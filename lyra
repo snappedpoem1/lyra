@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""
+Lyra Console Entry Point
+
+Usage:
+    lyra doctor
+    lyra hunt "Aphex Twin - Windowlicker"
+    lyra vibe create --name "Late Night Drive" --prompt "Chill synthwave"
+    lyra undo 3
+    lyra serve --port 8080
+    lyra agent "find me some punk edm remixes"
+    lyra index --force
+    lyra history 20
+
+Author: Lyra Oracle v10.0
+"""
+
+import sys
+from oracle.console import main
+
+if __name__ == "__main__":
+    sys.exit(main())

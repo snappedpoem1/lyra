@@ -1,0 +1,2548 @@
+{
+  "plan_id": "20260219_014332",
+  "applied_at": 1771483486.3066618,
+  "dry_run": false,
+  "operations": [
+    {
+      "track_id": "1d8a982fea1b2b114b6f040a88396330",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\A Day To Remember - A Day To Remember - The Downfall of Us All (Official Video) [CN4IIgFz93k].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\A Day To Remember - A Day To Remember - The Downfall of Us All (Official Video) [CN4IIgFz93k].m4a",
+      "timestamp": 1771483486.3307934
+    },
+    {
+      "track_id": "459c436b481250b85e63fb99a62dc2df",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\alt-J - alt-J (∆) Breezeblocks [rVeMiVU77wo].m4a",
+      "to_path": "A:\\music\\Active Music\\alt-J\\00 - alt-J (∆) Breezeblocks.m4a",
+      "timestamp": 1771483486.3495517
+    },
+    {
+      "track_id": "cad0fe0ab8c6664e8047456141c823a3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Bayside - Bayside - Devotion and Desire [AszabgCs6d8].m4a",
+      "to_path": "A:\\music\\Active Music\\Bayside\\00 - Bayside - Devotion and Desire.m4a",
+      "timestamp": 1771483486.3666825
+    },
+    {
+      "track_id": "4f287f9cd4ba7635aa4ab2426006ab95",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Bayside - Bayside - Sick, Sick, Sick [aqHsHCIrCvI].m4a",
+      "to_path": "A:\\music\\Active Music\\Bayside\\00 - Bayside - Sick, Sick, Sick.m4a",
+      "timestamp": 1771483486.3842757
+    },
+    {
+      "track_id": "b56d4b5a2988efdfad60c84a6b151363",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Bear Hands - Bear Hands - Giants (Official Music Video) [xadxu7tZJrg].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Bear Hands - Bear Hands - Giants (Official Music Video) [xadxu7tZJrg].m4a",
+      "timestamp": 1771483486.3988442
+    },
+    {
+      "track_id": "89a37d658a4d03dd0692905ea06546a8",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\By Storm - Injury Reserve - Jailbreak the Tesla (Feat. Aminé) [PWQL_XORalY].m4a",
+      "to_path": "A:\\music\\Active Music\\By Storm\\00 - Injury Reserve - Jailbreak the Tesla.m4a",
+      "timestamp": 1771483486.4159358
+    },
+    {
+      "track_id": "c80380ffc5efde9d4b54c5859689845c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Childish Gambino - Bonfire [aSQ5jq2qXN0].m4a",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Camp (20241001)\\00 - Bonfire.m4a",
+      "timestamp": 1771483486.4330134
+    },
+    {
+      "track_id": "e84ec4dfa248ed73f7f1a2a8eafc3a11",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Childish Gambino - I.Crawl [foHURvhLmhI].m4a",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Because the Internet (20241001)\\00 - I.Crawl.m4a",
+      "timestamp": 1771483486.4501023
+    },
+    {
+      "track_id": "e5c2dec8c8c440d39ee649a7f36f6a1d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Childish Gambino, Jason Martin - IV. Sweatpants [j_d2o-V5SgM].m4a",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino, Jason Martin\\Because the Internet (20241001)\\00 - IV. Sweatpants.m4a",
+      "timestamp": 1771483486.4651744
+    },
+    {
+      "track_id": "4417392ce6ced0de48d8002855b04b06",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\clipping. - clipping. - Nothing Is Safe (Official Lyric Video) [fIrpLBShe1A].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\clipping. - clipping. - Nothing Is Safe (Official Lyric Video) [fIrpLBShe1A].m4a",
+      "timestamp": 1771483486.4837713
+    },
+    {
+      "track_id": "beb6facb49737a82cd8423827d4e3760",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\clipping. - clipping. - Say the Name (Official Lyric Video) [hRP5uAuDAr4].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\clipping. - clipping. - Say the Name (Official Lyric Video) [hRP5uAuDAr4].m4a",
+      "timestamp": 1771483486.5003467
+    },
+    {
+      "track_id": "f8a01e57fea4c1c752c9e93fdb3f3276",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria - Coheed and Cambria - A Favor House Atlantic (Official Video) [pRWjLLpwnOM].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Coheed and Cambria - Coheed and Cambria - A Favor House Atlantic (Official Video) [pRWjLLpwnOM].m4a",
+      "timestamp": 1771483486.5154269
+    },
+    {
+      "track_id": "9eb9b80543bdd38ed4522adc8beae9aa",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria - Coheed and Cambria - Blood Red Summer (Official Video) [oFObU6-qN_k].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Coheed and Cambria - Coheed and Cambria - Blood Red Summer (Official Video) [oFObU6-qN_k].m4a",
+      "timestamp": 1771483486.5340369
+    },
+    {
+      "track_id": "ca030035deeafe1d40252538a3e9dcec",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria - Coheed and Cambria - In Keeping Secrets of Silent Earth： 3 (audio) [sT9zBeDVgIM].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Coheed and Cambria - Coheed and Cambria - In Keeping Secrets of Silent Earth： 3 (audio) [sT9zBeDVgIM].m4a",
+      "timestamp": 1771483486.5830598
+    },
+    {
+      "track_id": "48e2563232871443653f401d5e83967c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Denzel Curry - Denzel Curry - RICKY [3WHm6tfvKlk].m4a",
+      "to_path": "A:\\music\\Active Music\\Denzel Curry\\00 - Denzel Curry - RICKY.m4a",
+      "timestamp": 1771483486.597674
+    },
+    {
+      "track_id": "cf14e6bee1208ae723fb3af85c898ee7",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Dreamville - Dreamville - Down Bad ft. J.I.D, Bas, J. Cole, EarthGang, Young Nudy (Official Music Video) [lIM1hejXzhw].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Dreamville - Dreamville - Down Bad ft. J.I.D, Bas, J. Cole, EarthGang, Young Nudy (Official Music Video) [lIM1hejXzhw].m4a",
+      "timestamp": 1771483486.6142797
+    },
+    {
+      "track_id": "a3b1addbf0fb4b2f573669012ccbf698",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Dreamville - Dreamville - Wells Fargo ft. JID, EARTHGANG, Buddy & Guapdad 4000) [Interlude] (Official Audio) [NbMcGSDTxrQ].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Dreamville - Dreamville - Wells Fargo ft. JID, EARTHGANG, Buddy & Guapdad 4000) [Interlude] (Official Audio) [NbMcGSDTxrQ].m4a",
+      "timestamp": 1771483486.6263504
+    },
+    {
+      "track_id": "a8afa37ddbdd96c924f11a89faeeb0a6",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Emery - Emery - Studying Politics [1yHn8hbcR-8].m4a",
+      "to_path": "A:\\music\\Active Music\\Emery\\00 - Emery - Studying Politics.m4a",
+      "timestamp": 1771483486.6429484
+    },
+    {
+      "track_id": "93a945853bdad173bf0a75f9f1c8d4f6",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\J. Cole - J. Cole - G.O.M.D [vHU6ZRQJ50Q].m4a",
+      "to_path": "A:\\music\\Active Music\\J. Cole\\00 - J. Cole - G.O.M.D.m4a",
+      "timestamp": 1771483486.6620498
+    },
+    {
+      "track_id": "c0311dc3627a8ea59fb6d0e1b580c5df",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\J. Cole - KOD [ciya_AQu25o].m4a",
+      "to_path": "A:\\music\\Active Music\\J. Cole\\KOD (20180421)\\00 - KOD.m4a",
+      "timestamp": 1771483486.678138
+    },
+    {
+      "track_id": "1b3778aa6d4b617d688803a63877803e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\JID - JID - 151 Rum [vtY8pM-H65c].m4a",
+      "to_path": "A:\\music\\Active Music\\JID\\00 - JID - 151 Rum.m4a",
+      "timestamp": 1771483486.6927054
+    },
+    {
+      "track_id": "0a299086d76c5dcd40592686dac49209",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Joyner Lucas - Joyner Lucas ft. Logic - ISIS (ADHD) [hTDb0ebFh8E].m4a",
+      "to_path": "A:\\music\\Active Music\\Joyner Lucas\\00 - Joyner Lucas.m4a",
+      "timestamp": 1771483486.710801
+    },
+    {
+      "track_id": "f7f673d8080fdcc820ff5a96aa7ee4d8",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Joywave - Joywave - ＂DESTRUCTION＂ (Official Video) [jEOsNtHw5k8].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Joywave - Joywave - ＂DESTRUCTION＂ (Official Video) [jEOsNtHw5k8].m4a",
+      "timestamp": 1771483486.7540095
+    },
+    {
+      "track_id": "0488d07acb9ba2373ac1e1c2027543a0",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Kendrick Lamar - Kendrick Lamar - N95 [zI383uEwA6Q].m4a",
+      "to_path": "A:\\music\\Active Music\\Kendrick Lamar\\00 - Kendrick Lamar - N95.m4a",
+      "timestamp": 1771483486.7710998
+    },
+    {
+      "track_id": "76bc0f8eb309c13633a9538c713f1df3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Kendrick Lamar, MC Eiht - m.A.A.d city [AuikIJZpt_8].m4a",
+      "to_path": "A:\\music\\Active Music\\Kendrick Lamar, MC Eiht\\good kid, m.A.A.d city (20180726)\\00 - m.A.A.d city.m4a",
+      "timestamp": 1771483486.790184
+    },
+    {
+      "track_id": "82c4602775a405ca8efd41fba9843e9d",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\KennyHoopla - KennyHoopla - how will i rest in peace if i'm buried by a highway？⧸⧸ (Official Video) [Gm_PPNbgMjg].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\KennyHoopla - KennyHoopla - how will i rest in peace if i'm buried by a highway？⧸⧸ (Official Video) [Gm_PPNbgMjg].m4a",
+      "timestamp": 1771483486.8062763
+    },
+    {
+      "track_id": "0cb4aa75c90b46309db66d2112c65ff3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Mac Miller - Mac Miller - Frick Park Market [KJ19PJ7-SWc].m4a",
+      "to_path": "A:\\music\\Active Music\\Mac Miller\\00 - Mac Miller - Frick Park Market.m4a",
+      "timestamp": 1771483486.8218555
+    },
+    {
+      "track_id": "cca3f585d6bbbce1453f020575ed1503",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Manchester Orchestra - Manchester Orchestra - Shake It Out [FHSfyypZtag].m4a",
+      "to_path": "A:\\music\\Active Music\\Manchester Orchestra\\00 - Manchester Orchestra - Shake It Out.m4a",
+      "timestamp": 1771483486.8404558
+    },
+    {
+      "track_id": "960a030b2eef1860273da96d70d58288",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Matt Maeson - Matt Maeson - Cringe [Official Video] [eoJtlPQzqkQ].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Matt Maeson - Matt Maeson - Cringe [Official Video] [eoJtlPQzqkQ].m4a",
+      "timestamp": 1771483486.8565378
+    },
+    {
+      "track_id": "15339d7074258947b78f5e41dca01937",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Queens Of The Stone Age - Queens Of The Stone Age - The Way You Used To Do [3lw6MZBmY-U].m4a",
+      "to_path": "A:\\music\\Active Music\\Queens Of The Stone Age\\00 - Queens Of The Stone Age - The Way You Used To Do.m4a",
+      "timestamp": 1771483486.8741288
+    },
+    {
+      "track_id": "d006495be6c6f772b8b481ac63f22c61",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\RiseAgainst - Rise Against - Savior (Official Music Video) [e8X3ACToii0].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\RiseAgainst - Rise Against - Savior (Official Music Video) [e8X3ACToii0].m4a",
+      "timestamp": 1771483486.891217
+    },
+    {
+      "track_id": "88d9d42bf61be16a8e9bd51edd47db1a",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\RunTheJewels - Run The Jewels - Legend Has It (Official Music Video From RTJ3 & Black Panther) [vWaljXUiCaE].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\RunTheJewels - Run The Jewels - Legend Has It (Official Music Video From RTJ3 & Black Panther) [vWaljXUiCaE].m4a",
+      "timestamp": 1771483486.9088073
+    },
+    {
+      "track_id": "bde43a1cd9d9c8cf43645c66e525d272",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\RunTheJewels - Run The Jewels ＂Ooh LA LA＂ feat. Greg Nice & DJ Premier (Official Music Video) [Sff7Kc77QAY].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\RunTheJewels - Run The Jewels ＂Ooh LA LA＂ feat. Greg Nice & DJ Premier (Official Music Video) [Sff7Kc77QAY].m4a",
+      "timestamp": 1771483486.92589
+    },
+    {
+      "track_id": "201c0b49d76e58332b00fe0e858274f8",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Senses Fail - Senses Fail - Calling All Cars (Official Music Video) [MujdBOavqzQ].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Senses Fail - Senses Fail - Calling All Cars (Official Music Video) [MujdBOavqzQ].m4a",
+      "timestamp": 1771483486.9419794
+    },
+    {
+      "track_id": "8d6b2b2560f60c7f31b8609c5a33462a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\spacevoyage - TV On The Radio  Wolf Like Me [03hC_Ml8aAM].m4a",
+      "to_path": "A:\\music\\Active Music\\spacevoyage\\00 - TV On The Radio Wolf Like Me.m4a",
+      "timestamp": 1771483486.9595685
+    },
+    {
+      "track_id": "1804a0672399c13117d3ff63ef7fd346",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\takingbacksunday - Taking Back Sunday - A Decade Under the Influence (Official Music Video) [S9z3gv3MWaM].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\takingbacksunday - Taking Back Sunday - A Decade Under the Influence (Official Music Video) [S9z3gv3MWaM].m4a",
+      "timestamp": 1771483486.9776554
+    },
+    {
+      "track_id": "5b0f280761329d0386f444503634194a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\takingbacksunday - Taking Back Sunday - Cute Without the ＂E＂ (Cut From the Team) [ap0mqwvf7H0].m4a",
+      "to_path": "A:\\music\\Active Music\\takingbacksunday\\00 - Taking Back Sunday - Cute Without the E (Cut From the Team).m4a",
+      "timestamp": 1771483486.9942546
+    },
+    {
+      "track_id": "d66fbb904fec78bba6304bb34c3ad7b7",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\The Wombats - The Wombats - Greek Tragedy (Official Video) [9MHmx9nvHqU].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\The Wombats - The Wombats - Greek Tragedy (Official Video) [9MHmx9nvHqU].m4a",
+      "timestamp": 1771483487.0108562
+    },
+    {
+      "track_id": "8c892bf0b78cefe438899f537c1dc562",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Thrice - Thrice - Silhouette [Audio] [CkY-RMrkALU].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Thrice - Thrice - Silhouette [Audio] [CkY-RMrkALU].m4a",
+      "timestamp": 1771483487.0254273
+    },
+    {
+      "track_id": "0c2e0d8929ff32c603e06910c493c740",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Thrice - Thrice - The Artist In The Ambulance [Audio] [dqy1jA8-WCQ].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Thrice - Thrice - The Artist In The Ambulance [Audio] [dqy1jA8-WCQ].m4a",
+      "timestamp": 1771483487.0430276
+    },
+    {
+      "track_id": "45bf075033441f3cff73aa9b8a42994c",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Tyler, The Creator - LUMBERJACK (Audio) [9WOjaYotX1c].m4a",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Tyler, The Creator - LUMBERJACK (Audio) [9WOjaYotX1c].m4a",
+      "timestamp": 1771483487.055577
+    },
+    {
+      "track_id": "90a30a431a20f5b36a167f208309ed64",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Vince Staples - Vince Staples - Blue Suede [NJLfCBBcZAo].m4a",
+      "to_path": "A:\\music\\Active Music\\Vince Staples\\00 - Vince Staples - Blue Suede.m4a",
+      "timestamp": 1771483487.0726755
+    },
+    {
+      "track_id": "5116f69e9b5e55f0f5ee68c69575d5e9",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Vince Staples - Vince Staples - Norf Norf (Explicit) [mb6Jc4juSF8].m4a",
+      "to_path": "A:\\music\\Active Music\\Vince Staples\\00 - Vince Staples - Norf Norf.m4a",
+      "timestamp": 1771483487.0872643
+    },
+    {
+      "track_id": "5147ddf15c8b00f69c6e3894fcd074bd",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\AlexMau5\\Falling In Reverse - The Drug In Me Is You.m4a",
+      "to_path": "A:\\music\\Active Music\\Falling In Reverse\\00 - The Drug In Me Is You.m4a",
+      "timestamp": 1771483487.0978298
+    },
+    {
+      "track_id": "0688715739133335af3d593fb2553569",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Epitaph Records\\Falling In Reverse - ＂The Drug In Me Is Reimagined＂.m4a",
+      "to_path": "A:\\music\\Active Music\\Falling In Reverse\\00 - ＂The Drug In Me Is Reimagined＂.m4a",
+      "timestamp": 1771483487.1166837
+    },
+    {
+      "track_id": "35af94c3434c08f595c2f57fad4ddd98",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Epitaph Records\\Falling In Reverse - ＂The Drug In Me Is You＂.m4a",
+      "to_path": "A:\\music\\Active Music\\Falling In Reverse\\00 - ＂The Drug In Me Is You＂.m4a",
+      "timestamp": 1771483487.1337848
+    },
+    {
+      "track_id": "c58b952416cb7611bc3ee99d4d83c64a",
+      "action": "rename",
+      "from_path": "A:\\music\\Active Music\\massiveattack\\Massive Attack - Angel.m4a",
+      "to_path": "A:\\music\\Active Music\\massiveattack\\00 - Massive Attack - Angel.m4a",
+      "timestamp": 1771483487.151887
+    },
+    {
+      "track_id": "4223231979b2f8aafafe8f92d1ab518a",
+      "action": "rename",
+      "from_path": "A:\\music\\Active Music\\Rick Astley\\Rick Astley - Never Gonna Give You Up.m4a",
+      "to_path": "A:\\music\\Active Music\\Rick Astley\\00 - Never Gonna Give You Up.m4a",
+      "timestamp": 1771483487.1684852
+    },
+    {
+      "track_id": "de24ed84b4d584d6e34597054eea7da1",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\01 - The Embers of Fire.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - The Embers of Fire.flac",
+      "timestamp": 1771483487.1871
+    },
+    {
+      "track_id": "fab2a121956363151dcd35fec1ddb332",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\02 - Beautiful Losers.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - Beautiful Losers.flac",
+      "timestamp": 1771483487.2750766
+    },
+    {
+      "track_id": "3d258513c820495a6d02102dc074f403",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\03 - Comatose.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - Comatose.flac",
+      "timestamp": 1771483487.362051
+    },
+    {
+      "track_id": "d6e17c8e77d8d3cb57846ae511c362a8",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\04 - Shoulders.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - Shoulders.flac",
+      "timestamp": 1771483487.4574976
+    },
+    {
+      "track_id": "c0310049656931040712c6ae09a5c58c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\05 - A Disappearing Act.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - A Disappearing Act.flac",
+      "timestamp": 1771483487.5419207
+    },
+    {
+      "track_id": "cbcb0fe0120e673ad7a41973f33651e0",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\06 - Love Murder One.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - Love Murder One.flac",
+      "timestamp": 1771483487.625385
+    },
+    {
+      "track_id": "b59fbf17d5cedf12b4e3e17f9d54256d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\07 - Blood.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - Blood.flac",
+      "timestamp": 1771483487.724768
+    },
+    {
+      "track_id": "0d6f4366b092f82face51377ec04c20e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\08 - The Liars Club.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - The Liars Club.flac",
+      "timestamp": 1771483487.8202865
+    },
+    {
+      "track_id": "cd0ad3f1e0c41fe2b2cd8916d81f7684",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\09 - Bad Man.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - Bad Man.flac",
+      "timestamp": 1771483487.9233398
+    },
+    {
+      "track_id": "cf777cb7311287557fab7b76998d16eb",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\10 - Our Love.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - Our Love.flac",
+      "timestamp": 1771483487.968127
+    },
+    {
+      "track_id": "1bca85b872b967fe076534d662deef1a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\11 - Ladders of Supremacy.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - Ladders of Supremacy.flac",
+      "timestamp": 1771483488.1516724
+    },
+    {
+      "track_id": "263e6f0a3016c16114581cf1892a4edb",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\12 - Rise, Naianasha (Cut the Cord).flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\Vaxis II A Window of the Waking Mind (2022)\\00 - Rise, Naianasha (Cut the Cord).flac",
+      "timestamp": 1771483488.307033
+    },
+    {
+      "track_id": "7e5b228f536b4165e192069bf689a0a5",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\(Fork And Knife) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\(Fork And Knife)\\00 - (Fork And Knife).flac",
+      "timestamp": 1771483488.439701
+    },
+    {
+      "track_id": "7cd43262d93f2c9e65dcedbb14adaaf2",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\1996 (Demo 2006) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Leaked Demos 2006\\00 - 1996 (Demo 2006).flac",
+      "timestamp": 1771483488.6110578
+    },
+    {
+      "track_id": "3c97c453f3a19172ba25a1e0f17bd8bf",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\27 - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Folie à Deux\\00 - 27.flac",
+      "timestamp": 1771483488.6341856
+    },
+    {
+      "track_id": "6c741026e03b07d3fe79e156088a2af8",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\7 Minutes In Heaven (Atavan Halen) - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\From Under The Cork Tree\\00 - 7 Minutes In Heaven (Atavan Halen).flac",
+      "timestamp": 1771483488.6569529
+    },
+    {
+      "track_id": "d8e8d4ee598d2597900a761991cd2f3d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\A Little Less Sixteen Candles, A Little More 'Touch Me' - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\From Under The Cork Tree\\00 - A Little Less Sixteen Candles, A Little More Touch Me.flac",
+      "timestamp": 1771483488.679059
+    },
+    {
+      "track_id": "62ff49b1bec0b46e2f6973127defb2f5",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Alone Together - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Save Rock And Roll\\00 - Alone Together.flac",
+      "timestamp": 1771483488.7021918
+    },
+    {
+      "track_id": "493f809a7fe2cc64c3c9619cac75fa70",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Ambience_Limousine - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Coldest Winter\\00 - AmbienceLimousine.flac",
+      "timestamp": 1771483488.9177918
+    },
+    {
+      "track_id": "79d9a75832cfc1e1faebc7f1e258dd20",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\America's Suitehearts - Acoustic - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Live\\Acoustic Alternative\\00 - America's Suitehearts.flac",
+      "timestamp": 1771483488.9404137
+    },
+    {
+      "track_id": "f66a342bf540af73424933e393d66b98",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\American Beauty_American Psycho - Remix - Fall Out Boy, A$AP Ferg, Tony Fadd.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy, A$AP Ferg\\Remixes\\Make America Psycho Again\\00 - American BeautyAmerican Psycho.flac",
+      "timestamp": 1771483488.9635382
+    },
+    {
+      "track_id": "8135737e47063b7a900e307005c6c5ec",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Back To Earth (feat. Fall Out Boy) - Club Edition - Steve Aoki, Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Steve Aoki, Fall Out Boy\\Back To Earth (Remixes)\\00 - Back To Earth (Club Edition).flac",
+      "timestamp": 1771483488.9912055
+    },
+    {
+      "track_id": "113e05bbfce3065581cc6f4a43e9e671",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Battalions (Demo 2006) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Leaked Demos 2006\\00 - Battalions (Demo 2006).flac",
+      "timestamp": 1771483489.1374514
+    },
+    {
+      "track_id": "5bcdd13b1f27b0949d9a22ab32abe01f",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Beat It - Fall Out Boy, John Mayer.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy, John Mayer\\Believers Never Die - Greatest Hits\\00 - Beat It.flac",
+      "timestamp": 1771483489.1630769
+    },
+    {
+      "track_id": "1b4cbd64644553c5bc3e1da385f89224",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Best Friend (with Fall Out Boy) - Juice WRLD, Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Juice WRLD, Fall Out Boy\\The Party Never Ends 2.0\\00 - Best Friend.flac",
+      "timestamp": 1771483489.184171
+    },
+    {
+      "track_id": "e3d7ef5179cfa3ed8f9aa65ba4614c70",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Bob Dylan - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Believers Never Die - Greatest Hits (Volume Two)\\00 - Bob Dylan.flac",
+      "timestamp": 1771483489.2072916
+    },
+    {
+      "track_id": "5817e2cff296d4ebbc2bb8d5ad9036b2",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Brand New - BurnOutzz, Clxrvens.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\00 - BurnOutzz, Clxrvens.flac",
+      "timestamp": 1771483489.2454717
+    },
+    {
+      "track_id": "9213e4e18c935b3b60dd369dc901d0ba",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Brand New - Glenn Hollands.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\00 - Glenn Hollands.flac",
+      "timestamp": 1771483489.2645679
+    },
+    {
+      "track_id": "f7e8e0bee26734c7c14d34ac2eccf0a6",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\BRAND NEW - King Moore.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\00 - King Moore.flac",
+      "timestamp": 1771483489.273117
+    },
+    {
+      "track_id": "476eb79d436c324c4bc35779936f099b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Brand New - Shania Twain.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\00 - Shania Twain.flac",
+      "timestamp": 1771483489.3620608
+    },
+    {
+      "track_id": "b1612f422bad59ce4165c60f5543d18e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Brother's Song - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\3 Demos, Reworked\\00 - Brother's Song.flac",
+      "timestamp": 1771483489.6796587
+    },
+    {
+      "track_id": "d96df6c0cadbe56481c0c16e5a986005",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Calm Before the Storm - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - Calm Before the Storm.flac",
+      "timestamp": 1771483489.708804
+    },
+    {
+      "track_id": "58151b5a307743d43a5c27a4b62a36b5",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Can't Get It Out - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Science Fiction\\00 - Can't Get It Out.flac",
+      "timestamp": 1771483491.348598
+    },
+    {
+      "track_id": "07df767978ded4144618f2ed08090dae",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Centuries - Gazzo Remix - Fall Out Boy, Gazzo.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Remixes\\Centuries (Gazzo Remix)\\00 - Centuries (Gazzo Remix).flac",
+      "timestamp": 1771483491.780004
+    },
+    {
+      "track_id": "f28350a76050189f079a0f6d0b634549",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Champagne For My Real Friends, Real Pain For My Sham Friends - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\From Under The Cork Tree\\00 - Champagne For My Real Friends, Real Pain For My Sham Friends.flac",
+      "timestamp": 1771483491.8041523
+    },
+    {
+      "track_id": "67c6eee9910f02990addfcb66e786379",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Champion - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\M A N I A\\00 - Champion.flac",
+      "timestamp": 1771483491.8267987
+    },
+    {
+      "track_id": "645f3c6e3e0fe8cebd488426df341c32",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Champion - Remix - Fall Out Boy, RM.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy, RM\\Remixes\\Champion (Remix)\\00 - Champion.flac",
+      "timestamp": 1771483491.850449
+    },
+    {
+      "track_id": "7f898ee15998acf1df6ee3e4f544732b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Chicago Is So Two Years Ago - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - Chicago Is So Two Years Ago.flac",
+      "timestamp": 1771483491.9555793
+    },
+    {
+      "track_id": "fd4141e319b813bfdfe4f2f2ed5af0a3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Church (feat. nothing, nowhere.) - nothing,nowhere. remix - Fall Out Boy, nothing,nowhere., jay vee.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy, nothing,nowhere\\Remixes\\Church (nothing,nowhere. remix)\\00 - Church.flac",
+      "timestamp": 1771483491.9797235
+    },
+    {
+      "track_id": "78beec1c1ea852c13d8c7122a5ef0761",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Dance, Dance - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\From Under The Cork Tree\\00 - Dance, Dance.flac",
+      "timestamp": 1771483492.0018635
+    },
+    {
+      "track_id": "10e76fce923a22a6776f2048b21bc462",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Dead on Arrival - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - Dead on Arrival.flac",
+      "timestamp": 1771483492.1029568
+    },
+    {
+      "track_id": "a1ee60d1b44dddc49b777c50faf20c7d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Death Valley - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Save Rock And Roll\\00 - Death Valley.flac",
+      "timestamp": 1771483492.126622
+    },
+    {
+      "track_id": "84bfc0d88619417fe9ad37c03da4a113",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Disloyal Order Of Water Buffaloes - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Folie à Deux\\00 - Disloyal Order Of Water Buffaloes.flac",
+      "timestamp": 1771483492.1517797
+    },
+    {
+      "track_id": "a037fcf2fe1c9549cfcdd6309f090584",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Electric Touch (feat. Fall Out Boy) (Taylor’s Version) (From The Vault) - Taylor Swift, Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Taylor Swift, Fall Out Boy\\Remixes\\Speak Now (Taylor's Version)\\00 - Electric Touch (Taylor’s Version).flac",
+      "timestamp": 1771483492.1749156
+    },
+    {
+      "track_id": "cbbaa11ffa8cb2975e70d0a2e4fd9d1a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Eternal Summer - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\PAX AM Days\\00 - Eternal Summer.flac",
+      "timestamp": 1771483492.1950324
+    },
+    {
+      "track_id": "e7bd36314c5d5f8ad7da15dd9228a817",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Fall Out Boy (Chopped Not Slopped) - Ricky Lake, Slim K.flac",
+      "to_path": "A:\\music\\Active Music\\Ricky Lake, Slim K\\Wobbles (Chopped Not Slopped Remixes)\\00 - Fall Out Boy (Chopped Not Slopped).flac",
+      "timestamp": 1771483492.2181435
+    },
+    {
+      "track_id": "b14a0274a2025738a008eda4d41f8121",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Favorite Record - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\American Beauty American Psycho\\00 - Favorite Record.flac",
+      "timestamp": 1771483492.2412913
+    },
+    {
+      "track_id": "0f988a2e786bfdcfc5d6dbb514864760",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Fork and Knife (Demo 2006) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Leaked Demos 2006\\00 - Fork and Knife (Demo 2006).flac",
+      "timestamp": 1771483492.313885
+    },
+    {
+      "track_id": "fa48f7fee5b9ebc16ce42180a016feb3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Go With The Flow - Mix Cut - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fallout Boy\\Remixes\\The Tidy Boys Annual\\00 - Go With The Flow (Mix Cut).flac",
+      "timestamp": 1771483492.3400376
+    },
+    {
+      "track_id": "ca358f45c16d1a528af65beae9c6ae23",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Good Man (Demo 2006) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Leaked Demos 2006\\00 - Good Man (Demo 2006).flac",
+      "timestamp": 1771483492.3789833
+    },
+    {
+      "track_id": "9be5e32bb983b76ab58da1fd400ad6b1",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Good To Know That if I Ever Need Attention All I Have To Do Is Die - demo - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\The Holiday EP\\00 - Good To Know That if I Ever Need Attention All I Have To Do Is Die.flac",
+      "timestamp": 1771483492.4026096
+    },
+    {
+      "track_id": "537a47824d70c5827e71102ca6419775",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Grand Theft Autumn _ Where Is Your Boy - Acoustic - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Live\\My Heart Will Always Be the B-Side to My Tongue\\00 - Grand Theft Autumn Where Is Your Boy (Acoustic).flac",
+      "timestamp": 1771483492.5173655
+    },
+    {
+      "track_id": "9170586c6c5963750cc1953da53a6715",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Grenade Jumper - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - Grenade Jumper.flac",
+      "timestamp": 1771483494.8128455
+    },
+    {
+      "track_id": "db7793249a81f6e4aa93ba650511b9dc",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heartbreak Feels So Good - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\So Much (For) Stardust\\00 - Heartbreak Feels So Good.flac",
+      "timestamp": 1771483495.7971714
+    },
+    {
+      "track_id": "ac4e6d17e98f96e1f1287a1ea40f91fb",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heaven’s Gate - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\M A N I A\\00 - Heaven’s Gate.flac",
+      "timestamp": 1771483495.8218138
+    },
+    {
+      "track_id": "4227c52961c0a49d4ae76a2e25980758",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\HOLD ME TIGHT OR DON’T - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\M A N I A\\00 - HOLD ME TIGHT OR DON’T.flac",
+      "timestamp": 1771483495.844434
+    },
+    {
+      "track_id": "4000f5d50793badffd114527f43cf06b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Homesick at Space Camp - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - Homesick at Space Camp.flac",
+      "timestamp": 1771483496.005461
+    },
+    {
+      "track_id": "c30692b559db1ab3229cefb0107769e3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Honorable Mention - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Evening Out With Your Girlfriend\\00 - Honorable Mention.flac",
+      "timestamp": 1771483496.0291235
+    },
+    {
+      "track_id": "9cda93eccdd447ced92467f45ddd757d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\I Don't Care - Single Version - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Remixes\\Folie à Deux\\00 - I Don't Care.flac",
+      "timestamp": 1771483496.0532615
+    },
+    {
+      "track_id": "5d860e31042b312ad6ae9913d7760882",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\I Wan'na Be Like You (The Monkey Song) - From 'The Jungle Book' - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\We Love Disney (Deluxe)\\00 - I Wan'na Be Like You (The Monkey Song).flac",
+      "timestamp": 1771483496.0779202
+    },
+    {
+      "track_id": "b2ab51111a78fe33c77877b3a85f20d3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\I've Been Waiting (w_ ILoveMakonnen & Fall Out Boy) - Lil Peep, ILOVEMAKONNEN, Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Lil Peep, ILOVEMAKONNEN, Fall Out Boy\\I've Been Waiting (feat. Fall Out Boy)\\00 - I've Been Waiting.flac",
+      "timestamp": 1771483496.1010745
+    },
+    {
+      "track_id": "7727cd993ca7be3f461543db9b27501a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\I've Got A Dark Alley And A Bad Idea That Says You Should Shut Your Mouth (Summer Song) - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\From Under The Cork Tree\\00 - I've Got A Dark Alley And A Bad Idea That Says You Should Shut Your Mouth (Summer Song).flac",
+      "timestamp": 1771483496.1242225
+    },
+    {
+      "track_id": "732563138bc8df54a3b6ddd3b5c60fbd",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Immortals - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\American Beauty American Psycho\\00 - Immortals.flac",
+      "timestamp": 1771483496.1461406
+    },
+    {
+      "track_id": "a5ba4d424d3dfd0598f229fbc1e18ab6",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Irresistible - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\American Beauty American Psycho\\00 - Irresistible.flac",
+      "timestamp": 1771483496.1698096
+    },
+    {
+      "track_id": "b8de3dd9947590343de742a44a146083",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Irresistible - Revised Audio - Fall Out Boy, Demi Lovato.flac",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Irresistible - Revised Audio - Fall Out Boy, Demi Lovato.flac",
+      "timestamp": 1771483496.1914408
+    },
+    {
+      "track_id": "e3b435053e3b6e07c482d8a62745b498",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\It's Not a Side Effect of the Cocaine, I Am Thinking It Must Be Love - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\My Heart Will Always Be the B-Side to My Tongue\\00 - It's Not a Side Effect of the Cocaine, I Am Thinking It Must Be Love.flac",
+      "timestamp": 1771483496.212069
+    },
+    {
+      "track_id": "3706d1f9017ed49a090205bc8a6a24f4",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Jude Law And A Semester Abroad - 2000 Demo - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Your Favorite Weapon (Deluxe Edition)\\00 - Jude Law And A Semester Abroad (2000 Demo).flac",
+      "timestamp": 1771483496.273955
+    },
+    {
+      "track_id": "886d050dfd7b4187d739e37db0c854de",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Lake Effect Kid - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Lake Effect Kid\\00 - Lake Effect Kid.flac",
+      "timestamp": 1771483496.398166
+    },
+    {
+      "track_id": "deddc49d87c75d51a0bee153983f853a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Last Chance to Lose Your Keys - 2000 Throwaway Demo - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Your Favorite Weapon (Deluxe Edition)\\00 - Last Chance to Lose Your Keys (2000 Throwaway Demo).flac",
+      "timestamp": 1771483496.5074115
+    },
+    {
+      "track_id": "61202cb1390500ce4b7fbb27a1a7b0d9",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Logan To Government Center - 2000 Demo - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Your Favorite Weapon (Deluxe Edition)\\00 - Logan To Government Center (2000 Demo).flac",
+      "timestamp": 1771483496.6147223
+    },
+    {
+      "track_id": "07cb7f20b4671fc87dee7bd4f642e09a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Love from the Other Side - Edit - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Remixes\\Love From The Other Side (Edit)\\00 - Love From The Other Side (Edit).flac",
+      "timestamp": 1771483496.7484171
+    },
+    {
+      "track_id": "922ca8f1546868a0edc40ee16c623451",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Love Will Tear Us Apart - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\My Heart Will Always Be the B-Side to My Tongue\\00 - Love Will Tear Us Apart.flac",
+      "timestamp": 1771483496.7715647
+    },
+    {
+      "track_id": "b5603073c4b03db4e47ed5eb00aa0ad1",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Luca (Demo 2006) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Leaked Demos 2006\\00 - Luca (Demo 2006).flac",
+      "timestamp": 1771483497.1756868
+    },
+    {
+      "track_id": "3af67c9b5b4540475e5664bd7c4f1334",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Magazines - 2000 Throwaway Demo - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Your Favorite Weapon (Deluxe Edition)\\00 - Magazines (2000 Throwaway Demo).flac",
+      "timestamp": 1771483497.4079795
+    },
+    {
+      "track_id": "82a792750341ad110577e040f414a971",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Me vs. Maradona vs. Elvis - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Deja Entendu\\00 - Me vs. Maradona vs. Elvis.flac",
+      "timestamp": 1771483497.882808
+    },
+    {
+      "track_id": "d9d4b9e8f1d3717c8b3632cfbdc93b79",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Miss Missing You - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Save Rock And Roll\\00 - Miss Missing You.flac",
+      "timestamp": 1771483497.9074419
+    },
+    {
+      "track_id": "689fec21ed9f230fd2876112a04e8928",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Missing You (Demo 2006) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Leaked Demos 2006\\00 - Missing You (Demo 2006).flac",
+      "timestamp": 1771483501.3803618
+    },
+    {
+      "track_id": "2f08d1ba5799f2453529bc2803b0d3ef",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Moshi Moshi (Live at Dubin's House) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Live\\Friends\\00 - Moshi Moshi (Live at Dubin's House).flac",
+      "timestamp": 1771483501.9185386
+    },
+    {
+      "track_id": "212f48f4ac1baffe9605ddf8f2fd1515",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\My Heart Is the Worst Kind of Weapon - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\My Heart Will Always Be the B-Side to My Tongue\\00 - My Heart Is the Worst Kind of Weapon.flac",
+      "timestamp": 1771483502.9731667
+    },
+    {
+      "track_id": "feff90f99554bd9c4d8482077632e637",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\My Songs Know What You Did In The Dark (Light Em Up) - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Save Rock And Roll\\00 - My Songs Know What You Did In The Dark (Light Em Up).flac",
+      "timestamp": 1771483503.261631
+    },
+    {
+      "track_id": "ac80fb35eba034e21f1cd64f38270740",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Nobody Moves (Demo 2006) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Leaked Demos 2006\\00 - Nobody Moves (Demo 2006).flac",
+      "timestamp": 1771483504.073185
+    },
+    {
+      "track_id": "2275da464b87233251b55025536d4a89",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Novocaine - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\American Beauty American Psycho\\00 - Novocaine.flac",
+      "timestamp": 1771483504.0978527
+    },
+    {
+      "track_id": "4199e54bda18de343cd617d744e276ad",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Okay I Believe You, But My Tommy Gun Don't - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Deja Entendu\\00 - Okay I Believe You, But My Tommy Gun Don't.flac",
+      "timestamp": 1771483505.0923147
+    },
+    {
+      "track_id": "aa7996cb030a01802a523f740d7a7700",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Our Lawyer Made Us Change The Name Of This Song So We Wouldn't Get Sued - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\From Under The Cork Tree\\00 - Our Lawyer Made Us Change The Name Of This Song So We Wouldn't Get Sued.flac",
+      "timestamp": 1771483505.1154823
+    },
+    {
+      "track_id": "c896a32f96d953d8a2bfc906545ba112",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Pavlove - Demo - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Pavlove (Demo)\\00 - Pavlove (Demo).flac",
+      "timestamp": 1771483505.1405802
+    },
+    {
+      "track_id": "a8f53f0ea055db42f31418c2e919c38e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Reinventing the Wheel to Run Myself Over - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - Reinventing the Wheel to Run Myself Over.flac",
+      "timestamp": 1771483505.4254932
+    },
+    {
+      "track_id": "d20ac69949f7f79ff4e369fc05a9c4c7",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Roxanne - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Covers\\00 - Roxanne.flac",
+      "timestamp": 1771483505.450152
+    },
+    {
+      "track_id": "3f83b9546a3be8916da04d65dcc8cad2",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Same Logic_Teeth - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Science Fiction\\00 - Same LogicTeeth.flac",
+      "timestamp": 1771483506.1343014
+    },
+    {
+      "track_id": "4d558c886b3c9c89dda24641dbf5c694",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Saturday - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - Saturday.flac",
+      "timestamp": 1771483507.5923018
+    },
+    {
+      "track_id": "54c00165ed58c8c97ffb4019c70a1ac5",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Saturday Night's Alright (For Fighting) - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Goodbye Yellow Brick Road (40th Anniversary Celebration Super Deluxe)\\00 - Saturday Night's Alright (For Fighting).flac",
+      "timestamp": 1771483507.6184735
+    },
+    {
+      "track_id": "2e36353bd7eba25d28707e6a2c3306c6",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Say Sumthin' - Salese, Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Salese\\The Last Supper, Vol. 1\\00 - Say Sumthin'.flac",
+      "timestamp": 1771483508.2768447
+    },
+    {
+      "track_id": "6b512d039dc3a5bd0b5017d20d5a10ba",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Secondary - 2000 Demo - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Your Favorite Weapon (Deluxe Edition)\\00 - Secondary (2000 Demo).flac",
+      "timestamp": 1771483508.4660766
+    },
+    {
+      "track_id": "9dee884656697c856a2c8bbc1b350c53",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Sending Postcards from a Plane Crash (Wish You Were Her) - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - Sending Postcards From a Plane Crash (Wish You Were Here).flac",
+      "timestamp": 1771483508.6316423
+    },
+    {
+      "track_id": "6a339f1f0d84fe9d52ac550263149779",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Sic Transit Gloria ... Glory Fades - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Deja Entendu\\00 - Sic Transit Gloria ... Glory Fades.flac",
+      "timestamp": 1771483508.806353
+    },
+    {
+      "track_id": "d012c5cd97607aaa8551497729f281fd",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\So Much (For) Stardust - Edit - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Remixes\\So Much (For) Stardust [Edit]\\00 - So Much (For) Stardust [Edit].flac",
+      "timestamp": 1771483509.094646
+    },
+    {
+      "track_id": "34e4f21c120fec7c94c9cc5446d55e91",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Sowing Season (Yeah) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\The Devil And God Are Raging Inside Me\\00 - Sowing Season (Yeah).flac",
+      "timestamp": 1771483509.4208906
+    },
+    {
+      "track_id": "9195a7ef3f3729cbf6d1aa63ac2198a0",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Stay Frosty Royal Milk Tea - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\M A N I A\\00 - Stay Frosty Royal Milk Tea.flac",
+      "timestamp": 1771483509.4452024
+    },
+    {
+      "track_id": "59bc5c9dc586a59a5004f14e398a94a3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Stayin Out All Night - Boys of Zummer Remix - Wiz Khalifa, Fall Out Boy, Boys of Zummer.flac",
+      "to_path": "A:\\music\\Active Music\\Wiz Khalifa, Fall Out Boy\\Remixes\\Stayin Out All Night (Boys Of Zummer Remix)\\00 - Stayin Out All Night (Boys of Zummer Remix).flac",
+      "timestamp": 1771483509.4737332
+    },
+    {
+      "track_id": "24c36087664f4b06b51212aebff08af4",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Sugar, We're Goin Down - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Party Until The End\\00 - Sugar, We're Goin Down.flac",
+      "timestamp": 1771483509.4983919
+    },
+    {
+      "track_id": "67c1bf3e5814a37493d7e19800f1917c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Tell That Mick He Just Made My List of Things to Do Today - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - Tell That Mick He Just Made My List of Things to Do Today.flac",
+      "timestamp": 1771483509.5228732
+    },
+    {
+      "track_id": "bf38458d4c2dbb306ff3d69efac0df32",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\The Boy Who Blocked His Own Shot - acoustic - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Live\\The Holiday EP\\00 - The Boy Who Blocked His Own Shot.flac",
+      "timestamp": 1771483509.7725
+    },
+    {
+      "track_id": "a7849a04afad5143f5c00c1cc5edb517",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\The Kids Aren't Alright - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\American Beauty American Psycho\\00 - The Kids Aren't Alright.flac",
+      "timestamp": 1771483509.7986712
+    },
+    {
+      "track_id": "f8d613923365aa1657ff5f560974246c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\The Last Of The Real Ones (Remix) [feat. MadeinTYO & bülow] - Fall Out Boy, MadeinTYO, bülow.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy, Madeintyo, Bülow\\Remixes\\The Last Of The Real Ones (Remix)\\00 - The Last Of The Real Ones.flac",
+      "timestamp": 1771483509.824351
+    },
+    {
+      "track_id": "42fa98db571d26972d8963aa2c17cecf",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\The Last Of The Real Ones - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\M A N I A\\00 - The Last Of The Real Ones.flac",
+      "timestamp": 1771483509.8505108
+    },
+    {
+      "track_id": "60b39c5a7467a9720d20cbb321701710",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\The Mighty Fall - Fall Out Boy, Big Sean.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy, Big Sean\\Save Rock And Roll\\00 - The Mighty Fall.flac",
+      "timestamp": 1771483509.8732514
+    },
+    {
+      "track_id": "f487f88b50c710a4c254fe24081c52c6",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\The Music Or The Misery - Live From The Tweeter Center - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Live\\The Music Or The Misery (Live From The Tweeter Center)\\00 - The Music Or The Misery.flac",
+      "timestamp": 1771483509.8951619
+    },
+    {
+      "track_id": "dff4dcec82af1fddc8755919c3e2dd9c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\The Patron Saint of Liars and Fakes - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - The Patron Saint of Liars and Fakes.flac",
+      "timestamp": 1771483509.9193254
+    },
+    {
+      "track_id": "72fffef3b1b4a3f9cf528b11cb5d666a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\The Pros and Cons of Breathing - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Take This to Your Grave\\00 - The Pros and Cons of Breathing.flac",
+      "timestamp": 1771483509.9429486
+    },
+    {
+      "track_id": "60588c8c43b2bcaf3cb9f01a79d4b021",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\The Quiet Things That No One Ever Knows - acoustic - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Live\\The Holiday EP\\00 - The Quiet Things That No One Ever Knows.flac",
+      "timestamp": 1771483509.9652495
+    },
+    {
+      "track_id": "23412bca1fab09bd1d132ea7a5a4b7da",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\The Shower Scene - 2000 Demo - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Your Favorite Weapon (Deluxe Edition)\\00 - The Shower Scene (2000 Demo).flac",
+      "timestamp": 1771483510.2382576
+    },
+    {
+      "track_id": "7cc640925e111c72766664e11a5c9fc0",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\This Ain't A Scene, It's An Arms Race - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Believers Never Die - Greatest Hits\\00 - This Ain't A Scene, It's An Arms Race.flac",
+      "timestamp": 1771483510.2649095
+    },
+    {
+      "track_id": "7424ee74ec495c2161d0cf577853dbe9",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Thnks fr th Mmrs - The Lindbergh Palace Radio Edit - Fall Out Boy, Lindbergh Palace.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Remixes\\Thnks Fr Th Mmrs Remix EP\\00 - Thnks fr th Mmrs (The Lindbergh Palace Radio Edit).flac",
+      "timestamp": 1771483510.290072
+    },
+    {
+      "track_id": "d1b256855ab9061c78bfa4d4cfbcc6d0",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Thriller - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Live\\Live In Phoenix\\00 - Thriller.flac",
+      "timestamp": 1771483510.3192468
+    },
+    {
+      "track_id": "c6d2e3a6968b1fba880857630954faba",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Twin Skeleton's (Hotel In NYC) - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\American Beauty American Psycho\\00 - Twin Skeleton's (Hotel In NYC).flac",
+      "timestamp": 1771483510.343921
+    },
+    {
+      "track_id": "023bdf47db68b04fbb660e2ab20f04c2",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Uma Thurman - Fall Out Boy vs. Didrick - Fall Out Boy, Didrick.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy, Didrick\\Uma Thurman (Fall Out Boy vs. Didrick)\\00 - Uma Thurman.flac",
+      "timestamp": 1771483510.3655534
+    },
+    {
+      "track_id": "66749c84686af2354a5667f172e891bc",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Uma Thurman - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\American Beauty American Psycho\\00 - Uma Thurman.flac",
+      "timestamp": 1771483510.3896987
+    },
+    {
+      "track_id": "0511430b27e23e1b1768c24c4da5e066",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\We Didn’t Start The Fire - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\We Didn’t Start The Fire\\00 - We Didn’t Start The Fire.flac",
+      "timestamp": 1771483510.4144506
+    },
+    {
+      "track_id": "d627b5b882f66706cc5570c3bc90dbfc",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\We Were Doomed From The Start (The King Is Dead) - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\PAX AM Days\\00 - We Were Doomed From The Start (The King Is Dead).flac",
+      "timestamp": 1771483510.4345772
+    },
+    {
+      "track_id": "0dbe90b92ee5f9d8c5f4624f2dfb1cb4",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Wilson (Expensive Mistakes) - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\M A N I A\\00 - Wilson (Expensive Mistakes).flac",
+      "timestamp": 1771483510.4593549
+    },
+    {
+      "track_id": "876191b6ebf582be543d512200415bdf",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Yeah (Sowing Season) (Demo 2006) - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\Leaked Demos 2006\\00 - Yeah (Sowing Season) (Demo 2006).flac",
+      "timestamp": 1771483511.2470896
+    },
+    {
+      "track_id": "743677ad4b49aec99c576f7448d2f191",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\You Won't Know - Brand New.flac",
+      "to_path": "A:\\music\\Active Music\\Brand New\\The Devil And God Are Raging Inside Me\\00 - You Won't Know.flac",
+      "timestamp": 1771483512.0113137
+    },
+    {
+      "track_id": "fbe851151315988dd3ef3ba8e2f5076c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Young And Menace - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\M A N I A\\00 - Young And Menace.flac",
+      "timestamp": 1771483512.0359786
+    },
+    {
+      "track_id": "94f66330451e0ba8943c6d16fb78754d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Young Volcanoes - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Save Rock And Roll\\00 - Young Volcanoes.flac",
+      "timestamp": 1771483512.0602007
+    },
+    {
+      "track_id": "03bd10103a994826e16ac27939897d30",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Yule Shoot Your Eye Out - Fall Out Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Fall Out Boy\\Believers Never Die - Greatest Hits\\00 - Yule Shoot Your Eye Out.flac",
+      "timestamp": 1771483512.0838432
+    },
+    {
+      "track_id": "442f63d1db765aa31dd98eb07a1d2065",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Brand New\\Brother Sister (Remastered 2024 _ 30th Anniversary Expanded Edition)\\01. Art Blakey & The Jazz Messengers - Caravan (Remastered 2024).flac",
+      "to_path": "A:\\music\\Active Music\\Art Blakey & The Jazz Messengers\\Caravan (Remastered 2024) (1962)\\00 - Caravan.flac",
+      "timestamp": 1771483515.3980598
+    },
+    {
+      "track_id": "0a028e884ff8181a5b5200c9524ffbd9",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\((home movie_ 1994)) - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Dreamland\\00 - ((home movie 1994)).flac",
+      "timestamp": 1771483515.4071214
+    },
+    {
+      "track_id": "a54e97659e2f6a7224d7a33a95e22970",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\((home movie_ btx)) - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Dreamland\\00 - ((home movie btx)).flac",
+      "timestamp": 1771483515.414166
+    },
+    {
+      "track_id": "2292b877bf5280058899cb7e83eb6eb9",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\3005 (Friction Remix) - Childish Gambino, Friction.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Remixes\\3005 (Friction Remix)\\00 - 3005 (Friction Remix).flac",
+      "timestamp": 1771483515.4428682
+    },
+    {
+      "track_id": "c890a26dfa2ed3bf0dc3f034e0b4614c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\3005 (made popular by Childish Gambino) [backing version] - Party Tyme.flac",
+      "to_path": "A:\\music\\Active Music\\Party Tyme\\Remixes\\Hip Hop & Rap Hits 3 - Party Tyme (Backing Versions)\\00 - 3005 (made popular by Childish Gambino) [backing version].flac",
+      "timestamp": 1771483515.4660344
+    },
+    {
+      "track_id": "5371166085ee3be7c89f9bdf86ff9d1b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\A Decade Under The Influence (made popular by Taking Back Sunday) [backing version] - Party Tyme.flac",
+      "to_path": "A:\\music\\Active Music\\Party Tyme\\Remixes\\Rock Male Hits 1 - Party Tyme (Backing Versions)\\00 - A Decade Under The Influence (made popular by Taking Back Sunday) [backing version].flac",
+      "timestamp": 1771483515.4936948
+    },
+    {
+      "track_id": "42242c26dbe4493479f75b80021282f1",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\A Decade Under The Influence - Acoustic - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Live\\Punk Goes Acoustic, Vol. 3\\00 - A Decade Under The Influence.flac",
+      "timestamp": 1771483515.5193553
+    },
+    {
+      "track_id": "d9b0d6452298693e7f1901a459bb6a4f",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\A Tear in Space (Airlock) - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\A Tear in Space (Airlock)\\00 - A Tear in Space (Airlock).flac",
+      "timestamp": 1771483515.5425117
+    },
+    {
+      "track_id": "2853e73c9b2dbf31477b62e41b8fa04e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\A Tear in Space (Airlock) - Jakwob Remix - Glass Animals, Jakwob.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Jakwob\\Remixes\\A Tear in Space (Airlock) (Jakwob Remix)\\00 - A Tear in Space (Airlock).flac",
+      "timestamp": 1771483515.5641584
+    },
+    {
+      "track_id": "e5323b988db77d99f95bd1b50bbd56fb",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Agnes - Radio Edit - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Remixes\\Agnes (Radio Edit)\\00 - Agnes (Radio Edit).flac",
+      "timestamp": 1771483515.5883
+    },
+    {
+      "track_id": "53f3d8937daa70ea6782cc7478b414cc",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Algorhythm - Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Atavista\\00 - Algorhythm.flac",
+      "timestamp": 1771483515.756851
+    },
+    {
+      "track_id": "738c387e2f19461b0438a4aea914052b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Banana Clipper - Run The Jewels, El-P.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P\\Run The Jewels Instrumentals\\00 - Banana Clipper.flac",
+      "timestamp": 1771483515.778478
+    },
+    {
+      "track_id": "512943e773a7a3297b8e2131c20a5e11",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Bed Peace - Jhené Aiko, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Jhené Aiko, Childish Gambino\\Sail Out\\00 - Bed Peace.flac",
+      "timestamp": 1771483515.9136546
+    },
+    {
+      "track_id": "61d12d55c12ad761ed93aecbc33b9252",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Bike Scene - Demo - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Tell All Your Friends (20th Anniversary Edition)\\00 - Bike Scene (Demo).flac",
+      "timestamp": 1771483516.9902997
+    },
+    {
+      "track_id": "0f7610b7da2ca929c0173fc9c4876934",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Black Mambo - Stripped - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\ZABA (Deluxe)\\00 - Black Mambo.flac",
+      "timestamp": 1771483517.013459
+    },
+    {
+      "track_id": "00177ef30a31e2713365fb8c87d11d85",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Black Qualls - Thundercat, Steve Lacy, Steve Arrington, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Thundercat, Steve Lacy, Steve Arrington, Childish Gambino\\It Is What It Is\\00 - Black Qualls.flac",
+      "timestamp": 1771483517.0391169
+    },
+    {
+      "track_id": "52d7da3d609fb7efd695f6d2acb9c5e3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Body (feat. Childish Gambino) - Prodigy, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Prodigy, Childish Gambino\\R.I.P. #1\\00 - Body.flac",
+      "timestamp": 1771483517.0617654
+    },
+    {
+      "track_id": "4519760616773183dccfeda9bbf83fb5",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Bonus Mosh Pt. II - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Where You Want To Be\\00 - Bonus Mosh Pt. II.flac",
+      "timestamp": 1771483517.0869796
+    },
+    {
+      "track_id": "a980204f97475be4dc3aeb02d9a2afe0",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Born to Shine (feat. Run The Jewels) - Big Grams, Run The Jewels.flac",
+      "to_path": "A:\\music\\Active Music\\Big Grams, Run The Jewels\\Big Grams\\00 - Born to Shine.flac",
+      "timestamp": 1771483517.1091661
+    },
+    {
+      "track_id": "61e9e53db0a7c5a08b1da068c6a9f546",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Break Your Heart Right Back - Ariana Grande, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Ariana Grande, Childish Gambino\\My Everything (Deluxe)\\00 - Break Your Heart Right Back.flac",
+      "timestamp": 1771483517.1379344
+    },
+    {
+      "track_id": "ac66b8ad794e54c178d7f65aeb5e43e1",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\break your heart right back - live - Ariana Grande, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Ariana Grande, Childish Gambino\\Live\\k bye for now (swt live)\\00 - break your heart right back.flac",
+      "timestamp": 1771483517.1580162
+    },
+    {
+      "track_id": "4b37de52a142620778e0b74544374b8d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\C-C (You Set The Fire In Me) - Dave Glass Animals Remix - Tom Vek, Glass Animals, Dave Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Tom Vek, Glass Animals\\Remixes\\C-C (You Set The Fire In Me) (Dave Glass Animals Remix)\\00 - C-C (You Set The Fire In Me).flac",
+      "timestamp": 1771483517.1869738
+    },
+    {
+      "track_id": "082f9471309dcfb334ba28b5d357f70e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Capital M-E - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Transformers Revenge Of The Fallen The Album\\00 - Capital M-E.flac",
+      "timestamp": 1771483517.2076085
+    },
+    {
+      "track_id": "f9970f2999b8e606f39ca65b36f7e190",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Centipede (made popular by Childish Gambino) [backing version] - Party Tyme.flac",
+      "to_path": "A:\\music\\Active Music\\Party Tyme\\Remixes\\Hip Hop & Rap Hits 6 - Party Tyme (Backing Versions)\\00 - Centipede (made popular by Childish Gambino) [backing version].flac",
+      "timestamp": 1771483517.2327702
+    },
+    {
+      "track_id": "a0dc4d87fbec44a9a0835ce61efd6829",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Chase Me (feat. Run The Jewels & Big Boi) - Danger Mouse, Run The Jewels, Big Boi.flac",
+      "to_path": "A:\\music\\Active Music\\Danger Mouse, Run The Jewels, Big Boi\\Chase Me (feat. Run The Jewels & Big Boi)\\00 - Chase Me.flac",
+      "timestamp": 1771483517.2579243
+    },
+    {
+      "track_id": "f96f9652fc99fa63c282921e10bc8f1e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Childish Gambino - Instrumental Version - DesoulMusic.flac",
+      "to_path": "A:\\music\\Active Music\\DesoulMusic\\Remixes\\Soul Trap (Instrumental Version)\\00 - Childish Gambino.flac",
+      "timestamp": 1771483517.2825577
+    },
+    {
+      "track_id": "9351bd2d3d9c0bc0e4556abef684259b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Creatures in Heaven - Karaoke Version Originally Performed by Glass Animals - Backing Business.flac",
+      "to_path": "A:\\music\\Active Music\\Backing Business\\Remixes\\Pristine Karaoke, Vol. 148\\00 - Creatures in Heaven (Karaoke Version Originally Performed by Glass Animals).flac",
+      "timestamp": 1771483517.3047009
+    },
+    {
+      "track_id": "de56463fa8b9e1f27fd11190f51b33d0",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Cute Without The 'E' (Cut From The Team) - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Tell All Your Friends\\00 - Cute Without The 'E' (Cut From The Team).flac",
+      "timestamp": 1771483517.328358
+    },
+    {
+      "track_id": "10a73d6d5893b8f21aec40803f6f046a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Cute Without The E (Ziri) - Steve Aoki, Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Steve Aoki, Taking Back Sunday\\Cute Without The E (Ziri)\\00 - Cute Without The E (Ziri).flac",
+      "timestamp": 1771483517.351403
+    },
+    {
+      "track_id": "7ab7d62e2056872d16dbd53de2ae34ea",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Cute Without The E - Cut From The Team - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Live\\Punk Goes Acoustic\\00 - Cute Without The E - Cut From The Team.flac",
+      "timestamp": 1771483517.3730268
+    },
+    {
+      "track_id": "7838f918fcb1fa0eeafdd9ab8ca31025",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Damn Right (feat. Childish Gambino & Kali Uchis) - JENNIE, Childish Gambino, Kali Uchis.flac",
+      "to_path": "A:\\music\\Active Music\\JENNIE, Childish Gambino, Kali Uchis\\Ruby\\00 - Damn Right.flac",
+      "timestamp": 1771483517.400198
+    },
+    {
+      "track_id": "373e4fb6e546b834da0b378762aa75fa",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Dead Horse - Glass Animals Remix - Hayley Williams, Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Hayley Williams\\Remixes\\Dead Horse (Glass Animals Remix)\\00 - Dead Horse (Glass Animals Remix).flac",
+      "timestamp": 1771483518.9174197
+    },
+    {
+      "track_id": "a016e669057a42c4a365c0ad9c1bd33c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Delete Delete (feat. Run the Jewels & Cristin Milioti) - BOOTS, Run The Jewels, Cristin Milioti.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, Cristin Milioti\\#DARKDAZE\\00 - Delete Delete.flac",
+      "timestamp": 1771483518.9420712
+    },
+    {
+      "track_id": "08c1ee1553b79af465663519da36a069",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Do or Die (feat. Childish Gambino) - Flosstradamus Remix - Flux Pavilion, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Flux Pavilion, Childish Gambino\\Remixes\\Do or Die (Remix EP)\\00 - Do or Die [Flosstradamus Remix].flac",
+      "timestamp": 1771483518.9677327
+    },
+    {
+      "track_id": "eb425cc8d26517c3aa4d901c1a0811fc",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Do or Die (feat. Childish Gambino) - Joshua Steele, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Joshua Steele, Childish Gambino\\Blow the Roof\\00 - Do or Die.flac",
+      "timestamp": 1771483518.9923809
+    },
+    {
+      "track_id": "3f69fb1e3c0d4c31b79318c76441c8ea",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Don't Trip (feat. Run The Jewels & Sizzy Rocket) - Flosstradamus, Run The Jewels, Sizzy Rocket.flac",
+      "to_path": "A:\\music\\Active Music\\Flosstradamus, Run The Jewels, Sizzy Rocket\\Soundclash\\00 - Don't Trip.flac",
+      "timestamp": 1771483519.034122
+    },
+    {
+      "track_id": "4b6c078e2b75d99934c56dfaa54925f1",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Down (Instrumental) - Run The Jewels, El-P, Killer Mike, Joi.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P, Killer Mike, Joi\\Run The Jewels 3 (Instrumentals)\\00 - Down (Instrumental).flac",
+      "timestamp": 1771483519.0562987
+    },
+    {
+      "track_id": "ec473827b7be450e371e9da9cc8f1017",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Down (Z Dot UK Remix) - Run The Jewels, El-P, Killer Mike, Z Dot, Isaiah Dreads.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P, Killer Mike, Z Dot\\Remixes\\Down (Z Dot UK Remix)\\00 - Down (Z Dot UK Remix).flac",
+      "timestamp": 1771483519.0809705
+    },
+    {
+      "track_id": "18c3800a685b3df955d2302fcd750daa",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Dreamland - Mindchatter Remix - Glass Animals, Mindchatter.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Mindchatter\\Remixes\\Dreamland (Real Life Edition)\\00 - Dreamland.flac",
+      "timestamp": 1771483519.1071315
+    },
+    {
+      "track_id": "b711f0f06a8b9a1a092c4b4d3c644b0b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Drowning - Dave Glass Animals Remix - BANKS, Dave Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\BANKS\\Remixes\\Goddess (Remixes)\\00 - Drowning (Dave Glass Animals Remix).flac",
+      "timestamp": 1771483519.1358113
+    },
+    {
+      "track_id": "81295fd1878464af1d8ee09ea44344b3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Ea$tside - Trinidad James, Gucci Mane, Young Scooter, Alley Boy, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Trinidad James, Gucci Mane, Young Scooter, Alley Boy, Childish Gambino\\10Pc. Mild\\00 - Ea$tside.flac",
+      "timestamp": 1771483519.1619594
+    },
+    {
+      "track_id": "791131ca1f93487d6af783bb61191f67",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Faith (When I Let You Down) - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Taking Back Sunday\\00 - Faith (When I Let You Down).flac",
+      "timestamp": 1771483519.1835902
+    },
+    {
+      "track_id": "9f2c03168621a78bd5c2d7c8a8b3e601",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Favorite Song - Chance the Rapper, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Chance the Rapper, Childish Gambino\\Acid Rap\\00 - Favorite Song.flac",
+      "timestamp": 1771483519.2072544
+    },
+    {
+      "track_id": "b22bcf3bb4eb7ee9018ef5a087d2989b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Feel the Love (feat. John Newman) - VIP Mix [VIP Mix] - Rudimental, Childish Gambino, VIP.flac",
+      "to_path": "A:\\music\\Active Music\\Rudimental, Childish Gambino\\Remixes\\Home (Deluxe Edition)\\00 - Feel the Love [VIP Mix].flac",
+      "timestamp": 1771483519.2303987
+    },
+    {
+      "track_id": "f361cae44e848b08a8ef3bef9dfd5e6c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Feels Like Summer - Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Summer Pack\\00 - Feels Like Summer.flac",
+      "timestamp": 1771483519.2666025
+    },
+    {
+      "track_id": "c2cac46f28a27ee14ab02e3ebe0c2128",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Flicker, Fade - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Happiness Is\\00 - Flicker, Fade.flac",
+      "timestamp": 1771483519.290258
+    },
+    {
+      "track_id": "b2887156145a728195a14540a767a8c7",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Freaks And Geeks - Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\EP (2011 Re-Release)\\00 - Freaks And Geeks.flac",
+      "timestamp": 1771483519.3133974
+    },
+    {
+      "track_id": "eb5917b814d381e9fe136002ae4adb60",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Ghost Man On Third - Acoustic Version - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Live\\Taking Back Sunday (Deluxe Edition)\\00 - Ghost Man On Third.flac",
+      "timestamp": 1771483519.3370466
+    },
+    {
+      "track_id": "c631574fecf2aafffc201fb72ea33258",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Giants - Josh Osho, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Josh Osho, Childish Gambino\\L.i.f.e\\00 - Giants.flac",
+      "timestamp": 1771483519.3606951
+    },
+    {
+      "track_id": "1956c2795527d1d4b4e1f9a9236be4d2",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Gooey - Gilligan Moss Remix - Glass Animals, Gilligan Moss.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Remixes\\Gooey\\00 - Gooey (Gilligan Moss Remix).flac",
+      "timestamp": 1771483519.386358
+    },
+    {
+      "track_id": "ebe9e1fd1f609d019f216ee05e711515",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Great Romances Of The 20th Century - Demo - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Tell All Your Friends (20th Anniversary Edition)\\00 - Great Romances Of The 20th Century (Demo).flac",
+      "timestamp": 1771483519.409013
+    },
+    {
+      "track_id": "8cd6a69d1f4cbcda8af411eef713ed6f",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\H3@RT$ W3RE M3@NT T0 F7¥ - Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Bando Stone and The New World\\00 - H3@RT$ W3RE M3@NT T0 F7¥.flac",
+      "timestamp": 1771483519.4311507
+    },
+    {
+      "track_id": "b187250123b6251a26740cf513039637",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Hakuna Matata - Billy Eichner, Seth Rogen, JayDon, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Billy Eichner, Seth Rogen, JD McCrary, Donald Glover\\The Lion King (Original Motion Picture Soundtrack)\\00 - Hakuna Matata.flac",
+      "timestamp": 1771483519.4542813
+    },
+    {
+      "track_id": "88923e40713535e3fc2a2ddb9b9a3372",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Hazey - Dave Glass Animals Rework - Glass Animals, Rome Fortune.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Rome Fortune\\Remixes\\Remixes\\00 - Hazey.flac",
+      "timestamp": 1771483519.4869754
+    },
+    {
+      "track_id": "ef9d144d6645f9982ed3ab69ce14e887",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heart Is Full (feat. Run the Jewels) - Remix - Miike Snow, Run The Jewels.flac",
+      "to_path": "A:\\music\\Active Music\\Miike Snow, Run The Jewels\\Remixes\\iii\\00 - Heart Is Full [Remix].flac",
+      "timestamp": 1771483519.514645
+    },
+    {
+      "track_id": "16219b179475a1ba9cdb8a52bde96666",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heart-Shaped Box - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Heart-Shaped Box (Quarantine Covers Ep. 1)\\00 - Heart-Shaped Box.flac",
+      "timestamp": 1771483519.5347712
+    },
+    {
+      "track_id": "4c9592056c8ed5ec995ff546be94806b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\HEARTBEAT (CHILDISH GAMBINO REMIX) - Rushy Kenobi.flac",
+      "to_path": "A:\\music\\Active Music\\Rushy Kenobi\\Remixes\\The Lost Tapes EP\\00 - HEARTBEAT (CHILDISH GAMBINO REMIX).flac",
+      "timestamp": 1771483519.57652
+    },
+    {
+      "track_id": "51d4789af4887c23aa69d1b8f19758e3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heartbeat (OLIVER Remix) - Childish Gambino, OLIVER.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Remixes\\Heartbeat (Remix Bundle)\\00 - Heartbeat (OLIVER Remix).flac",
+      "timestamp": 1771483519.6011791
+    },
+    {
+      "track_id": "7edecde9e864c5063cd2a578ffad7c04",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heartbeat - Them Jeans Remix - Childish Gambino, Them Jeans.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Remixes\\Camp\\00 - Heartbeat.flac",
+      "timestamp": 1771483519.623818
+    },
+    {
+      "track_id": "17c9b24ce4fe6eb63976dd0cea231016",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves (By Glass Animals) (Melody Karaoke Version) - ZZang KARAOKE.flac",
+      "to_path": "A:\\music\\Active Music\\ZZang KARAOKE\\Remixes\\ZZang KARAOKE 2024 POP Vol.126\\00 - Heat Waves (By Glass Animals) (Melody Karaoke Version).flac",
+      "timestamp": 1771483519.6459846
+    },
+    {
+      "track_id": "e83c0de35c06ea2ac2c17fa3832dab7e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves (Made Popular By Glass Animals) [Instrumental Version] - Party Tyme Karaoke.flac",
+      "to_path": "A:\\music\\Active Music\\Party Tyme Karaoke\\Remixes\\Party Tyme Karaoke - Instrumentals 11\\00 - Heat Waves (Made Popular By Glass Animals) [Instrumental Version].flac",
+      "timestamp": 1771483519.717929
+    },
+    {
+      "track_id": "3fc51e351d3761e39631b3b92610441a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves (made popular by Glass Animals) [vocal version] - Party Tyme.flac",
+      "to_path": "A:\\music\\Active Music\\Party Tyme\\Remixes\\Super Hits 38 - Party Tyme (Vocal Versions)\\00 - Heat Waves (made popular by Glass Animals) [vocal version].flac",
+      "timestamp": 1771483519.8173447
+    },
+    {
+      "track_id": "988015cd86811a5d8aa7257c4ed2e1b9",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves (originally performed by Glass Animals) - Instrumental Version - StudiOke.flac",
+      "to_path": "A:\\music\\Active Music\\StudiOke\\Remixes\\Popular Songs Backing Tracks Karaoke vol.27\\00 - Heat Waves (originally performed by Glass Animals).flac",
+      "timestamp": 1771483519.8923695
+    },
+    {
+      "track_id": "6a1fb4a951289e98e80917310d6a6342",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves (Originally Performed by Glass Animals) [Instrumental Version] - Backing Business.flac",
+      "to_path": "A:\\music\\Active Music\\Backing Business\\Remixes\\Pristine Karaoke, Vol. 20\\00 - Heat Waves (Originally Performed by Glass Animals) [Instrumental Version].flac",
+      "timestamp": 1771483520.001475
+    },
+    {
+      "track_id": "dd246ec97b3cb4ab152b5599a9433491",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves - Diplo Remix - Glass Animals, Diplo.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Remixes\\Dreamland (+ Bonus Levels)\\00 - Heat Waves.flac",
+      "timestamp": 1771483520.0734494
+    },
+    {
+      "track_id": "808a52924e53390b91bb23fec5700cc7",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\Heat Waves - Karaoke Version Originally Performed by Glass Animals - Power Grid.flac",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\Heat Waves - Karaoke Version Originally Performed by Glass Animals - Power Grid.flac",
+      "timestamp": 1771483520.1820574
+    },
+    {
+      "track_id": "69f13549f8b3ec4cd3d350d1882f100e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves - Logic1000 Remix - Glass Animals, Logic1000.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Logic1000\\Remixes\\Dreamland (Real Life Edition)\\00 - Heat Waves.flac",
+      "timestamp": 1771483520.3103218
+    },
+    {
+      "track_id": "af822e98c674b66855472981850b0cf9",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves - Oliver Heldens Remix - Glass Animals, Oliver Heldens.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Oliver Heldens\\Remixes\\Dreamland (+ Bonus Levels)\\00 - Heat Waves.flac",
+      "timestamp": 1771483520.4397137
+    },
+    {
+      "track_id": "8c7cca4995429bcaef3321bf8c7abdf1",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves - Riton Remix - Glass Animals, Riton.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Riton\\Remixes\\Dreamland (+ Bonus Levels)\\00 - Heat Waves.flac",
+      "timestamp": 1771483520.5267222
+    },
+    {
+      "track_id": "29d122ee2e5151ffa37b31d9df0d8d2c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves - Slowed - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Heat Waves (Expansion Pack)\\00 - Heat Waves.flac",
+      "timestamp": 1771483520.634938
+    },
+    {
+      "track_id": "4bd6f83b3ea8220cde44061f09c206fa",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves - Sonny Fodera Remix - Glass Animals, Sonny Fodera.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Sonny Fodera\\Remixes\\Dreamland (+ Bonus Levels)\\00 - Heat Waves.flac",
+      "timestamp": 1771483520.7502763
+    },
+    {
+      "track_id": "d590083f1f3b1cc6760b38a14c38a333",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Heat Waves - Stripped Back - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Dreamland (+ Bonus Levels)\\00 - Heat Waves.flac",
+      "timestamp": 1771483520.8237007
+    },
+    {
+      "track_id": "97c13967cc85c2b9ec50aa6e3d62b614",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Helium - Hudson Mohawke Remix - Glass Animals, Hudson Mohawke.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Remixes\\Dreamland (Real Life Edition)\\00 - Helium.flac",
+      "timestamp": 1771483520.9472256
+    },
+    {
+      "track_id": "c084278a828337cabf9f2d0a28e5055d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Hot Sugar - Washed Out Remix - Glass Animals, Washed Out.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Washed Out\\Remixes\\Dreamland (Real Life Edition)\\00 - Hot Sugar.flac",
+      "timestamp": 1771483521.0404832
+    },
+    {
+      "track_id": "02a9da6912933c3dbfde028634c92d72",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\I Don't Wanna Talk (I Just Wanna Dance) - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\I Don't Wanna Talk (I Just Wanna Dance)\\00 - I Don't Wanna Talk (I Just Wanna Dance).flac",
+      "timestamp": 1771483521.135528
+    },
+    {
+      "track_id": "e24efaf9f3ff33f871ef0589c6fd4dc1",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\I Love You More Than You Know (feat. Childish Gambino) - bLAck pARty, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\bLAck pARty, Childish Gambino\\Hummingbird\\00 - I Love You More Than You Know.flac",
+      "timestamp": 1771483521.2829912
+    },
+    {
+      "track_id": "fda3afe358ba23ffe02b4c334cac6909",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\In The Night (feat. Jorja Smith & Amaarae) - Childish Gambino, Jorja Smith, Amaarae.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino, Jorja Smith, Amaarae\\Bando Stone and The New World\\00 - In The Night.flac",
+      "timestamp": 1771483521.486114
+    },
+    {
+      "track_id": "e782472dfe5c90496da3779e6b8fec42",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\It’s All So Incredibly Loud - DJ Seinfeld Remix - Glass Animals, DJ Seinfeld.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, DJ Seinfeld\\Remixes\\Dreamland (Real Life Edition)\\00 - It’s All So Incredibly Loud.flac",
+      "timestamp": 1771483521.639563
+    },
+    {
+      "track_id": "097881658d33833c10bd82593c818e49",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\It’s All So Incredibly Loud - Kelly Lee Owens Remix - Glass Animals, Kelly Lee Owens.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Kelly Lee Owens\\Remixes\\Dreamland (Real Life Edition)\\00 - It’s All So Incredibly Loud.flac",
+      "timestamp": 1771483521.7657635
+    },
+    {
+      "track_id": "24e5f8617573dd0d480d058b1a19d80e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\IV. Sweatpants - Childish Gambino, JasonMartin.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino, Jason Martin\\Because the Internet\\00 - IV. Sweatpants.flac",
+      "timestamp": 1771483521.8432295
+    },
+    {
+      "track_id": "37ec089789d05b3df3f9adc85443cfae",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Jeopardy - Instrumental - Run The Jewels.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P, Killer Mike\\Run The Jewels 2 (Instrumentals)\\00 - Jeopardy (Instrumental).flac",
+      "timestamp": 1771483521.9258254
+    },
+    {
+      "track_id": "6385a8fa724372196a7c98b33e7954b5",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Jump Hi - LION BABE, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\LION BABE, Childish Gambino\\Begin\\00 - Jump Hi.flac",
+      "timestamp": 1771483522.0395
+    },
+    {
+      "track_id": "eef2805206fde8826b343116e3aadf53",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Kill Your Masters - Run The Jewels, El-P, Killer Mike.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P, Killer Mike\\Kill Your Masters\\00 - Kill Your Masters.flac",
+      "timestamp": 1771483522.1627743
+    },
+    {
+      "track_id": "8c10377f65860d306e84e9166c74c96a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Kings & Queens (feat. Run the Jewels) - DJ Shadow, Run The Jewels.flac",
+      "to_path": "A:\\music\\Active Music\\DJ Shadow, Run The Jewels\\Our Pathetic Age\\00 - Kings & Queens.flac",
+      "timestamp": 1771483522.2970994
+    },
+    {
+      "track_id": "be4a23760e4a5a3589f18553f1fe2946",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\LAVA GLACiERS (feat. CHiLDiSH GAMBiNO) - CHOP NOT SLOP REMiX - Riff Raff, Mac Miller.flac",
+      "to_path": "A:\\music\\Active Music\\Riff Raff, Mac Miller\\Remixes\\PURPLE iCON (CHOPPED NOT SLOPPED)\\00 - LAVA GLACiERS [CHOP NOT SLOP REMiX].flac",
+      "timestamp": 1771483522.4253538
+    },
+    {
+      "track_id": "a85e80ff2193fd66a84ac86bfaed1899",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Lava Glaciers (feat. Childish Gambino) - Riff Raff, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Riff Raff, Childish Gambino\\Neon Icon\\00 - Lava Glaciers.flac",
+      "timestamp": 1771483522.5462353
+    },
+    {
+      "track_id": "1c6bac4410ff3e28572c05b9ef793796",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Legend Has It - Run The Jewels, El-P, Killer Mike.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P, Killer Mike\\Run The Jewels 3\\00 - Legend Has It.flac",
+      "timestamp": 1771483522.662928
+    },
+    {
+      "track_id": "7f6e2df75c23d68078c00db43150be26",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Let's Go (The Royal We) - Run The Jewels, El-P, Killer Mike.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P, Killer Mike\\Let's Go (The Royal We)\\00 - Let's Go (The Royal We).flac",
+      "timestamp": 1771483522.758102
+    },
+    {
+      "track_id": "1c84076558abdc4b77ced31a649901c4",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Life Itself - Roosevelt Remix - Glass Animals, Roosevelt.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Remixes\\Life Itself (Roosevelt Remix)\\00 - Life Itself (Roosevelt Remix).flac",
+      "timestamp": 1771483523.0248106
+    },
+    {
+      "track_id": "d0a94cb156175dd022e695a191bc545f",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Lithonia - Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Lithonia\\00 - Lithonia.flac",
+      "timestamp": 1771483523.1221251
+    },
+    {
+      "track_id": "69bad47de140825e66108d01d6be089e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Lonely, Lonely - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\New Again (Deluxe)\\00 - Lonely, Lonely.flac",
+      "timestamp": 1771483523.2347882
+    },
+    {
+      "track_id": "97f36d2c2863623592975c19db164d0d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Lose Your Head - Dave Glass Animals Remix - London Grammar, Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\London Grammar\\Remixes\\Lose Your Head (Dave Glass Animals Remix)\\00 - Lose Your Head (Dave Glass Animals Remix).flac",
+      "timestamp": 1771483526.5688443
+    },
+    {
+      "track_id": "f2f8d9b86f597113acf5a248949175c4",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Loved You A Little (Acoustic) - The Maine, Taking Back Sunday, Charlotte Sands.flac",
+      "to_path": "A:\\music\\Active Music\\The Maine, Taking Back Sunday, Charlotte Sands\\Live\\Loved You A Little (Acoustic)\\00 - Loved You A Little (Acoustic).flac",
+      "timestamp": 1771483527.524665
+    },
+    {
+      "track_id": "c498a705ba4c1b678bbb18e09bb544cf",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\MakeDamnSure (Lullaby Version of Taking Back Sunday) - Twinkle Twinkle Little Rock Star.flac",
+      "to_path": "A:\\music\\Active Music\\Twinkle Twinkle Little Rock Star\\Remixes\\Emo Baby! Lullabies for the Dark, Vol. 2\\00 - MakeDamnSure (Lullaby Version of Taking Back Sunday).flac",
+      "timestamp": 1771483528.1806943
+    },
+    {
+      "track_id": "69c562c20eac5c46dd177ff375b6d235",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\MakeDamnSure - Live At Long Beach Arena, Long Beach, CA _ 2006 - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Live\\Louder Now (Deluxe Edition)\\00 - MakeDamnSure (Live At Long Beach Arena, Long Beach, CA 2006).flac",
+      "timestamp": 1771483528.2053297
+    },
+    {
+      "track_id": "433a73895abd764b95d9038110223935",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Mama's Gun - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\How To Be A Human Being\\00 - Mama's Gun.flac",
+      "timestamp": 1771483528.2914658
+    },
+    {
+      "track_id": "9f6c54122d5ef6d9e18a8f8ce22899df",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Mean Demeanor - Run The Jewels, El-P, Killer Mike.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P, Killer Mike\\Mean Demeanor\\00 - Mean Demeanor.flac",
+      "timestamp": 1771483528.316127
+    },
+    {
+      "track_id": "1775938fb36e560b4f39691c1dd13a04",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Melon and the Coconut - Mona Yim Remix - Glass Animals, Mona Yim.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Mona Yim\\Remixes\\Dreamland (Real Life Edition)\\00 - Melon and the Coconut.flac",
+      "timestamp": 1771483528.3407803
+    },
+    {
+      "track_id": "9109bf7afa10388461dc4e593defb403",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Meowpurrdy - El-P Remix - Run The Jewels, Lil Bub, Maceo, Delonte, Snoop Dogg.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, LIL BUB, maceo, Delonte, Snoop Dogg\\Remixes\\Meow the Jewels\\00 - Meowpurrdy.flac",
+      "timestamp": 1771483528.3639395
+    },
+    {
+      "track_id": "49fc8aa0bf228df2149ae757aaa1d32d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\MOOD 4 EVA (feat. Oumou Sangaré) - Beyoncé, JAY-Z, Childish Gambino, Oumou Sangaré.flac",
+      "to_path": "A:\\music\\Active Music\\Beyoncé, JAŸ-Z, Childish Gambino, Oumou Sangaré\\The Lion King The Gift\\00 - MOOD 4 EVA.flac",
+      "timestamp": 1771483528.3890984
+    },
+    {
+      "track_id": "7fe1a0b14eeb57c134aac7826f293f96",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\MORE DOLLARS, MORE SENSE 1994 (feat. Childish Gambino) - JasonMartin, DJ Quik, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\JasonMartin, PROBLEM, DJ Quik, Childish Gambino\\MORE DOLLARS, MORE SENSE 2014 (feat. Childish Gambino)\\00 - MORE DOLLARS, MORE SENSE 1994.flac",
+      "timestamp": 1771483528.4087238
+    },
+    {
+      "track_id": "2e3b2a57add23202ee3877cda0520394",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\My Love - Dave Glass Animals Remix - Florence + The Machine, Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Florence + the Machine, Glass Animals\\Remixes\\My Love (Dave Glass Animals Remix)\\00 - My Love.flac",
+      "timestamp": 1771483528.4328907
+    },
+    {
+      "track_id": "9661016f7e33f5438fba5d42dbb05cbe",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\New Type (feat. Childish Gambino) - Summer Walker, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Summer Walker, Childish Gambino\\CLEAR 2 SOFT LIFE EP\\00 - New Type.flac",
+      "timestamp": 1771483528.471607
+    },
+    {
+      "track_id": "203223a86e67f324633d003444f6fba6",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\No Save Point - Run The Jewels, Yankee and the Brave.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, Yankee and the Brave\\Cyberpunk 2077 Radio, Vol. 1 (Original Soundtrack)\\00 - No Save Point.flac",
+      "timestamp": 1771483528.4927454
+    },
+    {
+      "track_id": "b6030e84c1411a175a7e65c9b387e7fa",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Nobody Speak - DJ Shadow, Run The Jewels.flac",
+      "to_path": "A:\\music\\Active Music\\DJ Shadow, Run The Jewels\\Nobody Speak - Single\\00 - Nobody Speak.flac",
+      "timestamp": 1771483528.5148988
+    },
+    {
+      "track_id": "f846b1c851ede7cce5a45e5eeab3428c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Oh My Darling Don't Cry - Run The Jewels.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels\\Run The Jewels 2\\00 - Oh My Darling Don't Cry.flac",
+      "timestamp": 1771483528.5410643
+    },
+    {
+      "track_id": "497253898ba1f05c9bb2661d2de6c456",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\One Wish (feat. Childish Gambino) - Ravyn Lenae, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Ravyn Lenae, Childish Gambino\\One Wish (feat. Childish Gambino)\\00 - One Wish.flac",
+      "timestamp": 1771483528.5622003
+    },
+    {
+      "track_id": "47f95e6791936e9ec26699adc3900dac",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\ooh la la - feat. Greg Nice & DJ Premier - Run The Jewels, El-P, Killer Mike, DJ Premier, Greg Nice.flac",
+      "to_path": "A:\\music\\Active Music\\El-P, Killer Mike, Run The Jewels, DJ Premier, Greg Nice\\RTJ4\\00 - ooh la la.flac",
+      "timestamp": 1771483528.5843463
+    },
+    {
+      "track_id": "993a86737ce10a4acff41140d8db53e5",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Opening Theme (From 'Aqua Teen Forever_ Plantasm') - Run The Jewels, Aqua Teen Hunger Force.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, Aqua Teen Hunger Force\\Opening Theme (From Aqua Teen Forever Plantasm )\\00 - Opening Theme.flac",
+      "timestamp": 1771483528.6060004
+    },
+    {
+      "track_id": "a87e37d3a2426a8cc1555cde053f406a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Panther Like a Panther - Original Demo Version - Run The Jewels, El-P, Killer Mike.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P, Killer Mike\\Remixes\\Panther Like a Panther (Original Demo Version)\\00 - Panther Like a Panther.flac",
+      "timestamp": 1771483528.6331644
+    },
+    {
+      "track_id": "b4ca2d6013b8a8e6b782e24491400e6e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Pork Soda (made popular by Glass Animals) [backing version] - Party Tyme.flac",
+      "to_path": "A:\\music\\Active Music\\Party Tyme\\Remixes\\Rock Male Hits 30 - Party Tyme (Backing Versions)\\00 - Pork Soda (made popular by Glass Animals) [backing version].flac",
+      "timestamp": 1771483528.6573029
+    },
+    {
+      "track_id": "3f24f0bc082ec666e9284602eff32057",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Pork Soda - Radio Edit - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Remixes\\Pork Soda (Radio Edit)\\00 - Pork Soda (Radio Edit).flac",
+      "timestamp": 1771483528.6887589
+    },
+    {
+      "track_id": "52cbe2933b689cc8556592c2708e235b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Put Jewels On It - Statik Selektah, Run The Jewels.flac",
+      "to_path": "A:\\music\\Active Music\\Statik Selektah, Run The Jewels\\Put Jewels on It\\00 - Put Jewels On It.flac",
+      "timestamp": 1771483528.7138937
+    },
+    {
+      "track_id": "0d963a903f2f49a8f7944ae711d4118d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Retro [ROUGH] - Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Kauai\\00 - Retro [ROUGH].flac",
+      "timestamp": 1771483528.7325122
+    },
+    {
+      "track_id": "eb7de2e20fd9142d1b11c637cf2db107",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Revolution Indifference - Until The Ribbon Breaks, Run The Jewels.flac",
+      "to_path": "A:\\music\\Active Music\\Until The Ribbon Breaks, Run The Jewels\\A Lesson Unlearnt\\00 - Revolution Indifference.flac",
+      "timestamp": 1771483528.755136
+    },
+    {
+      "track_id": "6b00ae9a54f7890cf508d776d2a83a0c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Riot - Fredo Santana, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Fredo Santana, Childish Gambino\\Walking Legend\\00 - Riot.flac",
+      "timestamp": 1771483528.7767565
+    },
+    {
+      "track_id": "59a7803cb3f77edf6017bb3b4a58eb09",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Rubble Kings Theme (Dynamite) - Run The Jewels.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels\\Rubble Kings The Album\\00 - Rubble Kings Theme (Dynamite).flac",
+      "timestamp": 1771483528.798898
+    },
+    {
+      "track_id": "107c950498e9b0e2fa2e1c59cd271b51",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Run the Jewels (and the money) - Less Cash.flac",
+      "to_path": "A:\\music\\Active Music\\Less Cash\\Scenery\\00 - Run the Jewels (and the money).flac",
+      "timestamp": 1771483528.8200371
+    },
+    {
+      "track_id": "86e7d34a6eac0288f78e7d1bcb94adbc",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Run The Jewels (Instrumental) - Run The Jewels, El-P, Killer Mike.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P\\Run The Jewels Instrumentals\\00 - Run the Jewels.flac",
+      "timestamp": 1771483528.8411846
+    },
+    {
+      "track_id": "b09ef87e532c7c1713be86022f9161f6",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Run the Jewels - Baby Driver Dialogue Version - Run The Jewels, El-P, Killer Mike.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P, Killer Mike\\Remixes\\Run The Jewels (Baby Driver Dialogue Version)\\00 - Run The Jewels (Baby Driver Dialogue Version).flac",
+      "timestamp": 1771483528.864188
+    },
+    {
+      "track_id": "bd926de9d6ec55aaf19c20e6073b0147",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Run The Jewels - Run The Jewels, El-P, Killer Mike.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels, El-P, Killer Mike\\Run The Jewels\\00 - Run The Jewels.flac",
+      "timestamp": 1771483528.886834
+    },
+    {
+      "track_id": "a36a54523366ca4c034b27cce5234acb",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Season 2 Episode 3 - Photay Remix - Glass Animals, Photay.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Remixes\\Season 2 Episode 3 (Photay Remix)\\00 - Season 2 Episode 3 (Photay Remix).flac",
+      "timestamp": 1771483528.9140534
+    },
+    {
+      "track_id": "a7fb12c53b7bba973f7ee5265d4a0a3c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Show Pony - Karaoke Version Originally Performed by Glass Animals Emulation - Backing Business.flac",
+      "to_path": "A:\\music\\Active Music\\Backing Business\\Remixes\\Pristine Karaoke, Vol. 163\\00 - Show Pony (Karaoke Version Originally Performed by Glass Animals Emulation).flac",
+      "timestamp": 1771483528.9372
+    },
+    {
+      "track_id": "1ff00453bbe027023e9bed6369dff458",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Show Pony - Parra For Cuva Remix - Glass Animals, Parra for Cuva.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Parra for Cuva\\Remixes\\Show Pony (Parra For Cuva Remix)\\00 - Show Pony.flac",
+      "timestamp": 1771483528.9618845
+    },
+    {
+      "track_id": "66a08b1e28426cea23ad4aae4872da10",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Solar Power - Spotify Singles - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Happy Vibes 2023\\00 - Solar Power.flac",
+      "timestamp": 1771483528.983943
+    },
+    {
+      "track_id": "92c17544948fc6932bf90a504c5fa15e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Space Ghost Coast To Coast (with Bree Runway) - Glass Animals, Bree Runway.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Bree Runway\\Space Ghost Coast To Coast\\00 - Space Ghost Coast To Coast.flac",
+      "timestamp": 1771483529.0050116
+    },
+    {
+      "track_id": "5984e4a93c67f59ea9906ef7bbc89ca3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Space Ghost Coast To Coast - Hit-Boy Remix - Glass Animals, Hit-Boy.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Hit-Boy\\Remixes\\Dreamland (Real Life Edition)\\00 - Space Ghost Coast To Coast.flac",
+      "timestamp": 1771483529.0352058
+    },
+    {
+      "track_id": "6dc9fef1649f4add97cd152f29be560c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Space Ghost Coast To Coast - Raz & Afla Remix - Glass Animals, Raz & Afla.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Raz & Afla\\Remixes\\Dreamland (Real Life Edition)\\00 - Space Ghost Coast To Coast.flac",
+      "timestamp": 1771483529.0608788
+    },
+    {
+      "track_id": "71a74002a8a3053ff29fdbebe52e4d27",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Stay High - Childish Gambino, Brittany Howard.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino, Brittany Howard\\Jaime (Reimagined)\\00 - Stay High.flac",
+      "timestamp": 1771483529.0825033
+    },
+    {
+      "track_id": "b7dd425b2d9bace8b55dee56e85e5cc0",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Suburban Home _ I Like Food - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Tony Hawk's American Wasteland Soundtrack\\00 - Suburban Home I Like Food.flac",
+      "timestamp": 1771483529.1041372
+    },
+    {
+      "track_id": "c3d18a630d18188928288286a0c42c86",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Summertime Magic - Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Summer Pack\\00 - Summertime Magic.flac",
+      "timestamp": 1771483529.1262589
+    },
+    {
+      "track_id": "e3fe1449809223004fcbcc3246f8ec04",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Sunshine (feat. Lil Wayne & Childish Gambino) - Latto, Lil Wayne, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Latto, Lil Wayne, Childish Gambino\\777\\00 - Sunshine.flac",
+      "timestamp": 1771483529.1478984
+    },
+    {
+      "track_id": "5b004099a0c6906eea932aee24650b07",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\S’old (Acoustic) - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Live\\S’old (Acoustic)\\00 - S’old (Acoustic).flac",
+      "timestamp": 1771483529.166523
+    },
+    {
+      "track_id": "b5edeb743e2afa5814e906bed17eaa0d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\S’old - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\152\\00 - S’old.flac",
+      "timestamp": 1771483529.1898856
+    },
+    {
+      "track_id": "5743d8ae2d16eb03366696ba7e3812af",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Tangerine (with Arlo Parks) - Glass Animals, Arlo Parks.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Arlo Parks\\Dreamland (Real Life Edition)\\00 - Tangerine (with Arlo Parks).flac",
+      "timestamp": 1771483529.2115297
+    },
+    {
+      "track_id": "7ae45f51b9451d670612d20bb78c7b3d",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Terrible 2's (feat. Run The Jewels) - DJ Premier, Run The Jewels.flac",
+      "to_path": "A:\\music\\Active Music\\DJ Premier, Run The Jewels\\Hip Hop 50 Vol. 1\\00 - Terrible 2's.flac",
+      "timestamp": 1771483529.2346823
+    },
+    {
+      "track_id": "959e6167c292660698cd8640ca46f21f",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\This Is America (Made Popular By Childish Gambino) [Vocal Version] - Party Tyme Karaoke.flac",
+      "to_path": "A:\\music\\Active Music\\Party Tyme Karaoke\\Remixes\\Party Tyme 133 (Vocal Versions)\\00 - This Is America (Made Popular By Childish Gambino) [Vocal Version].flac",
+      "timestamp": 1771483529.3237276
+    },
+    {
+      "track_id": "9797df2c34e00196a0ae77c587183132",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\This Is America - Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\This Is America\\00 - This Is America.flac",
+      "timestamp": 1771483529.3463628
+    },
+    {
+      "track_id": "6ae8d643f3e422a4ec12554ba553f181",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Tidal Wave (Acoustic) - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Live\\Tidal Wave B-Sides\\00 - Tidal Wave (Acoustic).flac",
+      "timestamp": 1771483529.3695216
+    },
+    {
+      "track_id": "ff82f7be22eca5cdeaff68bb07b87182",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Time (feat. Ariana Grande) - Childish Gambino, Ariana Grande.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\Atavista\\00 - Time.flac",
+      "timestamp": 1771483529.3956952
+    },
+    {
+      "track_id": "fa11aa5c961c6f2bbdf0ed527a3151ff",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Together (feat. Childish Gambino) - Marlin Remix - Selah Sue, Childish Gambino, Marlin.flac",
+      "to_path": "A:\\music\\Active Music\\Selah Sue, Childish Gambino\\Remixes\\Reason (Bonus Tracks)\\00 - Together.flac",
+      "timestamp": 1771483529.4218485
+    },
+    {
+      "track_id": "fa0e5a7339009b1b1a4e9fe2d21668d2",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Tokyo Drifting (with Denzel Curry) - Glass Animals, Denzel Curry.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Denzel Curry\\Tokyo Drifting\\00 - Tokyo Drifting.flac",
+      "timestamp": 1771483529.910126
+    },
+    {
+      "track_id": "fc3a19b34ecfd373af083b10b1cfd20c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Tokyo Drifting - Oliver Malcolm Remix - Glass Animals, Denzel Curry, Oliver Malcolm.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Denzel Curry, Oliver Malcolm\\Remixes\\Dreamland (+ Bonus Levels)\\00 - Tokyo Drifting.flac",
+      "timestamp": 1771483530.0887365
+    },
+    {
+      "track_id": "db868dafc7bab251477e3cd21ddce52c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Tokyo Drifting - Young Franco Remix - Glass Animals, Young Franco.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Young Franco\\Remixes\\POPULAR REMIXES VOL 10\\00 - Tokyo Drifting.flac",
+      "timestamp": 1771483530.164667
+    },
+    {
+      "track_id": "ca65411f791b5ebe15fc5d2d5d13b124",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Trillion Girls (feat. Childish Gambino) - Jr. Hi, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Jr. Hi, Childish Gambino\\Virtual Lover - EP\\00 - Trillion Girls.flac",
+      "timestamp": 1771483530.1879497
+    },
+    {
+      "track_id": "445b0e872d52a672aa0fdb3c91c7fffe",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Trouble (feat. Childish Gambino) - Leona Lewis, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Leona Lewis, Childish Gambino\\Trouble (feat. Childish Gambino)\\00 - Trouble.flac",
+      "timestamp": 1771483530.2121062
+    },
+    {
+      "track_id": "dc2888d67c9d7fe4c5dd9d7c96d5a953",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Trouble (In the Style of Leona Lewis Ft. Childish Gambino) [Karaoke Version] - Mr. Entertainer Karaoke.flac",
+      "to_path": "A:\\music\\Active Music\\Mr. Entertainer Karaoke\\Remixes\\Karaoke - Chart Hits October 2012, Vol. 97\\00 - Trouble (In the Style of Leona Lewis.flac",
+      "timestamp": 1771483530.297103
+    },
+    {
+      "track_id": "cf80bb1728ff6704b10a67105bbca82c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Trouble (made popular by Leona Lewis ft. Childish Gambino) [backing version] - Party Tyme.flac",
+      "to_path": "A:\\music\\Active Music\\Party Tyme\\Remixes\\R&B Female Hits 10 - Party Tyme (Backing Versions)\\00 - Trouble (made popular by Leona Lewis.flac",
+      "timestamp": 1771483530.3197415
+    },
+    {
+      "track_id": "f7478af3fa9e5381c5e5d3d7dca499c8",
+      "action": "quarantine",
+      "from_path": "A:\\music\\Active Music\\V. 3005 (Originally Performed by Childish Gambino) [Karaoke Version] - SBI Audio Karaoke.flac",
+      "to_path": "A:\\music\\_Quarantine\\Junk\\V. 3005 (Originally Performed by Childish Gambino) [Karaoke Version] - SBI Audio Karaoke.flac",
+      "timestamp": 1771483530.3448937
+    },
+    {
+      "track_id": "a6e7e48c7e52f04b2a191ab56a0f97c4",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Waiting For My Moment - Childish Gambino, Jhené Aiko, Vince Staples, Ludwig Göransson.flac",
+      "to_path": "A:\\music\\Active Music\\Donald Glover, Jhené Aiko, Vince Staples, Ludwig Goransson\\CREED Original Motion Picture Soundtrack\\00 - Waiting For My Moment.flac",
+      "timestamp": 1771483530.3730633
+    },
+    {
+      "track_id": "1c4a1b38a8e115defaeb3ebe6023efd3",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Walking in the Snow (Originally Performed by Run the Jewels) [Instrumental Version] - Backing Business.flac",
+      "to_path": "A:\\music\\Active Music\\Backing Business\\Remixes\\Pristine Karaoke, Vol. 17\\00 - Walking in the Snow (Originally Performed by Run the Jewels) [Instrumental Version].flac",
+      "timestamp": 1771483530.3952014
+    },
+    {
+      "track_id": "15ddfd2f10f3e846b121ee5cb60524a9",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Waterfalls Coming Out Your Mouth - Clap! Clap! Remix - Glass Animals, Clap! Clap!.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals, Clap! Clap!\\Remixes\\Dreamland (Real Life Edition)\\00 - Waterfalls Coming Out Your Mouth.flac",
+      "timestamp": 1771483530.4193463
+    },
+    {
+      "track_id": "f3de4f5d09bded42835c51166cb22fc4",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\What Kind of Love - Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\Childish Gambino\\What Kind of Love\\00 - What Kind of Love.flac",
+      "timestamp": 1771483530.4394789
+    },
+    {
+      "track_id": "1459ec45ee71a931fd034e20108eae9e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\What's It Feel Like To Be A Ghost_ - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Louder Now (Deluxe Edition)\\00 - What's It Feel Like To Be A Ghost.flac",
+      "timestamp": 1771483530.4636402
+    },
+    {
+      "track_id": "647b28c7ea282e1548521225e41cb25f",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\whatthehellishappening_ - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\I Love You So F ing Much\\00 - whatthehellishappening.flac",
+      "timestamp": 1771483530.4852812
+    },
+    {
+      "track_id": "63ab5c109c9366b24e66335746b9b12b",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Witchy (feat. Childish Gambino) - KAYTRANADA, Childish Gambino.flac",
+      "to_path": "A:\\music\\Active Music\\KAYTRANADA, Childish Gambino\\TIMELESS\\00 - Witchy.flac",
+      "timestamp": 1771483530.5114365
+    },
+    {
+      "track_id": "e5f0ec42aafd7874039a2d05c4cf894c",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Wonderful Nothing - Edit - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Remixes\\Wonderful Nothing (Edit)\\00 - Wonderful Nothing.flac",
+      "timestamp": 1771483530.532062
+    },
+    {
+      "track_id": "bbc563e9f8a577dc9b0b4ef50abf3ad9",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\yankee and the brave (ep. 4) - Run The Jewels, El-P, Killer Mike.flac",
+      "to_path": "A:\\music\\Active Music\\El-P, Killer Mike, Run The Jewels\\RTJ4\\00 - yankee and the brave.flac",
+      "timestamp": 1771483530.554191
+    },
+    {
+      "track_id": "3642146bf99ca477dfb2f9fd2a517970",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\yankee y el valiente (TROOKO’s Versión) - Run The Jewels, Trooko.flac",
+      "to_path": "A:\\music\\Active Music\\Run The Jewels\\RTJ CU4TRO\\00 - yankee y el valiente.flac",
+      "timestamp": 1771483530.5748043
+    },
+    {
+      "track_id": "851729aa1519d560efa05b2d1b35db14",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\You Can't Look Back - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Tidal Wave\\00 - You Can't Look Back.flac",
+      "timestamp": 1771483530.5989604
+    },
+    {
+      "track_id": "11a41d057f29bd1c738e22a74800030e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\You're So Last Summer - Taking Back Sunday.flac",
+      "to_path": "A:\\music\\Active Music\\Taking Back Sunday\\Tell All Your Friends\\00 - You're So Last Summer.flac",
+      "timestamp": 1771483530.6738768
+    },
+    {
+      "track_id": "34681e5392fc66f211dc426f89a7a308",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Your Love (Deja Vu) - Stripped Back - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Dreamland (+ Bonus Levels)\\00 - Your Love (Deja Vu).flac",
+      "timestamp": 1771483530.7463
+    },
+    {
+      "track_id": "d03b2670f3793a946aaff54550fb9899",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Your Love (Déjà Vu) - Glass Animals.flac",
+      "to_path": "A:\\music\\Active Music\\Glass Animals\\Your Love (Déjà Vu)\\00 - Your Love (Déjà Vu).flac",
+      "timestamp": 1771483530.9087644
+    },
+    {
+      "track_id": "45f8b7cb805db12aaaf512ed6c36fbbb",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Brand New\\PARAGON DEMON\\01. Quincy Jones And His Orchestra - Ain't That Peculiar.flac",
+      "to_path": "A:\\music\\Active Music\\Quincy Jones And His Orchestra\\Quincy's Got A Brand New Bag (1965)\\00 - Ain't That Peculiar.flac",
+      "timestamp": 1771483531.127701
+    },
+    {
+      "track_id": "634b92fa5458584c30e27fe77c893fab",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\01 Prologue_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - Prologue.flac",
+      "timestamp": 1771483531.1478448
+    },
+    {
+      "track_id": "dc87948a2e3d8009dd0dc67d153789d5",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\03 Unheavenly Creatures_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - Unheavenly Creatures.flac",
+      "timestamp": 1771483534.388772
+    },
+    {
+      "track_id": "573a3f050e6202025602777d497421d8",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\04 Toys_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - Toys.flac",
+      "timestamp": 1771483534.7863266
+    },
+    {
+      "track_id": "1ecb68cefab95d6bba6e8f8e15998c91",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\05 Black Sunday_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - Black Sunday.flac",
+      "timestamp": 1771483535.033311
+    },
+    {
+      "track_id": "386afd7d9e053aa56f132729dc67aff6",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\06 Queen Of The Dark_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - Queen Of The Dark.flac",
+      "timestamp": 1771483535.4045703
+    },
+    {
+      "track_id": "b8f9963280e2b8a3f16001dd17ef3da4",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\07 True Ugly_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - True Ugly.flac",
+      "timestamp": 1771483540.0434213
+    },
+    {
+      "track_id": "20befdc87b95663947b9020a7b142acb",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\08 Love Protocol_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - Love Protocol.flac",
+      "timestamp": 1771483541.6078768
+    },
+    {
+      "track_id": "0f7e8e10552917327969d40f7b441d12",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\09 The Pavilion (A Long Way Back)_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - The Pavilion (A Long Way Back).flac",
+      "timestamp": 1771483541.9866827
+    },
+    {
+      "track_id": "c7cdeb2740306ae4231912380ed7d917",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\10 Night-Time Walkers_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - Night-Time Walkers.flac",
+      "timestamp": 1771483543.1414104
+    },
+    {
+      "track_id": "f98766869a46374a679dddf3ee7733c7",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\11 The Gutter_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - The Gutter.flac",
+      "timestamp": 1771483543.3425803
+    },
+    {
+      "track_id": "ca5fa189d63cc4c867584920b7994cc9",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\12 All On Fire_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - All On Fire.flac",
+      "timestamp": 1771483543.5243423
+    },
+    {
+      "track_id": "f90ec8bba3f88edfde0cbbff38708290",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\13 It Walks Among Us_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - It Walks Among Us.flac",
+      "timestamp": 1771483543.666695
+    },
+    {
+      "track_id": "fd83a93722fdfcba8ae0246914aad5ac",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\14 Old Flames_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - Old Flames.flac",
+      "timestamp": 1771483543.801999
+    },
+    {
+      "track_id": "d5cee3593fcf29537d61622bfa8db177",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\15 Lucky Stars_1771376004.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - Lucky Stars.flac",
+      "timestamp": 1771483543.9036279
+    },
+    {
+      "track_id": "836d90069b41619c31c5478407b85151",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\A1. The Ring In Return_1771376037.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - The Ring In Return.flac",
+      "timestamp": 1771483544.2406173
+    },
+    {
+      "track_id": "639ef22e0cd9d8fdc3ca8bf61fa60c91",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\A2. In Keeping Secrets Of Silent Earth 3_1771376037.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - In Keeping Secrets Of Silent Earth 3.flac",
+      "timestamp": 1771483544.9235315
+    },
+    {
+      "track_id": "4279723e648d907984ec21a7344cbe1a",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\A3. Cuts Marked In The March Of Men_1771376037.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - Cuts Marked In The March Of Men.flac",
+      "timestamp": 1771483545.3517647
+    },
+    {
+      "track_id": "de66b177263b32d69bce66a336f22934",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\A4. Three Evils (Embodied In Love And Shadow)_1771376037.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - Three Evils (Embodied In Love And Shadow).flac",
+      "timestamp": 1771483545.993788
+    },
+    {
+      "track_id": "577f348e7ca544e3206c7f0d9e454add",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\B1. The Crowing_1771376037.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - The Crowing.flac",
+      "timestamp": 1771483546.544377
+    },
+    {
+      "track_id": "e86c9443b70545e3ce0e5f5ade2aeecc",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\B2. Blood Red Summer_1771376037.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - Blood Red Summer.flac",
+      "timestamp": 1771483547.6726966
+    },
+    {
+      "track_id": "72665af2dd70f835f4ec9960034d431e",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\B3. The Camper Velorium I Faint Of Hearts_1771376037.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - The Camper Velorium I Faint Of Hearts.flac",
+      "timestamp": 1771483548.278121
+    },
+    {
+      "track_id": "bc09f0a17482db48c56776605677ccf6",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\B4. The Camper Velorium II Backend Of Forever_1771376037.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - The Camper Velorium II Backend Of Forever.flac",
+      "timestamp": 1771483548.750805
+    },
+    {
+      "track_id": "3ff19e7d448ba0b30d20164b4ed95ccd",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\C1. The Camper Velorium III Al The Killer_1771376037.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - The Camper Velorium III Al The Killer.flac",
+      "timestamp": 1771483549.5528567
+    },
+    {
+      "track_id": "b9a8b96a93e257300cfc1b092f1557d5",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\C2. A Favor House Atlantic_1771376037.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - A Favor House Atlantic.flac",
+      "timestamp": 1771483549.8585377
+    },
+    {
+      "track_id": "1b628645ab83ad65b0fea7e11ac75611",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\C3. The Light & The Glass_1771376038.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - The Light & The Glass.flac",
+      "timestamp": 1771483552.5884557
+    },
+    {
+      "track_id": "39a1997b3cede0b38cf0e5a022972fbc",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\D1. 2113_1771376038.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed and Cambria\\In Keeping Secrets Of Silent Earth 3 (2003)\\00 - 21 13.flac",
+      "timestamp": 1771483554.1154773
+    },
+    {
+      "track_id": "b31c4011579daf3e09b0b24dfe579c88",
+      "action": "move",
+      "from_path": "A:\\music\\Active Music\\Coheed and Cambria\\The Unheavenly Creatures\\02 The Dark Sentencer.flac",
+      "to_path": "A:\\music\\Active Music\\Coheed, Cambria\\The Unheavenly Creatures (2018-10-05)\\00 - The Dark Sentencer.flac",
+      "timestamp": 1771483554.3574595
+    }
+  ]
+}

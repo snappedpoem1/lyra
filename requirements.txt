@@ -1,0 +1,60 @@
+# Music Oracle — Dependencies
+# Install: pip install -r requirements.txt
+#    or:   uv pip install -r requirements.txt
+
+# Core download engine
+yt-dlp>=2026.2.4
+
+# Audio metadata / tagging
+mutagen
+
+# HTTP + scraping
+requests
+beautifulsoup4
+
+# API wrappers
+lyricsgenius
+pylast
+spotipy
+musicbrainzngs
+qbittorrent-api
+openai
+
+# Environment config
+python-dotenv
+
+# Async HTTP
+aiohttp
+
+# Rich terminal UI
+rich
+questionary
+
+# Data analysis (Spotify history)
+pandas
+
+# Fuzzy matching for track dedup
+thefuzz[speedup]
+
+# Terminal colors (fallback)
+colorama
+
+# Retry logic
+tenacity
+tqdm
+
+# Web API server (for future dashboard)
+flask
+flask-cors
+
+# Sonic DNA / embeddings (optional — heavy, skip if you want lean install)
+# Uncomment these if you want ChromaDB + AI features (pinned for stability):
+# chromadb==1.5.0
+# transformers==5.2.0
+# torch==2.10.0
+# torchvision==0.25.0
+# torchaudio==2.10.0
+# librosa==0.11.0
+# soundfile==0.13.1
+# sentence-transformers==5.2.3
+# numpy>=2.0

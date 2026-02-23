@@ -1,0 +1,669 @@
+"""Unified Acquisition Waterfall.
+
+Lyra's tiered acquisition strategy:
+  T1: Qobuz      (hi-fi streaming API → FLAC up to 24-bit/96kHz)
+  T2: Slskd      (peer-to-peer FLAC search via Soulseek)
+  T3: Real-Debrid (Prowlarr search → RD cache → direct download)
+  T4: SpotDL     (YouTube with Spotify metadata - always available fallback)
+
+Each tier gracefully degrades if services aren't running.
+Quality: FLAC hi-res (T1) → FLAC (T2/T3) → 320k MP3 (T4)
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from oracle.config import guard_bypass_allowed, guard_bypass_reason
+from oracle.db.schema import get_connection, get_write_mode
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AcquisitionResult:
+    """Result of an acquisition attempt."""
+    success: bool
+    tier: int
+    source: str
+    path: Optional[str] = None
+    artist: str = ""
+    title: str = ""
+    error: Optional[str] = None
+    elapsed: float = 0.0
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+# ── Availability Checks ────────────────────────────────────────────
+
+
+def _check_qobuz_available() -> bool:
+    """Check if Qobuz credentials are configured or Docker service is up."""
+    try:
+        from oracle.acquirers.qobuz import is_service_available, is_available
+        return is_service_available() or is_available()
+    except ImportError:
+        return False
+
+
+def _check_slskd_available() -> bool:
+    """Check if Slskd node is reachable."""
+    import requests
+    url = os.getenv("LYRA_PROTOCOL_NODE_URL", "http://localhost:5030")
+    try:
+        response = requests.get(f"{url}/api/v0/application", timeout=5)
+        return response.status_code in (200, 401)  # 401 = needs auth but running
+    except Exception:
+        return False
+
+
+def _check_prowlarr_available() -> bool:
+    """Check if Prowlarr is reachable."""
+    import requests
+    url = os.getenv("PROWLARR_URL", "http://localhost:9696")
+    api_key = os.getenv("PROWLARR_API_KEY")
+    if not api_key:
+        return False
+    try:
+        response = requests.get(
+            f"{url}/api/v1/health",
+            headers={"X-Api-Key": api_key},
+            timeout=5,
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def _check_realdebrid_available() -> bool:
+    """Check if Real-Debrid API is accessible."""
+    key = os.getenv("REAL_DEBRID_KEY") or os.getenv("REAL_DEBRID_API_KEY")
+    if not key:
+        return False
+    try:
+        import requests
+        response = requests.get(
+            "https://api.real-debrid.com/rest/1.0/user",
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=5,
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def _check_spotdl_available() -> bool:
+    """Check if spotdl is installed."""
+    import shutil
+    if shutil.which("spotdl"):
+        return True
+    try:
+        __import__("spotdl")
+        return True
+    except ImportError:
+        return False
+
+
+# ── Tier Implementations ───────────────────────────────────────────
+
+
+def _try_tier1_qobuz(artist: str, title: str) -> AcquisitionResult:
+    """Tier 1: Qobuz hi-fi (FLAC up to 24-bit/96kHz, authenticated API)."""
+    start = time.perf_counter()
+
+    if not _check_qobuz_available():
+        return AcquisitionResult(
+            success=False,
+            tier=1,
+            source="qobuz",
+            error="Qobuz not available",
+            elapsed=time.perf_counter() - start,
+        )
+
+    try:
+        from oracle.acquirers.qobuz import download
+
+        result = download(artist, title)
+
+        return AcquisitionResult(
+            success=result.get("success", False),
+            tier=1,
+            source="qobuz",
+            path=result.get("path"),
+            artist=result.get("artist", artist),
+            title=result.get("title", title),
+            error=result.get("error"),
+            elapsed=result.get("elapsed", time.perf_counter() - start),
+            metadata=result.get("metadata", {}),
+        )
+
+    except Exception as e:
+        logger.exception("[T1] Qobuz error")
+        return AcquisitionResult(
+            success=False,
+            tier=1,
+            source="qobuz",
+            error=str(e),
+            elapsed=time.perf_counter() - start,
+        )
+
+
+def _try_tier2_slskd(artist: str, title: str) -> AcquisitionResult:
+    """Tier 2: Slskd peer-to-peer (FLAC quality)."""
+    start = time.perf_counter()
+
+    if not _check_slskd_available():
+        return AcquisitionResult(
+            success=False,
+            tier=2,
+            source="slskd",
+            error="Slskd not available",
+            elapsed=time.perf_counter() - start,
+        )
+
+    try:
+        from oracle.lyra_protocol import run_lyra_protocol
+        import asyncio
+
+        result = asyncio.run(run_lyra_protocol(artist, title))
+
+        if result.get("status") == "queued":
+            winner = result.get("winner")
+            return AcquisitionResult(
+                success=True,
+                tier=2,
+                source="slskd",
+                path=winner.identifier if winner else None,
+                artist=artist,
+                title=title,
+                elapsed=time.perf_counter() - start,
+                metadata={
+                    "route": result.get("route"),
+                    "integrity_score": winner.integrity_score if winner else None,
+                },
+            )
+
+        return AcquisitionResult(
+            success=False,
+            tier=2,
+            source="slskd",
+            error=result.get("error", "No results"),
+            elapsed=time.perf_counter() - start,
+        )
+
+    except Exception as e:
+        logger.exception("[T2] Error")
+        return AcquisitionResult(
+            success=False,
+            tier=2,
+            source="slskd",
+            error=str(e),
+            elapsed=time.perf_counter() - start,
+        )
+
+
+def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) -> AcquisitionResult:
+    """Tier 3: Prowlarr → Real-Debrid (cached torrents, FLAC quality)."""
+    start = time.perf_counter()
+
+    if not _check_prowlarr_available():
+        return AcquisitionResult(
+            success=False,
+            tier=3,
+            source="real_debrid",
+            error="Prowlarr not available",
+            elapsed=time.perf_counter() - start,
+        )
+
+    if not _check_realdebrid_available():
+        return AcquisitionResult(
+            success=False,
+            tier=3,
+            source="real_debrid",
+            error="Real-Debrid not available",
+            elapsed=time.perf_counter() - start,
+        )
+
+    try:
+        from oracle.acquirers.prowlarr_rd import search_prowlarr
+        from oracle.acquirers.realdebrid import (
+            extract_hash_from_magnet,
+            probe_magnet_cached,
+        )
+
+        # Search for release (prefer FLAC)
+        query = f"{artist} {album or title} FLAC"
+        logger.info(f"[T3] Searching Prowlarr: {query}")
+        results = search_prowlarr(query, limit=10)
+
+        if not results:
+            query = f"{artist} {title}"
+            results = search_prowlarr(query, limit=10)
+
+        if not results:
+            return AcquisitionResult(
+                success=False,
+                tier=3,
+                source="real_debrid",
+                error="No results from Prowlarr",
+                elapsed=time.perf_counter() - start,
+            )
+
+        # Build magnet list from Prowlarr results.
+        # Prowlarr field map (verified empirically):
+        #   guid      = actual magnet URI  ("magnet:?xt=urn:btih:...") for TPB-style indexers
+        #   infoHash  = raw hex hash (most reliable — use to construct magnet if guid isn't one)
+        #   magnetUrl = Prowlarr proxy URL (do NOT send this to RD; use guid/infoHash instead)
+        magnets: List[Dict] = []
+        for r in results:
+            info_hash = (r.get("infoHash") or "").strip().lower()
+            magnet = ""
+
+            guid = (r.get("guid") or "").strip()
+            if guid.lower().startswith("magnet:"):
+                magnet = guid
+                if not info_hash:
+                    info_hash = extract_hash_from_magnet(magnet) or ""
+            elif info_hash:
+                dn = (r.get("title") or "").replace(" ", "+")
+                magnet = f"magnet:?xt=urn:btih:{info_hash}&dn={dn}"
+
+            if magnet:
+                magnets.append({
+                    "magnet": magnet,
+                    "title": r.get("title", ""),
+                    "is_flac": "flac" in (r.get("title") or "").lower(),
+                    "seeders": r.get("seeders", 0) or 0,
+                })
+
+        if not magnets:
+            return AcquisitionResult(
+                success=False,
+                tier=3,
+                source="real_debrid",
+                error="No usable magnets in Prowlarr results",
+                elapsed=time.perf_counter() - start,
+            )
+
+        # Sort: FLAC first, then by seeder count descending
+        magnets.sort(key=lambda x: (not x["is_flac"], -x["seeders"]))
+
+        # RD instantAvailability is deprecated (returns 403). Instead: add each
+        # magnet, poll for 20s. Cached torrents go to "downloaded" in <5s.
+        # Non-cached ones time out — we delete them and move on.
+        # Limit to top 3 to keep T3 bounded (<60s total before falling to T4).
+        for entry in magnets[:3]:
+            magnet = entry["magnet"]
+            label = entry["title"][:55] or magnet[:55]
+            logger.info(f"[T3] Probing RD cache: {label}")
+            try:
+                files = probe_magnet_cached(
+                    magnet,
+                    target_artist=artist,
+                    target_title=title,
+                )
+                if not files:
+                    continue
+
+                # Post-download guard: verify the file is plausibly the right track
+                audio_files = [
+                    f for f in files
+                    if f.suffix.lower() in {".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus"}
+                ]
+                if not audio_files:
+                    logger.debug("[T3] No audio files in download — skipping")
+                    continue
+
+                best_file = audio_files[0]
+                if len(audio_files) > 1:
+                    # Pick the file whose name best matches the target
+                    from difflib import SequenceMatcher
+                    target_str = f"{artist} {title}".lower()
+                    audio_files.sort(
+                        key=lambda p: SequenceMatcher(None, target_str, p.stem.lower()).ratio(),
+                        reverse=True,
+                    )
+                    best_file = audio_files[0]
+
+                return AcquisitionResult(
+                    success=True,
+                    tier=3,
+                    source="real_debrid",
+                    path=str(best_file),
+                    artist=artist,
+                    title=title,
+                    elapsed=time.perf_counter() - start,
+                    metadata={"is_flac": entry["is_flac"], "files": len(files)},
+                )
+            except Exception as e:
+                logger.debug(f"[T3] probe failed: {e}")
+
+        return AcquisitionResult(
+            success=False,
+            tier=3,
+            source="real_debrid",
+            error="No cached results found in Real-Debrid",
+            elapsed=time.perf_counter() - start,
+        )
+
+    except Exception as e:
+        logger.exception("[T3] Error")
+        return AcquisitionResult(
+            success=False,
+            tier=3,
+            source="real_debrid",
+            error=str(e),
+            elapsed=time.perf_counter() - start,
+        )
+
+
+def _try_tier4_spotdl(artist: str, title: str, spotify_uri: Optional[str] = None) -> AcquisitionResult:
+    """Tier 4: SpotDL (YouTube with Spotify metadata, 320k quality)."""
+    start = time.perf_counter()
+
+    try:
+        from oracle.acquirers.spotdl import download, is_available
+
+        if not is_available():
+            return AcquisitionResult(
+                success=False,
+                tier=4,
+                source="spotdl",
+                error="spotdl not installed (pip install spotdl)",
+                elapsed=time.perf_counter() - start,
+            )
+
+        result = download(artist, title, spotify_uri)
+
+        return AcquisitionResult(
+            success=result.get("success", False),
+            tier=4,
+            source="spotdl",
+            path=result.get("path"),
+            artist=artist,
+            title=title,
+            error=result.get("error"),
+            elapsed=time.perf_counter() - start,
+        )
+
+    except Exception as e:
+        logger.exception("[T4] Error")
+        return AcquisitionResult(
+            success=False,
+            tier=4,
+            source="spotdl",
+            error=str(e),
+            elapsed=time.perf_counter() - start,
+        )
+
+
+# ── Guard ───────────────────────────────────────────────────────────
+
+
+def _guard_check(artist: str, title: str, skip_guard: bool = False) -> Dict[str, Any]:
+    """Run pre-acquisition guard check."""
+    if skip_guard:
+        if not guard_bypass_allowed():
+            logger.error(
+                "[guard] Skip requested but LYRA_ALLOW_GUARD_BYPASS is not enabled for %s - %s",
+                artist,
+                title,
+            )
+            return {
+                "allowed": False,
+                "artist": artist,
+                "title": title,
+                "reason": "Guard bypass denied: set LYRA_ALLOW_GUARD_BYPASS=1",
+                "category": "policy",
+            }
+        logger.warning(
+            "[guard] BYPASS ENABLED for %s - %s (reason=%s)",
+            artist,
+            title,
+            guard_bypass_reason(),
+        )
+        return {"allowed": True, "artist": artist, "title": title}
+
+    try:
+        from oracle.acquirers.guard import guard_acquisition
+
+        result = guard_acquisition(
+            artist=artist,
+            title=title,
+            skip_validation=False,  # Full validation
+            skip_duplicate_check=False,
+        )
+
+        return {
+            "allowed": result.allowed,
+            "artist": result.artist,
+            "title": result.title,
+            "album": result.album,
+            "reason": result.rejection_reason,
+            "category": result.rejection_category,
+            "confidence": result.confidence,
+            "validated_by": result.validated_by,
+            "warnings": result.warnings,
+        }
+    except ImportError:
+        logger.error("Guard module not available; failing closed")
+        return {
+            "allowed": False,
+            "artist": artist,
+            "title": title,
+            "reason": "Guard module unavailable",
+            "category": "guard_error",
+        }
+    except Exception as e:
+        logger.error("Guard check failed; failing closed: %s", e)
+        return {
+            "allowed": False,
+            "artist": artist,
+            "title": title,
+            "reason": f"Guard check failed: {e}",
+            "category": "guard_error",
+        }
+
+
+# ── Main Waterfall ──────────────────────────────────────────────────
+
+
+def acquire(
+    artist: str,
+    title: str,
+    album: Optional[str] = None,
+    spotify_uri: Optional[str] = None,
+    skip_tiers: Optional[List[int]] = None,
+    max_tier: int = 4,
+    skip_guard: bool = False,
+) -> AcquisitionResult:
+    """Run the acquisition waterfall with guard protection.
+
+    Tries each tier in order:
+      T1 (Qobuz) → T2 (Slskd) → T3 (Real-Debrid) → T4 (SpotDL)
+
+    GUARD CHECK runs first to reject:
+    - Karaoke/tribute/cover versions
+    - Record labels as artists
+    - YouTube channels as artists
+    - Duplicates already in library
+
+    Args:
+        artist: Artist name
+        title: Track title
+        album: Optional album name (helps T3 search)
+        spotify_uri: Optional Spotify URI (helps T4)
+        skip_tiers: List of tier numbers to skip (1=Qobuz, 2=Slskd, 3=RD, 4=SpotDL)
+        max_tier: Stop after this tier (1-4)
+        skip_guard: Skip guard check (not recommended)
+
+    Returns:
+        AcquisitionResult from the first successful tier, or the last failure
+    """
+    skip_tiers = skip_tiers or []
+    attempts: List[AcquisitionResult] = []
+
+    logger.info(f"[Waterfall] {artist} - {title}")
+
+    # GUARD CHECK - reject junk before wasting bandwidth
+    guard = _guard_check(artist, title, skip_guard)
+    if not guard.get("allowed"):
+        logger.warning(f"  [GUARD REJECTED] {guard.get('reason')}")
+        return AcquisitionResult(
+            success=False,
+            tier=0,
+            source="guard",
+            error=f"Guard rejected: {guard.get('reason')}",
+            artist=artist,
+            title=title,
+            metadata={"rejection_category": guard.get("category")},
+        )
+
+    # Use cleaned metadata from guard
+    artist = guard.get("artist", artist)
+    title = guard.get("title", title)
+    if guard.get("album") and not album:
+        album = guard.get("album")
+
+    if guard.get("warnings"):
+        for w in guard.get("warnings", []):
+            logger.info(f"  [WARN] {w}")
+
+    # Tier 1: Qobuz (hi-fi FLAC — priority, authenticated, reliable)
+    if 1 not in skip_tiers and max_tier >= 1:
+        logger.info("  [T1] Trying Qobuz...")
+        result = _try_tier1_qobuz(artist, title)
+        attempts.append(result)
+        if result.success:
+            logger.info(f"  [OK] T1 SUCCESS ({result.elapsed:.1f}s)")
+            _log_acquisition(artist, title, result)
+            return result
+        logger.info(f"  [--] T1: {result.error}")
+
+    # Tier 2: Slskd (P2P FLAC)
+    if 2 not in skip_tiers and max_tier >= 2:
+        logger.info("  [T2] Trying Slskd...")
+        result = _try_tier2_slskd(artist, title)
+        attempts.append(result)
+        if result.success:
+            logger.info(f"  [OK] T2 SUCCESS ({result.elapsed:.1f}s)")
+            _log_acquisition(artist, title, result)
+            return result
+        logger.info(f"  [--] T2: {result.error}")
+
+    # Tier 3: Real-Debrid (Prowlarr → cached torrents)
+    if 3 not in skip_tiers and max_tier >= 3:
+        logger.info("  [T3] Trying Real-Debrid...")
+        result = _try_tier3_realdebrid(artist, title, album)
+        attempts.append(result)
+        if result.success:
+            logger.info(f"  [OK] T3 SUCCESS ({result.elapsed:.1f}s)")
+            _log_acquisition(artist, title, result)
+            return result
+        logger.info(f"  [--] T3: {result.error}")
+
+    # Tier 4: SpotDL (YouTube 320k fallback)
+    if 4 not in skip_tiers and max_tier >= 4:
+        logger.info("  [T4] Trying SpotDL...")
+        result = _try_tier4_spotdl(artist, title, spotify_uri)
+        attempts.append(result)
+        if result.success:
+            logger.info(f"  [OK] T4 SUCCESS ({result.elapsed:.1f}s)")
+            _log_acquisition(artist, title, result)
+            return result
+        logger.info(f"  [--] T4: {result.error}")
+
+    # All failed
+    logger.warning(f"  [FAIL] All tiers failed for: {artist} - {title}")
+
+    if attempts:
+        return attempts[-1]
+
+    return AcquisitionResult(
+        success=False,
+        tier=0,
+        source="none",
+        error="All acquisition tiers skipped or failed",
+        artist=artist,
+        title=title,
+    )
+
+
+def _log_acquisition(artist: str, title: str, result: AcquisitionResult) -> None:
+    """Log successful acquisition to database."""
+    if get_write_mode() != "apply_allowed":
+        return
+
+    try:
+        conn = get_connection(timeout=5.0)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE acquisition_queue
+            SET status = 'completed', completed_at = datetime('now')
+            WHERE artist = ? AND title = ? AND status = 'pending'
+            """,
+            (artist, title),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.debug(f"Failed to update acquisition log: {e}")
+
+
+def get_tier_status() -> Dict[str, Dict[str, Any]]:
+    """Check availability of each acquisition tier."""
+    return {
+        "tier1_qobuz": {
+            "available": _check_qobuz_available(),
+            "description": "Qobuz hi-fi (FLAC up to 24-bit/96kHz)",
+        },
+        "tier2_slskd": {
+            "available": _check_slskd_available(),
+            "description": "Slskd peer-to-peer (FLAC)",
+        },
+        "tier3_realdebrid": {
+            "available": _check_prowlarr_available() and _check_realdebrid_available(),
+            "prowlarr": _check_prowlarr_available(),
+            "realdebrid": _check_realdebrid_available(),
+            "description": "Prowlarr + Real-Debrid (FLAC torrents)",
+        },
+        "tier4_spotdl": {
+            "available": _check_spotdl_available(),
+            "description": "SpotDL YouTube (320k MP3)",
+        },
+    }
+
+
+if __name__ == "__main__":
+    import sys
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    if len(sys.argv) < 3:
+        print("\nLyra Acquisition Waterfall\n")
+        print("Usage: python -m oracle.acquirers.waterfall <artist> <title> [album]")
+        print("\nTier status:")
+        for tier, info in get_tier_status().items():
+            avail = "[OK]" if info.get("available") else "[--]"
+            desc = info.get("description", "")
+            print(f"  {avail} {tier}: {desc}")
+        sys.exit(0)
+
+    artist = sys.argv[1]
+    title = sys.argv[2]
+    album = sys.argv[3] if len(sys.argv) > 3 else None
+
+    result = acquire(artist, title, album)
+    print(f"\nResult: {'SUCCESS' if result.success else 'FAILED'}")
+    print(f"  Tier: {result.tier}")
+    print(f"  Source: {result.source}")
+    if result.path:
+        print(f"  Path: {result.path}")
+    if result.error:
+        print(f"  Error: {result.error}")
+    print(f"  Elapsed: {result.elapsed:.1f}s")

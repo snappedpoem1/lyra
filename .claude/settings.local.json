@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker --version:*)",
+      "Bash(docker context:*)",
+      "Bash(docker context use:*)",
+      "Bash(powershell.exe -Command \"Start-Process ''C:\\\\Program Files\\\\Docker\\\\Docker\\\\Docker Desktop.exe'' -WindowStyle Hidden\")",
+      "Bash(docker exec:*)",
+      "Bash(MSYS_NO_PATHCONV=1 docker exec:*)",
+      "Bash(MSYS_NO_PATHCONV=1 docker inspect:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}

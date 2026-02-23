@@ -1,0 +1,206 @@
+[
+  {
+    "name": "db.migrate",
+    "rc": 0,
+    "sec": 0.16,
+    "out": ""
+  },
+  {
+    "name": "status",
+    "rc": 0,
+    "sec": 7.24,
+    "out": "============================================================\nLYRA ORACLE STATUS\n============================================================\nWrite Mode: apply_allowed\nProfile: performance | Paused: no\n\nDatabase:\n   Tracks (total): 2,331\n   Tracks (active): 2,292\n   Embeddings: 2,330\n   Scored tracks: 2,330\n   Vibes: 0\n   Queue (pending): 183\n   Spotify history: 637,860\n   Spotify library: 4,015\n   Playback events: 2\n\nAcquisition Tiers:\n   [OK] tier1_qobuz\n   [OK] tier2_slskd\n   [OK] tier3_realdebrid\n   [OK] tier4_spotdl\n\nServices:\n   [OK] Docker: daemon running\n   [OK] Prowlarr: HTTP 200\n   [OK] rdtclient: HTTP 200\n   [OK] slskd: HTTP 401 (live)\n   [OK] LM Studio: HTTP 200\n============================================================"
+  },
+  {
+    "name": "audit",
+    "rc": 0,
+    "sec": 0.3,
+    "out": "#   ARTIST                    PLAYS    LIKED    LOCAL    STATUS\n---------------------------------------------------------------------------\n1   Coheed and Cambria        14905    LIKE 27  LOC 43   25% OWNED\n2   Kendrick Lamar            11660    LIKE 31  LOC 1    1% OWNED\n3   Brand New                 10740    LIKE 46  LOC 95   COMPLETE\n4   Run The Jewels            9710     LIKE 12  LOC 3    3% OWNED\n5   Drake                     9180     LIKE 31  LOC 32   32% OWNED\n6   Childish Gambino          8450     LIKE 35  LOC 18   23% OWNED\n7   Kanye West                7855     LIKE 21  LOC 26   37% OWNED\n8   J. Cole                   7435     LIKE 26  LOC 2    2% OWNED\n9   JID                       6330     LIKE 11  LOC 17   39% OWNED\n10  Thrice                    5920     LIKE 22  LOC 16   30% OWNED\n11  Tyler, The Creator        5900     LIKE 11  LOC 112  COMPLETE\n12  Aesop Rock              "
+  },
+  {
+    "name": "doctor",
+    "rc": 0,
+    "sec": 4.48,
+    "out": "[OK] Python: Python 3.12\n  [OK] FFmpeg: C:\\Users\\Admin\\AppData\\Local\\Microsoft\\WinGet\\Links\\ffmpeg.EXE\n  [OK] fpcalc: C:\\Users\\Admin\\AppData\\Local\\Microsoft\\WinGet\\Links\\fpcalc.EXE\n  [OK] Disk: C:\\: 278.4 GB free\n  [OK] Disk: A:\\: 8666.1 GB free\n  [OK] Database: Writable: C:\\MusicOracle\\lyra_registry.db\n  [OK] ChromaDB (local): 10 files in chroma_storage\n  [OK] Env: Core env keys present\n  [OK] Docker: Daemon running\n  [OK] Real-Debrid API: Active \u00e2\u20ac\u201d 2050 pts, expires 2026-03-04\n  [OK] Prowlarr (T1): Live at http://localhost:9696\n  [OK] rdtclient (T1): Live at http://localhost:6500\n  [OK] slskd (T2): Live at http://localhost:5030\n  [OK] spotdl (T3): Available (Python package)\n  [!!] LM Studio (LLM): Live - no model loaded (expected: qwen2.5-14b-instruct; run: lms load qwen2.5-14b-instruct)\n\nDoctor result: WARNINGS (system functional)"
+  },
+  {
+    "name": "perf.status",
+    "rc": 0,
+    "sec": 0.13,
+    "out": "CPU cores: 16\nProfile: performance\nAuto workers -> network: 48, io: 32, cpu: 16\nPause: OFF"
+  },
+  {
+    "name": "scan.limit1",
+    "rc": 0,
+    "sec": 1.8,
+    "out": "{'scanned': 1, 'added': 0, 'updated': 1, 'quarantined': 0, 'errors': 0}\n\n\nScanning:   0%|          | 0/1 [00:00<?, ?file/s]\nScanning: 100%|\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6| 1/1 [00:00<00:00,  5.70file/s]\nScanning: 100%|\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6| 1/1 [00:00<00:00,  5.70file/s]"
+  },
+  {
+    "name": "index.limit1.no_score",
+    "rc": 0,
+    "sec": 5.8,
+    "out": "No tracks to index. Use --force-reindex to rebuild embeddings.\n{'indexed': 0, 'failed': 0, 'scored': 0}"
+  },
+  {
+    "name": "search.basic",
+    "rc": 0,
+    "sec": 8.72,
+    "out": "1. Balance and Composure - Ain't It Sweet | with you in spirit | 2024-10-04 | A:\\music\\Active Music\\Balance and Composure - Ain't It Sweet.flac"
+  },
+  {
+    "name": "pipeline.limit1.no_score",
+    "rc": 0,
+    "sec": 5.62,
+    "out": "============================================================\nLYRA PIPELINE: Scan \u00e2\u2020\u2019 Index \u00e2\u2020\u2019 Score\n============================================================\n\n[1/2] Scanning library...\n  Scanned: {'scanned': 1, 'added': 0, 'updated': 1, 'quarantined': 0, 'errors': 0}\n\n[2/2] Indexing + scoring...\nNo tracks to index. Use --force-reindex to rebuild embeddings.\n  Indexed: 0\n  Scored: 0\n  Failed: 0\n\n============================================================\nPipeline complete!\n============================================================\n\n\n\nScanning:   0%|          | 0/1 [00:00<?, ?file/s]\nScanning: 100%|\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6\u00e2\u2013\u02c6| 1/1 [00:00<00:00, 11.57file/s]"
+  },
+  {
+    "name": "hunt.query",
+    "rc": 0,
+    "sec": 9.37,
+    "out": "Pipeline state: completed\nPlaced at: A:\\music\\Active Music\\Massive Attack - Teardrop.flac\n\n[DEPRECATED] run_pipeline() delegates to compatibility pipeline facade."
+  },
+  {
+    "name": "score.limit1",
+    "rc": 0,
+    "sec": 5.27,
+    "out": "{\n  \"total\": 1,\n  \"scored\": 0,\n  \"skipped\": 1,\n  \"persisted\": 0,\n  \"errors\": 0,\n  \"workers\": 16,\n  \"write_mode\": \"apply_allowed\"\n}"
+  },
+  {
+    "name": "normalize.preview",
+    "rc": 0,
+    "sec": 0.12,
+    "out": "Analyzing 11 tracks...\n\n=== NORMALIZATION REPORT ===\n\nTracks to update: 0\n\nRun with --apply to make changes"
+  },
+  {
+    "name": "validate.limit1.preview",
+    "rc": 0,
+    "sec": 1.48,
+    "out": "Validating 1 tracks (only unvalidated tracks)...\n\nValidation workers: 1\n[1/1] A$AP Ferg*                - Work REMIX                          -> valid\n\n=== Complete ===\nValidated: 1\nFixed: 0\nWould fix: 0\nFailed: 0\nSkipped (already complete): 0\n\nMusicBrainz search failed: ('Connection aborted.', ConnectionResetError(10054, 'An existing connection was forcibly closed by the remote host', None, 10054, None))"
+  },
+  {
+    "name": "acquire.search",
+    "rc": 0,
+    "sec": 2.87,
+    "out": "Nirvana.Smells.Like.Teen.Spirit.Official.Video.Topaz.AI.Enhance.XXX.2160p.x265.MP4-BEN.THE.MEN -> http://localhost:9696/3/download?apikey=75f12f985f1f48b389c00ace31f1fb3b&link=dDFLaTdiV1VpQUt5Z2tiNFBEYVQxZDMzYmc4Q0NrQU4yRWloanZvcDV2RDVTcmVLeVdYclVwMHM2ZnNqODJ5QTl0Mzh6M1ZsSHFVVHZRSmx5b2VMdHJ5UmQ1MjY0Skw5S3hjeHkyNnlZb2s9&file=Nirvana.Smells.Like.Teen.Spirit.Official.Video.Topaz.AI.Enhance.XXX.2160p.x265.MP4-BEN.THE.MEN"
+  },
+  {
+    "name": "batch.run.limit1",
+    "rc": "TIMEOUT",
+    "sec": 240.01,
+    "out": ""
+  },
+  {
+    "name": "enrich.track1",
+    "rc": 0,
+    "sec": 0.18,
+    "out": "{\"error\": \"track not found\"}"
+  },
+  {
+    "name": "curate.classify.limit1",
+    "rc": 0,
+    "sec": 0.11,
+    "out": "Classification Summary (1 tracks):\n  junk: 1"
+  },
+  {
+    "name": "curate.plan.limit1",
+    "rc": 0,
+    "sec": 0.12,
+    "out": "Generating plan for 1 tracks...\n\nPlan generated: 20260223_133018\n  JSON: Reports\\curation_plan_20260223_133018.json\n  CSV: Reports\\curation_plan_20260223_133018.csv\n\nSummary:\n  quarantine: 1"
+  },
+  {
+    "name": "curate.apply.dry_run",
+    "rc": 0,
+    "sec": 0.13,
+    "out": "Applying plan 20260219_014332 (dry_run=True, confidence_min=0.5)...\nERROR: Source not found: A:\\music\\Active Music\\A Day To Remember - A Day To Remember - The Downfall of Us All (Official Video) [CN4IIgFz93k].m4a\nERROR: Source not found: A:\\music\\Active Music\\alt-J - alt-J (\u00e2\u02c6\u2020) Breezeblocks [rVeMiVU77wo].m4a\nERROR: Source not found: A:\\music\\Active Music\\Bayside - Bayside - Devotion and Desire [AszabgCs6d8].m4a\nERROR: Source not found: A:\\music\\Active Music\\Bayside - Bayside - Sick, Sick, Sick [aqHsHCIrCvI].m4a\nERROR: Source not found: A:\\music\\Active Music\\Bear Hands - Bear Hands - Giants (Official Music Video) [xadxu7tZJrg].m4a\nERROR: Source not found: A:\\music\\Active Music\\By Storm - Injury Reserve - Jailbreak the Tesla (Feat. Amin\u00c3\u00a9) [PWQL_XORalY].m4a\nERROR: Source not found: A:\\music\\Active Music\\Childish Gambino - Bonfire [aSQ5jq2qXN0].m4a\nERROR: Source not found: A:\\music\\Active "
+  },
+  {
+    "name": "curate.undo.dry_run",
+    "rc": 0,
+    "sec": 0.12,
+    "out": "Undoing 363 operations (dry_run=True)...\nREVERT: 00 - The Dark Sentencer.flac -> A:\\music\\Active Music\\Coheed and Cambria\\The Unheavenly Creatures\\02 The Dark Sentencer.flac\nREVERT: 00 - 21 13.flac -> A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\D1. 2113_1771376038.flac\nREVERT: 00 - The Light & The Glass.flac -> A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\C3. The Light & The Glass_1771376038.flac\nREVERT: 00 - A Favor House Atlantic.flac -> A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\C2. A Favor House Atlantic_1771376037.flac\nREVERT: 00 - The Camper Velorium III Al The Killer.flac -> A:\\music\\Active Music\\Coheed and Cambria\\The Father of Make Believe (New Entities Edition)\\C1. The Camper Velorium III Al The Killer_1771376037.flac\nREVERT: 00 - The Camp"
+  },
+  {
+    "name": "downloads.list",
+    "rc": 0,
+    "sec": 0.14,
+    "out": "No downloads found."
+  },
+  {
+    "name": "downloads.clean.dry_run",
+    "rc": 0,
+    "sec": 0.16,
+    "out": "No downloads found."
+  },
+  {
+    "name": "downloads.organize.dry_run",
+    "rc": 0,
+    "sec": 0.14,
+    "out": "No downloads found."
+  },
+  {
+    "name": "vibe.list",
+    "rc": 0,
+    "sec": 5.32,
+    "out": "No vibes saved yet."
+  },
+  {
+    "name": "vibe.refresh.all",
+    "rc": 0,
+    "sec": 5.56,
+    "out": "\u00e2\u0153\u201c Refreshed 0 vibe(s)"
+  },
+  {
+    "name": "guard.test",
+    "rc": 0,
+    "sec": 1.18,
+    "out": "============================================================\nGUARD TEST: Nirvana - Smells Like Teen Spirit\n============================================================\n\n\u00e2\u0153\u2026 ALLOWED\n  Confidence: 100%\n  Canonical: Nirvana - Smells Like Teen Spirit\n  Validated by: musicbrainz"
+  },
+  {
+    "name": "guard.scan",
+    "rc": 0,
+    "sec": 0.12,
+    "out": "============================================================\nGUARD SCAN: downloads\n============================================================\n\nTotal: 0\nAllowed: 0\nRejected: 0"
+  },
+  {
+    "name": "guard.import.dry_run",
+    "rc": 0,
+    "sec": 0.11,
+    "out": "============================================================\nGUARDED IMPORT\n============================================================\nTotal: 0\nImported: 0\nRejected: 0\nLow confidence: 0\nErrors: 0\n\n(DRY RUN - no changes made)"
+  },
+  {
+    "name": "guard.audit",
+    "rc": "TIMEOUT",
+    "sec": 180.01,
+    "out": "MusicBrainz lookup failed: HTTPSConnectionPool(host='musicbrainz.org', port=443): Max retries exceeded with url: /ws/2/recording?query=artist%3A%22Brand+New%22+AND+recording%3A%22In+the+Water%22&fmt=json&limit=3 (Caused by ProtocolError('Connection aborted.', ConnectionResetError(10054, 'An existing connection was forcibly closed by the remote host', None, 10054, None)))"
+  },
+  {
+    "name": "guard.quarantine.dry_run",
+    "rc": "TIMEOUT",
+    "sec": 180.01,
+    "out": "MusicBrainz lookup failed: HTTPSConnectionPool(host='musicbrainz.org', port=443): Max retries exceeded with url: /ws/2/recording?query=artist%3A%22Big+Sean%22+AND+recording%3A%22Why+Would+I+Stop%3F%22&fmt=json&limit=3 (Caused by ProtocolError('Connection aborted.', ConnectionResetError(10054, 'An existing connection was forcibly closed by the remote host', None, 10054, None)))"
+  },
+  {
+    "name": "catalog.lookup",
+    "rc": 0,
+    "sec": 192.47,
+    "out": ""
+  },
+  {
+    "name": "catalog.status",
+    "rc": 1,
+    "sec": 0.22,
+    "out": "Traceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"C:\\MusicOracle\\oracle\\cli.py\", line 1353, in <module>\n    main()\n  File \"C:\\MusicOracle\\oracle\\cli.py\", line 1183, in main\n    conn = get_connection()\n           ^^^^^^^^^^^^^^\nUnboundLocalError: cannot access local variable 'get_connection' where it is not associated with a value"
+  },
+  {
+    "name": "catalog.acquire.dry_run",
+    "rc": 0,
+    "sec": 178.32,
+    "out": ""
+  },
+  {
+    "name": "watch.once",
+    "rc": 0,
+    "sec": 10.16,
+    "out": "13:42:42 [INFO] [WATCHER] Watching: C:\\MusicOracle\\downloads, C:\\MusicOracle\\staging\n13:42:42 [INFO] [WATCHER] Library dir: A:\\music\\Active Music\n13:42:42 [INFO] [WATCHER] Waiting 10s for files to stabilize...\n13:42:52 [INFO] [WATCHER] Done. Ingested 0 file(s)."
+  }
+]

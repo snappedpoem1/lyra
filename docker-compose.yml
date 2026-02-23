@@ -1,0 +1,90 @@
+# Lyra Oracle — Docker Services
+# Runs: Prowlarr (indexer), rdtclient (Real-Debrid), slskd (Soulseek)
+# Usage: docker-compose up -d
+# Healthcheck: oracle doctor
+
+services:
+
+  prowlarr:
+    image: linuxserver/prowlarr:latest
+    container_name: lyra_prowlarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - ./data/prowlarr:/config
+    ports:
+      - "9696:9696"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9696/health", "--max-time", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  rdtclient:
+    image: rogerfar/rdtclient:latest
+    container_name: lyra_rdtclient
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+    volumes:
+      - ./data/transport:/data/db
+      - ./downloads:/data/downloads
+    ports:
+      - "6500:6500"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6500", "--max-time", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  qobuz:
+    build:
+      context: ./docker/qobuz
+      dockerfile: Dockerfile
+    container_name: lyra_qobuz
+    environment:
+      - QOBUZ_USERNAME=${QOBUZ_USERNAME}
+      - QOBUZ_PASSWORD=${QOBUZ_PASSWORD}
+      - QOBUZ_QUALITY=${QOBUZ_QUALITY:-7}
+      - QOBUZ_MAX_WORKERS=3
+      - STAGING_DIR=/app/staging
+      - TZ=America/New_York
+    volumes:
+      - ./staging:/app/staging
+    ports:
+      - "7700:7700"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:7700/health', timeout=3).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  slskd:
+    image: slskd/slskd:latest
+    container_name: lyra_slskd
+    environment:
+      - SLSKD_REMOTE_CONFIGURATION=true
+      - SLSKD_SLSK_LISTEN_PORT=50300
+    volumes:
+      - ./data/node/slskd.yml:/app/slskd.yml
+      - ./data/node/data:/app/data
+      - ./downloads:/app/downloads
+    ports:
+      - "5030:5030"
+      - "50300:50300"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5030/api/v0/application", "--max-time", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s

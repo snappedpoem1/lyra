@@ -1,0 +1,53 @@
+# ── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual Environment ─────────────────────────────────────
+.venv/
+venv/
+ENV/
+
+# ── IDE ─────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Environment & Secrets ───────────────────────────────────
+.env
+.spotify_cache
+*.pem
+*.key
+
+# ── Lyra Data (large / machine-generated) ───────────────────
+lyra_registry.db
+lyra_registry.db-journal
+lyra_registry.db-wal
+chroma_storage/
+hf_cache/
+downloads/
+staging/
+logs/
+
+# ── Archives & Backups ──────────────────────────────────────
+_archive/
+_backups/
+Backups/
+*.rar
+*.zip
+
+# ── OS ──────────────────────────────────────────────────────
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+*.gguf
+data/
+node_modules/
+.cache/
