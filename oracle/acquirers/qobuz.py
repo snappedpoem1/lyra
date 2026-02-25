@@ -1,4 +1,4 @@
-"""Qobuz high-fidelity acquisition backend (Tier 1 — priority).
+"""Qobuz high-fidelity acquisition backend (Tier 1 â€” priority).
 
 Uses qobuz-dl under the hood for authentication, app secret extraction,
 stream URL signing, download, and metadata tagging. Falls back to the
@@ -24,21 +24,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-<<<<<<< HEAD
-from dotenv import load_dotenv
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STAGING_DIR = (PROJECT_ROOT / "staging").resolve()
 
-<<<<<<< HEAD
-load_dotenv(PROJECT_ROOT / ".env", override=False)
-
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 QOBUZ_USERNAME = os.getenv("QOBUZ_USERNAME", "")
 QOBUZ_PASSWORD = os.getenv("QOBUZ_PASSWORD", "")
 QOBUZ_QUALITY = int(os.getenv("QOBUZ_QUALITY", "7"))
@@ -77,7 +68,7 @@ class QobuzAcquirer:
         self._secrets: Optional[List[str]] = None
         self._init_lock = threading.Lock()
 
-    # ── Lazy Init ───────────────────────────────────────────────────
+    # â”€â”€ Lazy Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _ensure_client(self) -> None:
         """Initialize the qobuz-dl client on first use.
@@ -108,7 +99,7 @@ class QobuzAcquirer:
                 app_id=self._app_id,
                 secrets=self._secrets,
             )
-            logger.info("[Qobuz] Authenticated — subscription: %s", self._client.label)
+            logger.info("[Qobuz] Authenticated â€” subscription: %s", self._client.label)
 
     @property
     def client(self):
@@ -116,7 +107,7 @@ class QobuzAcquirer:
         self._ensure_client()
         return self._client
 
-    # ── Search + Match ──────────────────────────────────────────────
+    # â”€â”€ Search + Match â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def search_tracks(
         self,
@@ -137,7 +128,7 @@ class QobuzAcquirer:
         query = f"{artist} {title}"
         resp = self.client.search_tracks(query, limit=limit)
         items = resp.get("tracks", {}).get("items", [])
-        logger.debug("[Qobuz] Search '%s' → %d results", query, len(items))
+        logger.debug("[Qobuz] Search '%s' â†’ %d results", query, len(items))
         return items
 
     def find_best_match(
@@ -188,7 +179,7 @@ class QobuzAcquirer:
         )
         return best_track
 
-    # ── Download via qobuz-dl ───────────────────────────────────────
+    # â”€â”€ Download via qobuz-dl â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _download_with_qobuz_dl(
         self,
@@ -219,11 +210,11 @@ class QobuzAcquirer:
         )
         d.download_id_by_type(track=True)
 
-        # Clean up cover.jpg files — art is embedded in the audio file
+        # Clean up cover.jpg files â€” art is embedded in the audio file
         for cover in output_dir.rglob("cover.jpg"):
             cover.unlink(missing_ok=True)
 
-        # Find what was downloaded — qobuz-dl creates artist-album subdirs
+        # Find what was downloaded â€” qobuz-dl creates artist-album subdirs
         audio_exts = {".flac", ".mp3", ".m4a", ".ogg"}
         candidates = [
             p for p in output_dir.rglob("*")
@@ -236,14 +227,14 @@ class QobuzAcquirer:
         # Return the most recently created file
         return max(candidates, key=lambda p: p.stat().st_mtime)
 
-    # ── Full Acquisition Pipeline ───────────────────────────────────
+    # â”€â”€ Full Acquisition Pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def acquire(
         self,
         artist: str,
         title: str,
     ) -> Dict[str, Any]:
-        """Full pipeline: search → match → download → tag → stage.
+        """Full pipeline: search â†’ match â†’ download â†’ tag â†’ stage.
 
         Args:
             artist: Artist name.
@@ -276,17 +267,9 @@ class QobuzAcquirer:
                 url_info = self.client.get_track_url(track_id, self.quality)
                 bit_depth = url_info.get("bit_depth", "?")
                 sampling_rate = url_info.get("sampling_rate", "?")
-<<<<<<< HEAD
-                mime = url_info.get("mime_type", "audio/flac")
             except Exception:
                 bit_depth = "?"
                 sampling_rate = "?"
-                mime = "audio/flac"
-=======
-            except Exception:
-                bit_depth = "?"
-                sampling_rate = "?"
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
             # 3. Download with qobuz-dl (handles tagging + cover art)
             with tempfile.TemporaryDirectory(prefix="qobuz_", dir=self.staging_dir.parent) as tmp:
@@ -348,7 +331,7 @@ class QobuzAcquirer:
             }
 
 
-# ── Module-level convenience API ────────────────────────────────────
+# â”€â”€ Module-level convenience API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _acquirer: Optional[QobuzAcquirer] = None
 
@@ -366,7 +349,7 @@ def _get_acquirer() -> QobuzAcquirer:
 def is_available() -> bool:
     """Check if Qobuz credentials are configured (username + password).
 
-    app_id and app_secret are auto-extracted — only user creds needed.
+    app_id and app_secret are auto-extracted â€” only user creds needed.
     """
     return bool(QOBUZ_USERNAME and QOBUZ_PASSWORD)
 
@@ -413,7 +396,7 @@ def _download_via_service(artist: str, title: str) -> Dict[str, Any]:
         resp.raise_for_status()
         data = resp.json()
 
-        # Translate container path → host path
+        # Translate container path â†’ host path
         if data.get("success") and data.get("path"):
             data["path"] = str(STAGING_DIR / Path(data["path"]).name)
 

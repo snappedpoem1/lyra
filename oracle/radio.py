@@ -12,23 +12,11 @@ Features:
 Author: Lyra Oracle v9.0
 """
 
-<<<<<<< HEAD
-import os
-import logging
-import sqlite3
-import json
-import random
-import numpy as np
-from typing import Optional, List, Dict
-from datetime import datetime, timedelta
-from pathlib import Path
-=======
 import logging
 import sqlite3
 import json
 import numpy as np
 from typing import Optional, List, Dict
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 import uuid
 
 from oracle.config import get_connection, CHROMA_COLLECTION
@@ -68,7 +56,7 @@ class Radio:
         Returns:
             List of chaos tracks
         """
-        logger.info(f"🎲 RADIO: Generating chaos from {current_track_id or 'START'}")
+        logger.info(f"ðŸŽ² RADIO: Generating chaos from {current_track_id or 'START'}")
         
         try:
             # Import ChromaDB locally to avoid circular imports
@@ -83,7 +71,7 @@ class Radio:
                 result = collection.get(ids=[current_track_id], include=["embeddings", "metadatas"])
                 
                 if not result["ids"]:
-                    logger.warning("  ⚠️  Current track not in ChromaDB")
+                    logger.warning("  âš ï¸  Current track not in ChromaDB")
                     return self._random_tracks(count)
                 
                 current_embedding = result["embeddings"][0]
@@ -121,7 +109,7 @@ class Radio:
                 # Select top N
                 selected = candidates[:count]
                 
-                logger.info(f"  → Selected {len(selected)} chaos tracks")
+                logger.info(f"  â†’ Selected {len(selected)} chaos tracks")
                 for track in selected:
                     logger.info(f"    {track['metadata']['artist']} - {track['metadata']['title']} (sim: {track['similarity']:.2f})")
                 
@@ -132,7 +120,7 @@ class Radio:
                 return self._random_tracks(count)
         
         except Exception as e:
-            logger.error(f"  ✗ Chaos generation failed: {e}")
+            logger.error(f"  âœ— Chaos generation failed: {e}")
             return self._random_tracks(count)
     
     def get_flow_track(
@@ -151,7 +139,7 @@ class Radio:
         
         "Feel the flow"
         """
-        logger.info(f"🌊 RADIO: Flowing from {current_track_id}")
+        logger.info(f"ðŸŒŠ RADIO: Flowing from {current_track_id}")
         
         conn = None
         try:
@@ -167,7 +155,7 @@ class Radio:
             
             current_structure = cursor.fetchone()
             if not current_structure:
-                logger.warning("  ⚠️  No structure data. Falling back to semantic.")
+                logger.warning("  âš ï¸  No structure data. Falling back to semantic.")
                 return self._semantic_similar_tracks(current_track_id, count)
             
             cur_bpm, cur_key, cur_energy = current_structure
@@ -219,7 +207,7 @@ class Radio:
             # Sort by compatibility
             candidates.sort(key=lambda x: x["compatibility"], reverse=True)
             
-            logger.info(f"  → {len(candidates)} compatible tracks found")
+            logger.info(f"  â†’ {len(candidates)} compatible tracks found")
             selected = candidates[:count]
             
             for track in selected:
@@ -228,7 +216,7 @@ class Radio:
             return selected
         
         except Exception as e:
-            logger.error(f"  ✗ Flow generation failed: {e}")
+            logger.error(f"  âœ— Flow generation failed: {e}")
             return self._semantic_similar_tracks(current_track_id, count)
         finally:
             if conn:
@@ -240,7 +228,7 @@ class Radio:
         
         "Find the hidden gems"
         """
-        logger.info(f"🔭 RADIO: Discovering hidden gems")
+        logger.info(f"ðŸ”­ RADIO: Discovering hidden gems")
         
         conn = self._open_conn()
         cursor = conn.cursor()
@@ -268,7 +256,7 @@ class Radio:
         
         selected = discoveries[:count]
         
-        logger.info(f"  → {len(selected)} discoveries")
+        logger.info(f"  â†’ {len(selected)} discoveries")
         for track in selected:
             logger.info(f"    {track['metadata']['artist']} - {track['metadata']['title']} (plays: {track.get('play_count', 0)})")
         
@@ -294,16 +282,6 @@ class Radio:
             rating: Optional 1-5 stars
         """
         conn = self._open_conn()
-<<<<<<< HEAD
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO playback_history
-            (track_id, context, session_id, skipped, completion_rate, rating)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (track_id, context, self.current_session, skipped, completion_rate, rating))
-        conn.commit()
-        conn.close()
-=======
         try:
             cursor = conn.cursor()
             track_exists = cursor.execute(
@@ -326,7 +304,6 @@ class Radio:
             raise ValueError(f"invalid playback payload: {exc}") from exc
         finally:
             conn.close()
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         
         # Update taste profile
         if completion_rate > 0.8 or rating and rating >= 4:
@@ -424,7 +401,7 @@ class Radio:
             return tracks
         
         except Exception as e:
-            logger.error(f"  ✗ Semantic fallback failed: {e}")
+            logger.error(f"  âœ— Semantic fallback failed: {e}")
             return self._random_tracks(count)
     
     def _random_tracks(self, count: int) -> List[Dict]:
@@ -470,7 +447,7 @@ class Radio:
         Returns:
             Radio queue
         """
-        logger.info(f"📻 RADIO: Building {mode} queue (length={length})")
+        logger.info(f"ðŸ“» RADIO: Building {mode} queue (length={length})")
         
         queue = []
         current_track = seed_track
@@ -498,7 +475,7 @@ class Radio:
         # Store queue in database
         self._store_queue(queue, mode)
         
-        logger.info(f"  ✓ Queue built: {len(queue)} tracks")
+        logger.info(f"  âœ“ Queue built: {len(queue)} tracks")
         return queue
     
     def _store_queue(self, queue: List[Dict], algorithm: str) -> None:
@@ -531,7 +508,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     
     if len(sys.argv) < 2:
-        print("\n📻 Lyra Radio - Chaos Engine\n")
+        print("\nðŸ“» Lyra Radio - Chaos Engine\n")
         print("Commands:")
         print("  python -m oracle.radio chaos [track_id]    - Get chaos track")
         print("  python -m oracle.radio flow <track_id>     - Get flow track")
@@ -549,7 +526,7 @@ if __name__ == "__main__":
         seed = sys.argv[2] if len(sys.argv) > 2 else None
         tracks = radio.get_chaos_track(seed, count=5)
         
-        print(f"\n🎲 CHAOS TRACKS:\n")
+        print(f"\nðŸŽ² CHAOS TRACKS:\n")
         for i, track in enumerate(tracks, 1):
             print(f"{i}. {track['metadata']['artist']} - {track['metadata']['title']}")
             if 'similarity' in track:
@@ -560,7 +537,7 @@ if __name__ == "__main__":
         seed = sys.argv[2]
         tracks = radio.get_flow_track(seed, count=5)
         
-        print(f"\n🌊 FLOW TRACKS:\n")
+        print(f"\nðŸŒŠ FLOW TRACKS:\n")
         for i, track in enumerate(tracks, 1):
             print(f"{i}. {track['metadata']['artist']} - {track['metadata']['title']}")
             if 'compatibility' in track:
@@ -570,7 +547,7 @@ if __name__ == "__main__":
     elif command == "discover":
         tracks = radio.get_discovery_track(count=5)
         
-        print(f"\n🔭 DISCOVERIES:\n")
+        print(f"\nðŸ”­ DISCOVERIES:\n")
         for i, track in enumerate(tracks, 1):
             print(f"{i}. {track['metadata']['artist']} - {track['metadata']['title']}")
             print(f"   Plays: {track.get('play_count', 0)}")
@@ -582,10 +559,10 @@ if __name__ == "__main__":
         
         queue = radio.build_queue(mode, seed, length=20)
         
-        print(f"\n📻 RADIO QUEUE ({mode}):\n")
+        print(f"\nðŸ“» RADIO QUEUE ({mode}):\n")
         for i, track in enumerate(queue, 1):
             print(f"{i:2}. {track['metadata']['artist']} - {track['metadata']['title']}")
         print()
     
     else:
-        print("\n✗ Invalid command. Run with no args for help.\n")
+        print("\nâœ— Invalid command. Run with no args for help.\n")

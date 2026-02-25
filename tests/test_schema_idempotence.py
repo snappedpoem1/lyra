@@ -21,8 +21,6 @@ class SchemaIdempotenceTests(unittest.TestCase):
         schema._ensure_tracks_columns(cursor)
         cursor.execute("PRAGMA table_info(tracks)")
         first = [row[1] for row in cursor.fetchall()]
-<<<<<<< HEAD
-=======
         for expected in (
             "subgenres",
             "artist_mbid",
@@ -36,7 +34,6 @@ class SchemaIdempotenceTests(unittest.TestCase):
             "last_enriched_at",
         ):
             self.assertIn(expected, first)
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
         schema._ensure_tracks_columns(cursor)
         cursor.execute("PRAGMA table_info(tracks)")

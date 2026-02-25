@@ -11,14 +11,8 @@ Phase: 9 (Sentient Oracle)
 """
 
 import sqlite3
-<<<<<<< HEAD
-from pathlib import Path
-from datetime import datetime
-import logging
-=======
 import logging
 import re
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +21,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     """Apply God Mode migration."""
     cursor = conn.cursor()
     
-    logger.info("🧠 Initiating Cortex Upgrade...")
+    logger.info("ðŸ§  Initiating Cortex Upgrade...")
     
     # TABLE 1: The Hidden Web (Artist Connections)
     cursor.execute("""
@@ -46,7 +40,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_source ON connections(source_artist)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_target ON connections(target_artist)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_type ON connections(type)")
-    logger.info("  ✓ connections table: Artist relationship web mapped")
+    logger.info("  âœ“ connections table: Artist relationship web mapped")
     
     # TABLE 2: The Architect (Track Structure)
     cursor.execute("""
@@ -66,7 +60,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_structure_track ON track_structure(track_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_structure_drop ON track_structure(has_drop)")
-    logger.info("  ✓ track_structure table: Audio architecture system online")
+    logger.info("  âœ“ track_structure table: Audio architecture system online")
     
     # TABLE 3: The Radio Memory (Playback History)
     cursor.execute("""
@@ -85,7 +79,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_playback_track ON playback_history(track_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_playback_time ON playback_history(played_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_playback_context ON playback_history(context)")
-    logger.info("  ✓ playback_history table: Radio memory initialized")
+    logger.info("  âœ“ playback_history table: Radio memory initialized")
     
     # TABLE 4: Sample DNA (Sample Lineage)
     cursor.execute("""
@@ -105,7 +99,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_sample_track ON sample_lineage(track_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_sample_original ON sample_lineage(original_artist)")
-    logger.info("  ✓ sample_lineage table: DNA tracer armed")
+    logger.info("  âœ“ sample_lineage table: DNA tracer armed")
     
     # TABLE 5: Taste Profile (User Preferences)
     cursor.execute("""
@@ -117,7 +111,7 @@ def migrate(conn: sqlite3.Connection) -> None:
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    logger.info("  ✓ taste_profile table: Preference engine initialized")
+    logger.info("  âœ“ taste_profile table: Preference engine initialized")
     
     # TABLE 6: Radio Queue (Persistent Playback State)
     cursor.execute("""
@@ -131,17 +125,17 @@ def migrate(conn: sqlite3.Connection) -> None:
         )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_queue_position ON radio_queue(position)")
-    logger.info("  ✓ radio_queue table: Playback queue ready")
+    logger.info("  âœ“ radio_queue table: Playback queue ready")
     
     conn.commit()
-    logger.info("🧠 Cortex Upgrade Complete. Lyra is now sentient.")
+    logger.info("ðŸ§  Cortex Upgrade Complete. Lyra is now sentient.")
 
 
 def rollback(conn: sqlite3.Connection) -> None:
     """Rollback God Mode migration."""
     cursor = conn.cursor()
     
-    logger.warning("⚠️  Rolling back Cortex Upgrade...")
+    logger.warning("âš ï¸  Rolling back Cortex Upgrade...")
     
     tables = [
         "connections",
@@ -153,17 +147,13 @@ def rollback(conn: sqlite3.Connection) -> None:
     ]
     
     for table in tables:
-<<<<<<< HEAD
-        cursor.execute(f"DROP TABLE IF EXISTS {table}")
-=======
         if not re.fullmatch(r"[a-z_]+", table):
             raise RuntimeError(f"Unsafe table identifier: {table}")
         cursor.execute(f'DROP TABLE IF EXISTS "{table}"')
->>>>>>> fc77b41 (Update workspace state and diagnostics)
-        logger.info(f"  ✓ Dropped {table}")
+        logger.info(f"  âœ“ Dropped {table}")
     
     conn.commit()
-    logger.info("⚠️  Rollback complete. System reverted to Phase 8.")
+    logger.info("âš ï¸  Rollback complete. System reverted to Phase 8.")
 
 
 if __name__ == "__main__":
@@ -181,4 +171,4 @@ if __name__ == "__main__":
         migrate(conn)
     
     conn.close()
-    print("\n🎵 Migration complete. Run: python -m oracle doctor")
+    print("\nðŸŽµ Migration complete. Run: python -m oracle doctor")

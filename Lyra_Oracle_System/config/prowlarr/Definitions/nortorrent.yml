@@ -10,11 +10,7 @@ type: public
 encoding: UTF-8
 # to fetch current domain use https://www.rantop.org/
 links:
-<<<<<<< HEAD
-  - https://www-nortorrent.com/
-=======
   - https://ww2-nortorrent.com/
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 legacylinks:
   # latest domains list
   - https://www.rantop.org/
@@ -30,10 +26,6 @@ legacylinks:
   - https://www.site-torrent.com/
   - https://www.rantop.my/
   # actual legacylinks
-<<<<<<< HEAD
-  - https://www.nortorrent1.com/
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
   - https://www.nortorrent2.com/
   - https://www.nortorrent3.com/
   - https://www.nortorrent4.com/
@@ -48,17 +40,14 @@ legacylinks:
   - https://www.nortorrent7.com/
   - https://www.nortorrent8.com/
   - https://ww1-nortorrent.com/
-<<<<<<< HEAD
-=======
   - https://www-nortorrent.com/
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 caps:
   categorymappings:
     - {id: Films, cat: Movies, desc: "Movies"}
     - {id: Animes, cat: TV/Anime, desc: "Anime"}
     - {id: Documentaires, cat: TV/Documentary, desc: "Documentaires"}
-    - {id: Séries, cat: TV, desc: "TV"}
+    - {id: SÃ©ries, cat: TV, desc: "TV"}
     - {id: Musiques, cat: Audio, desc: "Music"}
     - {id: Ebooks, cat: Books, desc: "Books"}
     - {id: Livres, cat: Books, desc: "Livres"}
@@ -70,7 +59,7 @@ caps:
     - {id: Spectacles, cat: TV/Other, desc: "Spectacles"}
     - {id: Sports, cat: TV/Sport, desc: "Sports"}
     - {id: Formations, cat: Other, desc: "Formations"}
-    - {id: Vidéos, cat: TV, desc: "Vidéos"}
+    - {id: VidÃ©os, cat: TV, desc: "VidÃ©os"}
 
   modes:
     search: [q]

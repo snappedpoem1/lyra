@@ -1,23 +1,14 @@
 """
-oracle.downloader — Music Acquisition Engine
+oracle.downloader â€” Music Acquisition Engine
 
 Downloads audio from SoundCloud, YouTube, Bandcamp, etc. using yt-dlp.
 Applies rate limiting, embeds metadata, handles batch operations.
 """
 
-<<<<<<< HEAD
-import os
-import sys
-import time
-import json
-import logging
-import sqlite3
-=======
 import time
 import logging
 import sqlite3
 import importlib.util
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Callable
@@ -27,19 +18,10 @@ try:
 except ImportError:
     yt_dlp = None
 
-<<<<<<< HEAD
-try:
-    from mutagen.mp4 import MP4
-    from mutagen.easymp4 import EasyMP4
-    HAS_MUTAGEN = True
-except ImportError:
-    HAS_MUTAGEN = False
-=======
 HAS_MUTAGEN = (
     importlib.util.find_spec("mutagen.mp4") is not None
     and importlib.util.find_spec("mutagen.easymp4") is not None
 )
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 import requests as http_requests
 
@@ -97,7 +79,7 @@ class DownloadResult:
 
     def __repr__(self):
         status = "OK" if self.success else "FAIL"
-        return f"[{status}] {self.artist} — {self.title}"
+        return f"[{status}] {self.artist} â€” {self.title}"
 
 
 class Downloader:
@@ -151,10 +133,10 @@ class Downloader:
         dest = output_dir or self.download_dir
 
         opts = {
-            # Format selection — best audio available
+            # Format selection â€” best audio available
             'format': 'bestaudio/best',
 
-            # Output template — clean filenames
+            # Output template â€” clean filenames
             'outtmpl': str(dest / '%(artist,uploader,channel)s - %(title)s [%(id)s].%(ext)s'),
             'restrictfilenames': False,
             'windowsfilenames': True,
@@ -239,7 +221,7 @@ class Downloader:
                 info = ydl.extract_info(url, download=True)
 
                 if info is None:
-                    raise RuntimeError("yt-dlp returned no info — URL may be invalid")
+                    raise RuntimeError("yt-dlp returned no info â€” URL may be invalid")
 
                 artist = (info.get('artist') or info.get('uploader')
                           or info.get('channel') or 'Unknown')
@@ -248,11 +230,6 @@ class Downloader:
 
                 # Find the actual downloaded file
                 dest = output_dir or self.download_dir
-<<<<<<< HEAD
-                # yt-dlp may have renamed with postprocessing
-                expected_stem = f"{artist} - {title}"
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 filepath = self._find_downloaded_file(dest, info.get('id', ''))
 
                 result = DownloadResult(

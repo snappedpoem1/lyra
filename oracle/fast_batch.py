@@ -1,7 +1,7 @@
 """
-oracle.fast_batch — Parallel batch acquisition + full pipeline in one pass.
+oracle.fast_batch â€” Parallel batch acquisition + full pipeline in one pass.
 
-Downloads tracks concurrently via ThreadPoolExecutor, then scans → indexes → scores
+Downloads tracks concurrently via ThreadPoolExecutor, then scans â†’ indexes â†’ scores
 in a single pipeline run. ~4x faster than sequential for downloads.
 
 Usage:
@@ -20,11 +20,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-<<<<<<< HEAD
-from typing import List, Optional
-=======
 from typing import List
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from dotenv import load_dotenv
 
@@ -79,12 +75,12 @@ def fast_batch(
     sleep_max: int = FAST_SLEEP_MAX,
 ) -> dict:
     """
-    Download tracks in parallel, then run scan → index → score.
+    Download tracks in parallel, then run scan â†’ index â†’ score.
 
     Args:
         queries: List of search queries (artist - title format works best).
         workers: Number of concurrent download threads.
-        run_pipeline: If True, auto-run scan → index → score after downloads.
+        run_pipeline: If True, auto-run scan â†’ index â†’ score after downloads.
         sleep_min: yt-dlp sleep_interval (0 = fastest).
         sleep_max: yt-dlp max_sleep_interval.
 
@@ -102,11 +98,11 @@ def fast_batch(
 
     total = len(queries)
     print(f"\n{'='*60}")
-    print(f"  FAST BATCH — {total} tracks, {workers} workers")
+    print(f"  FAST BATCH â€” {total} tracks, {workers} workers")
     print(f"  Sleep: {sleep_min}-{sleep_max}s | Pipeline: {'yes' if run_pipeline else 'no'}")
     print(f"{'='*60}\n")
 
-    # ── Phase 1: Parallel Downloads ──────────────────────────────
+    # â”€â”€ Phase 1: Parallel Downloads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     t_start = time.perf_counter()
     results: List[dict] = []
 
@@ -123,19 +119,19 @@ def fast_batch(
     ok = sum(1 for r in results if r["success"])
     fail = total - ok
 
-    print(f"\n── Downloads: {ok}/{total} OK, {fail} failed in {t_download:.1f}s ──")
+    print(f"\nâ”€â”€ Downloads: {ok}/{total} OK, {fail} failed in {t_download:.1f}s â”€â”€")
 
     if not ok:
         print("No tracks downloaded. Skipping pipeline.")
         return {"downloads": results, "pipeline": None, "elapsed": t_download}
 
-    # ── Phase 2: Pipeline (scan → index → score) ────────────────
+    # â”€â”€ Phase 2: Pipeline (scan â†’ index â†’ score) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     pipeline_stats = {}
     if run_pipeline:
         downloads_path = str(cfg.download_dir.resolve())
 
         # Scan
-        print("\n── Scanning... ──")
+        print("\nâ”€â”€ Scanning... â”€â”€")
         t0 = time.perf_counter()
         from oracle.scanner import scan_library
         scan_result = scan_library(downloads_path)
@@ -145,7 +141,7 @@ def fast_batch(
         pipeline_stats["scan_time"] = round(t_scan, 2)
 
         # Index (CLAP embeddings)
-        print("── Indexing CLAP embeddings... ──")
+        print("â”€â”€ Indexing CLAP embeddings... â”€â”€")
         t0 = time.perf_counter()
         from oracle.indexer import index_library
         index_result = index_library(library_path=downloads_path)
@@ -155,7 +151,7 @@ def fast_batch(
         pipeline_stats["index_time"] = round(t_index, 2)
 
         # Score (10 dimensions)
-        print("── Scoring dimensions... ──")
+        print("â”€â”€ Scoring dimensions... â”€â”€")
         t0 = time.perf_counter()
         from oracle.scorer import score_all
         score_result = score_all(force=False)
@@ -166,7 +162,7 @@ def fast_batch(
 
     t_total = time.perf_counter() - t_start
 
-    # ── Summary ──────────────────────────────────────────────────
+    # â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print(f"\n{'='*60}")
     print(f"  COMPLETE")
     print(f"  Downloads: {ok}/{total} in {t_download:.1f}s")

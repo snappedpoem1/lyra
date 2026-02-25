@@ -1,9 +1,9 @@
-"""Ingest Watcher — polls downloads/ dir and auto-ingests completed files.
+"""Ingest Watcher â€” polls downloads/ dir and auto-ingests completed files.
 
 Runs as a background daemon. When a new audio file appears in the downloads
 directory (and hasn't changed size for 10s, indicating complete download),
-it runs the full ingest pipeline: scan → guard check → move to library →
-index → score → update DB.
+it runs the full ingest pipeline: scan â†’ guard check â†’ move to library â†’
+index â†’ score â†’ update DB.
 
 Usage:
     python -m oracle.ingest_watcher          # run as daemon
@@ -14,17 +14,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-<<<<<<< HEAD
-import shutil
-import time
-from pathlib import Path
-from typing import Dict, List, Optional, Set
-
-from dotenv import load_dotenv
-
-load_dotenv(override=True)
-
-=======
 import os
 import sqlite3
 import shutil
@@ -34,15 +23,11 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 logger = logging.getLogger(__name__)
 
 AUDIO_EXTENSIONS = {".flac", ".mp3", ".m4a", ".ogg", ".wav", ".aac", ".opus"}
 POLL_INTERVAL = 10  # seconds between sweeps
 STABLE_SECONDS = 10  # file must not change size for this long before ingesting
-<<<<<<< HEAD
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-=======
 # Files older than this are assumed stable; skip stability wait in --once mode
 ALREADY_STABLE_AGE = 30  # seconds
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -151,7 +136,6 @@ def _extract_album_track(filepath: Path) -> tuple[Optional[str], Optional[int]]:
         return album, track_num
     except Exception:
         return None, None
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def _get_downloads_dir() -> Path:
@@ -180,8 +164,6 @@ def _is_stable(path: Path, prev_sizes: Dict[str, int]) -> bool:
     return prev is not None and prev == size
 
 
-<<<<<<< HEAD
-=======
 def _extract_tag(tags: dict, *keys: str, fallback: str = "") -> str:
     """Safely extract a tag value from mutagen tags (ID3 or Vorbis)."""
     for key in keys:
@@ -198,7 +180,6 @@ def _extract_tag(tags: dict, *keys: str, fallback: str = "") -> str:
     return fallback
 
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 def _guard_check(filepath: Path) -> dict:
     """Run acquisition guard on a downloaded file."""
     try:
@@ -209,12 +190,6 @@ def _guard_check(filepath: Path) -> dict:
         title = filepath.stem
         if audio and hasattr(audio, "tags") and audio.tags:
             tags = audio.tags
-<<<<<<< HEAD
-            artist = str(tags.get("TPE1", tags.get("artist", [""]))[0] if hasattr(tags.get("TPE1", None), "__getitem__") else tags.get("artist", [""])[0]) if "TPE1" in tags or "artist" in tags else ""
-            title = str(tags.get("TIT2", tags.get("title", [filepath.stem]))[0] if hasattr(tags.get("TIT2", None), "__getitem__") else tags.get("title", [filepath.stem])[0]) if "TIT2" in tags or "title" in tags else filepath.stem
-        result = guard_acquisition(artist=artist, title=title)
-        return {"allowed": result.allowed, "reason": result.rejection_reason}
-=======
             artist = _extract_tag(tags, "TPE1", "artist")
             title = _extract_tag(tags, "TIT2", "title", fallback=filepath.stem)
         result = guard_acquisition(artist=artist, title=title)
@@ -225,22 +200,12 @@ def _guard_check(filepath: Path) -> dict:
             "title": result.title or title,
             "confidence": float(result.confidence or 0.0),
         }
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     except Exception as e:
         logger.warning(f"Guard check error (rejecting): {e}")
         return {"allowed": False, "reason": f"guard error: {e}"}
 
 
 def _move_to_library(filepath: Path, library_dir: Path) -> Path:
-<<<<<<< HEAD
-    """Move file to library root (scanner will organize later)."""
-    dest = library_dir / filepath.name
-    # Handle filename collision
-    if dest.exists():
-        stem = filepath.stem
-        suffix = filepath.suffix
-        dest = library_dir / f"{stem}_{int(time.time())}{suffix}"
-=======
     """Move file to Artist/Album/Song layout."""
     guard = _guard_check(filepath)
     artist = _sanitize_component(
@@ -258,16 +223,11 @@ def _move_to_library(filepath: Path, library_dir: Path) -> Path:
         stem = dest.stem
         suffix = filepath.suffix
         dest = dest.parent / f"{stem}_{int(time.time())}{suffix}"
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(filepath), str(dest))
     return dest
 
 
-<<<<<<< HEAD
-def _move_file(filepath: Path, library_dir: Path) -> Optional[Path]:
-    """Guard check + move to library. Returns dest path on success, None on rejection."""
-=======
 def _mark_queue_completed(artist: str, title: str) -> None:
     if not artist or not title:
         return
@@ -304,33 +264,23 @@ def _mark_queue_completed(artist: str, title: str) -> None:
 
 def _move_file(filepath: Path, library_dir: Path) -> Optional[tuple[Path, dict]]:
     """Guard check + move to library. Returns (dest, guard) on success, None on rejection."""
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     logger.info(f"[INGEST] Processing: {filepath.name}")
 
     guard = _guard_check(filepath)
     if not guard["allowed"]:
-        logger.warning(f"[INGEST] REJECTED by guard: {filepath.name} — {guard['reason']}")
+        logger.warning(f"[INGEST] REJECTED by guard: {filepath.name} â€” {guard['reason']}")
         q_dir = library_dir.parent / "_Quarantine" / "Junk"
         q_dir.mkdir(parents=True, exist_ok=True)
         try:
             shutil.move(str(filepath), str(q_dir / filepath.name))
-<<<<<<< HEAD
-        except Exception:
-            pass
-=======
         except Exception as exc:
             logger.error("[INGEST] Failed to quarantine rejected file %s: %s", filepath, exc)
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         return None
 
     try:
         dest = _move_to_library(filepath, library_dir)
         logger.info(f"[INGEST] Moved: {dest.name}")
-<<<<<<< HEAD
-        return dest
-=======
         return dest, guard
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     except Exception as e:
         logger.error(f"[INGEST] Move failed: {e}")
         return None
@@ -344,10 +294,7 @@ def _sweep(downloads_dir: Path, library_dir: Path,
     CLAP model is loaded once per sweep, not once per file.
     """
     moved: List[Path] = []
-<<<<<<< HEAD
-=======
     moved_guard: List[dict] = []
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
     for path in sorted(downloads_dir.rglob("*")):
         if not path.is_file():
@@ -362,17 +309,11 @@ def _sweep(downloads_dir: Path, library_dir: Path,
 
         ingested.add(key)
         try:
-<<<<<<< HEAD
-            dest = _move_file(path, library_dir)
-            if dest:
-                moved.append(dest)
-=======
             payload = _move_file(path, library_dir)
             if payload:
                 dest, guard = payload
                 moved.append(dest)
                 moved_guard.append(guard)
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         except Exception as e:
             logger.error(f"[INGEST] Unhandled error on {path.name}: {e}")
 
@@ -380,36 +321,22 @@ def _sweep(downloads_dir: Path, library_dir: Path,
         return 0
 
     # Batch scan + index once for all moved files
-<<<<<<< HEAD
-=======
     scan_ok = False
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     try:
         from oracle.scanner import scan_paths
         result = scan_paths(moved)
         logger.info(f"[INGEST] Batch scan: {result}")
-<<<<<<< HEAD
-=======
         scan_ok = True
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     except Exception as e:
         logger.error(f"[INGEST] Scan failed: {e}")
         return len(moved)
 
-<<<<<<< HEAD
-=======
     index_ok = False
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     try:
         from oracle.indexer import index_track_ids
         track_ids = result.get("track_ids", []) if isinstance(result, dict) else []
         result = index_track_ids(track_ids) if track_ids else {"indexed": 0, "failed": 0, "scored": 0}
         logger.info(f"[INGEST] Batch index: {result}")
-<<<<<<< HEAD
-    except Exception as e:
-        logger.error(f"[INGEST] Index failed: {e}")
-
-=======
         index_ok = True
     except Exception as e:
         logger.error(f"[INGEST] Index failed: {e}")
@@ -418,29 +345,22 @@ def _sweep(downloads_dir: Path, library_dir: Path,
         for guard in moved_guard:
             _mark_queue_completed(guard.get("artist", ""), guard.get("title", ""))
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     logger.info(f"[INGEST] Done. {len(moved)} file(s) ingested.")
     return len(moved)
 
 
 def run_watcher(once: bool = False) -> None:
-<<<<<<< HEAD
-    """Main loop. If once=True, does one sweep and exits."""
-=======
     """Main loop. If once=True, does one sweep and exits.
 
     Lock enforcement: only one watcher may run at a time. A second invocation
     will exit immediately with a warning rather than creating a race condition.
     """
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
     )
 
-<<<<<<< HEAD
-=======
     lock = _WatcherLock(_LOCK_FILE)
     if not lock.acquire():
         logger.warning(
@@ -456,8 +376,7 @@ def run_watcher(once: bool = False) -> None:
 
 
 def _run_watcher_locked(once: bool = False) -> None:
-    """Internal watcher body — called after lock is acquired."""
->>>>>>> fc77b41 (Update workspace state and diagnostics)
+    """Internal watcher body â€” called after lock is acquired."""
     downloads_dir = _get_downloads_dir()
     staging_dir = PROJECT_ROOT / "staging"
     staging_dir.mkdir(parents=True, exist_ok=True)
@@ -471,10 +390,7 @@ def _run_watcher_locked(once: bool = False) -> None:
 
     prev_sizes: Dict[str, int] = {}
     ingested: Set[str] = set()
-<<<<<<< HEAD
-=======
     now = time.time()
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
     def _sweep_all() -> int:
         total = 0
@@ -483,18 +399,6 @@ def _run_watcher_locked(once: bool = False) -> None:
         return total
 
     if once:
-<<<<<<< HEAD
-        # Prime sizes from all watch dirs, wait one interval, then ingest stable files
-        for d in watch_dirs:
-            for path in sorted(d.rglob("*")):
-                if path.is_file() and path.suffix.lower() in AUDIO_EXTENSIONS:
-                    try:
-                        prev_sizes[str(path)] = path.stat().st_size
-                    except OSError:
-                        pass
-        logger.info(f"[WATCHER] Waiting {STABLE_SECONDS}s for files to stabilize...")
-        time.sleep(STABLE_SECONDS)
-=======
         # Collect audio files and check whether any are too new to be stable.
         audio_files: List[Path] = []
         needs_wait = False
@@ -509,7 +413,7 @@ def _run_watcher_locked(once: bool = False) -> None:
                     size = path.stat().st_size
                     mtime = path.stat().st_mtime
                     prev_sizes[str(path)] = size
-                    # File modified very recently → might still be writing
+                    # File modified very recently â†’ might still be writing
                     if (now - mtime) < ALREADY_STABLE_AGE:
                         needs_wait = True
                 except OSError:
@@ -525,7 +429,6 @@ def _run_watcher_locked(once: bool = False) -> None:
         else:
             logger.info(f"[WATCHER] {len(audio_files)} file(s) found (already stable). Ingesting immediately.")
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         n = _sweep_all()
         logger.info(f"[WATCHER] Done. Ingested {n} file(s).")
         return

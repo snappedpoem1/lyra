@@ -14,37 +14,21 @@ from __future__ import annotations
 
 import logging
 import math
-<<<<<<< HEAD
-=======
 import threading
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import lru_cache
-<<<<<<< HEAD
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-=======
 from typing import Any, Dict, List, Optional, Tuple
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from oracle.anchors import ANCHORS
 from oracle.chroma_store import LyraChromaStore
 from oracle.db.schema import get_connection, get_write_mode
 from oracle.embedders.clap_embedder import CLAPEmbedder
-<<<<<<< HEAD
-from oracle.perf import auto_workers
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 from oracle.runtime_state import wait_if_paused
 from oracle.vibe_descriptors import describe_scores
 
 logger = logging.getLogger(__name__)
-<<<<<<< HEAD
-
-# Use music-specific CLAP model (fallback handled in embedder)
-MODEL_NAME = "laion/larger_clap_music"
-=======
 _THREAD_LOCAL = threading.local()
 
 # Use music-specific CLAP model (fallback handled in embedder)
@@ -53,7 +37,6 @@ SCORE_VERSION = 2
 CALIBRATION_SAMPLE_SIZE = 2000
 CALIBRATION_Q_LOW = 0.05
 CALIBRATION_Q_HIGH = 0.95
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 @dataclass(frozen=True)
@@ -61,11 +44,7 @@ class TrackScores:
     track_id: str
     scores: Dict[str, float]
     scored_at: float
-<<<<<<< HEAD
-    score_version: int = 1
-=======
     score_version: int = SCORE_VERSION
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def _cosine(a: List[float], b: List[float]) -> float:
@@ -89,8 +68,6 @@ def _clamp01(x: float) -> float:
     return 0.0 if x < 0.0 else 1.0 if x > 1.0 else x
 
 
-<<<<<<< HEAD
-=======
 def _unit(vec: List[float]) -> List[float]:
     if not vec:
         return []
@@ -157,17 +134,11 @@ def _sigmoid(x: float) -> float:
     return z / (1.0 + z)
 
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 @lru_cache(maxsize=1)
 def _get_embedder() -> CLAPEmbedder:
     return CLAPEmbedder(model_name=MODEL_NAME)
 
 
-<<<<<<< HEAD
-@lru_cache(maxsize=1)
-def _get_store() -> LyraChromaStore:
-    return LyraChromaStore(persist_dir="./chroma_storage")
-=======
 def _get_store() -> LyraChromaStore:
     # Chroma client objects are not reliably thread-safe for concurrent reads.
     # Keep one store per worker thread to avoid cross-thread tenant/client errors.
@@ -176,7 +147,6 @@ def _get_store() -> LyraChromaStore:
         store = LyraChromaStore(persist_dir="./chroma_storage")
         _THREAD_LOCAL.chroma_store = store
     return store
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 @lru_cache(maxsize=1)
@@ -197,24 +167,6 @@ def _anchor_embeddings() -> Dict[str, Dict[str, List[List[float]]]]:
     return out
 
 
-<<<<<<< HEAD
-def _score_dimension(track_vec: List[float], dim: str) -> Optional[float]:
-    anchors = _anchor_embeddings().get(dim)
-    if not anchors:
-        return None
-
-    highs = anchors.get("high") or []
-    lows = anchors.get("low") or []
-    if not highs or not lows:
-        return None
-
-    high_sim = sum(_cosine(track_vec, h) for h in highs) / max(len(highs), 1)
-    low_sim = sum(_cosine(track_vec, l) for l in lows) / max(len(lows), 1)
-
-    # delta in [-2, 2] (cosine diff); map to [0, 1]
-    delta = high_sim - low_sim
-    score = 0.5 + (delta / 2.0)
-=======
 @lru_cache(maxsize=1)
 def _anchor_directions() -> Dict[str, List[float]]:
     """Build normalized direction vectors (high - low) per dimension."""
@@ -321,7 +273,6 @@ def _score_dimension(track_vec: List[float], dim: str) -> Optional[float]:
 
     # Fallback for tiny/degenerate bands.
     score = 0.5 + (raw * 3.0)
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     return round(_clamp01(float(score)), 4)
 
 
@@ -410,11 +361,7 @@ def score_track(track_id: str, *, persist: bool = True, force: bool = False) -> 
                 scores.get("complexity"),
                 scores.get("nostalgia"),
                 scored_at,
-<<<<<<< HEAD
-                1,
-=======
                 SCORE_VERSION,
->>>>>>> fc77b41 (Update workspace state and diagnostics)
             ),
         )
         conn.commit()
@@ -467,11 +414,6 @@ def score_all(
     conn.close()
 
     stats = {"total": len(ids), "scored": 0, "skipped": 0, "persisted": 0, "errors": 0}
-<<<<<<< HEAD
-    if workers <= 0:
-        workers = auto_workers("cpu")
-    workers = max(1, min(int(workers), 24))
-=======
     # Chroma local client access is not reliable under concurrent per-track fetches.
     # Keep scoring single-threaded until embedding fetch is refactored to batch mode.
     if workers <= 0:
@@ -482,7 +424,6 @@ def score_all(
             "Parallel scoring is currently disabled due Chroma concurrency limits; forcing workers=1."
         )
         workers = 1
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     stats["workers"] = workers
 
     def _score_one(track_id: str) -> Tuple[str, Dict[str, Any]]:

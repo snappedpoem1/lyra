@@ -4,7 +4,7 @@ Fixes:
 - Artist name variations (Coheed And Cambria vs Coheed and Cambria)
 - Featured artists extraction
 - YouTube cruft removal
-- Record label → real artist extraction
+- Record label â†’ real artist extraction
 - Title cleanup (Official Video, etc.)
 """
 
@@ -13,16 +13,11 @@ from __future__ import annotations
 import re
 import sqlite3
 from collections import defaultdict
-<<<<<<< HEAD
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-=======
 from typing import List, Optional, Tuple
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 from difflib import SequenceMatcher
 
 
-# Canonical artist names (lowercase key → proper case)
+# Canonical artist names (lowercase key â†’ proper case)
 ARTIST_CANONICAL = {
     "coheed and cambria": "Coheed and Cambria",
     "coheed & cambria": "Coheed and Cambria",
@@ -174,7 +169,7 @@ def normalize_title(title: str) -> Tuple[str, List[str]]:
     for pattern in TITLE_CLEANUP_PATTERNS:
         original = re.sub(pattern, '', original, flags=re.IGNORECASE).strip()
     
-    # Remove duplicate artist name from title ("Artist - Artist - Song" → "Song")
+    # Remove duplicate artist name from title ("Artist - Artist - Song" â†’ "Song")
     # This is common in YouTube rips
     parts = original.split(' - ')
     if len(parts) >= 2:
@@ -297,9 +292,9 @@ def normalize_library(db_path: str = "lyra_registry.db", apply: bool = False):
         print(f"\nSample changes:")
         for change in changes[:15]:
             if change["old_artist"] != change["new_artist"]:
-                print(f"  Artist: '{change['old_artist'][:30]}' → '{change['new_artist'][:30]}'")
+                print(f"  Artist: '{change['old_artist'][:30]}' â†’ '{change['new_artist'][:30]}'")
             if change["old_title"] != change["new_title"]:
-                print(f"  Title:  '{change['old_title'][:35]}' → '{change['new_title'][:35]}'")
+                print(f"  Title:  '{change['old_title'][:35]}' â†’ '{change['new_title'][:35]}'")
             print()
     
     if artist_groups:
@@ -323,7 +318,7 @@ def normalize_library(db_path: str = "lyra_registry.db", apply: bool = False):
     
     conn.commit()
     conn.close()
-    print(f"✓ Updated {len(changes)} tracks")
+    print(f"âœ“ Updated {len(changes)} tracks")
     
     return changes
 

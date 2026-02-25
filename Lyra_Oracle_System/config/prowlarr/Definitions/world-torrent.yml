@@ -11,17 +11,10 @@ encoding: UTF-8
 links:
   - https://ww2-mania-torrent.com/
   - https://ww2-cine-torrent.com/
-<<<<<<< HEAD
-  - https://www-magnet-torrent.com/
-  - https://www-mega-torrent.com/
-  - https://ww2-zone-torrent.com/
-  - https://www-warez-torrent.com/
-=======
   - https://ww2-magnet-torrent.com/
   - https://www-mega-torrent.com/
   - https://ww3-zone-torrent.com/
   - https://ww2-warez-torrent.com/
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 legacylinks:
   # latest domains list
   - https://www.rantop.org/
@@ -46,26 +39,6 @@ legacylinks:
   - https://ww1-zetorrents.me/
   - https://www.zetorrents.rent/
   - https://ww1-zetorrents.town/
-<<<<<<< HEAD
-  - https://www.world-torrent.com/
-  - https://www.mania-torrent.com/
-  - https://www.zone-torrent6.com/
-  - https://www.warez-torrent1.com/
-  - https://www.mega-torrent9.com/
-  - https://www.magnet-torrent1.com/
-  - https://www.cine-torrent1.com/
-  - https://ww1-mania-torrent.com/
-  - https://www.world-torrent1.com/
-  - https://www-cine-torrent.com/
-  - https://ww1-warez-torrent.com/
-  - https://ww1-magnet-torrent.com/
-  - https://ww1-zone-torrent.com/
-  - https://ww1-mega-torrent.com/
-  - https://www-mania-torrent.com/
-  - https://www-world-torrent.com/
-  - https://ww1-world-torrent.com/
-  - https://ww1-cine-torrent.com/
-=======
   - https://www.cine-torrent1.com/
   - https://www-cine-torrent.com/
   - https://ww1-cine-torrent.com/
@@ -87,14 +60,13 @@ legacylinks:
   - https://www.zone-torrent6.com/
   - https://ww1-zone-torrent.com/
   - https://ww2-zone-torrent.com/
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 caps:
   categorymappings:
     - {id: Films, cat: Movies, desc: "Movies"}
     - {id: Animes, cat: TV/Anime, desc: "Anime"}
     - {id: Documentaires, cat: TV/Documentary, desc: "Documentaires"}
-    - {id: Séries, cat: TV, desc: "TV"}
+    - {id: SÃ©ries, cat: TV, desc: "TV"}
     - {id: Musiques, cat: Audio, desc: "Music"}
     - {id: Ebooks, cat: Books, desc: "Books"}
     - {id: Livres, cat: Books, desc: "Livres"}
@@ -106,7 +78,7 @@ caps:
     - {id: Spectacles, cat: TV/Other, desc: "Spectacles"}
     - {id: Sports, cat: TV/Sport, desc: "Sports"}
     - {id: Formations, cat: Other, desc: "Formations"}
-    - {id: Vidéos, cat: TV, desc: "Vidéos"}
+    - {id: VidÃ©os, cat: TV, desc: "VidÃ©os"}
 
   modes:
     search: [q]

@@ -25,35 +25,23 @@ Based on the complete lyra_api.py file, there are 16 distinct functional areas t
 
 ### 2. Search Capabilities  
 - `/api/search` - Semantic search endpoint
-<<<<<<< HEAD
-- `/api/search/hybrid` - Hybrid search with metadata filters and dimensional ranges
-=======
 - `/api/search/rewrite` - LLM rewrite to CLAP-friendly query
 - `/api/search/hybrid` - Hybrid search with metadata filters and dimensional ranges (supports optional LLM query rewrite)
 - `/api/remixes/search` - Remix-focused search/view by artist, album, or track scope
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 ### 3. Library Management
 - `/api/library/scan` - Trigger library scan
 - `/api/library/index` - Trigger library indexing  
-<<<<<<< HEAD
-=======
 - `/api/library/validate` - Validate + enrich metadata using cache-backed providers
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 - `/api/library/tracks` - Get list of tracks
 
 ### 4. Vibes System
 - `/api/vibes` - List all vibes
-<<<<<<< HEAD
-- `/api/vibes/save` - Create a new vibe
-- `/api/vibes/build` - Build M3U8 for a vibe
-=======
 - `/api/vibes/create` - One-shot vibe create from prompt (optional build/materialize)
 - `/api/vibes/generate` - LLM-generated vibe query/name from prompt
 - `/api/vibes/save` - Create a new vibe
 - `/api/vibes/build` - Build M3U8 for a vibe
 - `/api/vibes/narrate` - LLM narrative for vibe track arc
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 - `/api/vibes/materialize` - Materialize a vibe as folder
 - `/api/vibes/refresh` - Refresh vibe(s)
 - `/api/vibes/delete` - Delete a vibe
@@ -148,33 +136,33 @@ Based on the complete lyra_api.py file, there are 16 distinct functional areas t
 
 ```
 src/
-├── components/          # Reusable UI components
-│   ├── layout/         # Header, Sidebar, Footer
-│   ├── dashboard/      # Main dashboard views
-│   ├── library/        # Library management components  
-│   ├── vibes/          # Vibes system components
-│   ├── curation/       # Curation tools
-│   ├── acquisition/    # Acquisition pipeline UI
-│   └── search/         # Search functionality
-├── pages/              # Page-level components
-│   ├── DashboardPage.tsx
-│   ├── LibraryPage.tsx
-│   ├── VibesPage.tsx
-│   ├── CurationPage.tsx
-│   ├── AcquisitionPage.tsx
-│   ├── SearchPage.tsx
-│   └── SettingsPage.tsx
-├── services/           # API service layer
-│   ├── apiClient.ts     # Axios instance with interceptors
-│   ├── endpoints/       # API endpoint definitions
-│   └── types/          # TypeScript interfaces for responses
-├── store/              # Redux state management
-│   ├── index.ts         # Store configuration
-│   ├── slices/         # Redux slices for different domains
-│   └── hooks/          # Custom React hooks for store access
-├── utils/              # Utility functions and helpers
-├── assets/             # Static assets (images, icons)
-└── App.tsx            # Main application component
+â”œâ”€â”€ components/          # Reusable UI components
+â”‚   â”œâ”€â”€ layout/         # Header, Sidebar, Footer
+â”‚   â”œâ”€â”€ dashboard/      # Main dashboard views
+â”‚   â”œâ”€â”€ library/        # Library management components  
+â”‚   â”œâ”€â”€ vibes/          # Vibes system components
+â”‚   â”œâ”€â”€ curation/       # Curation tools
+â”‚   â”œâ”€â”€ acquisition/    # Acquisition pipeline UI
+â”‚   â””â”€â”€ search/         # Search functionality
+â”œâ”€â”€ pages/              # Page-level components
+â”‚   â”œâ”€â”€ DashboardPage.tsx
+â”‚   â”œâ”€â”€ LibraryPage.tsx
+â”‚   â”œâ”€â”€ VibesPage.tsx
+â”‚   â”œâ”€â”€ CurationPage.tsx
+â”‚   â”œâ”€â”€ AcquisitionPage.tsx
+â”‚   â”œâ”€â”€ SearchPage.tsx
+â”‚   â””â”€â”€ SettingsPage.tsx
+â”œâ”€â”€ services/           # API service layer
+â”‚   â”œâ”€â”€ apiClient.ts     # Axios instance with interceptors
+â”‚   â”œâ”€â”€ endpoints/       # API endpoint definitions
+â”‚   â””â”€â”€ types/          # TypeScript interfaces for responses
+â”œâ”€â”€ store/              # Redux state management
+â”‚   â”œâ”€â”€ index.ts         # Store configuration
+â”‚   â”œâ”€â”€ slices/         # Redux slices for different domains
+â”‚   â””â”€â”€ hooks/          # Custom React hooks for store access
+â”œâ”€â”€ utils/              # Utility functions and helpers
+â”œâ”€â”€ assets/             # Static assets (images, icons)
+â””â”€â”€ App.tsx            # Main application component
 ```
 
 ### Core Features Implementation Plan
@@ -357,8 +345,4 @@ The web UI will interact with the SQLite database through:
 7. Implement acquisition pipeline UI
 8. Build advanced features like vibes and curation tools
 
-<<<<<<< HEAD
 This plan provides a comprehensive roadmap for implementing a full-featured web UI that exposes all existing Lyra Oracle functionality while maintaining excellent user experience and performance.
-=======
-This plan provides a comprehensive roadmap for implementing a full-featured web UI that exposes all existing Lyra Oracle functionality while maintaining excellent user experience and performance.
->>>>>>> fc77b41 (Update workspace state and diagnostics)

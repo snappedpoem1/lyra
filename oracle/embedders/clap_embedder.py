@@ -35,16 +35,6 @@ class CLAPEmbedder:
     ):
         # Try music-specific model first, fall back to general if needed
         self.model_name = model_name or os.getenv("LYRA_CLAP_MODEL", DEFAULT_MODEL)
-<<<<<<< HEAD
-        # Prefer DirectML (AMD GPU on Windows) > CUDA > CPU
-        try:
-            import torch_directml  # type: ignore
-            self.device = torch_directml.device()
-            self._dml = True
-        except ImportError:
-            self._dml = False
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-=======
         # Prefer CUDA first (NVIDIA), then DirectML fallback, then CPU.
         self._dml = False
         if torch.cuda.is_available():
@@ -56,7 +46,6 @@ class CLAPEmbedder:
                 self._dml = True
             except ImportError:
                 self.device = "cpu"
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         
         # Use project cache dir to avoid Windows .cache file conflicts
         if cache_dir:
@@ -77,8 +66,6 @@ class CLAPEmbedder:
         self.model = None
         self._load_model_with_retry()
 
-<<<<<<< HEAD
-=======
     # laion/larger_clap_music stores weights in a PR branch, not main.
     # Specifying this revision lets us skip all HF API network calls (~30-60s)
     # when the cache is warm.  Override via LYRA_CLAP_REVISION env var if needed.
@@ -86,7 +73,6 @@ class CLAPEmbedder:
         "laion/larger_clap_music": "refs/pr/5",
     }
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     def _load_model_with_retry(self, retries: int = 3, backoff: float = 2.0) -> None:
         models_to_try = [self.model_name]
         if self.use_fallback and self.model_name != FALLBACK_MODEL:
@@ -95,25 +81,6 @@ class CLAPEmbedder:
         last_error: Optional[Exception] = None
 
         for model_name in models_to_try:
-<<<<<<< HEAD
-            for attempt in range(1, retries + 1):
-                try:
-                    logger.info(f"Loading CLAP model: {model_name} (attempt {attempt})")
-                    self.processor = ClapProcessor.from_pretrained(
-                        model_name, cache_dir=self.cache_dir
-                    )
-                    self.model = ClapModel.from_pretrained(
-                        model_name, cache_dir=self.cache_dir,
-                        use_safetensors=True,
-                    ).to(self.device)
-                    self.model.eval()
-                    self.model_name = model_name  # Update to actual loaded model
-                    logger.info(f"CLAP model loaded: {model_name} on {self.device}")
-                    return
-                except Exception as exc:
-                    last_error = exc
-                    logger.warning(f"Failed to load {model_name}: {exc}")
-=======
             # Try local-first (skip network) using known revision hint, then fall
             # back to network-enabled load so a cold cache still works.
             revision_hint = os.getenv(
@@ -159,7 +126,6 @@ class CLAPEmbedder:
                         logger.warning(f"Load variant {kwargs} failed: {exc}")
                         # Only sleep between full retry cycles, not between variants
                 if attempt < retries:
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                     time.sleep(backoff ** attempt)
 
             logger.warning(f"All attempts failed for {model_name}, trying fallback...")
@@ -227,7 +193,7 @@ class CLAPEmbedder:
         duration: int = 30,
         batch_size: int = 8,
     ) -> dict:
-        """Embed multiple audio files in batches — single GPU forward pass per batch.
+        """Embed multiple audio files in batches â€” single GPU forward pass per batch.
 
         Args:
             file_paths: List of Path objects.

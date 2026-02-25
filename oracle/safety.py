@@ -12,10 +12,6 @@ Features:
 Author: Lyra Oracle v10.0
 """
 
-<<<<<<< HEAD
-import os
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 import json
 import shutil
 import logging
@@ -66,7 +62,7 @@ class Journal:
         # Create journal if it doesn't exist
         if not self.path.exists():
             self.path.touch()
-            logger.info(f"🌟 Journal initialized: {self.path}")
+            logger.info(f"ðŸŒŸ Journal initialized: {self.path}")
     
     def write(self, transaction: Transaction) -> None:
         """
@@ -76,9 +72,9 @@ class Journal:
         try:
             with open(self.path, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(transaction.to_dict()) + '\n')
-            logger.debug(f"📝 Logged: {transaction.action} {transaction.source} → {transaction.target}")
+            logger.debug(f"ðŸ“ Logged: {transaction.action} {transaction.source} â†’ {transaction.target}")
         except Exception as e:
-            logger.error(f"❌ Journal write failed: {e}")
+            logger.error(f"âŒ Journal write failed: {e}")
             raise
     
     def read_all(self) -> List[Transaction]:
@@ -99,10 +95,10 @@ class Journal:
                         data = json.loads(line)
                         transactions.append(Transaction.from_dict(data))
                     except json.JSONDecodeError as e:
-                        logger.warning(f"⚠️ Malformed journal entry: {e}")
+                        logger.warning(f"âš ï¸ Malformed journal entry: {e}")
                         continue
         except Exception as e:
-            logger.error(f"❌ Journal read failed: {e}")
+            logger.error(f"âŒ Journal read failed: {e}")
             raise
         
         return transactions
@@ -199,7 +195,7 @@ class SafetyController:
             except Exception as e:
                 plan["warnings"].append(f"Could not check disk space: {e}")
         
-        logger.info(f"📋 Plan created: {action} → Safe={plan['safe']}")
+        logger.info(f"ðŸ“‹ Plan created: {action} â†’ Safe={plan['safe']}")
         return plan
     
     def apply_plan(self, plan: Dict[str, Any]) -> Transaction:
@@ -241,7 +237,7 @@ class SafetyController:
             transaction.status = "failed"
             transaction.error = "Plan marked unsafe: " + "; ".join(plan.get("warnings", []))
             self.journal.write(transaction)
-            logger.error(f"❌ Unsafe plan rejected: {transaction.error}")
+            logger.error(f"âŒ Unsafe plan rejected: {transaction.error}")
             raise ValueError(transaction.error)
         
         # Execute operation
@@ -258,12 +254,12 @@ class SafetyController:
                 raise ValueError(f"Unknown action: {action}")
             
             transaction.status = "applied"
-            logger.info(f"✅ Applied: {action} {source} → {target}")
+            logger.info(f"âœ… Applied: {action} {source} â†’ {target}")
         
         except Exception as e:
             transaction.status = "failed"
             transaction.error = str(e)
-            logger.error(f"❌ Operation failed: {e}")
+            logger.error(f"âŒ Operation failed: {e}")
         
         finally:
             # Always log to journal
@@ -317,14 +313,14 @@ class SafetyController:
         
         "Rolling back the timeline..."
         """
-        logger.info(f"⏪ Rolling back {n} operation(s)...")
+        logger.info(f"âª Rolling back {n} operation(s)...")
         
         transactions = self.journal.read_last(n)
         undone = []
         
         for txn in transactions:
             if txn.status != "applied":
-                logger.warning(f"⚠️ Skipping non-applied transaction: {txn.id}")
+                logger.warning(f"âš ï¸ Skipping non-applied transaction: {txn.id}")
                 continue
             
             try:
@@ -345,10 +341,10 @@ class SafetyController:
                 self.journal.write(undo_txn)
                 undone.append(undo_txn)
                 
-                logger.info(f"✅ Undone: {txn.action} {txn.id}")
+                logger.info(f"âœ… Undone: {txn.action} {txn.id}")
             
             except Exception as e:
-                logger.error(f"❌ Undo failed for {txn.id}: {e}")
+                logger.error(f"âŒ Undo failed for {txn.id}: {e}")
         
         return undone
     
@@ -389,7 +385,7 @@ class SafetyController:
                     target_path.unlink()
 
 
-# ── Public API ──────────────────────────────────────────────
+# â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 # Global safety controller instance
 _controller = None
@@ -423,7 +419,7 @@ def get_journal() -> Journal:
     return get_controller().journal
 
 
-# ── CLI Entry Point ─────────────────────────────────────────
+# â”€â”€ CLI Entry Point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def main():
     """CLI tool for safety operations."""
@@ -443,11 +439,11 @@ def main():
         n = int(sys.argv[2]) if len(sys.argv) > 2 else 10
         transactions = journal.read_last(n)
         
-        print(f"📜 Last {n} operations:\n")
+        print(f"ðŸ“œ Last {n} operations:\n")
         for txn in transactions:
-            status_icon = {"applied": "✅", "failed": "❌", "planned": "📋"}.get(txn.status, "⚪")
+            status_icon = {"applied": "âœ…", "failed": "âŒ", "planned": "ðŸ“‹"}.get(txn.status, "âšª")
             print(f"{status_icon} [{txn.timestamp}] {txn.action}")
-            print(f"   {txn.source} → {txn.target}")
+            print(f"   {txn.source} â†’ {txn.target}")
             if txn.error:
                 print(f"   Error: {txn.error}")
             print()
@@ -455,7 +451,7 @@ def main():
     elif command == "undo":
         n = int(sys.argv[2]) if len(sys.argv) > 2 else 1
         undone = undo_last(n)
-        print(f"⏪ Rolled back {len(undone)} operation(s)")
+        print(f"âª Rolled back {len(undone)} operation(s)")
     
     else:
         print(f"Unknown command: {command}")

@@ -19,31 +19,25 @@ Author: Lyra Oracle v10.0
 import sys
 import logging
 from typing import Optional
-<<<<<<< HEAD
-from pathlib import Path
 
-from oracle.config import PROJECT_ROOT
-=======
-
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
 # ASCII Art Banner
 BANNER = r"""
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║   ██╗  ██╗   ██╗██████╗  █████╗                          ║
-║   ██║  ╚██╗ ██╔╝██╔══██╗██╔══██╗                         ║
-║   ██║   ╚████╔╝ ██████╔╝███████║                         ║
-║   ██║    ╚██╔╝  ██╔══██╗██╔══██║                         ║
-║   ███████╗██║   ██║  ██║██║  ██║                         ║
-║   ╚══════╝╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝                         ║
-║                                                           ║
-║   The Oracle. The Architect. The Soul.                   ║
-║   Music Intelligence Platform v10.0                      ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
+â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
+â•‘                                                           â•‘
+â•‘   â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   â–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—                          â•‘
+â•‘   â–ˆâ–ˆâ•‘  â•šâ–ˆâ–ˆâ•— â–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—                         â•‘
+â•‘   â–ˆâ–ˆâ•‘   â•šâ–ˆâ–ˆâ–ˆâ–ˆâ•”â• â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘                         â•‘
+â•‘   â–ˆâ–ˆâ•‘    â•šâ–ˆâ–ˆâ•”â•  â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘                         â•‘
+â•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘                         â•‘
+â•‘   â•šâ•â•â•â•â•â•â•â•šâ•â•   â•šâ•â•  â•šâ•â•â•šâ•â•  â•šâ•â•                         â•‘
+â•‘                                                           â•‘
+â•‘   The Oracle. The Architect. The Soul.                   â•‘
+â•‘   Music Intelligence Platform v10.0                      â•‘
+â•‘                                                           â•‘
+â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 """
 
 
@@ -54,7 +48,7 @@ def print_banner():
 
 def cmd_doctor():
     """Run system diagnostics."""
-    print("🔍 Running system diagnostics...\n")
+    print("ðŸ” Running system diagnostics...\n")
     
     from oracle.doctor import run_doctor, _render
     
@@ -87,13 +81,13 @@ def cmd_hunt(query: str):
         return 0
 
     except Exception as e:
-        print(f"❌ Pipeline failed: {e}")
+        print(f"âŒ Pipeline failed: {e}")
         return 1
 
 
 def cmd_vibe_create(name: str, prompt: str):
     """Create a vibe from natural language."""
-    print(f"🌊 Creating vibe: {name}\n")
+    print(f"ðŸŒŠ Creating vibe: {name}\n")
     print(f"Prompt: {prompt}\n")
     
     from oracle import vibes
@@ -101,38 +95,38 @@ def cmd_vibe_create(name: str, prompt: str):
     try:
         # Create vibe using existing save_vibe (uses prompt as query)
         vibe = vibes.save_vibe(name, prompt)
-        print(f"✅ Vibe created: {vibe['name']}")
+        print(f"âœ… Vibe created: {vibe['name']}")
         print(f"Query: {vibe.get('query', 'N/A')}")
         return 0
     
     except Exception as e:
-        print(f"❌ Vibe creation failed: {e}")
+        print(f"âŒ Vibe creation failed: {e}")
         return 1
 
 
 def cmd_undo(n: int = 1):
     """Undo last N operations."""
-    print(f"⏪ Rolling back {n} operation(s)...\n")
+    print(f"âª Rolling back {n} operation(s)...\n")
     
     from oracle.safety import undo_last
     
     try:
         undone = undo_last(n)
-        print(f"✅ Rolled back {len(undone)} operation(s)")
+        print(f"âœ… Rolled back {len(undone)} operation(s)")
         
         for txn in undone:
-            print(f"   Undone: {txn.action} {txn.source} → {txn.target}")
+            print(f"   Undone: {txn.action} {txn.source} â†’ {txn.target}")
         
         return 0
     
     except Exception as e:
-        print(f"❌ Undo failed: {e}")
+        print(f"âŒ Undo failed: {e}")
         return 1
 
 
 def cmd_serve(host: str = "0.0.0.0", port: int = 5000):
     """Start Flask API server."""
-    print(f"🚀 Starting API server on {host}:{port}...\n")
+    print(f"ðŸš€ Starting API server on {host}:{port}...\n")
     
     try:
         # Import and run Flask app
@@ -141,60 +135,56 @@ def cmd_serve(host: str = "0.0.0.0", port: int = 5000):
         return 0
     
     except Exception as e:
-        print(f"❌ Server failed: {e}")
+        print(f"âŒ Server failed: {e}")
         return 1
 
 
 def cmd_agent(query: str):
     """Send query to LLM agent."""
-    print(f"🧠 Querying agent: {query}\n")
+    print(f"ðŸ§  Querying agent: {query}\n")
     
     from oracle.agent import agent
     
     try:
         result = agent.run_agent(query)
         
-        print(f"💭 Thought: {result.get('thought', 'N/A')}")
-        print(f"🎯 Action: {result.get('action', 'N/A')}")
-        print(f"📋 Intent: {result.get('intent', {})}")
-        print(f"➡️ Next: {result.get('next', 'N/A')}")
-        print(f"🧠 LLM: {result.get('llm', 'N/A')}")
+        print(f"ðŸ’­ Thought: {result.get('thought', 'N/A')}")
+        print(f"ðŸŽ¯ Action: {result.get('action', 'N/A')}")
+        print(f"ðŸ“‹ Intent: {result.get('intent', {})}")
+        print(f"âž¡ï¸ Next: {result.get('next', 'N/A')}")
+        print(f"ðŸ§  LLM: {result.get('llm', 'N/A')}")
         
         return 0
     
     except Exception as e:
-        print(f"❌ Agent query failed: {e}")
+        print(f"âŒ Agent query failed: {e}")
         return 1
 
 
 def cmd_index(library_path: Optional[str] = None, force: bool = False):
     """Generate embeddings for library."""
-    print("🧬 Indexing library...\n")
+    print("ðŸ§¬ Indexing library...\n")
     
     from oracle.indexer import index_library
     
     try:
         result = index_library(library_path=library_path, force_reindex=force)
-        print(f"✅ Indexed: {result.get('indexed', 0)} tracks")
+        print(f"âœ… Indexed: {result.get('indexed', 0)} tracks")
         
         if result.get('failed', 0) > 0:
-            print(f"⚠️ Failed: {result.get('failed', 0)} tracks")
+            print(f"âš ï¸ Failed: {result.get('failed', 0)} tracks")
         
         return 0
     
     except Exception as e:
-        print(f"❌ Indexing failed: {e}")
+        print(f"âŒ Indexing failed: {e}")
         return 1
 
 
 def cmd_scan(paths: Optional[list] = None):
     """Scan library for metadata."""
-    print("📡 Scanning library...\n")
+    print("ðŸ“¡ Scanning library...\n")
     
-<<<<<<< HEAD
-    from oracle.scanner import scan_library
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     try:
         # Get library base if no paths specified
@@ -207,17 +197,17 @@ def cmd_scan(paths: Optional[list] = None):
             # TODO: Implement scan_library() in scanner.py
             # result = scan_library(path)
         
-        print(f"✅ Scan complete")
+        print(f"âœ… Scan complete")
         return 0
     
     except Exception as e:
-        print(f"❌ Scan failed: {e}")
+        print(f"âŒ Scan failed: {e}")
         return 1
 
 
 def cmd_history(n: int = 10):
     """Show operation history from journal."""
-    print(f"📜 Last {n} operations:\n")
+    print(f"ðŸ“œ Last {n} operations:\n")
     
     from oracle.safety import get_journal
     
@@ -229,9 +219,9 @@ def cmd_history(n: int = 10):
         return 0
     
     for txn in transactions:
-        status_icon = {"applied": "✅", "failed": "❌", "planned": "📋"}.get(txn.status, "⚪")
+        status_icon = {"applied": "âœ…", "failed": "âŒ", "planned": "ðŸ“‹"}.get(txn.status, "âšª")
         print(f"{status_icon} [{txn.timestamp}] {txn.action}")
-        print(f"   {txn.source} → {txn.target}")
+        print(f"   {txn.source} â†’ {txn.target}")
         
         if txn.error:
             print(f"   Error: {txn.error}")
@@ -284,11 +274,11 @@ def cmd_score(all_tracks: bool = False, track_id: Optional[str] = None, limit: i
 
     if all_tracks:
         stats = score_all(limit=limit, persist=True, force=rescore)
-        print(f"✅ Scoring complete: {stats}")
+        print(f"âœ… Scoring complete: {stats}")
         return 0
 
     result = score_track(track_id or "", persist=True, force=rescore)
-    print(f"✅ Score: {result}")
+    print(f"âœ… Score: {result}")
     return 0
 
 
@@ -416,11 +406,11 @@ def main():
             return 1
     
     except KeyboardInterrupt:
-        print("\n\n⚡ Interrupted by user.")
+        print("\n\nâš¡ Interrupted by user.")
         return 130
     
     except Exception as e:
-        print(f"\n❌ Fatal error: {e}")
+        print(f"\nâŒ Fatal error: {e}")
         logger.exception("Console command failed")
         return 1
 

@@ -27,14 +27,10 @@ def _sanitize_filename(text: str) -> str:
     sanitized = sanitized.strip('. ')
     
     # Collapse multiple spaces/underscores
-<<<<<<< HEAD
-    sanitized = re.sub(r'[ _]+', ' ', sanitized)
-=======
     sanitized = re.sub(r"[ _]+", " ", sanitized)
 
     # Re-trim after collapsing to avoid invalid trailing spaces on Windows.
     sanitized = sanitized.strip(". ")
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     # Limit length to prevent path issues
     if len(sanitized) > 200:
@@ -43,8 +39,6 @@ def _sanitize_filename(text: str) -> str:
     return sanitized or "Unknown"
 
 
-<<<<<<< HEAD
-=======
 def _primary_album_artist(artist: str) -> str:
     """Return the main album artist for folder naming."""
     raw = (artist or "").strip()
@@ -69,7 +63,6 @@ def _primary_album_artist(artist: str) -> str:
     return primary or "Unknown Artist"
 
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 def generate_target_path(
     track_id: str,
     preset: str = "artist_album",
@@ -121,10 +114,7 @@ def generate_target_path(
     
     # Sanitize components
     artist_safe = _sanitize_filename(artist or "Unknown Artist")
-<<<<<<< HEAD
-=======
     album_artist_safe = _sanitize_filename(_primary_album_artist(artist or "Unknown Artist"))
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     title_safe = _sanitize_filename(title or "Unknown Title")
     album_safe = _sanitize_filename(album or "Unknown Album")
     
@@ -186,57 +176,33 @@ def generate_target_path(
                     
                     # Multi-disc support
                     if disc_num_str:
-<<<<<<< HEAD
-                        folder = base / artist_safe / album_folder / f"Disc {disc_num_str}"
-                    else:
-                        folder = base / artist_safe / album_folder
-=======
                         folder = base / album_artist_safe / album_folder / f"Disc {disc_num_str}"
                     else:
                         folder = base / album_artist_safe / album_folder
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                     
                     filename = f"{track_num_str} - {title_safe}{ext}"
             else:
                 # No album info: Artist/## - Title.ext
-<<<<<<< HEAD
-                folder = base / artist_safe
-=======
                 folder = base / album_artist_safe
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 filename = f"{track_num_str} - {title_safe}{ext}"
     
     elif preset == "remix":
         # Force remix layout
         if album and album.lower() != "unknown album":
-<<<<<<< HEAD
-            folder = base / artist_safe / "Remixes" / album_safe
-        else:
-            folder = base / artist_safe / "Remixes"
-=======
             folder = base / album_artist_safe / "Remixes" / album_safe
         else:
             folder = base / album_artist_safe / "Remixes"
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         filename = f"{track_num_str} - {title_safe}{ext}"
     
     elif preset == "live":
         # Force live layout
         if album and album.lower() != "unknown album":
             if year:
-<<<<<<< HEAD
-                folder = base / artist_safe / "Live" / f"{album_safe} ({year})"
-            else:
-                folder = base / artist_safe / "Live" / album_safe
-        else:
-            folder = base / artist_safe / "Live"
-=======
                 folder = base / album_artist_safe / "Live" / f"{album_safe} ({year})"
             else:
                 folder = base / album_artist_safe / "Live" / album_safe
         else:
             folder = base / album_artist_safe / "Live"
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         filename = f"{track_num_str} - {title_safe}{ext}"
     
     elif preset == "compilation":
@@ -251,11 +217,7 @@ def generate_target_path(
     
     elif preset == "flat_artist":
         # Flat: Artist/{##} - {Title}.ext
-<<<<<<< HEAD
-        folder = base / artist_safe
-=======
         folder = base / album_artist_safe
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         filename = f"{track_num_str} - {title_safe}{ext}"
     
     else:

@@ -15,13 +15,7 @@ Checks:
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-import hashlib
 import logging
-import os
-=======
-import logging
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 import re
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
@@ -50,7 +44,7 @@ JUNK_PATTERNS: List[str] = [
     r'\borchestral\s*tribute\b',
     r'\bbacking\s*(version|track|vocal)?\b',
 
-    # Specific junk artists (full band names — safe to match anywhere)
+    # Specific junk artists (full band names â€” safe to match anywhere)
     r'\bparty\s*tyme\b',
     r'\bprosource\b',
     r'\bzzang\b',
@@ -70,7 +64,7 @@ JUNK_PATTERNS: List[str] = [
     r'\bchopped\s*not\s*slopped\b',
 ]
 
-# Title-only junk patterns — content descriptors that could legitimately be part
+# Title-only junk patterns â€” content descriptors that could legitimately be part
 # of a band name (e.g. "A Static Lullaby", "8-Bit Misfits") but are junk when
 # they appear in a track or album title.
 TITLE_JUNK_PATTERNS: List[str] = [
@@ -81,26 +75,23 @@ TITLE_JUNK_PATTERNS: List[str] = [
     r'\blullaby\s*(version|mix|edit|cover)?\b',
 
     # Instrumental/stripped versions (the user wants the actual song)
-    r'[-–(]\s*instrumental\b',
+    r'[-â€“(]\s*instrumental\b',
     r'\binstrumental\s+(version|mix|edit)\b',
-<<<<<<< HEAD
-=======
-    r'[-–(]\s*a\s*cappella\b',
-    r'[-–(]\s*acapella\b',
+    r'[-â€“(]\s*a\s*cappella\b',
+    r'[-â€“(]\s*acapella\b',
     r'\ba\s*cappella\s+(version|mix|edit)\b',
     r'\bacapella\s+(version|mix|edit)\b',
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
     # Lofi remakes by random channels
     r'\(lo-?fi\)',
     r'\blo-?fi\s+(version|remix|edit|mix)\b',
-    r'[-–]\s*lo-?fi\s*$',
+    r'[-â€“]\s*lo-?fi\s*$',
 
     # "Epic Version" / "Rave Version" YouTube remakes
     r'\bepic\s+version\b',
     r'\brave\s+version\b',
 
-    # Classical catalog numbers — Handel (HWV), Bach (BWV), Purcell (Z.)
+    # Classical catalog numbers â€” Handel (HWV), Bach (BWV), Purcell (Z.)
     # These indicate classical compositions misattributed to rock/hip-hop artists
     r'\bHWV\s*\d',
     r'\bBWV\s*\d',
@@ -206,7 +197,7 @@ def _check_junk(artist: str, title: str) -> Optional[Tuple[str, str]]:
     """Check if track matches junk patterns.
 
     JUNK_PATTERNS are checked against artist+title combined.
-    TITLE_JUNK_PATTERNS are checked against title only — these are content
+    TITLE_JUNK_PATTERNS are checked against title only â€” these are content
     descriptors that could legitimately appear in a band name (e.g. "A Static
     Lullaby", "8-Bit Misfits") but signal junk when in a track title.
 
@@ -646,7 +637,7 @@ def print_guard_summary(results: List[Tuple[Path, GuardResult]]) -> None:
     print(f"Rejected: {len(rejected)}")
     
     if rejected:
-        print(f"\n❌ REJECTED ({len(rejected)}):")
+        print(f"\nâŒ REJECTED ({len(rejected)}):")
         # Group by category
         by_category: Dict[str, List] = {}
         for filepath, result in rejected:
@@ -658,20 +649,20 @@ def print_guard_summary(results: List[Tuple[Path, GuardResult]]) -> None:
         for category, items in by_category.items():
             print(f"\n  [{category.upper()}] ({len(items)} files)")
             for filepath, result in items[:5]:
-                print(f"    • {filepath.name[:50]}")
+                print(f"    â€¢ {filepath.name[:50]}")
                 print(f"      Reason: {result.rejection_reason[:60]}")
             if len(items) > 5:
                 print(f"    ... and {len(items) - 5} more")
     
     if allowed:
-        print(f"\n✅ ALLOWED ({len(allowed)}):")
+        print(f"\nâœ… ALLOWED ({len(allowed)}):")
         for filepath, result in allowed[:10]:
             conf = f"{result.confidence:.0%}"
             validated = result.validated_by or "none"
-            print(f"  • {result.artist[:25]:25s} - {result.title[:30]:30s} ({conf}, {validated})")
+            print(f"  â€¢ {result.artist[:25]:25s} - {result.title[:30]:30s} ({conf}, {validated})")
             if result.warnings:
                 for w in result.warnings:
-                    print(f"    ⚠️ {w}")
+                    print(f"    âš ï¸ {w}")
         if len(allowed) > 10:
             print(f"  ... and {len(allowed) - 10} more")
 
@@ -721,7 +712,7 @@ if __name__ == "__main__":
             
             result = guard_acquisition(artist, title)
             
-            status = "✅ ALLOWED" if result.allowed else "❌ REJECTED"
+            status = "âœ… ALLOWED" if result.allowed else "âŒ REJECTED"
             print(f"\n{status}")
             print(f"  Confidence: {result.confidence:.0%}")
             print(f"  Artist: {result.artist}")
@@ -732,5 +723,5 @@ if __name__ == "__main__":
                 print(f"  Validated by: {result.validated_by}")
             if result.warnings:
                 for w in result.warnings:
-                    print(f"  ⚠️ {w}")
+                    print(f"  âš ï¸ {w}")
             print()

@@ -5,7 +5,7 @@ Translates abstract vibes into concrete acquisition targets.
 Identifies "Bridge Artists" who span multiple genres.
 
 Features:
-- Cross-genre fusion hunting (Punk + EDM → The Prodigy)
+- Cross-genre fusion hunting (Punk + EDM â†’ The Prodigy)
 - Discogs API integration for release discovery
 - Automatic tagging (fusion:punk_electronic, context:bridge)
 - Remix/mashup preference filtering
@@ -16,29 +16,17 @@ Author: Lyra Oracle v9.0
 import os
 import logging
 import requests
-<<<<<<< HEAD
-import sqlite3
-from typing import Optional, List, Dict
-from datetime import datetime
-from pathlib import Path
-
-from oracle.config import get_connection
-=======
 from typing import Optional, List, Dict
 
 from oracle.config import get_connection
 from oracle.enrichers.cache import make_lookup_key, get_or_set_payload
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
 # Discogs API Configuration
 DISCOGS_API_TOKEN = os.getenv("DISCOGS_API_TOKEN", "") or os.getenv("DISCOGS_TOKEN", "")
 DISCOGS_BASE_URL = "https://api.discogs.com"
-<<<<<<< HEAD
-=======
 DISCOGS_CACHE_TTL_SECONDS = int(os.getenv("LYRA_CACHE_TTL_DISCOGS_SECONDS", "1209600") or "1209600")
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 class Scout:
@@ -72,11 +60,11 @@ class Scout:
         Returns:
             List of targets with download metadata
         """
-        logger.info(f"🔬 SCOUT: Tracing fusion [{source_genre}] × [{target_genre}]")
+        logger.info(f"ðŸ”¬ SCOUT: Tracing fusion [{source_genre}] Ã— [{target_genre}]")
         
         # Phase 1: Identify bridge artists
         bridge_artists = self._find_bridge_artists(source_genre, target_genre)
-        logger.info(f"  → {len(bridge_artists)} bridge artists identified")
+        logger.info(f"  â†’ {len(bridge_artists)} bridge artists identified")
         
         # Phase 2: Filter for remix releases
         targets = []
@@ -107,7 +95,7 @@ class Scout:
         # Sort by priority
         targets.sort(key=lambda x: x["acquisition_priority"], reverse=True)
         
-        logger.info(f"  → {len(targets)} targets locked")
+        logger.info(f"  â†’ {len(targets)} targets locked")
         return targets[:limit]
     
     def _find_bridge_artists(self, genre1: str, genre2: str) -> List[Dict]:
@@ -127,43 +115,8 @@ class Scout:
         local_artists = [{"name": row[0], "source": "local"} for row in cursor.fetchall()]
         
         if local_artists:
-            logger.info(f"  → Found {len(local_artists)} bridge artists in local library")
+            logger.info(f"  â†’ Found {len(local_artists)} bridge artists in local library")
             return local_artists
-<<<<<<< HEAD
-        
-        # Fallback: Query Discogs API
-        if not DISCOGS_API_TOKEN:
-            logger.warning("  ⚠️  No Discogs token. Limited to local library.")
-            return []
-        
-        try:
-            response = self.session.get(
-                f"{DISCOGS_BASE_URL}/database/search",
-                params={
-                    "type": "artist",
-                    "style": f"{genre1},{genre2}",
-                    "per_page": 50
-                },
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                artists = [
-                    {"name": result["title"], "source": "discogs", "id": result["id"]}
-                    for result in data.get("results", [])
-                ]
-                logger.info(f"  → Discogs returned {len(artists)} artists")
-                return artists
-            else:
-                logger.error(f"  ✗ Discogs API error: {response.status_code}")
-                return []
-        
-        except Exception as e:
-            logger.error(f"  ✗ Discogs search failed: {e}")
-            return []
-    
-=======
         # Fallback: Query Discogs API
         if not DISCOGS_API_TOKEN:
             logger.warning("  No Discogs token. Limited to local library.")
@@ -209,7 +162,6 @@ class Scout:
         logger.info(f"  Found {len(artists)} bridge artists from Discogs")
         return artists
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     def _get_artist_releases(
         self,
         artist_name: str,
@@ -261,7 +213,7 @@ class Scout:
             return releases
         
         except Exception as e:
-            logger.error(f"  ✗ Failed to get releases for {artist_name}: {e}")
+            logger.error(f"  âœ— Failed to get releases for {artist_name}: {e}")
             return []
     
     def _calculate_priority(self, release: Dict, genre1: str, genre2: str) -> float:
@@ -302,13 +254,13 @@ class Scout:
         Maps abstract moods to concrete musical characteristics, then searches.
         
         Example moods:
-        - "aggressive rebellion" → Punk, Hardcore, Industrial
-        - "euphoric escape" → Trance, Progressive House
-        - "melancholic introspection" → Post-Rock, Ambient, Shoegaze
+        - "aggressive rebellion" â†’ Punk, Hardcore, Industrial
+        - "euphoric escape" â†’ Trance, Progressive House
+        - "melancholic introspection" â†’ Post-Rock, Ambient, Shoegaze
         """
-        logger.info(f"💭 SCOUT: Decoding mood [{mood}]")
+        logger.info(f"ðŸ’­ SCOUT: Decoding mood [{mood}]")
         
-        # Mood → Genre mapping (can be enhanced with LLM)
+        # Mood â†’ Genre mapping (can be enhanced with LLM)
         mood_map = {
             "aggressive": ["Punk", "Hardcore", "Metal", "Industrial"],
             "euphoric": ["Trance", "Progressive House", "Uplifting"],
@@ -327,10 +279,10 @@ class Scout:
                 genres.extend(genre_list)
         
         if not genres:
-            logger.warning(f"  ⚠️  Mood '{mood}' not mapped. Using literal search.")
+            logger.warning(f"  âš ï¸  Mood '{mood}' not mapped. Using literal search.")
             genres = [mood]
         
-        logger.info(f"  → Mapped to genres: {genres}")
+        logger.info(f"  â†’ Mapped to genres: {genres}")
         
         # Search local library first
         cursor = self.conn.cursor()
@@ -338,11 +290,7 @@ class Scout:
         params = [f"%{g}%" for g in genres]
         
         cursor.execute(f"""
-<<<<<<< HEAD
-            SELECT track_id, artist, title, genre, file_path
-=======
             SELECT track_id, artist, title, genre, filepath
->>>>>>> fc77b41 (Update workspace state and diagnostics)
             FROM tracks
             WHERE {placeholders}
             ORDER BY RANDOM()
@@ -355,18 +303,14 @@ class Scout:
                 "artist": row[1],
                 "title": row[2],
                 "genre": row[3],
-<<<<<<< HEAD
-                "file_path": row[4],
-=======
                 "filepath": row[4],
                 "file_path": row[4],  # Back-compat alias for legacy clients
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 "source": "local"
             }
             for row in cursor.fetchall()
         ]
         
-        logger.info(f"  → {len(results)} local matches found")
+        logger.info(f"  â†’ {len(results)} local matches found")
         return results
 
 
@@ -381,7 +325,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     
     if len(sys.argv) < 3:
-        print("\n🔬 Lyra Scout - Cross-Genre Discovery\n")
+        print("\nðŸ”¬ Lyra Scout - Cross-Genre Discovery\n")
         print("Usage:")
         print("  python -m oracle.scout <genre1> <genre2> [limit]")
         print("\nExample:")
@@ -395,7 +339,7 @@ if __name__ == "__main__":
     
     targets = scout.cross_genre_hunt(genre1, genre2, limit)
     
-    print(f"\n🎯 TARGETS LOCKED: {len(targets)}\n")
+    print(f"\nðŸŽ¯ TARGETS LOCKED: {len(targets)}\n")
     for i, target in enumerate(targets, 1):
         print(f"{i:2}. [{target['acquisition_priority']:.2f}] {target['artist']} - {target['title']}")
         print(f"    Genres: {', '.join(target.get('genres', []))}")
@@ -403,8 +347,5 @@ if __name__ == "__main__":
         if target.get('discogs_url'):
             print(f"    URL: {target['discogs_url']}")
         print()
-<<<<<<< HEAD
-=======
 
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)

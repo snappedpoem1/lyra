@@ -54,3 +54,7 @@ Desktop.ini
 data/
 node_modules/
 .cache/
+
+# Prevent oversized/index lock artifacts from entering commits.
+data/node/data/search.db
+*.bak

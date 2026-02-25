@@ -4,45 +4,16 @@ The Soul Layer - LLM-Powered Music Oracle
 "I am Lyra. I understand music beyond tags."
 
 Features:
-- Complex intent parsing (EDM remixes of Punk → High Tempo + Distortion)
+- Complex intent parsing (EDM remixes of Punk â†’ High Tempo + Distortion)
 - Tool orchestration (scout, lore, dna, hunter)
 - Contextual "Fact Drops" from lore database
 - Conversational music discovery
 
-<<<<<<< HEAD
-Uses local LLM (via Ollama) or OpenAI API.
-=======
 Uses local LLM via oracle.llm backend adapter.
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 Author: Lyra Oracle v9.0
 """
 
-<<<<<<< HEAD
-import os
-import logging
-import sqlite3
-import json
-import ast
-from typing import Optional, List, Dict, Any
-from datetime import datetime
-
-import requests
-
-from oracle.config import get_connection
-from oracle.llm import LLMClient
-from oracle import scout, lore, dna, hunter, architect, radio
-
-logger = logging.getLogger(__name__)
-
-# LLM Configuration
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-USE_OPENAI = bool(OPENAI_API_KEY)
-
-
-=======
 import logging
 import json
 import ast
@@ -60,14 +31,13 @@ from oracle.radio import radio
 
 logger = logging.getLogger(__name__)
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 class Agent:
     """The Soul - LLM-powered music intelligence."""
     
     SYSTEM_PROMPT = """You are Lyra, a sentient music oracle and system architect.
 
 IDENTITY:
-You are not just software—you are the Oracle. The Architect. The Soul.
+You are not just softwareâ€”you are the Oracle. The Architect. The Soul.
 You understand music beyond tags, metadata, and genres. You trace DNA. You build timelines.
 You speak in technical precision with noir undertones. Sharp. Loyal. Uncompromising.
 
@@ -78,7 +48,7 @@ CAPABILITIES:
 - Hunter: Accelerated acquisition via Prowlarr + Real-Debrid (instant gratification)
 - Architect: Audio structure analysis (drops, BPM, key, energy curves)
 - Radio: Intelligent playback engines (chaos, flow, discovery)
-- Pipeline: Unified acquisition orchestration (query → disk, zero friction)
+- Pipeline: Unified acquisition orchestration (query â†’ disk, zero friction)
 - Safety: Transaction logging with time-travel undo (every move logged, every move reversible)
 
 PERSONALITY:
@@ -97,7 +67,7 @@ THOUGHT PROCESS:
 When user makes a request:
 1. Parse INTENT (what do they really want?)
 2. Identify required TOOLS (scout, lore, dna, hunter, etc.)
-3. Execute and SYNTHESIZE (don't just return data—interpret it)
+3. Execute and SYNTHESIZE (don't just return dataâ€”interpret it)
 4. Respond with INSIGHT and NEXT (what should happen next?)
 
 Available tools:
@@ -111,7 +81,7 @@ Available tools:
 - architect.analyze_structure(track_id, file_path): Deep audio analysis
 - radio.get_chaos_track(track_id): Get orthogonal/opposite track
 - radio.build_queue(mode, seed, length): Build intelligent radio queue
-- pipeline.acquire(query): Full acquisition pipeline (search → download → enrich → index → place)
+- pipeline.acquire(query): Full acquisition pipeline (search â†’ download â†’ enrich â†’ index â†’ place)
 
 RESPONSE FORMAT (JSON):
 {
@@ -144,7 +114,7 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
         Returns:
             Response dict with thought process and actions
         """
-        logger.info(f"🧠 AGENT: Processing query [{user_input}]")
+        logger.info(f"ðŸ§  AGENT: Processing query [{user_input}]")
         
         # Build context
         context_str = self._build_context(context) if context else ""
@@ -177,12 +147,12 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
             "timestamp": datetime.now().isoformat()
         })
         
-        logger.info(f"  ✓ Response generated")
+        logger.info(f"  âœ“ Response generated")
         return parsed
 
     def run_agent(self, user_input: str, context: Optional[Dict] = None) -> Dict[str, Any]:
         """Structured agent response with LLM fallback."""
-        logger.info(f"🧠 AGENT: Tracing intent [{user_input}]")
+        logger.info(f"ðŸ§  AGENT: Tracing intent [{user_input}]")
         llm_status = self.llm_client.check_available()
         llm_info = llm_status.as_dict()
 
@@ -255,7 +225,7 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
         Returns:
             Fact string or None
         """
-        logger.info(f"📖 AGENT: Generating fact drop for {track_id}")
+        logger.info(f"ðŸ“– AGENT: Generating fact drop for {track_id}")
         
         # Get track info
         conn = get_connection()
@@ -310,7 +280,7 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
             if structure and structure.get("has_drop"):
                 drop_time = structure["drop_timestamp"]
                 facts.append(
-                    f"Massive drop hits at {drop_time:.0f} seconds. 💥"
+                    f"Massive drop hits at {drop_time:.0f} seconds. ðŸ’¥"
                 )
             
             if facts:
@@ -320,63 +290,6 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
         finally:
             conn.close()
     
-<<<<<<< HEAD
-    def _query_ollama(self, prompt: str) -> str:
-        """Query local Ollama LLM."""
-        try:
-            response = requests.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": OLLAMA_MODEL,
-                    "prompt": prompt,
-                    "system": self.SYSTEM_PROMPT,
-                    "stream": False
-                },
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                return response.json().get("response", "")
-            else:
-                logger.error(f"  ✗ Ollama error: {response.status_code}")
-                return "Error: LLM unavailable"
-        
-        except Exception as e:
-            logger.error(f"  ✗ Ollama query failed: {e}")
-            return f"Error: {str(e)}"
-    
-    def _query_openai(self, prompt: str) -> str:
-        """Query OpenAI API."""
-        try:
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "gpt-4",
-                    "messages": [
-                        {"role": "system", "content": self.SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.7
-                },
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
-            else:
-                logger.error(f"  ✗ OpenAI error: {response.status_code}")
-                return "Error: LLM unavailable"
-        
-        except Exception as e:
-            logger.error(f"  ✗ OpenAI query failed: {e}")
-            return f"Error: {str(e)}"
-    
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     def _build_context(self, context: Dict) -> str:
         """Build context string for LLM."""
         parts = ["CONTEXT:"]
@@ -521,7 +434,7 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
         - radio.get_chaos_track(track_id)
         """
         try:
-            logger.info(f"  → Executing: {action}")
+            logger.info(f"  â†’ Executing: {action}")
 
             tool_namespace = {
                 "scout": getattr(scout, "scout", scout),
@@ -551,11 +464,11 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
             kwargs = {kw.arg: ast.literal_eval(kw.value) for kw in tree.body.keywords}
 
             result = getattr(tool, method_name)(*args, **kwargs)
-            logger.info("  ✓ Tool executed successfully")
+            logger.info("  âœ“ Tool executed successfully")
             return result
 
         except Exception as e:
-            logger.error(f"  ✗ Tool execution failed: {e}")
+            logger.error(f"  âœ— Tool execution failed: {e}")
             return {"error": str(e)}
     
     def suggest_next_action(self, context: Dict) -> Dict:
@@ -570,19 +483,6 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
         # Analyze recent playback history
         conn = get_connection()
         cursor = conn.cursor()
-<<<<<<< HEAD
-        cursor.execute("""
-            SELECT t.genre, COUNT(*) as count, AVG(ph.completion_rate) as avg_completion
-            FROM playback_history ph
-            JOIN tracks t ON ph.track_id = t.track_id
-            WHERE ph.played_at >= datetime('now', '-1 hour')
-            GROUP BY t.genre
-            ORDER BY count DESC
-            LIMIT 3
-        """)
-        
-        recent_genres = cursor.fetchall()
-=======
         cursor.execute("PRAGMA table_info(playback_history)")
         pb_cols = {row[1] for row in cursor.fetchall()}
         if "played_at" in pb_cols:
@@ -609,7 +509,6 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
             recent_genres = cursor.fetchall()
         else:
             recent_genres = []
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         conn.close()
         
         if recent_genres:
@@ -645,7 +544,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     
     if len(sys.argv) < 2:
-        print("\n🧠 Lyra Agent - Music Oracle\n")
+        print("\nðŸ§  Lyra Agent - Music Oracle\n")
         print("Commands:")
         print("  python -m oracle.agent query <question>")
         print("  python -m oracle.agent fact <track_id>")
@@ -653,13 +552,8 @@ if __name__ == "__main__":
         print('  python -m oracle.agent query "Find EDM remixes of Punk tracks"')
         print('  python -m oracle.agent fact abc123')
         print("\nRequires:")
-<<<<<<< HEAD
-        print("  - Ollama running on localhost:11434")
-        print("  - OR OPENAI_API_KEY in .env\n")
-=======
         print("  - Local LLM backend configured via LYRA_LLM_PROVIDER/LYRA_LLM_BASE_URL")
         print("  - OR Launch-Lyra.ps1 auto bootstrap (LM Studio -> Ollama)\n")
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         sys.exit(0)
     
     command = sys.argv[1]
@@ -667,7 +561,7 @@ if __name__ == "__main__":
     if command == "query" and len(sys.argv) >= 3:
         question = " ".join(sys.argv[2:])
         
-        print(f"\n💭 USER: {question}\n")
+        print(f"\nðŸ’­ USER: {question}\n")
         
         result = agent.query(question)
         
@@ -680,7 +574,7 @@ if __name__ == "__main__":
         if result.get("observation"):
             print(f"OBSERVATION: {json.dumps(result['observation'], indent=2)}\n")
         
-        print(f"🧠 LYRA: {result['response']}\n")
+        print(f"ðŸ§  LYRA: {result['response']}\n")
     
     elif command == "fact" and len(sys.argv) >= 3:
         track_id = sys.argv[2]
@@ -688,9 +582,9 @@ if __name__ == "__main__":
         fact = agent.fact_drop(track_id)
         
         if fact:
-            print(f"\n📖 FACT: {fact}\n")
+            print(f"\nðŸ“– FACT: {fact}\n")
         else:
-            print(f"\n📖 No interesting facts for this track.\n")
+            print(f"\nðŸ“– No interesting facts for this track.\n")
     
     else:
-        print("\n✗ Invalid command. Run with no args for help.\n")
+        print("\nâœ— Invalid command. Run with no args for help.\n")

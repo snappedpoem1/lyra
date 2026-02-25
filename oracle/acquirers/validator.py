@@ -1,4 +1,4 @@
-﻿"""Smart Acquisition Validator - Verify and clean metadata before accepting tracks.
+"""Smart Acquisition Validator - Verify and clean metadata before accepting tracks.
 
 Uses Discogs, MusicBrainz, and AcoustID to:
 1. Verify artist/title are real
@@ -23,14 +23,9 @@ import requests
 from dotenv import load_dotenv
 from oracle.runtime_state import wait_if_paused
 from oracle.db.schema import get_connection
-<<<<<<< HEAD
-
-load_dotenv(override=True)
-=======
 from oracle.enrichers.cache import make_lookup_key, get_or_set_payload
 
 load_dotenv(override=False)
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +35,9 @@ ACOUSTID_KEY = os.getenv("ACOUSTID_API_KEY")
 MB_APP_NAME = os.getenv("MB_APP_NAME", "LyraOracle")
 MB_VERSION = os.getenv("MB_APP_VERSION", "1.0")
 MB_CONTACT = os.getenv("MB_CONTACT", "lyra@example.com")
-<<<<<<< HEAD
-=======
 MB_CACHE_TTL_SECONDS = int(os.getenv("LYRA_CACHE_TTL_MB_SECONDS", "2592000") or "2592000")
 DISCOGS_CACHE_TTL_SECONDS = int(os.getenv("LYRA_CACHE_TTL_DISCOGS_SECONDS", "1209600") or "1209600")
 ITUNES_CACHE_TTL_SECONDS = int(os.getenv("LYRA_CACHE_TTL_ITUNES_SECONDS", "604800") or "604800")
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 # User agent for MusicBrainz
 MB_USER_AGENT = f"{MB_APP_NAME}/{MB_VERSION} ({MB_CONTACT})"
@@ -78,11 +70,6 @@ class ValidationResult:
     canonical_album: Optional[str] = None
     year: Optional[int] = None
     genres: List[str] = field(default_factory=list)
-<<<<<<< HEAD
-    isrc: Optional[str] = None
-    discogs_id: Optional[str] = None
-    musicbrainz_id: Optional[str] = None
-=======
     subgenres: List[str] = field(default_factory=list)
     isrc: Optional[str] = None
     discogs_id: Optional[str] = None
@@ -91,7 +78,6 @@ class ValidationResult:
     recording_mbid: Optional[str] = None
     release_mbid: Optional[str] = None
     release_group_mbid: Optional[str] = None
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     rejection_reason: Optional[str] = None
     source: str = "unknown"  # discogs, musicbrainz, acoustid
 
@@ -171,47 +157,6 @@ def is_junk(artist: str, title: str) -> Optional[str]:
 
 def search_discogs(artist: str, title: str) -> Optional[Dict[str, Any]]:
     """Search Discogs for track info."""
-<<<<<<< HEAD
-    if not DISCOGS_TOKEN:
-        return None
-    
-    try:
-        headers = {
-            "Authorization": f"Discogs token={DISCOGS_TOKEN}",
-            "User-Agent": MB_USER_AGENT,
-        }
-        
-        # Search for release
-        resp = requests.get(
-            "https://api.discogs.com/database/search",
-            params={
-                "q": f"{artist} {title}",
-                "type": "release",
-                "per_page": 5,
-            },
-            headers=headers,
-            timeout=10,
-        )
-        
-        if resp.status_code != 200:
-            return None
-        
-        data = resp.json()
-        results = data.get("results", [])
-        
-        if not results:
-            return None
-        
-        # Find best match
-        for result in results:
-            result_title = result.get("title", "")
-            # Discogs format: "Artist - Album"
-            if " - " in result_title:
-                parts = result_title.split(" - ", 1)
-                result_artist = parts[0]
-                result_album = parts[1] if len(parts) > 1 else ""
-                
-=======
     cache_key = make_lookup_key("discogs_release", artist, title)
 
     def _fetch() -> Dict[str, Any]:
@@ -250,7 +195,6 @@ def search_discogs(artist: str, title: str) -> Optional[Dict[str, Any]]:
                 result_artist = parts[0]
                 result_album = parts[1] if len(parts) > 1 else ""
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 artist_sim = similarity(artist, result_artist)
                 if artist_sim > 0.7:
                     return {
@@ -262,14 +206,6 @@ def search_discogs(artist: str, title: str) -> Optional[Dict[str, Any]]:
                         "discogs_id": str(result.get("id")),
                         "confidence": artist_sim,
                     }
-<<<<<<< HEAD
-        
-        return None
-        
-    except Exception as e:
-        logger.warning(f"Discogs search failed: {e}")
-        return None
-=======
             return {"_miss": True}
         except Exception as e:
             logger.warning(f"Discogs search failed: {e}")
@@ -285,84 +221,10 @@ def search_discogs(artist: str, title: str) -> Optional[Dict[str, Any]]:
     if payload.get("_miss"):
         return None
     return payload
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def search_musicbrainz(artist: str, title: str) -> Optional[Dict[str, Any]]:
     """Search MusicBrainz for track info."""
-<<<<<<< HEAD
-    try:
-        headers = {"User-Agent": MB_USER_AGENT}
-        
-        # Search for recording
-        resp = requests.get(
-            "https://musicbrainz.org/ws/2/recording",
-            params={
-                "query": f'artist:"{artist}" AND recording:"{title}"',
-                "fmt": "json",
-                "limit": 5,
-            },
-            headers=headers,
-            timeout=10,
-        )
-        
-        if resp.status_code != 200:
-            return None
-        
-        data = resp.json()
-        recordings = data.get("recordings", [])
-        
-        if not recordings:
-            return None
-        
-        # Find best match
-        for rec in recordings:
-            rec_title = rec.get("title", "")
-            title_sim = similarity(title, rec_title)
-            
-            if title_sim < 0.7:
-                continue
-            
-            # Get artist
-            artists = rec.get("artist-credit", [])
-            if not artists:
-                continue
-            
-            rec_artist = artists[0].get("name", "") if artists else ""
-            artist_sim = similarity(artist, rec_artist)
-            
-            if artist_sim < 0.6:
-                continue
-            
-            # Get release info
-            releases = rec.get("releases", [])
-            album = releases[0].get("title") if releases else None
-            year = None
-            if releases and releases[0].get("date"):
-                year_match = re.match(r"(\d{4})", releases[0]["date"])
-                if year_match:
-                    year = int(year_match.group(1))
-            
-            # Get ISRC
-            isrcs = rec.get("isrcs", [])
-            isrc = isrcs[0] if isrcs else None
-            
-            return {
-                "artist": rec_artist,
-                "title": rec_title,
-                "album": album,
-                "year": year,
-                "isrc": isrc,
-                "musicbrainz_id": rec.get("id"),
-                "confidence": (title_sim + artist_sim) / 2,
-            }
-        
-        return None
-        
-    except Exception as e:
-        logger.warning(f"MusicBrainz search failed: {e}")
-        return None
-=======
     cache_key = make_lookup_key("musicbrainz_recording", artist, title)
 
     def _fetch() -> Dict[str, Any]:
@@ -452,63 +314,10 @@ def search_musicbrainz(artist: str, title: str) -> Optional[Dict[str, Any]]:
     if payload.get("_miss"):
         return None
     return payload
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def search_itunes(artist: str, title: str) -> Optional[Dict[str, Any]]:
     """Search iTunes public catalog as a backup to MusicBrainz/Discogs."""
-<<<<<<< HEAD
-    try:
-        resp = requests.get(
-            "https://itunes.apple.com/search",
-            params={
-                "term": f"{artist} {title}",
-                "media": "music",
-                "entity": "song",
-                "limit": 10,
-            },
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            return None
-
-        data = resp.json()
-        results = data.get("results", [])
-        if not results:
-            return None
-
-        best: Optional[Dict[str, Any]] = None
-        best_conf = 0.0
-        for item in results:
-            cand_artist = str(item.get("artistName", "")).strip()
-            cand_title = str(item.get("trackName", "")).strip()
-            if not cand_artist or not cand_title:
-                continue
-
-            artist_sim = similarity(artist, cand_artist)
-            title_sim = similarity(title, cand_title)
-            confidence = (artist_sim + title_sim) / 2.0
-            if confidence > best_conf:
-                year = None
-                release_date = str(item.get("releaseDate", ""))
-                year_match = re.match(r"(\d{4})", release_date)
-                if year_match:
-                    year = int(year_match.group(1))
-
-                best_conf = confidence
-                best = {
-                    "artist": cand_artist,
-                    "title": cand_title,
-                    "album": item.get("collectionName"),
-                    "year": year,
-                    "isrc": item.get("isrc"),
-                    "confidence": confidence,
-                }
-        return best
-    except Exception as e:
-        logger.warning(f"iTunes search failed: {e}")
-        return None
-=======
     cache_key = make_lookup_key("itunes_track", artist, title)
 
     def _fetch() -> Dict[str, Any]:
@@ -573,7 +382,6 @@ def search_itunes(artist: str, title: str) -> Optional[Dict[str, Any]]:
     if payload.get("_miss"):
         return None
     return payload
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def validate_track(
@@ -625,13 +433,10 @@ def validate_track(
             year=mb_result.get("year"),
             isrc=mb_result.get("isrc"),
             musicbrainz_id=mb_result.get("musicbrainz_id"),
-<<<<<<< HEAD
-=======
             artist_mbid=mb_result.get("artist_mbid"),
             recording_mbid=mb_result.get("recording_mbid"),
             release_mbid=mb_result.get("release_mbid"),
             release_group_mbid=mb_result.get("release_group_mbid"),
->>>>>>> fc77b41 (Update workspace state and diagnostics)
             source="musicbrainz",
         )
     
@@ -640,12 +445,8 @@ def validate_track(
     # Try Discogs
     discogs_result = search_discogs(artist, title)
     if discogs_result and discogs_result.get("confidence", 0) >= min_confidence:
-<<<<<<< HEAD
-        genres = discogs_result.get("genres", []) + discogs_result.get("styles", [])
-=======
         genres = discogs_result.get("genres", [])
         styles = discogs_result.get("styles", [])
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         return ValidationResult(
             valid=True,
             confidence=discogs_result["confidence"],
@@ -653,10 +454,7 @@ def validate_track(
             canonical_album=discogs_result.get("album"),
             year=discogs_result.get("year"),
             genres=genres[:5],
-<<<<<<< HEAD
-=======
             subgenres=styles[:8],
->>>>>>> fc77b41 (Update workspace state and diagnostics)
             discogs_id=discogs_result.get("discogs_id"),
             source="discogs",
         )
@@ -693,8 +491,6 @@ def validate_track(
             canonical_title=best.get("title") if best else title,
             canonical_album=best.get("album") if best else None,
             year=best.get("year") if best else None,
-<<<<<<< HEAD
-=======
             isrc=best.get("isrc") if best else None,
             discogs_id=best.get("discogs_id") if best else None,
             musicbrainz_id=best.get("musicbrainz_id") if best else None,
@@ -702,7 +498,6 @@ def validate_track(
             recording_mbid=best.get("recording_mbid") if best else None,
             release_mbid=best.get("release_mbid") if best else None,
             release_group_mbid=best.get("release_group_mbid") if best else None,
->>>>>>> fc77b41 (Update workspace state and diagnostics)
             source="partial_match",
         )
     
@@ -726,11 +521,8 @@ def validate_and_fix_library(
 
     conn = get_connection(timeout=10.0)
     cursor = conn.cursor()
-<<<<<<< HEAD
-=======
     cursor.execute("PRAGMA table_info(tracks)")
     track_columns = {row[1] for row in cursor.fetchall()}
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     _ensure_white_glove_table(cursor)
     conn.commit()
 
@@ -794,13 +586,10 @@ def validate_and_fix_library(
                     updates.append("artist = ?")
                     update_params.append(result.canonical_artist)
 
-<<<<<<< HEAD
-=======
                 if result.canonical_title and result.canonical_title != title:
                     updates.append("title = ?")
                     update_params.append(result.canonical_title)
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 if result.canonical_album and not album:
                     updates.append("album = ?")
                     update_params.append(result.canonical_album)
@@ -809,11 +598,6 @@ def validate_and_fix_library(
                     updates.append("year = ?")
                     update_params.append(str(result.year))
 
-<<<<<<< HEAD
-                if result.genres and not genre:
-                    updates.append("genre = ?")
-                    update_params.append(", ".join(result.genres[:3]))
-=======
                 if result.genres and (not genre):
                     updates.append("genre = ?")
                     update_params.append(", ".join(result.genres[:3]))
@@ -854,7 +638,6 @@ def validate_and_fix_library(
                 if "last_enriched_at" in track_columns:
                     updates.append("last_enriched_at = ?")
                     update_params.append(time.time())
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
                 if updates:
                     if apply:

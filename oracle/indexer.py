@@ -13,10 +13,6 @@ from typing import Dict, List, Optional
 import time
 
 from dotenv import load_dotenv
-<<<<<<< HEAD
-from tqdm import tqdm
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from oracle.chroma_store import LyraChromaStore
 from oracle.db.schema import get_connection, get_write_mode
@@ -173,7 +169,7 @@ def _index_rows(
 
     stats = {"indexed": 0, "failed": 0, "scored": 0}
 
-    # Batch size for GPU inference — 8 safe for DirectML, 16-32 for CUDA 8GB+
+    # Batch size for GPU inference â€” 8 safe for DirectML, 16-32 for CUDA 8GB+
     if workers <= 0:
         workers = auto_workers("io")
     workers = max(1, min(int(workers), 32))
@@ -219,8 +215,6 @@ def _index_rows(
                 stats["failed"] += 1
                 try:
                     cursor.execute(
-<<<<<<< HEAD
-=======
                         "UPDATE tracks SET status = 'index_error', updated_at = ? WHERE track_id = ?",
                         (time.time(), track_id),
                     )
@@ -228,7 +222,6 @@ def _index_rows(
                     pass
                 try:
                     cursor.execute(
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                         "INSERT INTO errors (track_id, stage, error, ts, retry_count) VALUES (?, ?, ?, ?, ?)",
                         (track_id, "embed", "Embedding failed", time.time(), 0)
                     )

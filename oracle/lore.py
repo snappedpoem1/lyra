@@ -2,10 +2,10 @@
 The Historian - Artist Lineage & Rivalry Mapper
 
 Maps the invisible bloodlines of music:
-- Band member histories (Skrillex → From First to Last)
+- Band member histories (Skrillex â†’ From First to Last)
 - Collaboration networks
 - Historical rivalries (Nas vs. Jay-Z)
-- Influence chains (Beatles → Oasis)
+- Influence chains (Beatles â†’ Oasis)
 
 Uses MusicBrainz relationships + optional LLM for rivalry detection.
 
@@ -15,15 +15,6 @@ Author: Lyra Oracle v9.0
 import os
 import logging
 import requests
-<<<<<<< HEAD
-import sqlite3
-import time
-import json
-from typing import Optional, List, Dict, Tuple
-from datetime import datetime
-
-from oracle.config import get_connection
-=======
 import time
 import json
 from typing import Optional, List, Dict
@@ -31,17 +22,13 @@ from datetime import datetime
 
 from oracle.config import get_connection
 from oracle.enrichers.cache import make_lookup_key, get_or_set_payload
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
 # MusicBrainz API Configuration
 MB_BASE_URL = "https://musicbrainz.org/ws/2"
 MB_RATE_LIMIT = 1.0  # 1 request per second
-<<<<<<< HEAD
-=======
 MB_CACHE_TTL_SECONDS = int(os.getenv("LYRA_CACHE_TTL_MB_SECONDS", "2592000") or "2592000")
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 class Lore:
@@ -57,8 +44,6 @@ class Lore:
     def _open_conn(self):
         """Get a fresh connection (thread-safe)."""
         return get_connection()
-<<<<<<< HEAD
-=======
 
     def _mb_request_json(self, path: str, params: Dict[str, object], cache_scope: str) -> Dict:
         """Fetch MusicBrainz payload with persistent cache + TTL."""
@@ -76,7 +61,7 @@ class Lore:
                     return {"_miss": True, "status_code": response.status_code}
                 return response.json()
             except Exception as exc:
-                logger.error("  âœ— MusicBrainz request failed (%s): %s", path, exc)
+                logger.error("  Ã¢Å“â€” MusicBrainz request failed (%s): %s", path, exc)
                 return {"_miss": True}
 
         return get_or_set_payload(
@@ -94,7 +79,6 @@ class Lore:
             params={"inc": "artist-rels+recording-rels+work-rels", "fmt": "json"},
             cache_scope="artist_rels_blob",
         )
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     def trace_lineage(self, artist_name: str, depth: int = 2) -> Dict:
         """
@@ -107,12 +91,12 @@ class Lore:
         Returns:
             Lineage map with connections
         """
-        logger.info(f"📜 LORE: Tracing lineage for [{artist_name}]")
+        logger.info(f"ðŸ“œ LORE: Tracing lineage for [{artist_name}]")
         
         # Get or create artist MBID
         mbid = self._get_artist_mbid(artist_name)
         if not mbid:
-            logger.warning(f"  ⚠️  Artist not found in MusicBrainz")
+            logger.warning(f"  âš ï¸  Artist not found in MusicBrainz")
             return {"artist": artist_name, "connections": [], "error": "not_found"}
         
         # Fetch relationships
@@ -129,7 +113,7 @@ class Lore:
                 metadata=json.dumps(rel.get("metadata", {}))
             )
             connections.append(rel)
-            logger.info(f"  → Member of: {rel['target']}")
+            logger.info(f"  â†’ Member of: {rel['target']}")
         
         # Phase 2: Collaboration relationships
         collabs = self._get_collaboration_relationships(mbid)
@@ -142,7 +126,7 @@ class Lore:
                 metadata=json.dumps(rel.get("metadata", {}))
             )
             connections.append(rel)
-            logger.info(f"  → Collab with: {rel['target']}")
+            logger.info(f"  â†’ Collab with: {rel['target']}")
         
         # Phase 3: Influence relationships (if available)
         influences = self._get_influence_relationships(mbid)
@@ -155,7 +139,7 @@ class Lore:
                 metadata=json.dumps(rel.get("metadata", {}))
             )
             connections.append(rel)
-            logger.info(f"  → Influenced by: {rel['target']}")
+            logger.info(f"  â†’ Influenced by: {rel['target']}")
         
         # Phase 4: Rivalry detection (requires LLM or manual data)
         rivalries = self._detect_rivalries(artist_name)
@@ -168,9 +152,9 @@ class Lore:
                 metadata=json.dumps(rival.get("metadata", {}))
             )
             connections.append(rival)
-            logger.info(f"  ⚔️  Rivalry with: {rival['target']}")
+            logger.info(f"  âš”ï¸  Rivalry with: {rival['target']}")
         
-        logger.info(f"  → Total connections: {len(connections)}")
+        logger.info(f"  â†’ Total connections: {len(connections)}")
         
         return {
             "artist": artist_name,
@@ -188,37 +172,24 @@ class Lore:
         try:
             cursor = conn.cursor()
             cursor.execute("""
-<<<<<<< HEAD
-                SELECT target_artist, type, weight, metadata, created_at
-                FROM connections
-                WHERE source_artist = ?
-=======
                 SELECT target, type, weight, evidence, created_at
                 FROM connections
                 WHERE source = ?
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 ORDER BY weight DESC
             """, (artist_name,))
             
             connections = []
             for row in cursor.fetchall():
-<<<<<<< HEAD
-=======
                 raw_evidence = row[3] if row[3] else ""
                 try:
                     parsed_evidence = json.loads(raw_evidence) if raw_evidence else {}
                 except Exception:
                     parsed_evidence = {"raw": raw_evidence}
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 connections.append({
                     "target": row[0],
                     "type": row[1],
                     "weight": row[2],
-<<<<<<< HEAD
-                    "metadata": json.loads(row[3]) if row[3] else {},
-=======
                     "metadata": parsed_evidence,
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                     "created_at": row[4]
                 })
             
@@ -240,7 +211,7 @@ class Lore:
         Returns:
             List of artists forming the path, or None if no connection
         """
-        logger.info(f"🔗 LORE: Finding path [{artist1}] → [{artist2}]")
+        logger.info(f"ðŸ”— LORE: Finding path [{artist1}] â†’ [{artist2}]")
         
         if artist1 == artist2:
             return [artist1]
@@ -265,124 +236,14 @@ class Lore:
                 target = conn["target"]
                 
                 if target == artist2:
-                    logger.info(f"  → Path found: {' → '.join(path + [target])}")
+                    logger.info(f"  â†’ Path found: {' â†’ '.join(path + [target])}")
                     return path + [target]
                 
                 if target not in visited:
                     queue.append((target, path + [target]))
         
-        logger.info(f"  ✗ No connection found within {max_hops} hops")
+        logger.info(f"  âœ— No connection found within {max_hops} hops")
         return None
-<<<<<<< HEAD
-    
-    def _get_artist_mbid(self, artist_name: str) -> Optional[str]:
-        """Search MusicBrainz for artist MBID."""
-        self._rate_limit()
-        
-        try:
-            response = self.session.get(
-                f"{MB_BASE_URL}/artist",
-                params={
-                    "query": f"artist:{artist_name}",
-                    "fmt": "json",
-                    "limit": 1
-                },
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("artists"):
-                    return data["artists"][0]["id"]
-            
-            return None
-        
-        except Exception as e:
-            logger.error(f"  ✗ MusicBrainz search failed: {e}")
-            return None
-    
-    def _get_member_relationships(self, mbid: str) -> List[Dict]:
-        """Get band membership relationships."""
-        self._rate_limit()
-        
-        try:
-            response = self.session.get(
-                f"{MB_BASE_URL}/artist/{mbid}",
-                params={
-                    "inc": "artist-rels",
-                    "fmt": "json"
-                },
-                timeout=10
-            )
-            
-            if response.status_code != 200:
-                return []
-            
-            data = response.json()
-            relations = data.get("relations", [])
-            
-            members = []
-            for rel in relations:
-                if rel.get("type") in ["member of band", "founder of band"]:
-                    members.append({
-                        "target": rel["artist"]["name"],
-                        "type": "member_of",
-                        "metadata": {
-                            "begin": rel.get("begin"),
-                            "end": rel.get("end"),
-                            "role": rel.get("type")
-                        }
-                    })
-            
-            return members
-        
-        except Exception as e:
-            logger.error(f"  ✗ Failed to get member relationships: {e}")
-            return []
-    
-    def _get_collaboration_relationships(self, mbid: str) -> List[Dict]:
-        """Get collaboration relationships."""
-        self._rate_limit()
-        
-        try:
-            response = self.session.get(
-                f"{MB_BASE_URL}/artist/{mbid}",
-                params={
-                    "inc": "recording-rels+work-rels",
-                    "fmt": "json"
-                },
-                timeout=10
-            )
-            
-            if response.status_code != 200:
-                return []
-            
-            data = response.json()
-            relations = data.get("relations", [])
-            
-            collabs = []
-            collaborators = set()
-            
-            for rel in relations:
-                if rel.get("type") in ["collaboration", "producer", "remixer"]:
-                    target_name = rel.get("artist", {}).get("name")
-                    if target_name and target_name not in collaborators:
-                        collaborators.add(target_name)
-                        collabs.append({
-                            "target": target_name,
-                            "type": "collab",
-                            "metadata": {
-                                "role": rel.get("type")
-                            }
-                        })
-            
-            return collabs
-        
-        except Exception as e:
-            logger.error(f"  ✗ Failed to get collaboration relationships: {e}")
-            return []
-    
-=======
 
     def _get_artist_mbid(self, artist_name: str) -> Optional[str]:
         """Search MusicBrainz for artist MBID."""
@@ -445,7 +306,6 @@ class Lore:
 
         return collabs
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     def _get_influence_relationships(self, mbid: str) -> List[Dict]:
         """Get influence relationships (rare in MusicBrainz)."""
         # MusicBrainz has limited influence data
@@ -504,22 +364,15 @@ class Lore:
         try:
             cursor = conn.cursor()
             cursor.execute("""
-<<<<<<< HEAD
-                INSERT OR REPLACE INTO connections
-                (source_artist, target_artist, type, weight, metadata, verified)
-                VALUES (?, ?, ?, ?, ?, 1)
-            """, (source, target, conn_type, weight, metadata))
-=======
                 INSERT INTO connections (source, target, type, weight, evidence, created_at)
                 SELECT ?, ?, ?, ?, ?, strftime('%s', 'now')
                 WHERE NOT EXISTS (
                     SELECT 1 FROM connections WHERE source = ? AND target = ? AND type = ?
                 )
             """, (source, target, conn_type, weight, metadata, source, target, conn_type))
->>>>>>> fc77b41 (Update workspace state and diagnostics)
             conn.commit()
         except Exception as e:
-            logger.error(f"  ✗ Failed to store connection: {e}")
+            logger.error(f"  âœ— Failed to store connection: {e}")
         finally:
             conn.close()
     
@@ -575,7 +428,7 @@ class Lore:
         if output_path:
             with open(output_path, 'w') as f:
                 json.dump(graph, f, indent=2)
-            logger.info(f"  → Graph exported to {output_path}")
+            logger.info(f"  â†’ Graph exported to {output_path}")
         
         return graph
 
@@ -591,7 +444,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     
     if len(sys.argv) < 2:
-        print("\n📜 Lyra Lore - Artist Lineage Tracer\n")
+        print("\nðŸ“œ Lyra Lore - Artist Lineage Tracer\n")
         print("Usage:")
         print("  python -m oracle.lore <artist_name>")
         print("\nExample:")
@@ -603,7 +456,7 @@ if __name__ == "__main__":
     
     lineage = lore.trace_lineage(artist)
     
-    print(f"\n🔗 LINEAGE MAP: {lineage['artist']}\n")
+    print(f"\nðŸ”— LINEAGE MAP: {lineage['artist']}\n")
     print(f"MusicBrainz ID: {lineage.get('mbid', 'N/A')}")
     print(f"Total Connections: {lineage['total']}\n")
     
@@ -611,20 +464,17 @@ if __name__ == "__main__":
         print("Connections:")
         for conn in lineage["connections"]:
             icon = {
-                "collab": "🤝",
-                "member_of": "🎸",
-                "influence": "💡",
-                "rivalry": "⚔️"
-            }.get(conn["type"], "•")
-            print(f"  {icon} {conn['type']:12} → {conn['target']}")
+                "collab": "ðŸ¤",
+                "member_of": "ðŸŽ¸",
+                "influence": "ðŸ’¡",
+                "rivalry": "âš”ï¸"
+            }.get(conn["type"], "â€¢")
+            print(f"  {icon} {conn['type']:12} â†’ {conn['target']}")
     else:
         print("No connections found.")
     
     print()
-<<<<<<< HEAD
-=======
 
 
 
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)

@@ -63,11 +63,7 @@ class LyraChromaStore:
 
         try:
             self._init_client()
-<<<<<<< HEAD
-        except Exception as exc:
-=======
         except Exception:
->>>>>>> fc77b41 (Update workspace state and diagnostics)
             if not self.allow_reset:
                 raise
             backup = self.persist_dir.with_name(

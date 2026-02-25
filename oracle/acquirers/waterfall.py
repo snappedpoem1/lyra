@@ -1,13 +1,13 @@
 """Unified Acquisition Waterfall.
 
 Lyra's tiered acquisition strategy:
-  T1: Qobuz      (hi-fi streaming API → FLAC up to 24-bit/96kHz)
+  T1: Qobuz      (hi-fi streaming API â†’ FLAC up to 24-bit/96kHz)
   T2: Slskd      (peer-to-peer FLAC search via Soulseek)
-  T3: Real-Debrid (Prowlarr search → RD cache → direct download)
+  T3: Real-Debrid (Prowlarr search â†’ RD cache â†’ direct download)
   T4: SpotDL     (YouTube with Spotify metadata - always available fallback)
 
 Each tier gracefully degrades if services aren't running.
-Quality: FLAC hi-res (T1) → FLAC (T2/T3) → 320k MP3 (T4)
+Quality: FLAC hi-res (T1) â†’ FLAC (T2/T3) â†’ 320k MP3 (T4)
 """
 
 from __future__ import annotations
@@ -16,20 +16,13 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-<<<<<<< HEAD
-from pathlib import Path
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 from typing import Any, Dict, List, Optional
 
 from oracle.config import guard_bypass_allowed, guard_bypass_reason
 from oracle.db.schema import get_connection, get_write_mode
 
 logger = logging.getLogger(__name__)
-<<<<<<< HEAD
-=======
 MIN_GUARD_CONFIDENCE = 0.30
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 @dataclass
@@ -46,7 +39,7 @@ class AcquisitionResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-# ── Availability Checks ────────────────────────────────────────────
+# â”€â”€ Availability Checks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _check_qobuz_available() -> bool:
@@ -116,7 +109,7 @@ def _check_spotdl_available() -> bool:
         return False
 
 
-# ── Tier Implementations ───────────────────────────────────────────
+# â”€â”€ Tier Implementations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _try_tier1_qobuz(artist: str, title: str) -> AcquisitionResult:
@@ -215,7 +208,7 @@ def _try_tier2_slskd(artist: str, title: str) -> AcquisitionResult:
 
 
 def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) -> AcquisitionResult:
-    """Tier 3: Prowlarr → Real-Debrid (cached torrents, FLAC quality)."""
+    """Tier 3: Prowlarr â†’ Real-Debrid (cached torrents, FLAC quality)."""
     start = time.perf_counter()
 
     if not _check_prowlarr_available():
@@ -242,10 +235,7 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
             extract_hash_from_magnet,
             probe_magnet_cached,
         )
-<<<<<<< HEAD
-=======
         from oracle.acquirers.guard import guard_file
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
         # Search for release (prefer FLAC)
         query = f"{artist} {album or title} FLAC"
@@ -268,7 +258,7 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
         # Build magnet list from Prowlarr results.
         # Prowlarr field map (verified empirically):
         #   guid      = actual magnet URI  ("magnet:?xt=urn:btih:...") for TPB-style indexers
-        #   infoHash  = raw hex hash (most reliable — use to construct magnet if guid isn't one)
+        #   infoHash  = raw hex hash (most reliable â€” use to construct magnet if guid isn't one)
         #   magnetUrl = Prowlarr proxy URL (do NOT send this to RD; use guid/infoHash instead)
         magnets: List[Dict] = []
         for r in results:
@@ -306,7 +296,7 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
 
         # RD instantAvailability is deprecated (returns 403). Instead: add each
         # magnet, poll for 20s. Cached torrents go to "downloaded" in <5s.
-        # Non-cached ones time out — we delete them and move on.
+        # Non-cached ones time out â€” we delete them and move on.
         # Limit to top 3 to keep T3 bounded (<60s total before falling to T4).
         for entry in magnets[:3]:
             magnet = entry["magnet"]
@@ -327,7 +317,7 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
                     if f.suffix.lower() in {".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus"}
                 ]
                 if not audio_files:
-                    logger.debug("[T3] No audio files in download — skipping")
+                    logger.debug("[T3] No audio files in download â€” skipping")
                     continue
 
                 best_file = audio_files[0]
@@ -341,8 +331,6 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
                     )
                     best_file = audio_files[0]
 
-<<<<<<< HEAD
-=======
                 guard_result = guard_file(best_file)
                 if not guard_result.allowed:
                     logger.info(
@@ -359,7 +347,6 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
                     )
                     continue
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 return AcquisitionResult(
                     success=True,
                     tier=3,
@@ -432,7 +419,7 @@ def _try_tier4_spotdl(artist: str, title: str, spotify_uri: Optional[str] = None
         )
 
 
-# ── Guard ───────────────────────────────────────────────────────────
+# â”€â”€ Guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _guard_check(artist: str, title: str, skip_guard: bool = False) -> Dict[str, Any]:
@@ -500,7 +487,7 @@ def _guard_check(artist: str, title: str, skip_guard: bool = False) -> Dict[str,
         }
 
 
-# ── Main Waterfall ──────────────────────────────────────────────────
+# â”€â”€ Main Waterfall â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def acquire(
@@ -515,7 +502,7 @@ def acquire(
     """Run the acquisition waterfall with guard protection.
 
     Tries each tier in order:
-      T1 (Qobuz) → T2 (Slskd) → T3 (Real-Debrid) → T4 (SpotDL)
+      T1 (Qobuz) â†’ T2 (Slskd) â†’ T3 (Real-Debrid) â†’ T4 (SpotDL)
 
     GUARD CHECK runs first to reject:
     - Karaoke/tribute/cover versions
@@ -564,7 +551,7 @@ def acquire(
         for w in guard.get("warnings", []):
             logger.info(f"  [WARN] {w}")
 
-    # Tier 1: Qobuz (hi-fi FLAC — priority, authenticated, reliable)
+    # Tier 1: Qobuz (hi-fi FLAC â€” priority, authenticated, reliable)
     if 1 not in skip_tiers and max_tier >= 1:
         logger.info("  [T1] Trying Qobuz...")
         result = _try_tier1_qobuz(artist, title)
@@ -586,7 +573,7 @@ def acquire(
             return result
         logger.info(f"  [--] T2: {result.error}")
 
-    # Tier 3: Real-Debrid (Prowlarr → cached torrents)
+    # Tier 3: Real-Debrid (Prowlarr â†’ cached torrents)
     if 3 not in skip_tiers and max_tier >= 3:
         logger.info("  [T3] Trying Real-Debrid...")
         result = _try_tier3_realdebrid(artist, title, album)

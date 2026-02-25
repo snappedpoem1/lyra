@@ -8,10 +8,6 @@ Includes:
 from __future__ import annotations
 
 import random
-<<<<<<< HEAD
-from pathlib import Path
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
@@ -22,8 +18,6 @@ from oracle.embedders.clap_embedder import CLAPEmbedder
 from oracle.vibe_descriptors import describe_scores
 
 MODEL_NAME = "laion/clap-htsat-unfused"
-<<<<<<< HEAD
-=======
 REMIX_HINT_TOKENS = (
     "remix",
     "edit",
@@ -34,7 +28,6 @@ REMIX_HINT_TOKENS = (
     "flip",
     "mix",
 )
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def search(query_text: str, n: int = 10) -> List[Dict[str, str]]:
@@ -80,8 +73,6 @@ def search(query_text: str, n: int = 10) -> List[Dict[str, str]]:
     return output
 
 
-<<<<<<< HEAD
-=======
 def find_remixes(
     artist: str | None = None,
     album: str | None = None,
@@ -187,7 +178,6 @@ def find_remixes(
     return results
 
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 def hybrid_search(
     query: str | None = None,
     filters: dict[str, Any] | None = None,

@@ -34,7 +34,7 @@ caps:
     - {id: 112, cat: Console, desc: "Gry"}
     - {id: 113, cat: Other, desc: "Inne"}
     - {id: 114, cat: Books, desc: "Kolorowanki"}
-    - {id: 115, cat: Books, desc: "Książki"}
+    - {id: 115, cat: Books, desc: "KsiÄ…Å¼ki"}
     - {id: 116, cat: Audio, desc: "Muzyka"}
     - {id: 117, cat: PC, desc: "Programy"}
     - {id: 118, cat: Audio/Video, desc: "Teledyski"}
@@ -66,7 +66,7 @@ caps:
     - {id: 53, cat: PC/Mac, desc: "Macintosh"}
     # Erotyka
     - {id: 58, cat: XXX/Other, desc: "Czasopisma"}
-    - {id: 59, cat: XXX/ImageSet, desc: "Zdjęcia"}
+    - {id: 59, cat: XXX/ImageSet, desc: "ZdjÄ™cia"}
     - {id: 60, cat: XXX/x264, desc: "Filmy"}
     - {id: 61, cat: XXX/Other, desc: "Gry"}
     - {id: 63, cat: XXX/Other, desc: "Hentai+18"}
@@ -77,7 +77,7 @@ caps:
     # Inne
     - {id: 55, cat: Other, desc: "Tapety"}
     - {id: 57, cat: Other, desc: "Pozostale"}
-    - {id: 86, cat: Other, desc: "Śmieszne"}
+    - {id: 86, cat: Other, desc: "Åšmieszne"}
     - {id: 105, cat: Other, desc: "Design www"}
     - {id: 106, cat: Other, desc: "Filmy (S)VCD"}
     - {id: 107, cat: Other, desc: "Flash/Shockwave"}
@@ -87,13 +87,13 @@ caps:
     # Sport
     - {id: 92, cat: TV/Sport, desc: "Boks"}
     - {id: 93, cat: TV/Sport, desc: "Hokej"}
-    - {id: 94, cat: TV/Sport, desc: "Koszykówka"}
+    - {id: 94, cat: TV/Sport, desc: "KoszykÃ³wka"}
     - {id: 95, cat: TV/Sport, desc: "Kulturystyka i fitness"}
     - {id: 96, cat: TV/Sport, desc: "MMA"}
     - {id: 97, cat: TV/Sport, desc: "Motorowe"}
-    - {id: 98, cat: TV/Sport, desc: "Piłka nożna"}
+    - {id: 98, cat: TV/Sport, desc: "PiÅ‚ka noÅ¼na"}
     - {id: 99, cat: TV/Sport, desc: "Rowerowe"}
-    - {id: 100, cat: TV/Sport, desc: "Siatkówka"}
+    - {id: 100, cat: TV/Sport, desc: "SiatkÃ³wka"}
     - {id: 101, cat: TV/Sport, desc: "Wodne"}
     - {id: 102, cat: TV/Sport, desc: "Wrestling"}
     - {id: 103, cat: TV/Sport, desc: "Zapasy"}
@@ -139,13 +139,10 @@ settings:
     options:
       desc: desc
       asc: asc
-<<<<<<< HEAD
-=======
   - name: info_limit
     type: info
     label: "Download Daily Limit"
     default: "Polskie-Torrenty has a daily limit on downloads. If downloads <b>fail</b> then you have exceeded your daily limit. Try again tomorrow."
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 login:
   method: cookie

@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
-<<<<<<< HEAD
-import os
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 import re
 import shutil
 import time
@@ -74,7 +70,7 @@ def _deep_clean_title(title: str) -> str:
         r"\s*[\(\[]\s*ft\.?\s+[^\)\]]+[\)\]]",
         r"\s*[\(\[]\s*prod\.?\s+by\s+[^\)\]]+[\)\]]",
         r"\s*[\(\[]\s*from\s+[^\)\]]+[\)\]]",
-        r"\s*[•·]\s*",
+        r"\s*[â€¢Â·]\s*",
     ]
 
     for pattern in patterns:
@@ -83,9 +79,9 @@ def _deep_clean_title(title: str) -> str:
     cleaned = re.sub(r"\s+feat\.?\s+.+$", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s+ft\.?\s+.+$", "", cleaned, flags=re.IGNORECASE)
 
-    cleaned = re.sub(r"\s*[-–—|:]\s*(official\s+)?(audio|video|lyrics?)$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*[-â€“â€”|:]\s*(official\s+)?(audio|video|lyrics?)$", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s{2,}", " ", cleaned)
-    cleaned = cleaned.strip(" -–—|:\t")
+    cleaned = cleaned.strip(" -â€“â€”|:\t")
 
     return cleaned or title.strip()
 
@@ -101,20 +97,6 @@ def get_default_metadata(file_path: Path) -> Dict[str, str]:
 def extract_metadata(file_path: Path) -> Dict[str, str]:
     meta = get_default_metadata(file_path)
     try:
-<<<<<<< HEAD
-        audio = MutagenFile(str(file_path), easy=True)
-        if audio and audio.tags:
-            if "artist" in audio.tags and audio.tags["artist"]:
-                meta["artist"] = audio.tags["artist"][0]
-            if "title" in audio.tags and audio.tags["title"]:
-                meta["title"] = _deep_clean_title(audio.tags["title"][0])
-            if "album" in audio.tags and audio.tags["album"]:
-                meta["album"] = audio.tags["album"][0]
-            if "date" in audio.tags and audio.tags["date"]:
-                meta["year"] = audio.tags["date"][0]
-        if audio and audio.info and getattr(audio.info, "length", None):
-            meta["duration"] = str(float(audio.info.length))
-=======
         audio_easy = MutagenFile(str(file_path), easy=True)
         if audio_easy and audio_easy.tags:
             if "artist" in audio_easy.tags and audio_easy.tags["artist"]:
@@ -133,7 +115,6 @@ def extract_metadata(file_path: Path) -> Dict[str, str]:
 
         if duration_source and duration_source.info and getattr(duration_source.info, "length", None):
             meta["duration"] = str(float(duration_source.info.length))
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     except Exception:
         pass
 
@@ -143,8 +124,6 @@ def extract_metadata(file_path: Path) -> Dict[str, str]:
     return meta
 
 
-<<<<<<< HEAD
-=======
 def _sanitize_duration(value) -> float | None:
     """Normalize parsed duration value; return None when invalid."""
     if value in (None, ""):
@@ -156,7 +135,6 @@ def _sanitize_duration(value) -> float | None:
     return parsed if parsed > 0 else None
 
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 def quarantine_file(file_path: Path) -> Tuple[bool, str]:
     QUARANTINE_PATH.mkdir(parents=True, exist_ok=True)
     target = QUARANTINE_PATH / file_path.name
@@ -232,13 +210,6 @@ def scan_library(library_path: str, limit: int = 0) -> Dict[str, int]:
             existing = cursor.fetchone()
 
             if existing:
-<<<<<<< HEAD
-                cursor.execute(
-                    """
-                    UPDATE tracks
-                    SET artist = ?, title = ?, album = ?, year = ?, genre = ?, duration = ?,
-                        content_hash = ?, last_seen_at = ?, updated_at = ?
-=======
                 duration_value = _sanitize_duration(meta.get("duration"))
                 cursor.execute(
                     """
@@ -246,7 +217,6 @@ def scan_library(library_path: str, limit: int = 0) -> Dict[str, int]:
                     SET artist = ?, title = ?, album = ?, year = ?, genre = ?,
                         duration = COALESCE(?, duration),
                         content_hash = ?, last_seen_at = ?, updated_at = ?, status = 'active'
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                     WHERE filepath = ?
                     """,
                     (
@@ -255,11 +225,7 @@ def scan_library(library_path: str, limit: int = 0) -> Dict[str, int]:
                         meta.get("album"),
                         meta.get("year"),
                         meta.get("genre"),
-<<<<<<< HEAD
-                        meta.get("duration"),
-=======
                         duration_value,
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                         content_hash,
                         now,
                         now,
@@ -268,10 +234,7 @@ def scan_library(library_path: str, limit: int = 0) -> Dict[str, int]:
                 )
                 stats["updated"] += 1
             else:
-<<<<<<< HEAD
-=======
                 duration_value = _sanitize_duration(meta.get("duration"))
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO tracks (
@@ -287,11 +250,7 @@ def scan_library(library_path: str, limit: int = 0) -> Dict[str, int]:
                         meta.get("album"),
                         meta.get("year"),
                         meta.get("genre"),
-<<<<<<< HEAD
-                        meta.get("duration"),
-=======
                         duration_value,
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                         content_hash,
                         now,
                         now,
@@ -385,19 +344,12 @@ def scan_paths(paths: Iterable[Path]) -> Dict[str, object]:
             existing = cursor.fetchone()
 
             if existing:
-<<<<<<< HEAD
-                cursor.execute(
-                    """
-                    UPDATE tracks
-                    SET artist = ?, title = ?, album = ?, year = ?, genre = ?, duration = ?,
-=======
                 duration_value = _sanitize_duration(meta.get("duration"))
                 cursor.execute(
                     """
                     UPDATE tracks
                     SET artist = ?, title = ?, album = ?, year = ?, genre = ?,
                         duration = COALESCE(?, duration),
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                         content_hash = ?, last_seen_at = ?, updated_at = ?, status = 'active'
                     WHERE filepath = ?
                     """,
@@ -407,11 +359,7 @@ def scan_paths(paths: Iterable[Path]) -> Dict[str, object]:
                         meta.get("album"),
                         meta.get("year"),
                         meta.get("genre"),
-<<<<<<< HEAD
-                        meta.get("duration"),
-=======
                         duration_value,
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                         content_hash,
                         now,
                         now,
@@ -420,10 +368,7 @@ def scan_paths(paths: Iterable[Path]) -> Dict[str, object]:
                 )
                 stats["updated"] = int(stats["updated"]) + 1
             else:
-<<<<<<< HEAD
-=======
                 duration_value = _sanitize_duration(meta.get("duration"))
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO tracks (
@@ -439,11 +384,7 @@ def scan_paths(paths: Iterable[Path]) -> Dict[str, object]:
                         meta.get("album"),
                         meta.get("year"),
                         meta.get("genre"),
-<<<<<<< HEAD
-                        meta.get("duration"),
-=======
                         duration_value,
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                         content_hash,
                         now,
                         now,

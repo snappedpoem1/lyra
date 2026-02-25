@@ -13,8 +13,6 @@ class ConfigSchemaContractTests(unittest.TestCase):
         with mock.patch.dict("os.environ", {}, clear=True):
             self.assertFalse(config.guard_bypass_allowed())
 
-<<<<<<< HEAD
-=======
     def test_validate_required_env_fails_loudly(self) -> None:
         with mock.patch.dict("os.environ", {}, clear=True):
             with self.assertRaises(RuntimeError):
@@ -28,7 +26,6 @@ class ConfigSchemaContractTests(unittest.TestCase):
         ):
             config.validate_required_env(["PROWLARR_API_KEY", "REAL_DEBRID_KEY"])
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 if __name__ == "__main__":
     unittest.main()

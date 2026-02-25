@@ -11,20 +11,12 @@ import os
 import shutil
 import time
 from pathlib import Path
-<<<<<<< HEAD
-from typing import Dict, List, Optional, Set, Tuple
-
-import mutagen
-
-from oracle.acquirers.guard import guard_file, guard_acquisition, GuardResult
-=======
 from typing import Dict, List, Set, Tuple
 
 import mutagen
 
 from oracle.acquirers.guard import guard_file, GuardResult
 from oracle.config import LIBRARY_BASE
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +158,7 @@ def process_downloads(
                         logger.error(f"Failed to quarantine {filepath}: {e}")
                         action_taken = "quarantine_failed"
             
-            logger.info(f"❌ REJECTED: {filepath.name[:50]} → {guard_result.rejection_reason[:40]} ({action_taken})")
+            logger.info(f"âŒ REJECTED: {filepath.name[:50]} â†’ {guard_result.rejection_reason[:40]} ({action_taken})")
             
         elif guard_result.confidence < min_confidence:
             # LOW CONFIDENCE - move to quarantine for manual review
@@ -188,7 +180,7 @@ def process_downloads(
                 except Exception as e:
                     logger.error(f"Failed to quarantine {filepath}: {e}")
             
-            logger.warning(f"⚠️ LOW CONFIDENCE ({guard_result.confidence:.0%}): {filepath.name[:50]} ({action_taken})")
+            logger.warning(f"âš ï¸ LOW CONFIDENCE ({guard_result.confidence:.0%}): {filepath.name[:50]} ({action_taken})")
             
         else:
             # ALLOWED - import to library
@@ -203,7 +195,7 @@ def process_downloads(
                 if dest.exists():
                     # Check if it's truly a duplicate
                     summary["errors"] += 1
-                    logger.warning(f"⚠️ File exists: {clean_name}")
+                    logger.warning(f"âš ï¸ File exists: {clean_name}")
                     continue
                 
                 if not dry_run:
@@ -223,7 +215,7 @@ def process_downloads(
                     "validated_by": guard_result.validated_by,
                 })
                 
-                logger.info(f"✅ IMPORTED: {guard_result.artist} - {guard_result.title} ({guard_result.confidence:.0%})")
+                logger.info(f"âœ… IMPORTED: {guard_result.artist} - {guard_result.title} ({guard_result.confidence:.0%})")
                 
             except Exception as e:
                 summary["errors"] += 1
@@ -314,11 +306,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Guarded Import Processor")
     parser.add_argument("command", choices=["scan", "import", "audit", "quarantine"])
     parser.add_argument("--downloads", default="downloads", help="Downloads folder")
-<<<<<<< HEAD
-    parser.add_argument("--library", default=os.getenv("LIBRARY_BASE", "A:\\music\\Active Music"))
-=======
     parser.add_argument("--library", default=str(LIBRARY_BASE))
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     parser.add_argument("--dry-run", action="store_true", help="Preview only")
     parser.add_argument("--delete-rejected", action="store_true", help="Delete rejected files")
     parser.add_argument("--min-confidence", type=float, default=0.3)
@@ -342,15 +330,15 @@ if __name__ == "__main__":
         print(f"Rejected: {len(rejected)}")
         
         if rejected:
-            print(f"\n❌ REJECTED:")
+            print(f"\nâŒ REJECTED:")
             for filepath, result in rejected:
-                print(f"  • {filepath.name[:50]}")
+                print(f"  â€¢ {filepath.name[:50]}")
                 print(f"    Reason: {result.rejection_reason}")
         
         if allowed:
-            print(f"\n✅ ALLOWED:")
+            print(f"\nâœ… ALLOWED:")
             for filepath, result in allowed[:10]:
-                print(f"  • {result.artist[:25]:25s} - {result.title[:30]}")
+                print(f"  â€¢ {result.artist[:25]:25s} - {result.title[:30]}")
             if len(allowed) > 10:
                 print(f"  ... and {len(allowed) - 10} more")
     
@@ -386,10 +374,10 @@ if __name__ == "__main__":
         print(f"Junk: {audit['junk']}")
         
         if audit["junk_files"]:
-            print(f"\n❌ JUNK FILES:")
+            print(f"\nâŒ JUNK FILES:")
             for item in audit["junk_files"][:20]:
                 filepath = Path(item["file"])
-                print(f"  • {filepath.name[:50]}")
+                print(f"  â€¢ {filepath.name[:50]}")
                 print(f"    Reason: {item['reason']}")
             if len(audit["junk_files"]) > 20:
                 print(f"  ... and {len(audit['junk_files']) - 20} more")

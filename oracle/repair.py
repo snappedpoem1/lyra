@@ -2,20 +2,12 @@
 
 from __future__ import annotations
 
-<<<<<<< HEAD
-from pathlib import Path
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 import os
 import re
 import sys
 import shutil
 import time
-<<<<<<< HEAD
-from typing import Dict, List
-=======
 from typing import Dict
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from oracle.db.schema import get_connection, migrate, get_write_mode
 from oracle.config import (
@@ -49,7 +41,7 @@ def check_directories() -> Dict[str, bool]:
     for name, path in dirs_to_check.items():
         exists = os.path.exists(path)
         results[name] = exists
-        status = "✓" if exists else "✗"
+        status = "âœ“" if exists else "âœ—"
         print(f"  {status} {name}: {path}")
     
     return results
@@ -75,13 +67,13 @@ def create_missing_directories() -> Dict[str, bool]:
         if not os.path.exists(path):
             try:
                 os.makedirs(path, exist_ok=True)
-                print(f"  ✓ Created: {name} -> {path}")
+                print(f"  âœ“ Created: {name} -> {path}")
                 results[name] = True
             except Exception as e:
-                print(f"  ✗ Failed to create {name}: {e}")
+                print(f"  âœ— Failed to create {name}: {e}")
                 results[name] = False
         else:
-            print(f"  ↷ Already exists: {name}")
+            print(f"  â†· Already exists: {name}")
             results[name] = True
     
     return results
@@ -101,7 +93,7 @@ def check_database() -> Dict[str, any]:
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tables = [row[0] for row in cursor.fetchall()]
         
-        print(f"  ✓ Tables found: {len(tables)}")
+        print(f"  âœ“ Tables found: {len(tables)}")
         for table in sorted(tables):
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table or ""):
                 print(f"    - {table}: skipped (unsafe table name)")
@@ -118,7 +110,7 @@ def check_database() -> Dict[str, any]:
         }
     
     except Exception as e:
-        print(f"  ✗ Database error: {e}")
+        print(f"  âœ— Database error: {e}")
         return {
             "status": "error",
             "error": str(e),
@@ -140,16 +132,12 @@ def check_chromadb() -> Dict[str, any]:
             settings=Settings(anonymized_telemetry=False, allow_reset=True)
         )
         
-<<<<<<< HEAD
-        collection = client.get_or_create_collection(name="clap_embeddings")
-=======
         client.get_or_create_collection(name="clap_embeddings")
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         count = collection.count()
         
-        print(f"  ✓ ChromaDB initialized")
-        print(f"  ✓ Collection: clap_embeddings")
-        print(f"  ✓ Embeddings: {count}")
+        print(f"  âœ“ ChromaDB initialized")
+        print(f"  âœ“ Collection: clap_embeddings")
+        print(f"  âœ“ Embeddings: {count}")
         
         return {
             "status": "ok",
@@ -157,7 +145,7 @@ def check_chromadb() -> Dict[str, any]:
         }
     
     except Exception as e:
-        print(f"  ✗ ChromaDB error: {e}")
+        print(f"  âœ— ChromaDB error: {e}")
         return {
             "status": "error",
             "error": str(e),
@@ -169,13 +157,13 @@ def reinitialize_chromadb() -> Dict[str, any]:
     print("\n" + "="*60)
     print("REINITIALIZING CHROMADB")
     print("="*60)
-    print("  ⚠ WARNING: This will delete all existing embeddings!")
+    print("  âš  WARNING: This will delete all existing embeddings!")
     
     try:
         # Backup old ChromaDB
         if os.path.exists(CHROMA_PATH):
             backup_path = CHROMA_PATH.parent / f"chroma_storage_backup_{int(time.time())}"
-            print(f"  ↷ Backing up to: {backup_path}")
+            print(f"  â†· Backing up to: {backup_path}")
             shutil.move(str(CHROMA_PATH), str(backup_path))
         
         # Create fresh ChromaDB
@@ -189,21 +177,17 @@ def reinitialize_chromadb() -> Dict[str, any]:
             settings=Settings(anonymized_telemetry=False, allow_reset=True)
         )
         
-<<<<<<< HEAD
-        collection = client.get_or_create_collection(name="clap_embeddings")
-=======
         client.get_or_create_collection(name="clap_embeddings")
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         
-        print(f"  ✓ ChromaDB reinitialized")
-        print(f"  ✓ Collection created: clap_embeddings")
+        print(f"  âœ“ ChromaDB reinitialized")
+        print(f"  âœ“ Collection created: clap_embeddings")
         
         return {
             "status": "ok",
         }
     
     except Exception as e:
-        print(f"  ✗ Failed to reinitialize: {e}")
+        print(f"  âœ— Failed to reinitialize: {e}")
         return {
             "status": "error",
             "error": str(e),
@@ -223,10 +207,10 @@ def smoke_test() -> Dict[str, bool]:
     try:
         conn = get_connection(timeout=5.0)
         conn.close()
-        print("    ✓ PASS")
+        print("    âœ“ PASS")
         results["database"] = True
     except Exception as e:
-        print(f"    ✗ FAIL: {e}")
+        print(f"    âœ— FAIL: {e}")
         results["database"] = False
     
     # Test 2: ChromaDB connection
@@ -239,15 +223,11 @@ def smoke_test() -> Dict[str, bool]:
             path=str(CHROMA_PATH),
             settings=Settings(anonymized_telemetry=False, allow_reset=True)
         )
-<<<<<<< HEAD
-        collection = client.get_or_create_collection(name="clap_embeddings")
-=======
         client.get_or_create_collection(name="clap_embeddings")
->>>>>>> fc77b41 (Update workspace state and diagnostics)
-        print("    ✓ PASS")
+        print("    âœ“ PASS")
         results["chromadb"] = True
     except Exception as e:
-        print(f"    ✗ FAIL: {e}")
+        print(f"    âœ— FAIL: {e}")
         results["chromadb"] = False
     
     # Test 3: Model loading (optional, can be slow)
@@ -255,20 +235,20 @@ def smoke_test() -> Dict[str, bool]:
     try:
         from oracle.indexer import load_clap_model
         model, processor = load_clap_model()
-        print("    ✓ PASS")
+        print("    âœ“ PASS")
         results["model"] = True
     except Exception as e:
-        print(f"    ✗ FAIL: {e}")
+        print(f"    âœ— FAIL: {e}")
         results["model"] = False
     
     # Test 4: Write mode
     print("\n  Test 4: Write Mode")
     try:
         mode = get_write_mode()
-        print(f"    ✓ PASS (mode: {mode})")
+        print(f"    âœ“ PASS (mode: {mode})")
         results["write_mode"] = True
     except Exception as e:
-        print(f"    ✗ FAIL: {e}")
+        print(f"    âœ— FAIL: {e}")
         results["write_mode"] = False
     
     return results
@@ -291,10 +271,10 @@ def full_repair(skip_chromadb: bool = False) -> Dict[str, any]:
     print("="*60)
     try:
         migrate()
-        print("  ✓ Database migrated")
+        print("  âœ“ Database migrated")
         results["database_migration"] = True
     except Exception as e:
-        print(f"  ✗ Migration failed: {e}")
+        print(f"  âœ— Migration failed: {e}")
         results["database_migration"] = False
     
     # Step 3: Check database
@@ -320,10 +300,10 @@ def full_repair(skip_chromadb: bool = False) -> Dict[str, any]:
     ])
     
     if all_passed:
-        print("\n  ✓✓✓ ALL CHECKS PASSED ✓✓✓")
+        print("\n  âœ“âœ“âœ“ ALL CHECKS PASSED âœ“âœ“âœ“")
         print("\n  System is healthy and ready to use.")
     else:
-        print("\n  ⚠⚠⚠ SOME CHECKS FAILED ⚠⚠⚠")
+        print("\n  âš âš âš  SOME CHECKS FAILED âš âš âš ")
         print("\n  Review the output above for details.")
     
     print("="*80 + "\n")
@@ -355,10 +335,6 @@ Examples:
 
 def main():
     """Main entry point."""
-<<<<<<< HEAD
-    import time
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     if len(sys.argv) < 2:
         print_help()
@@ -375,7 +351,7 @@ def main():
         full_repair()
     
     elif command == "reset-chroma":
-        print("\n⚠ WARNING: This will delete all ChromaDB embeddings!")
+        print("\nâš  WARNING: This will delete all ChromaDB embeddings!")
         response = input("Type 'YES' to confirm: ")
         if response == "YES":
             reinitialize_chromadb()

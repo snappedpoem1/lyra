@@ -7,11 +7,7 @@ import json
 import shutil
 import time
 from pathlib import Path
-<<<<<<< HEAD
-from typing import Dict, List, Optional
-=======
 from typing import Dict
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from dotenv import load_dotenv
 
@@ -293,11 +289,6 @@ def apply_plan(
         from_path = Path(action["from_path"])
         to_path_str = action.get("to_path")
         confidence = action.get("confidence", 0.0)
-<<<<<<< HEAD
-        reason = action.get("reason", "")
-        
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         # Skip low confidence
         if confidence < confidence_min:
             print(f"SKIP: {from_path.name} (confidence {confidence:.2f} < {confidence_min:.2f})")

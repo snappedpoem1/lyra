@@ -14,11 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-<<<<<<< HEAD
-from typing import Any, Dict, List, Optional
-=======
 from typing import List, Optional
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 import yt_dlp
 

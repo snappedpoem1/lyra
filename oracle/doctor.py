@@ -6,10 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 import shutil
-<<<<<<< HEAD
-import socket
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 import subprocess
 import sys
 import time
@@ -42,7 +38,7 @@ class CheckResult:
 def _check_python() -> CheckResult:
     major, minor = sys.version_info[:2]
     if major != 3 or minor < 12:
-        return CheckResult("Python", "WARNING", f"Python {major}.{minor} — 3.12+ recommended")
+        return CheckResult("Python", "WARNING", f"Python {major}.{minor} â€” 3.12+ recommended")
     return CheckResult("Python", "PASS", f"Python {major}.{minor}")
 
 
@@ -108,17 +104,13 @@ def _http_get(url: str, timeout: int = 4) -> tuple[int, str]:
 
 def _check_prowlarr() -> CheckResult:
     url = os.getenv("PROWLARR_URL", "http://localhost:9696")
-<<<<<<< HEAD
-    api_key = os.getenv("PROWLARR_API_KEY", "")
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     status, err = _http_get(f"{url}/health", timeout=4)
     if status == 200:
         return CheckResult("Prowlarr (T1)", "PASS", f"Live at {url}")
     if status == 401:
         return CheckResult("Prowlarr (T1)", "WARNING", f"Running but API key missing/wrong ({url})")
     if status == 0:
-        return CheckResult("Prowlarr (T1)", "FAIL", f"Not reachable at {url} — run: docker-compose up -d")
+        return CheckResult("Prowlarr (T1)", "FAIL", f"Not reachable at {url} â€” run: docker-compose up -d")
     return CheckResult("Prowlarr (T1)", "WARNING", f"HTTP {status} from {url}")
 
 
@@ -128,7 +120,7 @@ def _check_rdtclient() -> CheckResult:
     if status in (200, 301, 302, 303):
         return CheckResult("rdtclient (T1)", "PASS", f"Live at {url}")
     if status == 0:
-        return CheckResult("rdtclient (T1)", "FAIL", f"Not reachable at {url} — run: docker-compose up -d")
+        return CheckResult("rdtclient (T1)", "FAIL", f"Not reachable at {url} â€” run: docker-compose up -d")
     return CheckResult("rdtclient (T1)", "PASS", f"HTTP {status} at {url} (OK)")
 
 
@@ -138,7 +130,7 @@ def _check_slskd() -> CheckResult:
     if status in (200, 401):
         return CheckResult("slskd (T2)", "PASS", f"Live at {url}")
     if status == 0:
-        return CheckResult("slskd (T2)", "FAIL", f"Not reachable at {url} — run: docker-compose up -d")
+        return CheckResult("slskd (T2)", "FAIL", f"Not reachable at {url} â€” run: docker-compose up -d")
     return CheckResult("slskd (T2)", "WARNING", f"HTTP {status} from {url}")
 
 
@@ -221,9 +213,9 @@ def _check_realdebrid() -> CheckResult:
             data = r.json()
             points = data.get("points", "?")
             expiry = data.get("expiration", "?")[:10]
-            return CheckResult("Real-Debrid API", "PASS", f"Active — {points} pts, expires {expiry}")
+            return CheckResult("Real-Debrid API", "PASS", f"Active â€” {points} pts, expires {expiry}")
         if r.status_code == 401:
-            return CheckResult("Real-Debrid API", "FAIL", "Invalid API key — update REAL_DEBRID_KEY in .env")
+            return CheckResult("Real-Debrid API", "FAIL", "Invalid API key â€” update REAL_DEBRID_KEY in .env")
         return CheckResult("Real-Debrid API", "WARNING", f"HTTP {r.status_code}")
     except Exception as exc:
         return CheckResult("Real-Debrid API", "WARNING", f"Could not reach API: {exc}")
@@ -236,7 +228,7 @@ def _check_spotdl() -> CheckResult:
         __import__("spotdl")
         return CheckResult("spotdl (T3)", "PASS", "Available (Python package)")
     except ImportError:
-        return CheckResult("spotdl (T3)", "WARNING", "Not installed — pip install spotdl")
+        return CheckResult("spotdl (T3)", "WARNING", "Not installed â€” pip install spotdl")
 
 
 def _check_docker() -> CheckResult:
@@ -247,7 +239,7 @@ def _check_docker() -> CheckResult:
         r = subprocess.run(["docker", "ps"], capture_output=True, timeout=5)
         if r.returncode == 0:
             return CheckResult("Docker", "PASS", "Daemon running")
-        return CheckResult("Docker", "WARNING", "Docker CLI found but daemon not running — launch Docker Desktop")
+        return CheckResult("Docker", "WARNING", "Docker CLI found but daemon not running â€” launch Docker Desktop")
     except Exception as exc:
         return CheckResult("Docker", "WARNING", f"Docker check failed: {exc}")
 

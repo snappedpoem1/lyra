@@ -3,13 +3,10 @@
 ## Overview
 Lyra Oracle is a semantic music intelligence system that transforms music libraries into AI-powered knowledge bases with semantic search, intelligent curation, and natural language playlist generation.
 
-<<<<<<< HEAD
-=======
 For a detailed runtime map of LLM access and processing surfaces, see:
 - `plans/llm_access_points.md`
 - `plans/backend_v1_objectives.md`
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 ## Component Diagram
 
 ```mermaid
@@ -129,8 +126,4 @@ The Guard system acts as the gatekeeper for all acquisitions, ensuring only qual
 ### Performance Optimization
 - SQLite with WAL mode and optimized cache settings
 - ChromaDB for efficient vector similarity searches  
-<<<<<<< HEAD
 - Parallel processing where appropriate (thread pools)
-=======
-- Parallel processing where appropriate (thread pools)
->>>>>>> fc77b41 (Update workspace state and diagnostics)

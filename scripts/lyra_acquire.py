@@ -1,5 +1,5 @@
 """
-lyra_acquire.py — Tiered Acquisition Engine
+lyra_acquire.py â€” Tiered Acquisition Engine
 =============================================
 Real-Debrid (via Hunter/Prowlarr) first, SpotiFLAC fallback.
 Supports artist filtering, whole-artist mode, full discography
@@ -12,17 +12,14 @@ Usage:
     python lyra_acquire.py --link-liked
     python lyra_acquire.py --dry-run --limit 20
 
-Tier 1: Prowlarr → Real-Debrid (album-level FLAC torrents)
+Tier 1: Prowlarr â†’ Real-Debrid (album-level FLAC torrents)
 Tier 2: SpotiFLAC (track-level FLAC via Tidal/Qobuz/Amazon)
 """
 
 from __future__ import annotations
 
 import argparse
-<<<<<<< HEAD
-=======
 import atexit
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 import logging
 import os
 import re
@@ -30,10 +27,6 @@ import shutil
 import subprocess
 import sqlite3
 import sys
-<<<<<<< HEAD
-import time
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -41,11 +34,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env", override=True)
 
-<<<<<<< HEAD
-from oracle.config import get_connection, LIBRARY_BASE, LYRA_DB_PATH
-=======
 from oracle.config import get_connection, LIBRARY_BASE
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger("lyra.acquire")
 logging.basicConfig(
@@ -56,17 +45,14 @@ logging.basicConfig(
 
 # Audio extensions we care about when unpacking RD results
 AUDIO_EXTS = {".flac", ".mp3", ".m4a", ".ogg", ".opus", ".wav", ".aac", ".wma", ".alac"}
-<<<<<<< HEAD
-=======
 SPOTIFY_MAX_RETRY_AFTER_SECONDS = int(
     os.getenv("LYRA_SPOTIFY_MAX_RETRY_AFTER_SECONDS", "120") or "120"
 )
 ACQUIRE_LOCK_PATH = Path("logs") / "lyra_acquire.lock"
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # DB Helpers
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _queue_columns() -> set[str]:
     conn = get_connection()
@@ -181,8 +167,6 @@ def _normalize_artist_identity(name: str) -> str:
     return s
 
 
-<<<<<<< HEAD
-=======
 def _spotify_call(callable_obj, *args, **kwargs):
     """Call Spotify API and fail fast on extreme rate-limit retry windows."""
     try:
@@ -227,10 +211,9 @@ def _release_run_lock() -> None:
         pass
 
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
-# ──────────────────────────────────────────────────────────────
-# TIER 1 — Real-Debrid via Hunter (album-level FLAC torrents)
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# TIER 1 â€” Real-Debrid via Hunter (album-level FLAC torrents)
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 # Quality waterfall: try highest first, fall back progressively
 QUALITY_TIERS = ["FLAC", "MP3 320", ""]
@@ -249,7 +232,7 @@ def _build_rd_search_queries(
       2. Album-level
       3. Track-level fallback
 
-    Quality tiers: FLAC → MP3 320 → any format.
+    Quality tiers: FLAC â†’ MP3 320 â†’ any format.
     If quality_preference is not FLAC, the tiers start from that level.
     """
     # Build quality tiers starting from the user's preference
@@ -298,7 +281,7 @@ def acquire_via_realdebrid(
     quality_preference: str = "FLAC",
 ) -> dict:
     """
-    Tier 1: Search Prowlarr → check RD cache → download.
+    Tier 1: Search Prowlarr â†’ check RD cache â†’ download.
 
     Returns:
         {"status": "complete"|"failed"|"no_results", "files": [...], "error": ...}
@@ -308,21 +291,17 @@ def acquire_via_realdebrid(
     queries = _build_rd_search_queries(artist, album, title, quality_preference)
 
     if dry_run:
-        logger.info(f"  🔎 TIER 1 (Real-Debrid): {len(queries)} queries across quality tiers")
+        logger.info(f"  ðŸ”Ž TIER 1 (Real-Debrid): {len(queries)} queries across quality tiers")
         for q in queries:
-            logger.info(f"     • {q}")
-        logger.info(f"  🧪 DRY RUN: would try {len(queries)} query(ies)")
+            logger.info(f"     â€¢ {q}")
+        logger.info(f"  ðŸ§ª DRY RUN: would try {len(queries)} query(ies)")
         return {"status": "dry_run", "queries": queries}
 
     try:
         hunter = Hunter()
         targets = []
-<<<<<<< HEAD
-        used_query = None
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         for q in queries:
-            logger.info(f"  🔎 TIER 1 (Real-Debrid): searching [{q}]")
+            logger.info(f"  ðŸ”Ž TIER 1 (Real-Debrid): searching [{q}]")
             hits = hunter.hunt(q, quality_preference=quality_preference)
             if not hits:
                 continue
@@ -330,23 +309,19 @@ def acquire_via_realdebrid(
             viable = [h for h in hits if h.get("seeders", 0) > 0 or h.get("is_cached")]
             if viable:
                 targets = viable
-<<<<<<< HEAD
-                used_query = q
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 break
             else:
-                logger.info(f"  ⚠️  All {len(hits)} results have 0 seeders and not cached — trying next query")
+                logger.info(f"  âš ï¸  All {len(hits)} results have 0 seeders and not cached â€” trying next query")
 
         if not targets:
-            logger.info("  ⚠️  No Prowlarr results — falling through to Tier 2")
+            logger.info("  âš ï¸  No Prowlarr results â€” falling through to Tier 2")
             return {"status": "no_results"}
 
         # Take the best-ranked target
         best = targets[0]
-        cached_tag = "⚡ CACHED" if best.get("is_cached") else ""
+        cached_tag = "âš¡ CACHED" if best.get("is_cached") else ""
         logger.info(
-            f"  → Best match: {best['title']} "
+            f"  â†’ Best match: {best['title']} "
             f"[{best['quality']}] {best.get('seeders', 0)} seeders "
             f"{cached_tag} (priority {best['priority']:.2f})"
         )
@@ -355,22 +330,22 @@ def acquire_via_realdebrid(
 
         if result.get("status") == "completed":
             file_path = result.get("file_path")
-            logger.info(f"  ✅ RD download complete: {file_path}")
+            logger.info(f"  âœ… RD download complete: {file_path}")
 
             # Move audio files to library under Artist/Album structure
             moved = _organize_rd_download(Path(file_path) if file_path else None, artist, album)
             return {"status": "complete", "files": moved, "source": "real-debrid"}
         elif result.get("status") == "pending":
             tid = result.get("torrent_id")
-            logger.info(f"  ⏳ RD torrent {tid} still downloading — will check back later")
+            logger.info(f"  â³ RD torrent {tid} still downloading â€” will check back later")
             return {"status": "rd_pending", "torrent_id": tid, "title": best["title"]}
         else:
             err = result.get("error", "unknown")
-            logger.warning(f"  ⚠️  RD acquisition failed: {err}")
+            logger.warning(f"  âš ï¸  RD acquisition failed: {err}")
             return {"status": "failed", "error": err}
 
     except Exception as exc:
-        logger.warning(f"  ⚠️  Tier 1 exception: {exc}")
+        logger.warning(f"  âš ï¸  Tier 1 exception: {exc}")
         return {"status": "failed", "error": str(exc)}
 
 
@@ -395,7 +370,7 @@ def _organize_rd_download(
     elif downloaded_path.suffix.lower() in AUDIO_EXTS:
         audio = [downloaded_path]
     else:
-        # Could be an archive — check the parent dir
+        # Could be an archive â€” check the parent dir
         audio = _extract_audio_files(downloaded_path.parent)
 
     return _move_to_library(audio, artist, album)
@@ -463,32 +438,32 @@ def _move_to_library(files: List[Path], artist: str, album: str | None) -> List[
         if target.exists():
             old_quality = _ext_quality(target)
             if new_quality > old_quality:
-                logger.info(f"    ⬆️  Upgrading {target.name} ({target.suffix} → {f.suffix})")
+                logger.info(f"    â¬†ï¸  Upgrading {target.name} ({target.suffix} â†’ {f.suffix})")
                 target.unlink()
             elif new_quality == old_quality:
-                # Same quality, same name — skip (already have it)
-                logger.debug(f"    ⏭️  Already have: {target.name}")
+                # Same quality, same name â€” skip (already have it)
+                logger.debug(f"    â­ï¸  Already have: {target.name}")
                 f.unlink(missing_ok=True)
                 continue
             else:
-                # New file is lower quality — skip
-                logger.debug(f"    ⏭️  Keeping higher quality: {target.name}")
+                # New file is lower quality â€” skip
+                logger.debug(f"    â­ï¸  Keeping higher quality: {target.name}")
                 f.unlink(missing_ok=True)
                 continue
 
-        # Check for a different-extension match (e.g. track.mp3 → track.flac)
+        # Check for a different-extension match (e.g. track.mp3 â†’ track.flac)
         if not target.exists():
             existing = _find_existing_match(dest_dir, f.stem)
             if existing:
                 old_quality = _ext_quality(existing)
                 if new_quality > old_quality:
                     logger.info(
-                        f"    ⬆️  Replacing {existing.name} with {f.name} "
-                        f"(quality {old_quality} → {new_quality})"
+                        f"    â¬†ï¸  Replacing {existing.name} with {f.name} "
+                        f"(quality {old_quality} â†’ {new_quality})"
                     )
                     existing.unlink()
                 elif new_quality <= old_quality:
-                    logger.debug(f"    ⏭️  Already have equal/better: {existing.name}")
+                    logger.debug(f"    â­ï¸  Already have equal/better: {existing.name}")
                     f.unlink(missing_ok=True)
                     continue
 
@@ -496,16 +471,16 @@ def _move_to_library(files: List[Path], artist: str, album: str | None) -> List[
             final = dest_dir / f.name
             shutil.move(str(f), str(final))
             moved.append(final)
-            logger.info(f"    📂 {final}")
+            logger.info(f"    ðŸ“‚ {final}")
         except Exception as exc:
-            logger.warning(f"    ⚠️  Move failed for {f.name}: {exc}")
+            logger.warning(f"    âš ï¸  Move failed for {f.name}: {exc}")
 
     return moved
 
 
-# ──────────────────────────────────────────────────────────────
-# TIER 2 — SpotiFLAC fallback (track-level FLAC via Tidal/Qobuz)
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# TIER 2 â€” SpotiFLAC fallback (track-level FLAC via Tidal/Qobuz)
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _resolve_spotiflac_invocation() -> List[str] | None:
     launcher = shutil.which("spotiflac")
@@ -540,20 +515,20 @@ def acquire_via_spotiflac(
         return {"status": "failed", "error": "SpotiFLAC not installed (pip install SpotiFLAC)"}
 
     cmd = [*spotiflac_cmd, spotify_uri, str(LIBRARY_BASE)]
-    logger.info(f"  🔎 TIER 2 (SpotiFLAC): {artist} - {title}")
+    logger.info(f"  ðŸ”Ž TIER 2 (SpotiFLAC): {artist} - {title}")
 
     if dry_run:
-        logger.info(f"  🧪 DRY RUN: {' '.join(cmd)}")
+        logger.info(f"  ðŸ§ª DRY RUN: {' '.join(cmd)}")
         return {"status": "dry_run", "cmd": " ".join(cmd)}
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result.returncode == 0:
-            logger.info("  ✅ SpotiFLAC download complete")
+            logger.info("  âœ… SpotiFLAC download complete")
             return {"status": "complete", "source": "spotiflac"}
         else:
             err = (result.stderr or result.stdout or "download failed").strip()[:500]
-            logger.warning(f"  ❌ SpotiFLAC failed: {err}")
+            logger.warning(f"  âŒ SpotiFLAC failed: {err}")
             return {"status": "failed", "error": err}
     except subprocess.TimeoutExpired:
         return {"status": "failed", "error": "SpotiFLAC timeout (120s)"}
@@ -561,9 +536,9 @@ def acquire_via_spotiflac(
         return {"status": "failed", "error": str(exc)}
 
 
-# ──────────────────────────────────────────────────────────────
-# Tiered Waterfall — orchestrates RD → SpotiFLAC
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Tiered Waterfall â€” orchestrates RD â†’ SpotiFLAC
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def acquire_track(
     queue_id: int,
@@ -585,12 +560,12 @@ def acquire_track(
     artist_name = artist or "Unknown Artist"
     track_title = title or "Unknown Title"
 
-    logger.info(f"🎯 ACQUIRING: {artist_name} — {track_title}")
+    logger.info(f"ðŸŽ¯ ACQUIRING: {artist_name} â€” {track_title}")
 
     if not dry_run:
         update_status(queue_id, "downloading")
 
-    # ── TIER 1: Real-Debrid (album-level preferred) ──
+    # â”€â”€ TIER 1: Real-Debrid (album-level preferred) â”€â”€
     rd_result = acquire_via_realdebrid(
         artist_name, album, track_title,
         dry_run=dry_run, quality_preference=quality_preference,
@@ -606,14 +581,14 @@ def acquire_track(
 
     rd_is_pending = rd_result["status"] == "rd_pending"
 
-    # ── TIER 2: SpotiFLAC (track-level fallback) ──
+    # â”€â”€ TIER 2: SpotiFLAC (track-level fallback) â”€â”€
     if spotify_uri:
         sf_result = acquire_via_spotiflac(spotify_uri, artist_name, track_title, dry_run=dry_run)
 
         if sf_result["status"] == "complete":
             if not dry_run:
                 update_status(queue_id, "complete")
-            # SpotiFLAC handled it — still pass pending RD info so harvest can
+            # SpotiFLAC handled it â€” still pass pending RD info so harvest can
             # optionally upgrade to FLAC later if the torrent finishes
             if rd_is_pending:
                 return "rd_pending", rd_result
@@ -624,8 +599,8 @@ def acquire_track(
 
     # Both tiers failed / no Spotify URI
     if rd_is_pending:
-        # RD is still downloading — don't mark as failed yet
-        logger.info(f"  ⏳ RD pending, SpotiFLAC unavailable — will sweep later")
+        # RD is still downloading â€” don't mark as failed yet
+        logger.info(f"  â³ RD pending, SpotiFLAC unavailable â€” will sweep later")
         return "rd_pending", rd_result
 
     error_parts = [f"RD: {rd_result.get('error','no results')}"]
@@ -639,9 +614,9 @@ def acquire_track(
     return "failed"
 
 
-# ──────────────────────────────────────────────────────────────
-# RD Sweep — check back on pending torrents after harvest
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# RD Sweep â€” check back on pending torrents after harvest
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _sweep_rd_pending(
     pending: Dict[str, Dict],
@@ -664,7 +639,7 @@ def _sweep_rd_pending(
     from oracle.hunter import Hunter
 
     if dry_run:
-        logger.info(f"  🧪 DRY RUN: would sweep {len(pending)} pending torrent(s)")
+        logger.info(f"  ðŸ§ª DRY RUN: would sweep {len(pending)} pending torrent(s)")
         return
 
     hunter = Hunter()
@@ -674,7 +649,7 @@ def _sweep_rd_pending(
     while remaining and waited < max_wait:
         time.sleep(poll_interval)
         waited += poll_interval
-        logger.info(f"  ⏳ Sweep check ({waited}s / {max_wait}s) — {len(remaining)} pending")
+        logger.info(f"  â³ Sweep check ({waited}s / {max_wait}s) â€” {len(remaining)} pending")
 
         done_ids = []
         for tid, info in remaining.items():
@@ -684,7 +659,7 @@ def _sweep_rd_pending(
             if rd_status == "downloaded":
                 links = status.get("links", [])
                 if links:
-                    logger.info(f"  ✅ RD torrent ready: {info['title']} ({len(links)} link(s))")
+                    logger.info(f"  âœ… RD torrent ready: {info['title']} ({len(links)} link(s))")
                     paths = hunter.download_torrent_links(links)
                     if paths:
                         for p in paths:
@@ -695,12 +670,12 @@ def _sweep_rd_pending(
                         stats["complete"] = stats.get("complete", 0) + 1
                         done_ids.append(tid)
                     else:
-                        logger.warning(f"  ⚠️  Downloaded but no files extracted for {info['title']}")
+                        logger.warning(f"  âš ï¸  Downloaded but no files extracted for {info['title']}")
                 else:
-                    logger.warning(f"  ⚠️  RD says downloaded but no links for {info['title']}")
+                    logger.warning(f"  âš ï¸  RD says downloaded but no links for {info['title']}")
 
             elif rd_status in ("error", "magnet_error", "virus", "dead"):
-                logger.warning(f"  ✗ RD torrent died: {info['title']} ({rd_status})")
+                logger.warning(f"  âœ— RD torrent died: {info['title']} ({rd_status})")
                 done_ids.append(tid)
 
             else:
@@ -712,13 +687,13 @@ def _sweep_rd_pending(
             del remaining[tid]
 
     if remaining:
-        logger.info(f"  ⏰ Sweep timeout — {len(remaining)} torrent(s) still downloading on RD")
+        logger.info(f"  â° Sweep timeout â€” {len(remaining)} torrent(s) still downloading on RD")
         logger.info(f"     They'll keep downloading on RD. Run harvest again later to pick them up.")
 
 
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Pre-harvest: collect previously submitted RD torrents
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _collect_previous_rd_downloads(
     pending_targets: List[Tuple[int, str, str, str, str]],
@@ -744,7 +719,7 @@ def _collect_previous_rd_downloads(
     if not ready:
         return set()
 
-    logger.info(f"🔍 Found {len(ready)} completed RD torrent(s) from prior runs")
+    logger.info(f"ðŸ” Found {len(ready)} completed RD torrent(s) from prior runs")
 
     # Deduplicate RD torrents by filename (earlier runs may have added the same torrent)
     seen_filenames: set[str] = set()
@@ -756,7 +731,7 @@ def _collect_previous_rd_downloads(
             unique_ready.append(t)
     ready = unique_ready
 
-    # Build a lookup: lowercase artist → list of (queue_id, artist, title, album)
+    # Build a lookup: lowercase artist â†’ list of (queue_id, artist, title, album)
     artist_lookup: Dict[str, List[tuple]] = {}
     for qid, art, title, album, uri in pending_targets:
         key = (art or "").lower().strip()
@@ -788,12 +763,12 @@ def _collect_previous_rd_downloads(
             rd_album = _parse_album_from_torrent(torrent.get("filename", ""), art)
 
             logger.info(
-                f"  ✅ RD torrent matches [{art}]: {torrent.get('filename')} "
-                f"({len(links)} link(s)) → album: {rd_album or '?'}"
+                f"  âœ… RD torrent matches [{art}]: {torrent.get('filename')} "
+                f"({len(links)} link(s)) â†’ album: {rd_album or '?'}"
             )
 
             if dry_run:
-                logger.info(f"  🧪 DRY RUN: would download {len(links)} link(s)")
+                logger.info(f"  ðŸ§ª DRY RUN: would download {len(links)} link(s)")
                 continue
 
             # Download all links
@@ -811,7 +786,7 @@ def _collect_previous_rd_downloads(
                     update_status(qid, "complete")
                     fulfilled.add(qid)
                     stats["complete"] = stats.get("complete", 0) + 1
-                    logger.info(f"    ⏭️  Fulfilled from RD: {a} — {t}")
+                    logger.info(f"    â­ï¸  Fulfilled from RD: {a} â€” {t}")
 
             break  # Don't re-match this torrent
 
@@ -841,9 +816,9 @@ def _parse_album_from_torrent(filename: str, artist: str) -> str | None:
     return None
 
 
-# ──────────────────────────────────────────────────────────────
-# Harvest — process the acquisition queue
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Harvest â€” process the acquisition queue
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def start_harvest(
     limit: int = 10,
@@ -866,13 +841,13 @@ def start_harvest(
             logger.info("Queue empty. Run 'python spotify_import.py --queue' first.")
         return {}
 
-    logger.info(f"🚀 Starting Harvest: {len(targets)} targets")
-    logger.info(f"📁 Library: {LIBRARY_BASE}")
-    logger.info(f"⚙️  Waterfall: Real-Debrid → SpotiFLAC\n")
+    logger.info(f"ðŸš€ Starting Harvest: {len(targets)} targets")
+    logger.info(f"ðŸ“ Library: {LIBRARY_BASE}")
+    logger.info(f"âš™ï¸  Waterfall: Real-Debrid â†’ SpotiFLAC\n")
 
     stats: Dict[str, int] = {"complete": 0, "failed": 0, "skipped": 0, "dry_run": 0}
 
-    # Group by album for smarter RD batching —
+    # Group by album for smarter RD batching â€”
     # if RD grabs a whole album, mark all tracks from that album as complete
     album_groups: Dict[str, List[tuple]] = {}
     for row in targets:
@@ -882,7 +857,7 @@ def start_harvest(
 
     processed_albums: set[str] = set()
 
-    # ── PRE-SWEEP: grab any completed RD torrents from previous runs ──
+    # â”€â”€ PRE-SWEEP: grab any completed RD torrents from previous runs â”€â”€
     already_fulfilled = _collect_previous_rd_downloads(
         targets, stats, processed_albums, dry_run=dry_run,
     )
@@ -896,7 +871,7 @@ def start_harvest(
 
         # If this album was already grabbed via RD (album-level), skip individual tracks
         if album_key in processed_albums:
-            logger.info(f"  ⏭️  Album already acquired: {art} — {title}")
+            logger.info(f"  â­ï¸  Album already acquired: {art} â€” {title}")
             if not dry_run:
                 update_status(qid, "complete")
             stats["complete"] += 1
@@ -920,10 +895,10 @@ def start_harvest(
                     "queue_id": qid, "artist": art,
                     "album": album, "title": title,
                 }
-                logger.info(f"  ⏳ Parked RD torrent {tid} — will sweep later")
+                logger.info(f"  â³ Parked RD torrent {tid} â€” will sweep later")
             # Still fall through to SpotiFLAC inside acquire_track,
             # but track it for the sweep
-            # Don't count as complete yet — SpotiFLAC may have handled it
+            # Don't count as complete yet â€” SpotiFLAC may have handled it
             continue
 
         status = result
@@ -934,10 +909,10 @@ def start_harvest(
         if status == "complete" and album:
             processed_albums.add(album_key)
 
-    # ── RD SWEEP: check back on pending torrents ──
+    # â”€â”€ RD SWEEP: check back on pending torrents â”€â”€
     if rd_pending:
-        logger.info(f"\n{'─'*50}")
-        logger.info(f"🔄 Sweeping {len(rd_pending)} pending RD torrent(s)...")
+        logger.info(f"\n{'â”€'*50}")
+        logger.info(f"ðŸ”„ Sweeping {len(rd_pending)} pending RD torrent(s)...")
         _sweep_rd_pending(rd_pending, stats, dry_run)
 
     logger.info(f"\n{'='*50}")
@@ -945,9 +920,9 @@ def start_harvest(
     return stats
 
 
-# ──────────────────────────────────────────────────────────────
-# DISCOGRAPHY MODE — Spotify API → full artist catalog
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# DISCOGRAPHY MODE â€” Spotify API â†’ full artist catalog
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _get_spotify_client(scopes: Optional[str] = None):
     """Authenticate and return a spotipy client."""
@@ -966,9 +941,6 @@ def _get_spotify_client(scopes: Optional[str] = None):
         cache_path=str(cache_path),
         open_browser=True,
     )
-<<<<<<< HEAD
-    return spotipy.Spotify(auth_manager=auth, requests_timeout=30)
-=======
     return spotipy.Spotify(
         auth_manager=auth,
         requests_timeout=30,
@@ -976,19 +948,14 @@ def _get_spotify_client(scopes: Optional[str] = None):
         status_retries=0,
         backoff_factor=0.0,
     )
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def _resolve_artist(sp, artist_name: str) -> Optional[Dict]:
     """Find the best-matching artist on Spotify."""
-<<<<<<< HEAD
-    results = sp.search(q=f"artist:{artist_name}", type="artist", limit=5)
-=======
     results = _spotify_call(sp.search, q=f"artist:{artist_name}", type="artist", limit=5)
     if not results:
         logger.warning(f"Spotify search unavailable/rate-limited for artist lookup: {artist_name}")
         return None
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     artists = results.get("artists", {}).get("items", [])
     if not artists:
         logger.error(f"Artist not found on Spotify: {artist_name}")
@@ -1018,9 +985,6 @@ def _fetch_artist_albums(sp, artist_id: str) -> List[Dict]:
     for album_type in ["album,single,compilation", "appears_on"]:
         offset = 0
         while True:
-<<<<<<< HEAD
-            resp = sp.artist_albums(artist_id, album_type=album_type, limit=50, offset=offset)
-=======
             resp = _spotify_call(
                 sp.artist_albums,
                 artist_id,
@@ -1031,7 +995,6 @@ def _fetch_artist_albums(sp, artist_id: str) -> List[Dict]:
             if not resp:
                 logger.warning("Spotify artist_albums unavailable/rate-limited; stopping album fetch early.")
                 break
->>>>>>> fc77b41 (Update workspace state and diagnostics)
             items = resp.get("items", [])
             if not items:
                 break
@@ -1048,12 +1011,12 @@ def _search_sweep(sp, artist_name: str, artist_id: str, seen_uris: set[str]) -> 
     that don't appear under the artist's own discography.
 
     Searches for:
-      - "{artist} remix"        → other artists' remixes featuring them
-      - "{artist} feat"         → features on other artists' tracks
-      - "{artist} live"         → live recordings and bootlegs
-      - "{artist} acoustic"     → acoustic versions
-      - "{artist} cover"        → cover recordings
-      - "{artist} version"      → alternate versions, radio edits
+      - "{artist} remix"        â†’ other artists' remixes featuring them
+      - "{artist} feat"         â†’ features on other artists' tracks
+      - "{artist} live"         â†’ live recordings and bootlegs
+      - "{artist} acoustic"     â†’ acoustic versions
+      - "{artist} cover"        â†’ cover recordings
+      - "{artist} version"      â†’ alternate versions, radio edits
     """
     sweep_queries = [
         f'artist:"{artist_name}" remix',
@@ -1072,14 +1035,10 @@ def _search_sweep(sp, artist_name: str, artist_id: str, seen_uris: set[str]) -> 
         try:
             offset = 0
             while offset < 200:  # Cap at 200 results per query
-<<<<<<< HEAD
-                resp = sp.search(q=query, type="track", limit=50, offset=offset)
-=======
                 resp = _spotify_call(sp.search, q=query, type="track", limit=50, offset=offset)
                 if not resp:
-                    logger.warning("  ⚠️  Search sweep halted for query due Spotify rate-limit/offline.")
+                    logger.warning("  âš ï¸  Search sweep halted for query due Spotify rate-limit/offline.")
                     break
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 tracks = resp.get("tracks", {}).get("items", [])
                 if not tracks:
                     break
@@ -1112,7 +1071,7 @@ def _search_sweep(sp, artist_name: str, artist_id: str, seen_uris: set[str]) -> 
                     break
 
         except Exception as exc:
-            logger.warning(f"  ⚠️  Search sweep failed for [{query}]: {exc}")
+            logger.warning(f"  âš ï¸  Search sweep failed for [{query}]: {exc}")
             continue
 
     return found
@@ -1120,10 +1079,10 @@ def _search_sweep(sp, artist_name: str, artist_id: str, seen_uris: set[str]) -> 
 
 def fetch_artist_discography(artist_name: str, sp: Optional[object] = None) -> List[Dict]:
     """
-    Comprehensive artist discography fetch — three layers:
+    Comprehensive artist discography fetch â€” three layers:
 
     1. Primary catalog: artist_albums (albums, singles, compilations)
-    2. Appearances: artist_albums(appears_on) — soundtracks, VA comps, features
+    2. Appearances: artist_albums(appears_on) â€” soundtracks, VA comps, features
     3. Web search sweep: remixes, alternate versions, live cuts, features
        on other artists' tracks that Spotify doesn't link in the discography
 
@@ -1132,7 +1091,7 @@ def fetch_artist_discography(artist_name: str, sp: Optional[object] = None) -> L
     try:
         import spotipy  # noqa: F401
     except ImportError:
-        logger.error("spotipy not installed — pip install spotipy")
+        logger.error("spotipy not installed â€” pip install spotipy")
         return []
 
     if sp is None:
@@ -1143,11 +1102,11 @@ def fetch_artist_discography(artist_name: str, sp: Optional[object] = None) -> L
 
     artist_id = artist_obj["id"]
     artist_real_name = artist_obj["name"]
-    logger.info(f"🎤 Artist: {artist_real_name} (Spotify ID: {artist_id})")
+    logger.info(f"ðŸŽ¤ Artist: {artist_real_name} (Spotify ID: {artist_id})")
 
-    # ── Layer 1+2: All albums (own catalog + appears_on) ──
+    # â”€â”€ Layer 1+2: All albums (own catalog + appears_on) â”€â”€
     raw_albums = _fetch_artist_albums(sp, artist_id)
-    logger.info(f"  📀 {len(raw_albums)} total releases (catalog + appears_on)")
+    logger.info(f"  ðŸ“€ {len(raw_albums)} total releases (catalog + appears_on)")
 
     # Deduplicate albums by normalized name
     seen_albums: set[str] = set()
@@ -1158,7 +1117,7 @@ def fetch_artist_discography(artist_name: str, sp: Optional[object] = None) -> L
             seen_albums.add(norm)
             unique_albums.append(alb)
 
-    logger.info(f"  📀 {len(unique_albums)} unique albums after dedup")
+    logger.info(f"  ðŸ“€ {len(unique_albums)} unique albums after dedup")
 
     # Fetch tracks for each album
     all_tracks: List[Dict] = []
@@ -1167,23 +1126,16 @@ def fetch_artist_discography(artist_name: str, sp: Optional[object] = None) -> L
     for alb in unique_albums:
         album_name = alb["name"]
 
-<<<<<<< HEAD
-        tracks_resp = sp.album_tracks(alb["id"], limit=50)
-        items = tracks_resp.get("items", [])
-        while tracks_resp.get("next"):
-            tracks_resp = sp.next(tracks_resp)
-=======
         tracks_resp = _spotify_call(sp.album_tracks, alb["id"], limit=50)
         if not tracks_resp:
-            logger.warning(f"    ⚠️  Album tracks fetch skipped due Spotify rate-limit: {album_name}")
+            logger.warning(f"    âš ï¸  Album tracks fetch skipped due Spotify rate-limit: {album_name}")
             continue
         items = tracks_resp.get("items", [])
         while tracks_resp.get("next"):
             tracks_resp = _spotify_call(sp.next, tracks_resp)
             if not tracks_resp:
-                logger.warning(f"    ⚠️  Pagination halted due Spotify rate-limit: {album_name}")
+                logger.warning(f"    âš ï¸  Pagination halted due Spotify rate-limit: {album_name}")
                 break
->>>>>>> fc77b41 (Update workspace state and diagnostics)
             items.extend(tracks_resp.get("items", []))
 
         album_count = 0
@@ -1215,23 +1167,21 @@ def fetch_artist_discography(artist_name: str, sp: Optional[object] = None) -> L
         if album_count > 0:
             logger.info(f"    {album_name}: {album_count} tracks")
 
-    logger.info(f"  🎵 {len(all_tracks)} tracks from artist catalog")
+    logger.info(f"  ðŸŽµ {len(all_tracks)} tracks from artist catalog")
 
-    # ── Layer 3: Web search sweep (remixes, features, deep cuts) ──
-    logger.info("  🌐 Running web search sweep for remixes, features, and variants...")
+    # â”€â”€ Layer 3: Web search sweep (remixes, features, deep cuts) â”€â”€
+    logger.info("  ðŸŒ Running web search sweep for remixes, features, and variants...")
     sweep_tracks = _search_sweep(sp, artist_real_name, artist_id, seen_uris)
     if sweep_tracks:
         all_tracks.extend(sweep_tracks)
-        logger.info(f"  🌐 +{len(sweep_tracks)} additional tracks from search sweep")
+        logger.info(f"  ðŸŒ +{len(sweep_tracks)} additional tracks from search sweep")
     else:
-        logger.info("  🌐 No additional tracks found in sweep")
+        logger.info("  ðŸŒ No additional tracks found in sweep")
 
-    logger.info(f"  🎵 {len(all_tracks)} total tracks (catalog + appearances + sweep)")
+    logger.info(f"  ðŸŽµ {len(all_tracks)} total tracks (catalog + appearances + sweep)")
     return all_tracks
 
 
-<<<<<<< HEAD
-=======
 def _fallback_discography_from_history(artist_name: str, limit: int = 5000) -> List[Dict]:
     """Fallback discography source from local spotify_history when API is unavailable."""
     conn = get_connection()
@@ -1252,7 +1202,7 @@ def _fallback_discography_from_history(artist_name: str, limit: int = 5000) -> L
         )
         rows = cur.fetchall()
     except sqlite3.Error as exc:
-        logger.warning(f"  ⚠️  spotify_history fallback failed: {exc}")
+        logger.warning(f"  âš ï¸  spotify_history fallback failed: {exc}")
         rows = []
     finally:
         conn.close()
@@ -1277,11 +1227,10 @@ def _fallback_discography_from_history(artist_name: str, limit: int = 5000) -> L
             }
         )
     if tracks:
-        logger.info(f"  📚 Fallback from spotify_history: {len(tracks)} tracks")
+        logger.info(f"  ðŸ“š Fallback from spotify_history: {len(tracks)} tracks")
     return tracks
 
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 def run_discography_mode(
     artist_name: str,
     dry_run: bool = False,
@@ -1301,21 +1250,16 @@ def run_discography_mode(
     logger.info(f"  DISCOGRAPHY MODE: {artist_name}")
     logger.info(f"{'='*60}\n")
 
-<<<<<<< HEAD
-    disco_tracks = fetch_artist_discography(artist_name, sp=sp)
-    if not disco_tracks:
-=======
     try:
         disco_tracks = fetch_artist_discography(artist_name, sp=sp)
     except Exception as exc:
-        logger.warning(f"  ⚠️  Spotify API discography fetch failed: {exc}")
+        logger.warning(f"  âš ï¸  Spotify API discography fetch failed: {exc}")
         disco_tracks = []
     if not disco_tracks:
-        logger.warning("  ⚠️  Spotify API discography unavailable; using local spotify_history fallback.")
+        logger.warning("  âš ï¸  Spotify API discography unavailable; using local spotify_history fallback.")
         disco_tracks = _fallback_discography_from_history(artist_name)
     if not disco_tracks:
-        logger.warning("  ⚠️  No discography tracks available from API or local fallback.")
->>>>>>> fc77b41 (Update workspace state and diagnostics)
+        logger.warning("  âš ï¸  No discography tracks available from API or local fallback.")
         return {}
 
     conn = get_connection()
@@ -1346,12 +1290,12 @@ def run_discography_mode(
 
         new_tracks.append(t)
 
-    logger.info(f"  ✅ Already owned locally:  {owned_count}")
-    logger.info(f"  📋 Already in queue:       {queued_count}")
-    logger.info(f"  🆕 New tracks to enqueue:  {len(new_tracks)}")
+    logger.info(f"  âœ… Already owned locally:  {owned_count}")
+    logger.info(f"  ðŸ“‹ Already in queue:       {queued_count}")
+    logger.info(f"  ðŸ†• New tracks to enqueue:  {len(new_tracks)}")
 
     if not new_tracks:
-        logger.info("  Nothing new to acquire — discography is complete! 🎉")
+        logger.info("  Nothing new to acquire â€” discography is complete! ðŸŽ‰")
         conn.close()
         return {"owned": owned_count, "queued": queued_count, "new": 0}
 
@@ -1373,11 +1317,11 @@ def run_discography_mode(
                 ),
             )
         conn.commit()
-        logger.info(f"  📥 Enqueued {len(new_tracks)} new tracks")
+        logger.info(f"  ðŸ“¥ Enqueued {len(new_tracks)} new tracks")
     else:
-        logger.info(f"\n  🧪 DRY RUN — would enqueue {len(new_tracks)} tracks:")
+        logger.info(f"\n  ðŸ§ª DRY RUN â€” would enqueue {len(new_tracks)} tracks:")
         for t in new_tracks:
-            logger.info(f"    • {t['artist']} — {t['title']} ({t.get('album','')})")
+            logger.info(f"    â€¢ {t['artist']} â€” {t['title']} ({t.get('album','')})")
 
     conn.close()
 
@@ -1395,7 +1339,7 @@ def run_discography_mode(
     )
 
 
-# Top artists — discography helper
+# Top artists â€” discography helper
 def get_top_artists(limit: int = 20, time_range: str = "medium_term") -> Tuple[List[str], Optional[object]]:
     """
     Get the user's top artists.
@@ -1410,21 +1354,17 @@ def get_top_artists(limit: int = 20, time_range: str = "medium_term") -> Tuple[L
     # Spotify API (preferred)
     try:
         sp_client = _get_spotify_client(scopes="user-top-read user-library-read")
-<<<<<<< HEAD
-        resp = sp_client.current_user_top_artists(limit=limit, time_range=time_range)
-=======
         resp = _spotify_call(sp_client.current_user_top_artists, limit=limit, time_range=time_range)
         if not resp:
             raise RuntimeError("Spotify top artists unavailable/rate-limited")
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         items = resp.get("items", []) if resp else []
         artists = [a.get("name", "") for a in items if a.get("name")]
         if artists:
             logger.info(f"Top artists from Spotify ({time_range}): {len(artists)}")
             return artists, sp_client
-        logger.warning("Spotify top artists API returned no artists — falling back to spotify_history")
+        logger.warning("Spotify top artists API returned no artists â€” falling back to spotify_history")
     except Exception as exc:
-        logger.warning(f"Spotify top artists failed: {exc} — falling back to spotify_history")
+        logger.warning(f"Spotify top artists failed: {exc} â€” falling back to spotify_history")
         sp_client = None
 
     # Fallback: local streaming history
@@ -1494,9 +1434,9 @@ def run_top_discographies(
     return results
 
 
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # LIKED SONGS FOLDER LINKING
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def link_liked_songs(dry_run: bool = False) -> Dict[str, int]:
     """
@@ -1523,7 +1463,7 @@ def link_liked_songs(dry_run: bool = False) -> Dict[str, int]:
         "SELECT artist, title, album FROM spotify_library WHERE source = 'liked'"
     )
     liked = cur.fetchall()
-    logger.info(f"💜 {len(liked)} liked songs in Spotify library")
+    logger.info(f"ðŸ’œ {len(liked)} liked songs in Spotify library")
 
     stats = {"linked": 0, "not_found": 0, "already_linked": 0}
 
@@ -1561,36 +1501,36 @@ def link_liked_songs(dry_run: bool = False) -> Dict[str, int]:
             continue
 
         if dry_run:
-            logger.info(f"  🧪 LINK: {link_path.name} → {source_path}")
+            logger.info(f"  ðŸ§ª LINK: {link_path.name} â†’ {source_path}")
             stats["linked"] += 1
         else:
             try:
                 link_path.symlink_to(source_path)
                 stats["linked"] += 1
             except OSError:
-                # Symlinks on Windows may need admin — fall back to hard link
+                # Symlinks on Windows may need admin â€” fall back to hard link
                 try:
                     os.link(str(source_path), str(link_path))
                     stats["linked"] += 1
                 except OSError as exc:
-                    logger.warning(f"  ⚠️  Cannot link {link_path.name}: {exc}")
+                    logger.warning(f"  âš ï¸  Cannot link {link_path.name}: {exc}")
                     stats["not_found"] += 1
 
-    logger.info(f"\n💜 Liked Songs linking: {stats}")
+    logger.info(f"\nðŸ’œ Liked Songs linking: {stats}")
     if stats["not_found"] > 0:
-        logger.info(f"  ℹ️  {stats['not_found']} liked songs not in local library yet — acquire them first!")
+        logger.info(f"  â„¹ï¸  {stats['not_found']} liked songs not in local library yet â€” acquire them first!")
 
     conn.close()
     return stats
 
 
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # CLI
-# ──────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Lyra Acquire — Tiered Acquisition Engine (Real-Debrid → SpotiFLAC)",
+        description="Lyra Acquire â€” Tiered Acquisition Engine (Real-Debrid â†’ SpotiFLAC)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1603,7 +1543,7 @@ Examples:
   python lyra_acquire.py --dry-run --limit 20                 Preview without downloading
 
 Acquisition Waterfall:
-  Tier 1: Prowlarr → Real-Debrid (album-level FLAC torrents, cached = instant)
+  Tier 1: Prowlarr â†’ Real-Debrid (album-level FLAC torrents, cached = instant)
   Tier 2: SpotiFLAC (track-level FLAC via Tidal/Qobuz/Amazon, fallback)
         """,
     )
@@ -1629,18 +1569,15 @@ Acquisition Waterfall:
     )
 
     args = parser.parse_args()
-<<<<<<< HEAD
-=======
     _acquire_run_lock()
     atexit.register(_release_run_lock)
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
-    # ── Liked Songs linking ──
+    # â”€â”€ Liked Songs linking â”€â”€
     if args.link_liked:
         link_liked_songs(dry_run=args.dry_run)
         return
 
-    # ── Top artists discographies ──
+    # â”€â”€ Top artists discographies â”€â”€
     if args.top_discographies:
         run_top_discographies(
             limit=args.top_n,
@@ -1650,7 +1587,7 @@ Acquisition Waterfall:
         )
         return
 
-    # ── Discography mode ──
+    # â”€â”€ Discography mode â”€â”€
     if args.discography:
         if not args.artist:
             logger.error("--discography requires --artist \"Artist Name\"")
@@ -1662,7 +1599,7 @@ Acquisition Waterfall:
         )
         return
 
-    # ── Standard harvest ──
+    # â”€â”€ Standard harvest â”€â”€
     start_harvest(
         limit=args.limit,
         dry_run=args.dry_run,

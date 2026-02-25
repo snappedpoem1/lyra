@@ -19,21 +19,11 @@ Enables:
 Author: Lyra Oracle v9.0
 """
 
-<<<<<<< HEAD
-import os
 import logging
-import sqlite3
-=======
-import logging
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 import json
 import numpy as np
 from typing import Optional, List, Dict, Tuple
 from datetime import datetime
-<<<<<<< HEAD
-from pathlib import Path
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 try:
     import librosa
@@ -58,7 +48,7 @@ class Architect:
         self.conn = get_connection()
         
         if not librosa:
-            logger.warning("⚠️  librosa not available. Install with: pip install librosa")
+            logger.warning("âš ï¸  librosa not available. Install with: pip install librosa")
     
     def analyze_structure(self, track_id: str, file_path: str) -> Dict:
         """
@@ -74,36 +64,36 @@ class Architect:
         if not librosa:
             return {"error": "librosa_not_installed"}
         
-        logger.info(f"🏗️  ARCHITECT: Analyzing structure [{file_path}]")
+        logger.info(f"ðŸ—ï¸  ARCHITECT: Analyzing structure [{file_path}]")
         
         try:
             # Load audio
-            logger.info("  → Loading audio...")
+            logger.info("  â†’ Loading audio...")
             y, sr = librosa.load(file_path, sr=22050, mono=True, duration=600)  # Max 10 minutes
             
             # Phase 1: BPM Detection
-            logger.info("  → Detecting BPM...")
+            logger.info("  â†’ Detecting BPM...")
             bpm = self._detect_bpm(y, sr)
             logger.info(f"    BPM: {bpm:.1f}")
             
             # Phase 2: Key Detection
-            logger.info("  → Detecting key...")
+            logger.info("  â†’ Detecting key...")
             key_signature = self._detect_key(y, sr)
             logger.info(f"    Key: {key_signature}")
             
             # Phase 3: Structure Segmentation
-            logger.info("  → Segmenting structure...")
+            logger.info("  â†’ Segmenting structure...")
             structure = self._segment_structure(y, sr, bpm)
             logger.info(f"    Segments: {len(structure)}")
             
             # Phase 4: Drop Detection
-            logger.info("  → Detecting drops...")
+            logger.info("  â†’ Detecting drops...")
             has_drop, drop_time = self._detect_drop(y, sr, structure)
             if has_drop:
-                logger.info(f"    DROP at {drop_time:.1f}s 💥")
+                logger.info(f"    DROP at {drop_time:.1f}s ðŸ’¥")
             
             # Phase 5: Energy Profile
-            logger.info("  → Generating energy profile...")
+            logger.info("  â†’ Generating energy profile...")
             energy_profile = self._generate_energy_profile(y, sr)
             
             # Store in database
@@ -117,7 +107,7 @@ class Architect:
                 energy_profile
             )
             
-            logger.info("  ✓ Analysis complete")
+            logger.info("  âœ“ Analysis complete")
             
             return {
                 "track_id": track_id,
@@ -131,7 +121,7 @@ class Architect:
             }
         
         except Exception as e:
-            logger.error(f"  ✗ Analysis failed: {e}")
+            logger.error(f"  âœ— Analysis failed: {e}")
             return {"error": str(e)}
     
     def _detect_bpm(self, y: np.ndarray, sr: int) -> float:
@@ -176,11 +166,7 @@ class Architect:
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         
         # Compute recurrence matrix
-<<<<<<< HEAD
-        R = librosa.segment.recurrence_matrix(
-=======
         librosa.segment.recurrence_matrix(
->>>>>>> fc77b41 (Update workspace state and diagnostics)
             mfcc,
             mode='affinity',
             metric='cosine',
@@ -279,7 +265,7 @@ class Architect:
                         sub_bass_ratio = sub_bass_energy / total_energy if total_energy > 0 else 0
                         
                         if sub_bass_ratio > 0.15:  # Strong sub-bass presence
-                            logger.info(f"    → DROP detected: Buildup slope={energy_slope:.3f}, Sub-bass={sub_bass_ratio:.2%}")
+                            logger.info(f"    â†’ DROP detected: Buildup slope={energy_slope:.3f}, Sub-bass={sub_bass_ratio:.2%}")
                             return True, float(peak_time)
         
         return False, None
@@ -341,10 +327,10 @@ class Architect:
                 json.dumps(energy_profile)
             ))
             self.conn.commit()
-            logger.info("  → Structure stored in database")
+            logger.info("  â†’ Structure stored in database")
         
         except Exception as e:
-            logger.error(f"  ✗ Failed to store structure: {e}")
+            logger.error(f"  âœ— Failed to store structure: {e}")
     
     def get_structure(self, track_id: str) -> Optional[Dict]:
         """Retrieve stored structure analysis."""
@@ -404,7 +390,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     
     if len(sys.argv) < 2:
-        print("\n🏗️  Lyra Architect - Audio Structure Analysis\n")
+        print("\nðŸ—ï¸  Lyra Architect - Audio Structure Analysis\n")
         print("Commands:")
         print("  python -m oracle.architect analyze <track_id> <file_path>")
         print("  python -m oracle.architect get <track_id>")
@@ -424,34 +410,34 @@ if __name__ == "__main__":
         result = architect.analyze_structure(track_id, file_path)
         
         if "error" not in result:
-            print(f"\n🏗️  STRUCTURE ANALYSIS:\n")
+            print(f"\nðŸ—ï¸  STRUCTURE ANALYSIS:\n")
             print(f"BPM: {result['bpm']:.1f}")
             print(f"Key: {result['key']}")
-            print(f"Drop: {'YES 💥 at ' + str(result['drop_timestamp']) + 's' if result['has_drop'] else 'NO'}")
+            print(f"Drop: {'YES ðŸ’¥ at ' + str(result['drop_timestamp']) + 's' if result['has_drop'] else 'NO'}")
             print(f"\nSegments: {len(result['structure'])}")
             for seg in result['structure']:
                 print(f"  [{seg['start']:.1f}s - {seg['end']:.1f}s] {seg['label']}")
         else:
-            print(f"\n✗ Analysis failed: {result['error']}\n")
+            print(f"\nâœ— Analysis failed: {result['error']}\n")
     
     elif command == "get" and len(sys.argv) >= 3:
         track_id = sys.argv[2]
         structure = architect.get_structure(track_id)
         
         if structure:
-            print(f"\n🏗️  STORED STRUCTURE:\n")
+            print(f"\nðŸ—ï¸  STORED STRUCTURE:\n")
             print(json.dumps(structure, indent=2))
         else:
-            print(f"\n✗ No structure analysis found for track {track_id}\n")
+            print(f"\nâœ— No structure analysis found for track {track_id}\n")
     
     elif command == "drops":
         drops = architect.find_drop_tracks(50)
         
-        print(f"\n💥 TRACKS WITH DROPS: {len(drops)}\n")
+        print(f"\nðŸ’¥ TRACKS WITH DROPS: {len(drops)}\n")
         for i, drop in enumerate(drops, 1):
             print(f"{i:2}. {drop['artist']} - {drop['title']}")
             print(f"    Drop at {drop['drop_time']:.1f}s | BPM: {drop['bpm']:.0f}")
         print()
     
     else:
-        print("\n✗ Invalid command. Run with no args for help.\n")
+        print("\nâœ— Invalid command. Run with no args for help.\n")

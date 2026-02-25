@@ -5,22 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Tuple
 import shutil
-<<<<<<< HEAD
-import os
-
-from oracle.config import LIBRARY_BASE
-from oracle.name_cleaner import clean_metadata, parse_filename, suggest_rename
-from oracle.db.schema import get_connection, get_write_mode, get_content_hash_fast, get_track_id
-from oracle.scanner import AUDIO_EXTS, extract_metadata
-from oracle.organizer import generate_target_path
-import time
-=======
 
 from oracle.config import LIBRARY_BASE
 from oracle.name_cleaner import clean_metadata, suggest_rename
 from oracle.db.schema import get_write_mode, get_content_hash_fast
 from oracle.scanner import AUDIO_EXTS, extract_metadata
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOWNLOADS_DIR = PROJECT_ROOT / "downloads"
@@ -243,23 +232,23 @@ def process_downloads(
         
         if result['status'] == 'success':
             stats['success'] += 1
-            print(f"  ✓ Organized to: {result['target']}")
+            print(f"  âœ“ Organized to: {result['target']}")
             if result['cleaned_name']:
-                print(f"  ✓ Cleaned name: {result['original_name']} → {result['cleaned_name']}")
-            print(f"  ✓ Metadata: {result['metadata'].get('artist', '?')} - {result['metadata'].get('title', '?')}")
+                print(f"  âœ“ Cleaned name: {result['original_name']} â†’ {result['cleaned_name']}")
+            print(f"  âœ“ Metadata: {result['metadata'].get('artist', '?')} - {result['metadata'].get('title', '?')}")
         
         elif result['status'] == 'duplicate_removed':
             stats['duplicate'] += 1
-            print(f"  ✓ Removed duplicate (exists at {result['target']})")
+            print(f"  âœ“ Removed duplicate (exists at {result['target']})")
         
         elif result['status'] == 'would_copy':
-            print(f"  → Would copy to: {result['target']}")
+            print(f"  â†’ Would copy to: {result['target']}")
             if result['cleaned_name']:
-                print(f"  → Would clean: {result['original_name']} → {result['cleaned_name']}")
+                print(f"  â†’ Would clean: {result['original_name']} â†’ {result['cleaned_name']}")
         
         elif result['status'] in ['failed', 'error', 'blocked']:
             stats['error'] += 1
-            print(f"  ✗ Failed: {result.get('error', 'Unknown error')}")
+            print(f"  âœ— Failed: {result.get('error', 'Unknown error')}")
     
     print(f"\n{'='*60}")
     print(f"Processed {stats['found']} files:")

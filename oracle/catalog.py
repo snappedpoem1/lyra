@@ -1,4 +1,4 @@
-"""Catalog-first acquisition — verified discography from MusicBrainz.
+"""Catalog-first acquisition â€” verified discography from MusicBrainz.
 
 Looks up an artist's real discography via MusicBrainz, filters to actual
 studio albums/EPs, then acquires full albums via Prowlarr + Real-Debrid.
@@ -41,12 +41,9 @@ _SKIP_SECONDARY_TYPES = {"compilation", "dj-mix", "mixtape/street", "remix", "so
 _LIVE_TITLE_RE = re.compile(
     r"\bLive\s+(at|from|in)\b|\d{4}-\d{2}-\d{2}[\s:]", re.IGNORECASE
 )
-<<<<<<< HEAD
-=======
 _LOW_PRIORITY_TITLE_RE = re.compile(
     r"\b(demo|untitled|instrumental|era|lullaby)\b", re.IGNORECASE
 )
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def lookup_artist(name: str) -> Optional[Dict[str, Any]]:
@@ -211,10 +208,6 @@ def check_album_in_library(artist: str, album_title: str) -> Dict[str, Any]:
     ).fetchall()
     conn.close()
 
-<<<<<<< HEAD
-    artist_lower = artist.lower()
-=======
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     album_lower = album_title.lower()
     owned: List[str] = []
 
@@ -245,7 +238,7 @@ def _sanitize_name(value: str) -> str:
 
 def _normalize_title(value: str) -> str:
     s = (value or "").lower()
-    s = s.replace("…", "...")
+    s = s.replace("â€¦", "...")
     s = re.sub(r"[^\w\s]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
@@ -423,12 +416,9 @@ def acquire_album(
             logger.warning(f"[catalog] Prowlarr search failed for '{query}': {exc}")
 
     if not results:
-<<<<<<< HEAD
-=======
         fallback = _acquire_album_via_qobuz(artist, album_title, expected_tracks, album_dir)
         if fallback.get("success"):
             return fallback
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         return {"success": False, "error": "No Prowlarr results", "files": []}
 
     # Deduplicate by infoHash
@@ -468,7 +458,7 @@ def acquire_album(
         torrent_id = None
         try:
             torrent_id = add_magnet(magnet)
-            logger.info(f"[catalog] Added magnet for '{r.get('title', '?')}' → {torrent_id}")
+            logger.info(f"[catalog] Added magnet for '{r.get('title', '?')}' â†’ {torrent_id}")
 
             # Phase 1: wait for file list
             start = time.time()
@@ -487,7 +477,7 @@ def acquire_album(
 
                     if total_bytes > max_bytes:
                         gb = total_bytes / 1024 ** 3
-                        logger.info(f"[catalog] Too large ({gb:.1f} GB > {max_torrent_gb} GB) — skip")
+                        logger.info(f"[catalog] Too large ({gb:.1f} GB > {max_torrent_gb} GB) â€” skip")
                         break
 
                     # Count audio files
@@ -572,11 +562,6 @@ def acquire_album(
                 delete_torrent(torrent_id)
             continue
 
-<<<<<<< HEAD
-    return {"success": False, "error": "All Prowlarr results failed", "files": []}
-
-
-=======
     fallback = _acquire_album_via_qobuz(artist, album_title, expected_tracks, album_dir)
     if fallback.get("success"):
         return fallback
@@ -665,7 +650,6 @@ def _acquire_album_via_qobuz(
     }
 
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 def match_files_to_tracklist(
     files: List[Path],
     expected_tracks: List[Dict[str, Any]],
@@ -823,8 +807,6 @@ def catalog_acquire_artist(
 
     # Display plan
     pending = [r for r in releases if not (skip_existing and r.get("owned_count", 0) > 0)]
-<<<<<<< HEAD
-=======
     # Prioritize likely mainline releases first to improve acquisition success.
     pending.sort(
         key=lambda r: (
@@ -834,7 +816,6 @@ def catalog_acquire_artist(
             r.get("title", ""),
         )
     )
->>>>>>> fc77b41 (Update workspace state and diagnostics)
     if limit > 0:
         pending = pending[:limit]
 
@@ -970,7 +951,7 @@ def display_acquire_results(data: Dict[str, Any]) -> None:
         return
 
     artist = data.get("artist", {})
-    print(f"\n{artist.get('name', '?')} — Catalog Acquisition")
+    print(f"\n{artist.get('name', '?')} â€” Catalog Acquisition")
     print(f"{'=' * 50}")
 
     if data.get("dry_run"):
@@ -983,7 +964,7 @@ def display_acquire_results(data: Dict[str, Any]) -> None:
             owned = rel.get("owned_count", 0)
             tracks = rel.get("track_count", 0)
             year = rel.get("year") or "????"
-            skip = " [SKIP — already owned]" if owned > 0 else ""
+            skip = " [SKIP â€” already owned]" if owned > 0 else ""
             print(f"  {year} | {rel['title']} ({tracks} tracks){skip}")
         return
 

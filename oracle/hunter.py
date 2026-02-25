@@ -17,16 +17,8 @@ Author: Lyra Oracle v9.0
 import os
 import logging
 import requests
-<<<<<<< HEAD
-import sqlite3
-import re
-import tempfile
-from typing import Optional, List, Dict
-from datetime import datetime
-=======
 import re
 from typing import Optional, List, Dict
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
@@ -41,11 +33,8 @@ PROWLARR_URL = os.getenv("PROWLARR_URL", "http://localhost:9696")
 PROWLARR_API_KEY = os.getenv("PROWLARR_API_KEY", "")
 REALDEBRID_API_KEY = os.getenv("REALDEBRID_API_KEY", "") or os.getenv("REAL_DEBRID_KEY", "")
 REALDEBRID_BASE_URL = "https://api.real-debrid.com/rest/1.0"
-<<<<<<< HEAD
-=======
 PROWLARR_COOLDOWN_SECONDS = int(os.getenv("LYRA_PROWLARR_COOLDOWN_SECONDS", "300") or "300")
 _PROWLARR_DOWN_UNTIL = 0.0
->>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def _read_local_prowlarr_api_key() -> str:
@@ -100,14 +89,14 @@ class Hunter:
         Returns:
             List of acquisition targets with priority scores
         """
-        logger.info(f"🎯 HUNTER: Acquiring [{query}]")
+        logger.info(f"ðŸŽ¯ HUNTER: Acquiring [{query}]")
         
         # Phase 1: Search Prowlarr
         prowlarr_results = self._search_prowlarr(query)
-        logger.info(f"  → Prowlarr: {len(prowlarr_results)} results")
+        logger.info(f"  â†’ Prowlarr: {len(prowlarr_results)} results")
         
         if not prowlarr_results:
-            logger.warning("  ⚠️  No results from Prowlarr")
+            logger.warning("  âš ï¸  No results from Prowlarr")
             return []
         
         # Phase 2: Check Real-Debrid cache status
@@ -139,7 +128,7 @@ class Hunter:
             if not magnet_url and not download_url:
                 continue
 
-            # Check if cached (instant download) — only works with magnet hashes
+            # Check if cached (instant download) â€” only works with magnet hashes
             is_cached = False
             rd_link = None
 
@@ -176,9 +165,9 @@ class Hunter:
         # Sort by priority first, seeders as tiebreaker
         targets.sort(key=lambda x: (x["priority"], x.get("seeders", 0)), reverse=True)
         
-        logger.info(f"  → {len(targets)} targets ranked (top seeders: {targets[0].get('seeders', 0) if targets else 'n/a'})")
+        logger.info(f"  â†’ {len(targets)} targets ranked (top seeders: {targets[0].get('seeders', 0) if targets else 'n/a'})")
         if targets and targets[0]["is_cached"]:
-            logger.info(f"  ⚡ CACHED torrent available! Instant download ready.")
+            logger.info(f"  âš¡ CACHED torrent available! Instant download ready.")
         
         return targets
     
@@ -192,25 +181,23 @@ class Hunter:
         Returns:
             Acquisition status
         """
-        logger.info(f"📥 HUNTER: Acquiring [{target['title']}]")
+        logger.info(f"ðŸ“¥ HUNTER: Acquiring [{target['title']}]")
 
         if target.get("is_cached") and target.get("rd_link"):
             # Instant download via Real-Debrid
             return self._download_from_realdebrid(target)
         elif target.get("magnet") and target["magnet"].startswith("magnet:"):
-            # Real magnet link → addMagnet
+            # Real magnet link â†’ addMagnet
             return self._add_to_realdebrid(target)
         elif target.get("download_url"):
-            # Prowlarr .torrent download URL → fetch file → addTorrent
+            # Prowlarr .torrent download URL â†’ fetch file â†’ addTorrent
             return self._add_torrent_to_realdebrid(target)
         else:
-            logger.error("  ✗ No valid download method")
+            logger.error("  âœ— No valid download method")
             return {"status": "failed", "error": "no_download_method"}
     
     def _search_prowlarr(self, query: str) -> List[Dict]:
         """Search Prowlarr indexers."""
-<<<<<<< HEAD
-=======
         global _PROWLARR_DOWN_UNTIL
         now = time.time()
         if now < _PROWLARR_DOWN_UNTIL:
@@ -218,7 +205,6 @@ class Hunter:
             logger.warning(f"  Prowlarr cooling down after recent failure ({remaining}s remaining)")
             return []
 
->>>>>>> fc77b41 (Update workspace state and diagnostics)
         candidate_keys: List[str] = []
         if PROWLARR_API_KEY:
             candidate_keys.append(PROWLARR_API_KEY.strip())
@@ -244,10 +230,7 @@ class Hunter:
                 )
 
                 if response.status_code == 200:
-<<<<<<< HEAD
-=======
                     _PROWLARR_DOWN_UNTIL = 0.0
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                     if idx > 0:
                         logger.info("  Prowlarr auth recovered via local config key")
                     return response.json()
@@ -256,19 +239,13 @@ class Hunter:
                     logger.warning("  Prowlarr key unauthorized, retrying with fallback key")
                     continue
 
-<<<<<<< HEAD
-=======
                 if response.status_code >= 500:
                     _PROWLARR_DOWN_UNTIL = time.time() + PROWLARR_COOLDOWN_SECONDS
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 logger.error(f"  Prowlarr error: {response.status_code}")
                 return []
 
             except Exception as e:
-<<<<<<< HEAD
-=======
                 _PROWLARR_DOWN_UNTIL = time.time() + PROWLARR_COOLDOWN_SECONDS
->>>>>>> fc77b41 (Update workspace state and diagnostics)
                 logger.error(f"  Prowlarr search failed: {e}")
                 return []
 
@@ -302,13 +279,13 @@ class Hunter:
                 data = response.json()
                 # If data is not empty, torrent is cached
                 if data.get(torrent_hash):
-                    logger.info(f"  ⚡ Torrent cached on Real-Debrid!")
+                    logger.info(f"  âš¡ Torrent cached on Real-Debrid!")
                     return True, None
             
             return False, None
         
         except Exception as e:
-            logger.error(f"  ✗ Real-Debrid cache check failed: {e}")
+            logger.error(f"  âœ— Real-Debrid cache check failed: {e}")
             return False, None
     
     def _add_to_realdebrid(self, target: Dict) -> Dict:
@@ -320,7 +297,7 @@ class Hunter:
 
         try:
             # Add magnet
-            logger.info("  → Adding magnet to Real-Debrid...")
+            logger.info("  â†’ Adding magnet to Real-Debrid...")
             response = self.session.post(
                 f"{REALDEBRID_BASE_URL}/torrents/addMagnet",
                 data={"magnet": target["magnet"]},
@@ -328,20 +305,20 @@ class Hunter:
             )
 
             if response.status_code != 201:
-                logger.warning(f"  ⚠️  addMagnet returned {response.status_code}: {response.text[:200]}")
+                logger.warning(f"  âš ï¸  addMagnet returned {response.status_code}: {response.text[:200]}")
                 # Fall back to .torrent download if we have a Prowlarr URL
                 if target.get("download_url"):
-                    logger.info("  → Falling back to .torrent upload...")
+                    logger.info("  â†’ Falling back to .torrent upload...")
                     return self._add_torrent_to_realdebrid(target)
                 return {"status": "failed", "error": "add_magnet_failed"}
 
             torrent_id = response.json().get("id")
-            logger.info(f"  → Torrent ID: {torrent_id}")
+            logger.info(f"  â†’ Torrent ID: {torrent_id}")
 
             return self._wait_and_download(torrent_id, target)
 
         except Exception as e:
-            logger.error(f"  ✗ Real-Debrid acquisition failed: {e}")
+            logger.error(f"  âœ— Real-Debrid acquisition failed: {e}")
             return {"status": "failed", "error": str(e)}
 
     def _wait_and_download(self, torrent_id: str, target: Dict) -> Dict:
@@ -381,7 +358,7 @@ class Hunter:
                 return {"status": "failed", "error": "select_files_failed"}
 
             n_files = len(audio_ids) or len(files)
-            logger.info(f"  → {n_files} files selected. Waiting for download...")
+            logger.info(f"  â†’ {n_files} files selected. Waiting for download...")
 
             # Shorter timeout for uncached torrents (they can take ages)
             is_cached = target.get("is_cached", False)
@@ -398,7 +375,7 @@ class Hunter:
                         timeout=15
                     )
                 except (requests.ConnectionError, requests.Timeout) as e:
-                    logger.warning(f"  ⚠️  Connection hiccup ({e.__class__.__name__}), retrying...")
+                    logger.warning(f"  âš ï¸  Connection hiccup ({e.__class__.__name__}), retrying...")
                     time.sleep(3)
                     continue
 
@@ -407,13 +384,13 @@ class Hunter:
                     status = torrent_info.get("status")
                     progress = torrent_info.get("progress", 0)
                     if status == "downloaded":
-                        logger.info("  ✓ Download complete!")
+                        logger.info("  âœ“ Download complete!")
                         break
                     elif status in ("error", "magnet_error", "virus", "dead"):
-                        logger.error(f"  ✗ RD torrent error: {status}")
+                        logger.error(f"  âœ— RD torrent error: {status}")
                         return {"status": "failed", "error": status}
                     elif waited % 15 == 0:
-                        logger.info(f"  ⏳ RD progress: {progress}% ({status})")
+                        logger.info(f"  â³ RD progress: {progress}% ({status})")
 
             # Get download links
             response = self.session.get(
@@ -428,11 +405,11 @@ class Hunter:
                     # Unrestrict first link
                     return self._download_from_link(links[0], target)
 
-            # Timed out but torrent is still alive on RD — return pending
+            # Timed out but torrent is still alive on RD â€” return pending
             return {"status": "pending", "error": "no_download_link", "torrent_id": torrent_id}
 
         except Exception as e:
-            logger.error(f"  ✗ Real-Debrid wait/download failed: {e}")
+            logger.error(f"  âœ— Real-Debrid wait/download failed: {e}")
             return {"status": "failed", "error": str(e)}
     
     def _add_torrent_to_realdebrid(self, target: Dict) -> Dict:
@@ -451,26 +428,26 @@ class Hunter:
                 return self._add_to_realdebrid(target)
 
             if not download_url or not download_url.startswith("http"):
-                logger.error(f"  ✗ Invalid download URL: {download_url[:80]}")
+                logger.error(f"  âœ— Invalid download URL: {download_url[:80]}")
                 return {"status": "failed", "error": "invalid_download_url"}
 
-            logger.info("  → Downloading .torrent from Prowlarr...")
+            logger.info("  â†’ Downloading .torrent from Prowlarr...")
 
-            # Don't follow redirects — some indexers redirect to magnet links
+            # Don't follow redirects â€” some indexers redirect to magnet links
             torrent_resp = requests.get(download_url, timeout=30, allow_redirects=False)
 
             # Handle redirect to magnet link
             if torrent_resp.status_code in (301, 302, 303, 307, 308):
                 location = torrent_resp.headers.get("Location", "")
                 if location.startswith("magnet:"):
-                    logger.info("  → Prowlarr redirected to magnet link")
+                    logger.info("  â†’ Prowlarr redirected to magnet link")
                     target["magnet"] = location
                     return self._add_to_realdebrid(target)
-                # Normal HTTP redirect — follow it
+                # Normal HTTP redirect â€” follow it
                 torrent_resp = requests.get(location, timeout=30, allow_redirects=False)
 
             if torrent_resp.status_code != 200:
-                logger.error(f"  ✗ Prowlarr download failed: {torrent_resp.status_code}")
+                logger.error(f"  âœ— Prowlarr download failed: {torrent_resp.status_code}")
                 return {"status": "failed", "error": f"prowlarr_download_{torrent_resp.status_code}"}
 
             torrent_bytes = torrent_resp.content
@@ -479,16 +456,16 @@ class Hunter:
             if len(torrent_bytes) < 500:
                 text = torrent_bytes.decode("utf-8", errors="ignore").strip()
                 if text.startswith("magnet:"):
-                    logger.info("  → Prowlarr returned magnet link as body")
+                    logger.info("  â†’ Prowlarr returned magnet link as body")
                     target["magnet"] = text
                     return self._add_to_realdebrid(target)
 
             if len(torrent_bytes) < 50:
-                logger.error("  ✗ Prowlarr returned empty/invalid torrent")
+                logger.error("  âœ— Prowlarr returned empty/invalid torrent")
                 return {"status": "failed", "error": "invalid_torrent_file"}
 
             # Upload to Real-Debrid addTorrent (raw binary PUT)
-            logger.info("  → Uploading torrent to Real-Debrid...")
+            logger.info("  â†’ Uploading torrent to Real-Debrid...")
             rd_resp = self.session.put(
                 f"{REALDEBRID_BASE_URL}/torrents/addTorrent",
                 data=torrent_bytes,
@@ -497,17 +474,17 @@ class Hunter:
             )
 
             if rd_resp.status_code not in (200, 201):
-                logger.error(f"  ✗ RD addTorrent failed: {rd_resp.status_code} {rd_resp.text[:200]}")
+                logger.error(f"  âœ— RD addTorrent failed: {rd_resp.status_code} {rd_resp.text[:200]}")
                 return {"status": "failed", "error": "rd_add_torrent_failed"}
 
             torrent_id = rd_resp.json().get("id")
-            logger.info(f"  → Torrent ID: {torrent_id}")
+            logger.info(f"  â†’ Torrent ID: {torrent_id}")
 
             # From here it's the same flow: select files, wait, download
             return self._wait_and_download(torrent_id, target)
 
         except Exception as e:
-            logger.error(f"  ✗ Torrent upload acquisition failed: {e}")
+            logger.error(f"  âœ— Torrent upload acquisition failed: {e}")
             return {"status": "failed", "error": str(e)}
 
     def _download_from_realdebrid(self, target: Dict) -> Dict:
@@ -541,7 +518,7 @@ class Hunter:
                 return {"status": "failed", "error": "no_download_url"}
             
             # Download file
-            logger.info(f"  → Downloading from {download_url}")
+            logger.info(f"  â†’ Downloading from {download_url}")
             
             filename = data.get("filename", "download")
             output_path = Path(DOWNLOADS_FOLDER) / filename
@@ -552,7 +529,7 @@ class Hunter:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
             
-            logger.info(f"  ✓ Downloaded: {output_path}")
+            logger.info(f"  âœ“ Downloaded: {output_path}")
             
             return {
                 "status": "completed",
@@ -561,10 +538,10 @@ class Hunter:
             }
         
         except Exception as e:
-            logger.error(f"  ✗ Download failed: {e}")
+            logger.error(f"  âœ— Download failed: {e}")
             return {"status": "failed", "error": str(e)}
     
-    # ── Sweep helpers (check / download pending RD torrents) ──
+    # â”€â”€ Sweep helpers (check / download pending RD torrents) â”€â”€
 
     def list_rd_torrents(self, limit: int = 50) -> List[Dict]:
         """List recent torrents on Real-Debrid account.
@@ -602,7 +579,7 @@ class Hunter:
                 "filename": info.get("filename", ""),
             }
         except Exception as e:
-            logger.warning(f"  ⚠️  check_torrent error: {e}")
+            logger.warning(f"  âš ï¸  check_torrent error: {e}")
             return {"status": "unknown"}
 
     def download_torrent_links(self, links: List[str], max_workers: int = 4) -> List[str]:
@@ -635,7 +612,7 @@ class Hunter:
         Calculate acquisition priority.
         
         Scoring (seeder-weighted):
-        - Seeders:       up to 0.50 (dominant factor — dead torrents are useless)
+        - Seeders:       up to 0.50 (dominant factor â€” dead torrents are useless)
         - Cached on RD:  +0.30
         - Quality match: +0.15
         - Discography:   +0.05 (bonus for full artist torrents)
@@ -644,7 +621,7 @@ class Hunter:
         title = result.get("title", "").upper()
         seeders = result.get("seeders", 0) or 0
 
-        # Seeders — dominant factor (scale 0-0.50)
+        # Seeders â€” dominant factor (scale 0-0.50)
         if seeders >= 50:
             score += 0.50
         elif seeders >= 20:
@@ -667,7 +644,7 @@ class Hunter:
         elif "FLAC" in title and quality_pref != "MP3-320":
             score += 0.10
 
-        # Discography bonus — full catalog in one grab
+        # Discography bonus â€” full catalog in one grab
         if "DISCOGRAPHY" in title or "DISCOGRAFIA" in title or "COMPLETE" in title:
             score += 0.05
 
@@ -697,7 +674,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     
     if len(sys.argv) < 2:
-        print("\n🎯 Lyra Hunter - Accelerated Acquisition\n")
+        print("\nðŸŽ¯ Lyra Hunter - Accelerated Acquisition\n")
         print("Usage:")
         print("  python -m oracle.hunter hunt <query>   - Search and rank targets")
         print("  python -m oracle.hunter acquire <idx>  - Acquire target by index")
@@ -714,9 +691,9 @@ if __name__ == "__main__":
         query = " ".join(sys.argv[2:])
         targets = hunter.hunt(query)
         
-        print(f"\n🎯 HUNT RESULTS: {len(targets)} targets\n")
+        print(f"\nðŸŽ¯ HUNT RESULTS: {len(targets)} targets\n")
         for i, target in enumerate(targets, 1):
-            cached = "⚡ CACHED" if target["is_cached"] else ""
+            cached = "âš¡ CACHED" if target["is_cached"] else ""
             print(f"{i:2}. [{target['priority']:.2f}] {cached}")
             print(f"    {target['title']}")
             print(f"    Quality: {target['quality']} | Seeders: {target['seeders']} | Size: {target.get('size', 'Unknown')}")
@@ -724,6 +701,6 @@ if __name__ == "__main__":
             print()
     
     else:
-        print("\n✗ Invalid command. Run with no args for help.\n")
+        print("\nâœ— Invalid command. Run with no args for help.\n")
 
 
