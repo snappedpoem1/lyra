@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Dict, Optional
+import logging
 import os
 import time
 import requests
@@ -10,25 +11,76 @@ import requests
 from dotenv import load_dotenv
 
 MB_BASE_URL = os.getenv("MB_BASE_URL", "https://musicbrainz.org/ws/2/")
+_REQUEST_TIMEOUT_SECONDS = float(os.getenv("MB_TIMEOUT_SECONDS", "30"))
+_MAX_RETRIES = int(os.getenv("MB_MAX_RETRIES", "4"))
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+_LAST_REQUEST_TS = 0.0
+_SESSION = requests.Session()
+logger = logging.getLogger(__name__)
 
 
 def _user_agent() -> str:
     name = os.getenv("MB_APP_NAME", "LyraOracle")
     version = os.getenv("MB_APP_VERSION", "1.0")
     contact = os.getenv("MB_CONTACT", "unknown@example.com")
-    return f"{name}/{version} ( {contact} )"
+    return f"{name}/{version} ({contact})"
+
+
+def _min_interval_seconds() -> float:
+    interval = os.getenv("MB_MIN_INTERVAL_SECONDS")
+    if interval:
+        try:
+            return max(0.0, float(interval))
+        except ValueError:
+            return 1.1
+    # Backward compatibility: existing env var name suggests RPS.
+    # If MB_RATE_LIMIT_RPS=1, this enforces 1.0s between requests.
+    rps = os.getenv("MB_RATE_LIMIT_RPS", "1")
+    try:
+        rate = max(0.1, float(rps))
+    except ValueError:
+        rate = 1.0
+    return 1.0 / rate
+
+
+def _respect_rate_limit() -> None:
+    global _LAST_REQUEST_TS
+    min_interval = _min_interval_seconds()
+    elapsed = time.monotonic() - _LAST_REQUEST_TS
+    wait = max(0.0, min_interval - elapsed)
+    if wait > 0:
+        time.sleep(wait)
+    _LAST_REQUEST_TS = time.monotonic()
+
+
+def _retry_after_seconds(response: requests.Response) -> float:
+    retry_after = response.headers.get("Retry-After", "").strip()
+    if retry_after:
+        try:
+            return max(0.0, float(retry_after))
+        except ValueError:
+            pass
+    return 0.0
 
 
 def _request(url: str, params: Dict[str, str]) -> Dict:
     headers = {"User-Agent": _user_agent()}
-    for attempt in range(1, 4):
+    for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            response = requests.get(url, params=params, headers=headers, timeout=30)
+            _respect_rate_limit()
+            response = _SESSION.get(url, params=params, headers=headers, timeout=_REQUEST_TIMEOUT_SECONDS)
+            if response.status_code in _RETRYABLE_STATUS:
+                server_wait = _retry_after_seconds(response)
+                backoff_wait = min(16.0, 2 ** (attempt - 1))
+                time.sleep(max(server_wait, backoff_wait))
+                continue
             response.raise_for_status()
-            time.sleep(float(os.getenv("MB_RATE_LIMIT_RPS", "1")))
             return response.json()
-        except Exception:
-            time.sleep(2 ** attempt)
+        except requests.RequestException as exc:
+            if attempt >= _MAX_RETRIES:
+                logger.warning("MusicBrainz request failed after %s attempts: %s", attempt, exc)
+                return {}
+            time.sleep(min(16.0, 2 ** (attempt - 1)))
     return {}
 
 
