@@ -83,3 +83,29 @@ Lyra_Oracle_System/config/prowlarr/
 # --- Secrets ---
 .env
 .env.*
+
+# --- Python virtualenvs ---
+.venv/
+.venv*/
+venv/
+__pycache__/
+
+# --- Databases & SQLite volatile files ---
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# --- Runtime data (never commit) ---
+data/
+Lyra_Oracle_System/config/prowlarr/
+
+# --- Local tool state ---
+.claude/worktrees/
+.claude/**
+
+# --- Secrets ---
+.env
+.env.*
