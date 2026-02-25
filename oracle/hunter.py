@@ -17,11 +17,16 @@ Author: Lyra Oracle v9.0
 import os
 import logging
 import requests
+<<<<<<< HEAD
 import sqlite3
 import re
 import tempfile
 from typing import Optional, List, Dict
 from datetime import datetime
+=======
+import re
+from typing import Optional, List, Dict
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
@@ -36,6 +41,11 @@ PROWLARR_URL = os.getenv("PROWLARR_URL", "http://localhost:9696")
 PROWLARR_API_KEY = os.getenv("PROWLARR_API_KEY", "")
 REALDEBRID_API_KEY = os.getenv("REALDEBRID_API_KEY", "") or os.getenv("REAL_DEBRID_KEY", "")
 REALDEBRID_BASE_URL = "https://api.real-debrid.com/rest/1.0"
+<<<<<<< HEAD
+=======
+PROWLARR_COOLDOWN_SECONDS = int(os.getenv("LYRA_PROWLARR_COOLDOWN_SECONDS", "300") or "300")
+_PROWLARR_DOWN_UNTIL = 0.0
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def _read_local_prowlarr_api_key() -> str:
@@ -199,6 +209,16 @@ class Hunter:
     
     def _search_prowlarr(self, query: str) -> List[Dict]:
         """Search Prowlarr indexers."""
+<<<<<<< HEAD
+=======
+        global _PROWLARR_DOWN_UNTIL
+        now = time.time()
+        if now < _PROWLARR_DOWN_UNTIL:
+            remaining = int(_PROWLARR_DOWN_UNTIL - now)
+            logger.warning(f"  Prowlarr cooling down after recent failure ({remaining}s remaining)")
+            return []
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         candidate_keys: List[str] = []
         if PROWLARR_API_KEY:
             candidate_keys.append(PROWLARR_API_KEY.strip())
@@ -224,6 +244,10 @@ class Hunter:
                 )
 
                 if response.status_code == 200:
+<<<<<<< HEAD
+=======
+                    _PROWLARR_DOWN_UNTIL = 0.0
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                     if idx > 0:
                         logger.info("  Prowlarr auth recovered via local config key")
                     return response.json()
@@ -232,10 +256,19 @@ class Hunter:
                     logger.warning("  Prowlarr key unauthorized, retrying with fallback key")
                     continue
 
+<<<<<<< HEAD
+=======
+                if response.status_code >= 500:
+                    _PROWLARR_DOWN_UNTIL = time.time() + PROWLARR_COOLDOWN_SECONDS
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 logger.error(f"  Prowlarr error: {response.status_code}")
                 return []
 
             except Exception as e:
+<<<<<<< HEAD
+=======
+                _PROWLARR_DOWN_UNTIL = time.time() + PROWLARR_COOLDOWN_SECONDS
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 logger.error(f"  Prowlarr search failed: {e}")
                 return []
 

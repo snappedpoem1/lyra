@@ -24,15 +24,21 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
+<<<<<<< HEAD
 from dotenv import load_dotenv
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STAGING_DIR = (PROJECT_ROOT / "staging").resolve()
 
+<<<<<<< HEAD
 load_dotenv(PROJECT_ROOT / ".env", override=False)
 
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 QOBUZ_USERNAME = os.getenv("QOBUZ_USERNAME", "")
 QOBUZ_PASSWORD = os.getenv("QOBUZ_PASSWORD", "")
 QOBUZ_QUALITY = int(os.getenv("QOBUZ_QUALITY", "7"))
@@ -270,11 +276,17 @@ class QobuzAcquirer:
                 url_info = self.client.get_track_url(track_id, self.quality)
                 bit_depth = url_info.get("bit_depth", "?")
                 sampling_rate = url_info.get("sampling_rate", "?")
+<<<<<<< HEAD
                 mime = url_info.get("mime_type", "audio/flac")
             except Exception:
                 bit_depth = "?"
                 sampling_rate = "?"
                 mime = "audio/flac"
+=======
+            except Exception:
+                bit_depth = "?"
+                sampling_rate = "?"
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
             # 3. Download with qobuz-dl (handles tagging + cover art)
             with tempfile.TemporaryDirectory(prefix="qobuz_", dir=self.staging_dir.parent) as tmp:

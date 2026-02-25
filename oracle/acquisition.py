@@ -7,12 +7,20 @@ from typing import Dict, List
 import os
 import time
 import logging
+<<<<<<< HEAD
+=======
+import sqlite3
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from dotenv import load_dotenv
 
 from oracle.acquirers.ytdlp import YTDLPAcquirer
 from oracle.acquirers import prowlarr_rd
+<<<<<<< HEAD
 from oracle.acquirers.guard import guard_file
+=======
+from oracle.acquirers.guard import guard_acquisition, guard_file
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 from oracle.db.schema import get_connection, get_write_mode
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -56,6 +64,7 @@ def enqueue_url(url: str, source: str, artist: str = "", title: str = "", album:
     conn.close()
 
 
+<<<<<<< HEAD
 def _update_status(cursor, row_id: int, status: str, error: str | None = None) -> None:
     cursor.execute(
         """
@@ -65,6 +74,28 @@ def _update_status(cursor, row_id: int, status: str, error: str | None = None) -
         """,
         (status, error, row_id)
     )
+=======
+def _exec_write(sql: str, params: tuple, retries: int = 5, delay_seconds: float = 0.2) -> None:
+    """Execute a short write transaction with lock retry to avoid transient sqlite lock failures."""
+    last_exc: Exception | None = None
+    for attempt in range(retries):
+        conn = get_connection(timeout=10.0)
+        try:
+            cursor = conn.cursor()
+            cursor.execute(sql, params)
+            conn.commit()
+            return
+        except sqlite3.OperationalError as exc:
+            last_exc = exc
+            if "locked" in str(exc).lower() and attempt < retries - 1:
+                time.sleep(delay_seconds * (attempt + 1))
+                continue
+            raise
+        finally:
+            conn.close()
+    if last_exc:
+        raise last_exc
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def process_queue(limit: int = 0) -> Dict[str, int]:
@@ -73,6 +104,7 @@ def process_queue(limit: int = 0) -> Dict[str, int]:
         return {"completed": 0, "failed": 1}
 
     conn = get_connection(timeout=10.0)
+<<<<<<< HEAD
     cursor = conn.cursor()
     sql = "SELECT id, url, source, retry_count FROM acquisition_queue WHERE status = 'pending' ORDER BY id DESC"
     params = ()
@@ -85,6 +117,26 @@ def process_queue(limit: int = 0) -> Dict[str, int]:
     stats = {"completed": 0, "failed": 0}
 
     for row_id, url, source, retry_count in rows:
+=======
+    try:
+        cursor = conn.cursor()
+        sql = (
+            "SELECT id, url, source, retry_count, artist, title "
+            "FROM acquisition_queue WHERE status = 'pending' ORDER BY id DESC"
+        )
+        params = ()
+        if limit and limit > 0:
+            sql += " LIMIT ?"
+            params = (int(limit),)
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+
+    stats = {"completed": 0, "failed": 0}
+
+    for row_id, url, source, retry_count, artist, title in rows:
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         try:
             if not source or not url:
                 raise RuntimeError("Queue item missing source/url")
@@ -92,11 +144,44 @@ def process_queue(limit: int = 0) -> Dict[str, int]:
                 acquirer = YTDLPAcquirer()
                 result = acquirer.download(url)
                 if result:
+<<<<<<< HEAD
                     _update_status(cursor, row_id, "completed")
+=======
+                    _exec_write(
+                        """
+                        UPDATE acquisition_queue
+                        SET status = 'completed', completed_at = datetime('now'), error = NULL
+                        WHERE id = ?
+                        """,
+                        (row_id,),
+                    )
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                     stats["completed"] += 1
                 else:
                     raise RuntimeError("yt-dlp download failed")
             elif source == "prowlarr":
+<<<<<<< HEAD
+=======
+                guard_artist = (artist or "").strip()
+                guard_title = (title or "").strip()
+                if not guard_artist or not guard_title:
+                    raise RuntimeError("Guard pre-flight requires artist and title for prowlarr queue items")
+                preflight = guard_acquisition(
+                    artist=guard_artist,
+                    title=guard_title,
+                    skip_validation=False,
+                    skip_duplicate_check=False,
+                )
+                if not preflight.allowed:
+                    raise RuntimeError(
+                        f"Guard pre-flight rejected: {preflight.rejection_reason or 'rejected'}"
+                    )
+                if preflight.confidence < MIN_GUARD_CONFIDENCE:
+                    raise RuntimeError(
+                        f"Guard pre-flight low confidence: {preflight.confidence:.2f}"
+                    )
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 torrent_id = prowlarr_rd.add_to_real_debrid(url)
                 if not torrent_id:
                     raise RuntimeError("Real-Debrid addMagnet failed")
@@ -109,12 +194,24 @@ def process_queue(limit: int = 0) -> Dict[str, int]:
                 _assert_guard_pass(files, stage="post_download")
                 staged_files = prowlarr_rd.move_to_staging(files)
                 _assert_guard_pass(staged_files, stage="post_staging")
+<<<<<<< HEAD
                 _update_status(cursor, row_id, "completed")
+=======
+                _exec_write(
+                    """
+                    UPDATE acquisition_queue
+                    SET status = 'completed', completed_at = datetime('now'), error = NULL
+                    WHERE id = ?
+                    """,
+                    (row_id,),
+                )
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 stats["completed"] += 1
             else:
                 raise RuntimeError(f"Unknown source: {source}")
         except Exception as exc:
             retry_count = (retry_count or 0) + 1
+<<<<<<< HEAD
             cursor.execute(
                 "UPDATE acquisition_queue SET retry_count = ?, error = ? WHERE id = ?",
                 (retry_count, str(exc), row_id)
@@ -125,6 +222,23 @@ def process_queue(limit: int = 0) -> Dict[str, int]:
 
     conn.commit()
     conn.close()
+=======
+            _exec_write(
+                "UPDATE acquisition_queue SET retry_count = ?, error = ? WHERE id = ?",
+                (retry_count, str(exc), row_id),
+            )
+            if retry_count >= 3:
+                _exec_write(
+                    """
+                    UPDATE acquisition_queue
+                    SET status = 'failed', completed_at = datetime('now'), error = ?
+                    WHERE id = ?
+                    """,
+                    (str(exc), row_id),
+                )
+                stats["failed"] += 1
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     return stats
 
 

@@ -4,15 +4,27 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+<<<<<<< HEAD
 from typing import Dict, List
 import json
 import traceback
+=======
+import time
+from typing import Dict, List
+import json
+import traceback
+import sqlite3
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
 
+<<<<<<< HEAD
 load_dotenv(override=True)
+=======
+load_dotenv(override=False)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 hf_home = str(PROJECT_ROOT / "hf_cache")
@@ -28,7 +40,11 @@ from oracle.vibes import save_vibe, list_vibes, build_vibe, materialize_vibe, re
 from oracle.curator import generate_plan, apply_plan
 from oracle.classifier import classify_library
 from oracle.acquirers.ytdlp import YTDLPAcquirer
+<<<<<<< HEAD
 from oracle.acquisition import enqueue_url, process_queue
+=======
+from oracle.acquisition import process_queue
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 from oracle.download_processor import list_downloads, process_downloads
 from oracle.validation import (
     validate_search_request,
@@ -37,7 +53,10 @@ from oracle.validation import (
     validate_name,
     validate_url,
     validate_path,
+<<<<<<< HEAD
     validate_count,
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     validate_boolean,
     validate_confidence,
     sanitize_integer,
@@ -88,8 +107,14 @@ except Exception as _e:
     _import_warnings.append(f"agent: {_e}")
 
 try:
+<<<<<<< HEAD
     from oracle.llm import get_llm_status
 except Exception as _e:
+=======
+    from oracle.llm import get_llm_status, LLMClient
+except Exception as _e:
+    LLMClient = None
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     get_llm_status = lambda: {"status": "unavailable", "error": str(_e)}
     _import_warnings.append(f"llm: {_e}")
 
@@ -116,6 +141,33 @@ CORS(app)
 VERSION = "1.0.0"
 
 
+<<<<<<< HEAD
+=======
+def _json_safe(value):
+    """Convert non-JSON-native objects (e.g. Path) into JSON-safe primitives."""
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    return value
+
+
+def _fallback_vibe_narrative(tracks: List[Dict[str, str]], arc_type: str) -> str:
+    """Deterministic fallback narrative when LLM is unavailable."""
+    if not tracks:
+        return f"{arc_type.title()} arc with no tracks available."
+    first = tracks[0]
+    last = tracks[-1]
+    return (
+        f"{arc_type.title()} arc across {len(tracks)} tracks, beginning with "
+        f"{first.get('artist', '?')} - {first.get('title', '?')} and resolving at "
+        f"{last.get('artist', '?')} - {last.get('title', '?')}."
+    )
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 # ============================================================================
 # HEALTH & STATUS
 # ============================================================================
@@ -161,10 +213,216 @@ def status():
         'embeddings': embedding_count,
         'vibes': vibe_count,
         'queue_pending': queue_pending,
+<<<<<<< HEAD
         'write_mode': get_write_mode()
     })
 
 
+=======
+        'write_mode': get_write_mode(),
+        'llm': get_llm_status(),
+    })
+
+
+@app.route('/api/cache/stats', methods=['GET'])
+def api_cache_stats():
+    """Report provider-cache coverage and freshness from enrich_cache."""
+    try:
+        stale_seconds = sanitize_integer(request.args.get('stale_seconds', 1209600), default=1209600, min_val=60, max_val=31536000)
+        provider = (request.args.get('provider') or '').strip()
+        now = time.time()
+
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+        where = ""
+        params = []
+        if provider:
+            where = "WHERE provider = ?"
+            params.append(provider)
+
+        cursor.execute(
+            f"""
+            SELECT provider,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN fetched_at IS NULL THEN 1 ELSE 0 END) AS missing_ts,
+                   MIN(fetched_at) AS min_fetched_at,
+                   MAX(fetched_at) AS max_fetched_at
+            FROM enrich_cache
+            {where}
+            GROUP BY provider
+            ORDER BY total DESC
+            """,
+            params,
+        )
+        rows = cursor.fetchall()
+
+        results = []
+        for row in rows:
+            p, total, missing_ts, min_ts, max_ts = row
+            stale_count = 0
+            if stale_seconds > 0:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM enrich_cache WHERE provider = ? AND fetched_at IS NOT NULL AND fetched_at < ?",
+                    (p, now - stale_seconds),
+                )
+                stale_count = int(cursor.fetchone()[0] or 0)
+
+            results.append({
+                'provider': p,
+                'total': int(total or 0),
+                'missing_timestamp': int(missing_ts or 0),
+                'stale': stale_count,
+                'min_fetched_at': min_ts,
+                'max_fetched_at': max_ts,
+            })
+
+        conn.close()
+        return jsonify({
+            'providers': results,
+            'count': len(results),
+            'stale_seconds': stale_seconds,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+def _rewrite_search_query_with_llm(query: str, n: int) -> dict:
+    """Rewrite free-form query into CLAP-optimized text via local LLM."""
+    fallback = {
+        "query": query,
+        "n": n,
+        "used_llm": False,
+        "llm": {"status": "unavailable"},
+        "intent": "unknown",
+        "rationale": "LLM rewrite unavailable; using raw query.",
+    }
+
+    if not LLMClient:
+        return fallback
+
+    try:
+        client = LLMClient.from_env()
+        status = client.check_available()
+        llm_payload = status.as_dict()
+        llm_payload["status"] = "ok" if status.ok else "unavailable"
+        fallback["llm"] = llm_payload
+        if not status.ok:
+            return fallback
+
+        result = client.chat(
+            [{"role": "user", "content": query}],
+            temperature=0.2,
+            max_tokens=180,
+            json_schema={
+                "name": "search_rewrite",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "clap_query": {"type": "string"},
+                        "n": {"type": "integer", "minimum": 1, "maximum": 1000},
+                        "intent": {"type": "string"},
+                        "rationale": {"type": "string"},
+                    },
+                    "required": ["clap_query", "n", "intent", "rationale"],
+                    "additionalProperties": False,
+                },
+            },
+            system=(
+                "You rewrite music search requests into compact CLAP-friendly audio descriptions. "
+                "Focus on sonic traits (texture, tempo, instrumentation, energy, mood). "
+                "Keep clap_query concise and retrieval-effective."
+            ),
+        )
+        if not result.get("ok") or "data" not in result:
+            fallback["rationale"] = f"LLM rewrite failed: {result.get('error', 'unknown')}"
+            return fallback
+
+        payload = result["data"]
+        rewritten = (payload.get("clap_query") or "").strip() or query
+        rewritten_n = sanitize_integer(payload.get("n", n), default=n, min_val=1, max_val=1000)
+        return {
+            "query": rewritten,
+            "n": rewritten_n,
+            "used_llm": rewritten != query or rewritten_n != n,
+            "llm": llm_payload,
+            "intent": (payload.get("intent") or "unknown").strip() or "unknown",
+            "rationale": (payload.get("rationale") or "").strip(),
+        }
+    except Exception as exc:
+        fallback["rationale"] = f"LLM rewrite exception: {exc}"
+        return fallback
+
+
+def _generate_vibe_from_prompt(prompt: str, n: int) -> dict:
+    """Generate vibe metadata and CLAP query from a natural-language prompt."""
+    prompt = prompt.strip()
+    fallback_name = " ".join(prompt.split()[:4]).strip() or "Generated Vibe"
+    fallback_name = fallback_name[:80]
+    fallback = {
+        "name": fallback_name,
+        "query": prompt,
+        "n": n,
+        "narrative": "",
+        "used_llm": False,
+        "llm": {"status": "unavailable"},
+    }
+
+    if not LLMClient:
+        return fallback
+
+    try:
+        client = LLMClient.from_env()
+        status = client.check_available()
+        llm_payload = status.as_dict()
+        llm_payload["status"] = "ok" if status.ok else "unavailable"
+        fallback["llm"] = llm_payload
+        if not status.ok:
+            return fallback
+
+        result = client.chat(
+            [{"role": "user", "content": prompt}],
+            temperature=0.35,
+            max_tokens=220,
+            json_schema={
+                "name": "vibe_generation",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "query": {"type": "string"},
+                        "n": {"type": "integer", "minimum": 1, "maximum": 1000},
+                        "narrative": {"type": "string"},
+                    },
+                    "required": ["name", "query", "n", "narrative"],
+                    "additionalProperties": False,
+                },
+            },
+            system=(
+                "You build music vibe presets. Return a concise vibe name and a CLAP-friendly query "
+                "that captures sound and mood (tempo, texture, instrumentation, energy)."
+            ),
+        )
+        if not result.get("ok") or "data" not in result:
+            return fallback
+
+        payload = result["data"]
+        name = (payload.get("name") or fallback_name).strip()[:80]
+        query = (payload.get("query") or prompt).strip() or prompt
+        count = sanitize_integer(payload.get("n", n), default=n, min_val=1, max_val=1000)
+        narrative = (payload.get("narrative") or "").strip()
+        return {
+            "name": name,
+            "query": query,
+            "n": count,
+            "narrative": narrative,
+            "used_llm": True,
+            "llm": llm_payload,
+        }
+    except Exception:
+        return fallback
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 # ============================================================================
 # SEARCH
 # ============================================================================
@@ -179,14 +437,69 @@ def api_search():
         valid, error, sanitized = validate_search_request(data)
         if not valid:
             return jsonify({'error': error}), 400
+<<<<<<< HEAD
         
         results = search(sanitized['query'], n=sanitized['n'])
         return jsonify({'results': results, 'count': len(results)})
+=======
+
+        raw_use_rewrite = data.get('rewrite_with_llm', data.get('natural_language', False))
+        valid, error, use_rewrite = validate_boolean(raw_use_rewrite, "rewrite_with_llm")
+        if not valid:
+            return jsonify({'error': error}), 400
+
+        query = sanitized['query']
+        n = sanitized['n']
+        rewrite_meta = {
+            "query": query,
+            "n": n,
+            "used_llm": False,
+            "intent": "unknown",
+            "rationale": "",
+            "llm": {"status": "not_requested"},
+        }
+        if use_rewrite:
+            rewrite_meta = _rewrite_search_query_with_llm(query, n)
+            query = rewrite_meta["query"]
+            n = rewrite_meta["n"]
+
+        results = search(query, n=n)
+        return jsonify({
+            'results': results,
+            'count': len(results),
+            'original_query': sanitized['query'],
+            'query': query,
+            'n': n,
+            'rewrite': rewrite_meta,
+        })
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
+<<<<<<< HEAD
+=======
+@app.route('/api/search/rewrite', methods=['POST'])
+def api_search_rewrite():
+    """Rewrite a query with LLM for CLAP search, without running search."""
+    try:
+        data = request.get_json() or {}
+        valid, error, sanitized = validate_search_request(data)
+        if not valid:
+            return jsonify({'error': error}), 400
+        rewrite = _rewrite_search_query_with_llm(sanitized['query'], sanitized['n'])
+        return jsonify({
+            'original_query': sanitized['query'],
+            'query': rewrite['query'],
+            'n': rewrite['n'],
+            'rewrite': rewrite,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 @app.route('/api/search/hybrid', methods=['POST'])
 def api_search_hybrid():
     """Hybrid search: semantic + metadata filters + dimensional ranges."""
@@ -194,11 +507,33 @@ def api_search_hybrid():
         from oracle.search import hybrid_search
 
         data = request.get_json() or {}
+<<<<<<< HEAD
         query = (data.get('query') or '').strip() or None
         filters = data.get('filters') or {}
         dimension_ranges = data.get('dimension_ranges') or data.get('dimensions') or {}
         sort_by = data.get('sort_by') or data.get('sort') or 'relevance'
         top_k = int(data.get('top_k') or data.get('limit') or 20)
+=======
+        original_query = (data.get('query') or '').strip()
+        query = original_query or None
+        filters = data.get('filters') or {}
+        dimension_ranges = data.get('dimension_ranges') or data.get('dimensions') or {}
+        sort_by = data.get('sort_by') or data.get('sort') or 'relevance'
+        top_k = sanitize_integer(data.get('top_k') or data.get('limit') or 20, default=20, min_val=1, max_val=1000)
+
+        valid, error, rewrite_requested = validate_boolean(
+            data.get('rewrite_with_llm', data.get('natural_language', False)),
+            "rewrite_with_llm",
+        )
+        if not valid:
+            return jsonify({'error': error}), 400
+
+        rewrite_meta = None
+        if query and rewrite_requested:
+            rewrite_meta = _rewrite_search_query_with_llm(query, top_k)
+            query = (rewrite_meta.get('query') or query).strip() or query
+            top_k = sanitize_integer(rewrite_meta.get('n', top_k), default=top_k, min_val=1, max_val=1000)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
         if not query and not filters:
             return jsonify({'error': 'query or filters required'}), 400
@@ -210,7 +545,16 @@ def api_search_hybrid():
             sort_by=sort_by,
             top_k=top_k,
         )
+<<<<<<< HEAD
         return jsonify({'results': results, 'count': len(results)})
+=======
+        response = {'results': results, 'count': len(results), 'query': query, 'top_k': top_k}
+        if original_query:
+            response['original_query'] = original_query
+        if rewrite_meta:
+            response['rewrite'] = rewrite_meta
+        return jsonify(response)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
@@ -251,6 +595,71 @@ def api_index():
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
+<<<<<<< HEAD
+=======
+@app.route('/api/library/validate', methods=['POST'])
+def api_library_validate():
+    """Validate + enrich track metadata using cached provider lookups."""
+    try:
+        from oracle.acquirers.validator import validate_and_fix_library
+
+        data = request.get_json() or {}
+        limit = sanitize_integer(data.get('limit', 0), default=0, min_val=0, max_val=500000)
+        workers = sanitize_integer(data.get('workers', 0), default=0, min_val=0, max_val=64)
+        confidence = data.get('confidence', 0.7)
+        valid, error, apply_changes = validate_boolean(data.get('apply', True), "apply")
+        if not valid:
+            return jsonify({'error': error}), 400
+        valid, error, only_unvalidated = validate_boolean(
+            data.get('only_unvalidated', True),
+            "only_unvalidated",
+        )
+        if not valid:
+            return jsonify({'error': error}), 400
+        valid, error, force_refresh = validate_boolean(data.get('force', False), "force")
+        if not valid:
+            return jsonify({'error': error}), 400
+        valid, error, full_rescan_if_needed = validate_boolean(
+            data.get('full_rescan_if_needed', True),
+            "full_rescan_if_needed",
+        )
+        if not valid:
+            return jsonify({'error': error}), 400
+
+        if force_refresh:
+            only_unvalidated = False
+
+        valid_conf, conf_error, conf_value = validate_confidence(confidence)
+        if not valid_conf:
+            return jsonify({'error': conf_error}), 400
+
+        results = validate_and_fix_library(
+            limit=limit,
+            apply=apply_changes,
+            min_confidence=conf_value,
+            workers=workers,
+            only_unvalidated=only_unvalidated,
+            full_rescan_if_needed=full_rescan_if_needed,
+        )
+        return jsonify({
+            'status': 'ok',
+            'results': results,
+            'config': {
+                'limit': limit,
+                'apply': apply_changes,
+                'confidence': conf_value,
+                'workers': workers,
+                'only_unvalidated': only_unvalidated,
+                'force': force_refresh,
+                'full_rescan_if_needed': full_rescan_if_needed,
+            },
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 @app.route('/api/library/tracks', methods=['GET'])
 def api_tracks():
     """Get list of tracks."""
@@ -265,7 +674,11 @@ def api_tracks():
             """
             SELECT track_id, artist, title, album, year, version_type, confidence
             FROM tracks
+<<<<<<< HEAD
             ORDER BY id DESC
+=======
+            ORDER BY COALESCE(updated_at, created_at, added_at, 0) DESC, rowid DESC
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             LIMIT ? OFFSET ?
             """,
             (limit, offset)
@@ -328,6 +741,170 @@ def api_vibes_save():
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
+<<<<<<< HEAD
+=======
+@app.route('/api/vibes/generate', methods=['POST'])
+def api_vibes_generate():
+    """Generate vibe query/name from natural-language prompt, optionally save."""
+    try:
+        data = request.get_json() or {}
+        prompt = (data.get('prompt') or data.get('query') or '').strip()
+        if not prompt:
+            return jsonify({'error': 'prompt is required'}), 400
+
+        n = sanitize_integer(data.get('n', 200), default=200, min_val=1, max_val=1000)
+        valid, error, save_generated = validate_boolean(data.get('save', False), "save")
+        if not valid:
+            return jsonify({'error': error}), 400
+
+        generated = _generate_vibe_from_prompt(prompt, n)
+        response = {
+            'prompt': prompt,
+            'generated': generated,
+        }
+
+        if save_generated:
+            candidate_name = generated.get('name', '').strip() or "Generated Vibe"
+            valid_name, name_error = validate_name(candidate_name, "Vibe name")
+            if not valid_name:
+                candidate_name = " ".join(prompt.split()[:4]).strip() or "Generated Vibe"
+                candidate_name = candidate_name.replace("/", " ").replace("\\", " ").replace(":", " ")
+                candidate_name = candidate_name[:80]
+
+            save_result = save_vibe(candidate_name, generated['query'], n=generated['n'])
+            if 'error' in save_result:
+                response['save'] = save_result
+                return jsonify(response), 400
+            response['save'] = save_result
+
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@app.route('/api/vibes/create', methods=['POST'])
+def api_vibes_create():
+    """One-shot vibe create from natural-language prompt with optional build/materialize."""
+    try:
+        data = request.get_json() or {}
+        prompt = (data.get('prompt') or data.get('query') or '').strip()
+        if not prompt:
+            return jsonify({'error': 'prompt is required'}), 400
+
+        provided_name = (data.get('name') or '').strip()
+        n = sanitize_integer(data.get('n', 200), default=200, min_val=1, max_val=1000)
+
+        valid, error, do_build = validate_boolean(data.get('build', False), "build")
+        if not valid:
+            return jsonify({'error': error}), 400
+        valid, error, do_materialize = validate_boolean(data.get('materialize', False), "materialize")
+        if not valid:
+            return jsonify({'error': error}), 400
+
+        mode = (data.get('mode') or 'hardlink').strip().lower()
+        if mode not in ('hardlink', 'symlink', 'shortcut'):
+            return jsonify({'error': "Invalid mode. Must be one of: hardlink, symlink, shortcut"}), 400
+
+        generated = _generate_vibe_from_prompt(prompt, n)
+        vibe_name = provided_name or (generated.get('name') or '').strip() or "Generated Vibe"
+
+        valid_name, _ = validate_name(vibe_name, "Vibe name")
+        if not valid_name:
+            vibe_name = " ".join(prompt.split()[:4]).strip() or "Generated Vibe"
+            vibe_name = vibe_name.replace("/", " ").replace("\\", " ").replace(":", " ")
+            vibe_name = vibe_name[:80]
+
+        save_result = save_vibe(vibe_name, generated['query'], n=generated['n'])
+        if 'error' in save_result:
+            return jsonify({'prompt': prompt, 'generated': generated, 'save': save_result}), 400
+
+        response = {
+            'prompt': prompt,
+            'name': vibe_name,
+            'generated': generated,
+            'save': save_result,
+        }
+
+        if do_build:
+            build_result = build_vibe(vibe_name)
+            response['build'] = build_result
+            if 'error' in build_result:
+                return jsonify(response), 400
+
+        if do_materialize:
+            materialize_result = materialize_vibe(vibe_name, mode=mode)
+            response['materialize'] = materialize_result
+            if 'error' in materialize_result:
+                return jsonify(response), 400
+
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@app.route('/api/vibes/narrate', methods=['POST'])
+def api_vibes_narrate():
+    """Generate an LLM narrative for a vibe's current ordered tracks."""
+    try:
+        if not LLMClient:
+            return jsonify({'error': 'LLM client unavailable'}), 503
+
+        data = request.get_json() or {}
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify({'error': 'name is required'}), 400
+
+        arc_type = (data.get('arc_type') or 'journey').strip() or 'journey'
+        limit = sanitize_integer(data.get('limit', 20), default=20, min_val=1, max_val=50)
+
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT t.artist, t.title
+            FROM vibe_tracks vt
+            JOIN tracks t ON vt.track_id = t.track_id
+            WHERE vt.vibe_name = ?
+            ORDER BY vt.position
+            LIMIT ?
+            """,
+            (name, limit),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            return jsonify({'error': f'No tracks found for vibe "{name}"'}), 404
+
+        tracks = [{"artist": row[0] or "", "title": row[1] or ""} for row in rows]
+        client = LLMClient.from_env()
+        llm_status = client.check_available()
+        llm_payload = llm_status.as_dict()
+        llm_payload["status"] = "ok" if llm_status.ok else "unavailable"
+        if not llm_status.ok:
+            narrative = _fallback_vibe_narrative(tracks, arc_type)
+            return jsonify({
+                'name': name,
+                'arc_type': arc_type,
+                'track_count': len(tracks),
+                'narrative': narrative,
+                'llm': llm_payload,
+                'fallback': True,
+            })
+
+        narrative = client.narrate_playlist(tracks, arc_type=arc_type)
+        return jsonify({
+            'name': name,
+            'arc_type': arc_type,
+            'track_count': len(tracks),
+            'narrative': narrative,
+            'llm': llm_payload,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 @app.route('/api/vibes/build', methods=['POST'])
 def api_vibes_build():
     """Build M3U8 for a vibe."""
@@ -420,9 +997,19 @@ def api_curate_classify():
     """Classify all tracks."""
     try:
         data = request.get_json() or {}
+<<<<<<< HEAD
         limit = data.get('limit', 0)
         
         results = classify_library(limit=limit)
+=======
+        limit = sanitize_integer(data.get('limit', 0), default=0, min_val=0, max_val=500000)
+        raw_use_llm = data.get('use_llm', False)
+        valid, error, use_llm = validate_boolean(raw_use_llm, "use_llm")
+        if not valid:
+            return jsonify({'error': error}), 400
+
+        results = classify_library(limit=limit, use_llm=use_llm)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         return jsonify(results)
     
     except Exception as e:
@@ -496,8 +1083,13 @@ def api_acquire_youtube():
         
         acquirer = YTDLPAcquirer()
         result = acquirer.download(url.strip())
+<<<<<<< HEAD
         
         return jsonify({'result': result or 'Download failed'})
+=======
+
+        return jsonify({'result': _json_safe(result or 'Download failed')})
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
@@ -542,9 +1134,74 @@ def api_acquire_queue():
 def api_acquire_process():
     """Process acquisition queue."""
     try:
+<<<<<<< HEAD
         results = process_queue()
         return jsonify(results)
     
+=======
+        data = request.get_json(silent=True) or {}
+        limit = sanitize_integer(data.get('limit', 0), default=0, min_val=0, max_val=1000)
+        results = process_queue(limit=limit)
+        return jsonify(results)
+    except sqlite3.OperationalError as e:
+        if "locked" in str(e).lower():
+            return jsonify({'error': 'database is locked; retry shortly'}), 503
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@app.route('/api/remixes/search', methods=['POST'])
+def api_remixes_search():
+    """Find and view remix tracks for artist/album/track scopes."""
+    try:
+        from oracle.search import find_remixes
+
+        data = request.get_json() or {}
+        artist = (data.get('artist') or '').strip()
+        album = (data.get('album') or '').strip()
+        track = (data.get('track') or '').strip()
+        n = sanitize_integer(data.get('n', 100), default=100, min_val=1, max_val=1000)
+        sort_by = (data.get('sort_by') or 'recent').strip().lower()
+
+        valid, error, include_candidates = validate_boolean(
+            data.get('include_candidates', True),
+            "include_candidates",
+        )
+        if not valid:
+            return jsonify({'error': error}), 400
+
+        if not artist and not album and not track:
+            return jsonify({'error': 'artist, album, or track is required'}), 400
+
+        results = find_remixes(
+            artist=artist or None,
+            album=album or None,
+            track=track or None,
+            n=n,
+            include_candidates=include_candidates,
+            sort_by=sort_by,
+        )
+        strict_count = sum(1 for r in results if r.get('is_strict_remix'))
+        candidate_count = len(results) - strict_count
+
+        return jsonify({
+            'filters': {
+                'artist': artist,
+                'album': album,
+                'track': track,
+                'n': n,
+                'include_candidates': include_candidates,
+                'sort_by': sort_by,
+            },
+            'count': len(results),
+            'summary': {
+                'strict_remix': strict_count,
+                'candidate': candidate_count,
+            },
+            'results': results,
+        })
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
@@ -747,6 +1404,7 @@ def api_downloads_organize():
 def api_spotify_missing():
     """Find Spotify favorites not in local library — acquisition candidates."""
     try:
+<<<<<<< HEAD
         from oracle.spotify_import import SpotifyImporter
         from pathlib import Path
         min_plays = int(request.args.get('min_plays', 5))
@@ -756,6 +1414,42 @@ def api_spotify_missing():
             data_dir=Path("data/spotify")
         )
         missing = importer.find_missing_tracks(min_plays=min_plays, limit=limit)
+=======
+        min_plays = sanitize_integer(request.args.get('min_plays', 5), default=5, min_val=0, max_val=1000000)
+        limit = sanitize_integer(request.args.get('limit', 100), default=100, min_val=1, max_val=1000)
+
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT artist, title, album, spotify_uri, source, play_count, priority_score, status, added_at
+            FROM acquisition_queue
+            WHERE source IN ('history', 'liked', 'playlist', 'top_tracks')
+              AND status = 'pending'
+              AND COALESCE(play_count, 0) >= ?
+            ORDER BY COALESCE(priority_score, 0.0) DESC, COALESCE(play_count, 0) DESC, added_at DESC
+            LIMIT ?
+            """,
+            (min_plays, limit),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        missing = [
+            {
+                'artist': row[0],
+                'title': row[1],
+                'album': row[2],
+                'spotify_uri': row[3],
+                'source': row[4],
+                'play_count': row[5],
+                'priority_score': row[6],
+                'status': row[7],
+                'added_at': row[8],
+            }
+            for row in rows
+        ]
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         return jsonify({
             'ok': True,
             'missing': missing,
@@ -770,6 +1464,7 @@ def api_spotify_missing():
 def api_spotify_stats():
     """Get Spotify import statistics."""
     try:
+<<<<<<< HEAD
         from oracle.spotify_import import SpotifyImporter
         from pathlib import Path
         importer = SpotifyImporter(
@@ -782,6 +1477,57 @@ def api_spotify_stats():
             {'name': r[0], 'score': r[1], 'plays': r[2], 'total_ms': r[3]}
             for r in top_artists
         ]
+=======
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+        stats = {}
+
+        for table in ('spotify_history', 'spotify_library', 'spotify_features'):
+            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?", (table,))
+            exists = cursor.fetchone()[0] > 0
+            if exists:
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                stats[f"{table}_count"] = int(cursor.fetchone()[0])
+            else:
+                stats[f"{table}_count"] = 0
+
+        cursor.execute(
+            """
+            SELECT
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END)
+            FROM acquisition_queue
+            WHERE source IN ('history', 'liked', 'playlist', 'top_tracks')
+            """
+        )
+        pending, completed, failed = cursor.fetchone()
+        stats['queue_pending'] = int(pending or 0)
+        stats['queue_completed'] = int(completed or 0)
+        stats['queue_failed'] = int(failed or 0)
+
+        top_artists = []
+        cursor.execute(
+            """
+            SELECT artist, COUNT(*) AS play_count, SUM(COALESCE(ms_played, 0)) AS total_ms
+            FROM spotify_history
+            WHERE artist IS NOT NULL AND trim(artist) != ''
+            GROUP BY artist
+            ORDER BY play_count DESC, total_ms DESC
+            LIMIT 25
+            """
+        )
+        for artist, play_count, total_ms in cursor.fetchall():
+            top_artists.append({
+                'name': artist,
+                'score': int(play_count or 0),
+                'plays': int(play_count or 0),
+                'total_ms': int(total_ms or 0),
+            })
+
+        conn.close()
+        stats['top_artists'] = top_artists
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         return jsonify({'ok': True, **stats})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
@@ -795,6 +1541,12 @@ def api_spotify_stats():
 def api_scout_cross_genre():
     """Cross-genre hunt using Discogs + bridge artists."""
     try:
+<<<<<<< HEAD
+=======
+        if not scout_engine:
+            return jsonify({'error': 'Scout engine not available â€” check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         data = request.get_json() or {}
         source_genre = (data.get('source_genre') or '').strip()
         target_genre = (data.get('target_genre') or '').strip()
@@ -854,6 +1606,12 @@ def api_lore_connections():
 def api_dna_trace():
     """Trace samples for a track."""
     try:
+<<<<<<< HEAD
+=======
+        if not dna_engine:
+            return jsonify({'error': 'DNA engine not available â€” check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         track_id = (request.args.get('track_id') or '').strip()
         if not track_id:
             return jsonify({'error': 'track_id is required'}), 400
@@ -869,6 +1627,12 @@ def api_dna_trace():
 def api_dna_pivot():
     """Pivot to original sample source if available."""
     try:
+<<<<<<< HEAD
+=======
+        if not dna_engine:
+            return jsonify({'error': 'DNA engine not available â€” check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         track_id = (request.args.get('track_id') or '').strip()
         if not track_id:
             return jsonify({'error': 'track_id is required'}), 400
@@ -888,6 +1652,12 @@ def api_dna_pivot():
 def api_hunter_hunt():
     """Hunt for a release via Prowlarr + Real-Debrid cache."""
     try:
+<<<<<<< HEAD
+=======
+        if not hunter_engine:
+            return jsonify({'error': 'Hunter engine not available â€” check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         data = request.get_json() or {}
         query = (data.get('query') or '').strip()
         prefer_cached = bool(data.get('prefer_cached', True))
@@ -907,6 +1677,12 @@ def api_hunter_hunt():
 def api_hunter_acquire():
     """Acquire a target from hunter results."""
     try:
+<<<<<<< HEAD
+=======
+        if not hunter_engine:
+            return jsonify({'error': 'Hunter engine not available â€” check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         data = request.get_json() or {}
         target = data.get('target') or {}
         if not target:
@@ -927,6 +1703,12 @@ def api_hunter_acquire():
 def api_architect_analyze():
     """Analyze track structure and store results."""
     try:
+<<<<<<< HEAD
+=======
+        if not architect_engine:
+            return jsonify({'error': 'Architect engine not available â€” check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         data = request.get_json() or {}
         track_id = (data.get('track_id') or '').strip()
         file_path = (data.get('file_path') or '').strip()
@@ -954,6 +1736,12 @@ def api_architect_analyze():
 def api_architect_structure(track_id: str):
     """Get stored structure analysis for a track."""
     try:
+<<<<<<< HEAD
+=======
+        if not architect_engine:
+            return jsonify({'error': 'Architect engine not available â€” check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         result = architect_engine.get_structure(track_id)
         return jsonify({'track_id': track_id, 'structure': result})
 
@@ -1042,15 +1830,25 @@ def api_radio_queue():
 def api_playback_record():
     """Record playback event for taste learning."""
     try:
+<<<<<<< HEAD
+=======
+        if not radio_engine:
+            return jsonify({'error': 'Radio engine not available; check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         data = request.get_json() or {}
         track_id = (data.get('track_id') or '').strip()
         context = (data.get('context') or 'manual').strip()
         skipped = bool(data.get('skipped', False))
+<<<<<<< HEAD
         completion_rate = float(data.get('completion_rate', 1.0))
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         rating = data.get('rating')
 
         if not track_id:
             return jsonify({'error': 'track_id is required'}), 400
+<<<<<<< HEAD
 
         radio_engine.record_playback(
             track_id=track_id,
@@ -1059,6 +1857,32 @@ def api_playback_record():
             completion_rate=completion_rate,
             rating=rating
         )
+=======
+        try:
+            completion_rate = float(data.get('completion_rate', 1.0))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'completion_rate must be a number'}), 400
+        if completion_rate < 0.0 or completion_rate > 1.0:
+            return jsonify({'error': 'completion_rate must be between 0.0 and 1.0'}), 400
+        if rating is not None:
+            try:
+                rating = int(rating)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'rating must be an integer from 1 to 5'}), 400
+            if rating < 1 or rating > 5:
+                return jsonify({'error': 'rating must be an integer from 1 to 5'}), 400
+
+        try:
+            radio_engine.record_playback(
+                track_id=track_id,
+                context=context,
+                skipped=skipped,
+                completion_rate=completion_rate,
+                rating=rating
+            )
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         return jsonify({'status': 'ok'})
 
     except Exception as e:
@@ -1073,14 +1897,33 @@ def api_playback_record():
 def api_agent_query():
     """Query Lyra agent for orchestration."""
     try:
+<<<<<<< HEAD
         data = request.get_json() or {}
         text = (data.get('text') or '').strip()
         context = data.get('context') or {}
+=======
+        if not agent_engine:
+            return jsonify({'error': 'Agent engine not available'}), 503
+
+        data = request.get_json() or {}
+        text = (data.get('text') or data.get('query') or '').strip()
+        context = data.get('context') or {}
+        valid, error, execute = validate_boolean(data.get('execute', False), "execute")
+        if not valid:
+            return jsonify({'error': error}), 400
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
         if not text:
             return jsonify({'error': 'text is required'}), 400
 
+<<<<<<< HEAD
         result = agent_engine.run_agent(text, context=context)
+=======
+        if execute:
+            result = agent_engine.query(text, context=context)
+        else:
+            result = agent_engine.run_agent(text, context=context)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         return jsonify(result)
 
     except Exception as e:
@@ -1091,6 +1934,12 @@ def api_agent_query():
 def api_agent_fact_drop():
     """Get a fact drop for a track."""
     try:
+<<<<<<< HEAD
+=======
+        if not agent_engine:
+            return jsonify({'error': 'Agent engine not available'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         track_id = (request.args.get('track_id') or '').strip()
         if not track_id:
             return jsonify({'error': 'track_id is required'}), 400
@@ -1150,6 +1999,12 @@ def api_undo():
 def api_pipeline_start():
     """Start acquisition pipeline."""
     try:
+<<<<<<< HEAD
+=======
+        if not get_pipeline:
+            return jsonify({'error': 'Pipeline engine not available â€” check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         data = request.get_json() or {}
         query = (data.get('query') or '').strip()
         
@@ -1174,6 +2029,12 @@ def api_pipeline_start():
 def api_pipeline_status(job_id: str):
     """Get pipeline job status."""
     try:
+<<<<<<< HEAD
+=======
+        if not get_pipeline:
+            return jsonify({'error': 'Pipeline engine not available â€” check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         pipeline = get_pipeline()
         job = pipeline.get_job(job_id)
         
@@ -1209,6 +2070,12 @@ def api_pipeline_run(job_id: str):
 def api_pipeline_jobs():
     """List recent pipeline jobs."""
     try:
+<<<<<<< HEAD
+=======
+        if not get_pipeline:
+            return jsonify({'error': 'Pipeline engine not available â€” check server logs'}), 503
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         limit = int(request.args.get('limit', 20))
         pipeline = get_pipeline()
         jobs = pipeline.list_jobs(limit)

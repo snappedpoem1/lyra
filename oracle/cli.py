@@ -157,7 +157,11 @@ def main() -> None:
     vibe_save.add_argument("--query", required=True, help="Semantic search query")
     vibe_save.add_argument("--n", type=int, default=200, help="Number of tracks")
     
+<<<<<<< HEAD
     vibe_list = vibe_sub.add_parser("list", help="List all vibes")
+=======
+    vibe_sub.add_parser("list", help="List all vibes")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     vibe_build = vibe_sub.add_parser("build", help="Build M3U8 playlist for vibe")
     vibe_build.add_argument("--name", required=True, help="Vibe name")
@@ -691,7 +695,11 @@ def main() -> None:
 
     if args.command == "curate" and args.curate_command == "plan":
         from oracle.curator import generate_plan
+<<<<<<< HEAD
         plan = generate_plan(
+=======
+        generate_plan(
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             preset=args.preset,
             classify_first=args.classify_first,
             limit=args.limit,
@@ -1256,7 +1264,11 @@ def main() -> None:
         workers = max(1, min(workers, 32))
         print(f"\nDraining {len(items)} track(s) from queue (max tier: T{args.max_tier}, workers: {workers})...")
 
+<<<<<<< HEAD
         success_count = 0
+=======
+        downloaded_count = 0
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         failed_count = 0
         retried_count = 0
         hard_failed_count = 0
@@ -1270,16 +1282,28 @@ def main() -> None:
 
             new_state = "failed"
             if result.success and file_ready:
+<<<<<<< HEAD
                 # True success: file exists locally and can be ingested.
                 try:
                     wconn = get_connection()
                     wconn.execute(
                         "UPDATE acquisition_queue SET status='completed', completed_at=datetime('now'), error=NULL WHERE id=?",
+=======
+                # Download succeeded; watcher marks final completion after post-flight ingest.
+                try:
+                    wconn = get_connection()
+                    wconn.execute(
+                        "UPDATE acquisition_queue SET status='downloaded', completed_at=NULL, error=NULL WHERE id=?",
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                         (queue_id,),
                     )
                     wconn.commit()
                     wconn.close()
+<<<<<<< HEAD
                     new_state = "completed"
+=======
+                    new_state = "downloaded"
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 except Exception as exc:
                     new_state = "failed"
                     result.error = f"DB update failed: {exc}"
@@ -1308,11 +1332,19 @@ def main() -> None:
                 _, artist, title, album, spotify_uri, _ = item
                 print(f"\n  {artist} - {title}")
                 _, _, result, state = _drain_one(item)
+<<<<<<< HEAD
                 if state == "completed":
                     print(f"    [OK] T{result.tier} ({result.source}) — {result.elapsed:.1f}s")
                     if result.path:
                         print(f"         {result.path}")
                     success_count += 1
+=======
+                if state == "downloaded":
+                    print(f"    [OK] T{result.tier} ({result.source}) — {result.elapsed:.1f}s")
+                    if result.path:
+                        print(f"         {result.path}")
+                    downloaded_count += 1
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 else:
                     if state == "retried":
                         print(f"    [~~] RETRY QUEUED: {result.error}")
@@ -1327,9 +1359,15 @@ def main() -> None:
                 for future in as_completed(futures):
                     artist, title, result, state = future.result()
                     with lock:
+<<<<<<< HEAD
                         if state == "completed":
                             print(f"  [OK] {artist} - {title} | T{result.tier} ({result.source}) {result.elapsed:.1f}s")
                             success_count += 1
+=======
+                        if state == "downloaded":
+                            print(f"  [OK] {artist} - {title} | T{result.tier} ({result.source}) {result.elapsed:.1f}s")
+                            downloaded_count += 1
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                         else:
                             if state == "retried":
                                 print(f"  [~~] {artist} - {title} | retry queued | {result.error}")
@@ -1339,11 +1377,19 @@ def main() -> None:
                                 hard_failed_count += 1
                             failed_count += 1
 
+<<<<<<< HEAD
         print(f"\nDone. {success_count} acquired, {failed_count} failed.")
         if retried_count or hard_failed_count:
             print(f"Retries queued: {retried_count} | Hard failed: {hard_failed_count}")
         if success_count:
             print("Run 'oracle watch --once' to ingest any files in downloads/")
+=======
+        print(f"\nDone. {downloaded_count} downloaded, {failed_count} failed.")
+        if retried_count or hard_failed_count:
+            print(f"Retries queued: {retried_count} | Hard failed: {hard_failed_count}")
+        if downloaded_count:
+            print("Run 'oracle watch --once' to ingest and mark queue items completed.")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         return
 
     parser.print_help()

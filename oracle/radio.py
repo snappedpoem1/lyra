@@ -12,6 +12,7 @@ Features:
 Author: Lyra Oracle v9.0
 """
 
+<<<<<<< HEAD
 import os
 import logging
 import sqlite3
@@ -21,6 +22,13 @@ import numpy as np
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 from pathlib import Path
+=======
+import logging
+import sqlite3
+import json
+import numpy as np
+from typing import Optional, List, Dict
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 import uuid
 
 from oracle.config import get_connection, CHROMA_COLLECTION
@@ -286,6 +294,7 @@ class Radio:
             rating: Optional 1-5 stars
         """
         conn = self._open_conn()
+<<<<<<< HEAD
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO playback_history
@@ -294,6 +303,30 @@ class Radio:
         """, (track_id, context, self.current_session, skipped, completion_rate, rating))
         conn.commit()
         conn.close()
+=======
+        try:
+            cursor = conn.cursor()
+            track_exists = cursor.execute(
+                "SELECT 1 FROM tracks WHERE track_id = ? LIMIT 1",
+                (track_id,),
+            ).fetchone()
+            if not track_exists:
+                raise ValueError(f"unknown track_id: {track_id}")
+
+            cursor.execute(
+                """
+                INSERT INTO playback_history
+                (track_id, context, session_id, skipped, completion_rate, rating)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (track_id, context, self.current_session, skipped, completion_rate, rating),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"invalid playback payload: {exc}") from exc
+        finally:
+            conn.close()
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         
         # Update taste profile
         if completion_rate > 0.8 or rating and rating >= 4:

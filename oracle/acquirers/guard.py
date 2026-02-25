@@ -15,9 +15,13 @@ Checks:
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 import hashlib
 import logging
 import os
+=======
+import logging
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 import re
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
@@ -79,6 +83,13 @@ TITLE_JUNK_PATTERNS: List[str] = [
     # Instrumental/stripped versions (the user wants the actual song)
     r'[-–(]\s*instrumental\b',
     r'\binstrumental\s+(version|mix|edit)\b',
+<<<<<<< HEAD
+=======
+    r'[-–(]\s*a\s*cappella\b',
+    r'[-–(]\s*acapella\b',
+    r'\ba\s*cappella\s+(version|mix|edit)\b',
+    r'\bacapella\s+(version|mix|edit)\b',
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
     # Lofi remakes by random channels
     r'\(lo-?fi\)',

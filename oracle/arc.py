@@ -13,7 +13,11 @@ This module is intentionally self-contained and does not depend on Playlust.
 from __future__ import annotations
 
 import math
+<<<<<<< HEAD
 from typing import Any, Dict, List, Optional, Tuple
+=======
+from typing import Any, Dict, List, Optional
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 ARC_TEMPLATES: Dict[str, Dict[str, Any]] = {

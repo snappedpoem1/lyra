@@ -1,0 +1,2936 @@
+{
+  "generated_at_utc": "2026-02-24T10:46:00.555324+00:00",
+  "doc_endpoint_count": 52,
+  "app_route_count": 55,
+  "missing_doc_endpoints_in_app": [],
+  "import_failure_count": 0,
+  "import_failures": [],
+  "endpoint_count": 47,
+  "endpoint_fail_500_count": 0,
+  "endpoint_results": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "status": 200,
+      "body": {
+        "llm": {
+          "base_url": "http://localhost:1234/v1",
+          "error": "model list unavailable or no model loaded",
+          "model": "qwen2.5-14b-instruct",
+          "ok": false,
+          "provider": "lmstudio",
+          "status": "unavailable"
+        },
+        "ok": true,
+        "service": "lyra-oracle",
+        "status": "ok",
+        "version": "1.0.0",
+        "write_mode": "apply_allowed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/status",
+      "status": 200,
+      "body": {
+        "embeddings": 2785,
+        "llm": {
+          "base_url": "http://localhost:1234/v1",
+          "error": "model list unavailable or no model loaded",
+          "model": "qwen2.5-14b-instruct",
+          "ok": false,
+          "provider": "lmstudio",
+          "status": "unavailable"
+        },
+        "queue_pending": 0,
+        "tracks": 2786,
+        "vibes": 3,
+        "write_mode": "apply_allowed"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/cache/stats",
+      "status": 200,
+      "body": {
+        "count": 7,
+        "providers": [
+          {
+            "max_fetched_at": 1771914083.6819232,
+            "min_fetched_at": 1771902056.784389,
+            "missing_timestamp": 0,
+            "provider": "validator_musicbrainz",
+            "stale": 0,
+            "total": 13
+          },
+          {
+            "max_fetched_at": 1771914084.620562,
+            "min_fetched_at": 1771902069.9321754,
+            "missing_timestamp": 0,
+            "provider": "validator_discogs",
+            "stale": 0,
+            "total": 11
+          },
+          {
+            "max_fetched_at": 1771914085.0543938,
+            "min_fetched_at": 1771902070.226414,
+            "missing_timestamp": 0,
+            "provider": "validator_itunes",
+            "stale": 0,
+            "total": 10
+          },
+          {
+            "max_fetched_at": 1771914074.2558548,
+            "min_fetched_at": 1771903222.7297256,
+            "missing_timestamp": 0,
+            "provider": "lore_musicbrainz",
+            "stale": 0,
+            "total": 4
+          },
+          {
+            "max_fetched_at": 1771402467.2638578,
+            "min_fetched_at": 1771402467.2638578,
+            "missing_timestamp": 0,
+            "provider": "acoustid",
+            "stale": 0,
+            "total": 1
+          },
+          {
+            "max_fetched_at": 1771402466.749437,
+            "min_fetched_at": 1771402466.749437,
+            "missing_timestamp": 0,
+            "provider": "musicbrainz",
+            "stale": 0,
+            "total": 1
+          },
+          {
+            "max_fetched_at": 1771906958.5339892,
+            "min_fetched_at": 1771906958.5339892,
+            "missing_timestamp": 0,
+            "provider": "scout_discogs",
+            "stale": 0,
+            "total": 1
+          }
+        ],
+        "stale_seconds": 1209600
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/search",
+      "status": 200,
+      "body": {
+        "count": 5,
+        "n": 5,
+        "original_query": "metal",
+        "query": "metal",
+        "results": [
+          {
+            "album": "Control System",
+            "artist": "Ab-Soul",
+            "path": "A:\\music\\Active Music\\Ab-Soul - Terrorist Threats (feat. Danny Brown & Jhene Aiko).flac",
+            "rank": "1",
+            "title": "Terrorist Threats",
+            "track_id": "5960ee50be5624b41e153c3aebcbf230",
+            "year": "2012-05-11"
+          },
+          {
+            "album": "CHASE",
+            "artist": "Aaron May",
+            "path": "A:\\music\\Active Music\\Aaron May - I'm Good Luv, Enjoy..flac",
+            "rank": "2",
+            "title": "I'm Good Luv, Enjoy.",
+            "track_id": "5a7a7d21a7a0683bb0d2667d8ffda656",
+            "year": "2019-02-28"
+          },
+          {
+            "album": "Irresistible",
+            "artist": "Fall Out Boy, Demi Lovato",
+            "path": "A:\\music\\Active Music\\Irresistible - Revised Audio - Fall Out Boy, Demi Lovato.flac",
+            "rank": "3",
+            "title": "Irresistible",
+            "track_id": "b8de3dd9947590343de742a44a146083",
+            "year": ""
+          },
+          {
+            "album": "",
+            "artist": "Dreamville",
+            "path": "A:\\music\\_Quarantine\\Junk\\Dreamville - Dreamville - Wells Fargo ft. JID, EARTHGANG, Buddy & Guapdad 4000) [Interlude] (Official Audio) [NbMcGSDTxrQ].m4a",
+            "rank": "4",
+            "title": "Dreamville - Wells Fargo",
+            "track_id": "a3b1addbf0fb4b2f573669012ccbf698",
+            "year": "20190705"
+          },
+          {
+            "album": "",
+            "artist": "RunTheJewels",
+            "path": "A:\\music\\_Quarantine\\Junk\\RunTheJewels - Run The Jewels - Legend Has It (Official Music Video From RTJ3 & Black Panther) [vWaljXUiCaE].m4a",
+            "rank": "5",
+            "title": "Run The Jewels - Legend Has It (Official Music Video From RTJ3 & Black Panther)",
+            "track_id": "88d9d42bf61be16a8e9bd51edd47db1a",
+            "year": "20170323"
+          }
+        ],
+        "rewrite": {
+          "intent": "unknown",
+          "llm": {
+            "status": "not_requested"
+          },
+          "n": 5,
+          "query": "metal",
+          "rationale": "",
+          "used_llm": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/search/rewrite",
+      "status": 200,
+      "body": {
+        "n": 10,
+        "original_query": "warm indie nostalgia",
+        "query": "warm indie nostalgia",
+        "rewrite": {
+          "intent": "unknown",
+          "llm": {
+            "base_url": "http://localhost:1234/v1",
+            "error": "model list unavailable or no model loaded",
+            "model": "qwen2.5-14b-instruct",
+            "ok": false,
+            "provider": "lmstudio",
+            "status": "unavailable"
+          },
+          "n": 10,
+          "query": "warm indie nostalgia",
+          "rationale": "LLM rewrite unavailable; using raw query.",
+          "used_llm": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/search/hybrid",
+      "status": 200,
+      "body": {
+        "count": 20,
+        "original_query": "warm indie nostalgia",
+        "query": "warm indie nostalgia",
+        "results": [
+          {
+            "album": "Consolers of the Lonely",
+            "artist": "The Raconteurs",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 7487.0,
+            "duration": 179.97333333333333,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\The Raconteurs - Salute Your Solution.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 1,
+            "scores": {
+              "complexity": 0.5001,
+              "density": 0.4999,
+              "energy": 0.4997,
+              "movement": 0.4999,
+              "nostalgia": 0.5006,
+              "rawness": 0.4994,
+              "space": 0.4999,
+              "tension": 0.5007,
+              "valence": 0.4999,
+              "warmth": 0.4998
+            },
+            "source": "",
+            "title": "Salute Your Solution",
+            "track_id": "eaf6f6b76a82db2e12aa109996057260",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.501
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2008-03-25"
+          },
+          {
+            "album": "Mezzanine",
+            "artist": "Massive Attack",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 7784.0,
+            "duration": 330.7733333333333,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Massive Attack - Teardrop.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 2,
+            "scores": {
+              "complexity": 0.2868,
+              "density": 0.2217,
+              "energy": 0.0571,
+              "movement": 0.1273,
+              "nostalgia": 0.216,
+              "rawness": 0.7914,
+              "space": 0.8349,
+              "tension": 0.3299,
+              "valence": 0.3254,
+              "warmth": 0.8958
+            },
+            "source": "",
+            "title": "Teardrop",
+            "track_id": "c318854c09729f86a2826bc3ffde0157",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "low",
+                  "density": "low",
+                  "energy": "low",
+                  "movement": "low",
+                  "nostalgia": "low",
+                  "rawness": "high",
+                  "space": "high",
+                  "tension": "low",
+                  "valence": "low",
+                  "warmth": "high"
+                },
+                "emotional_depth": 0.278,
+                "intensity": 0.171,
+                "intimacy": 0.53,
+                "polish": 0.209
+              },
+              "summary": "moody, chill, straightforward, raw and gritty, wide/open",
+              "tags": [
+                "melancholic",
+                "gritty",
+                "warm",
+                "atmospheric"
+              ]
+            },
+            "year": "1998-01-01"
+          },
+          {
+            "album": "Three Cheers for Sweet Revenge",
+            "artist": "My Chemical Romance",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 7084.0,
+            "duration": 187.98277777777778,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\My Chemical Romance - I'm Not Okay (I Promise).flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 3,
+            "scores": {
+              "complexity": 0.5003,
+              "density": 0.5008,
+              "energy": 0.4998,
+              "movement": 0.5003,
+              "nostalgia": 0.4999,
+              "rawness": 0.4999,
+              "space": 0.5008,
+              "tension": 0.5,
+              "valence": 0.5,
+              "warmth": 0.4994
+            },
+            "source": "",
+            "title": "I'm Not Okay (I Promise)",
+            "track_id": "7b4665d43e00146bb61a59e224a61bd6",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.499,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2004-06-08"
+          },
+          {
+            "album": "Science Fiction",
+            "artist": "Brand New",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 1393.0,
+            "duration": 314.88,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\07. Out of Mana.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 5,
+            "scores": {
+              "complexity": 0.5005,
+              "density": 0.5008,
+              "energy": 0.4999,
+              "movement": 0.5003,
+              "nostalgia": 0.5004,
+              "rawness": 0.4998,
+              "space": 0.5001,
+              "tension": 0.5004,
+              "valence": 0.4999,
+              "warmth": 0.4998
+            },
+            "source": "",
+            "title": "Out of Mana",
+            "track_id": "05fa23213e70f6589fb0cc13d5b97617",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2017-08-18"
+          },
+          {
+            "album": "From Under The Cork Tree",
+            "artist": "Fall Out Boy",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": null,
+            "created_at": 16135.0,
+            "duration": 169.02666666666667,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Fall Out Boy\\From Under The Cork Tree\\00 - A Little Less Sixteen Candles, A Little More Touch Me.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 6,
+            "scores": {
+              "complexity": 0.5006,
+              "density": 0.5008,
+              "energy": 0.4998,
+              "movement": 0.5005,
+              "nostalgia": 0.5,
+              "rawness": 0.4997,
+              "space": 0.5001,
+              "tension": 0.5,
+              "valence": 0.5,
+              "warmth": 0.4996
+            },
+            "source": "",
+            "title": "A Little Less Sixteen Candles, A Little More Touch Me",
+            "track_id": "d8e8d4ee598d2597900a761991cd2f3d",
+            "version_type": "",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": ""
+          },
+          {
+            "album": "Drive Thru Records Greatest Hits (Deluxe Edition)",
+            "artist": "Finch",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.7999999999999999,
+            "created_at": 2782.0,
+            "duration": 268.8933333333333,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Finch\\Drive Thru Records Greatest Hits (Deluxe Edition) (2005-12-05)\\What It Is To Burn (New Version).flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 7,
+            "scores": {
+              "complexity": 0.5004,
+              "density": 0.5002,
+              "energy": 0.5,
+              "movement": 0.5001,
+              "nostalgia": 0.5002,
+              "rawness": 0.4998,
+              "space": 0.5004,
+              "tension": 0.4998,
+              "valence": 0.4998,
+              "warmth": 0.5002
+            },
+            "source": "",
+            "title": "What It Is To Burn (New Version)",
+            "track_id": "36901ca631d36b2b0d91e078c29d3ca1",
+            "version_type": "remix",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2005-12-05"
+          },
+          {
+            "album": "Hits To The Head",
+            "artist": "Franz Ferdinand",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 2786.0,
+            "duration": 239.70889583333334,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Franz Ferdinand\\Hits To The Head (2022-03-11)\\Take Me Out.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 8,
+            "scores": {
+              "complexity": 0.5005,
+              "density": 0.5008,
+              "energy": 0.4998,
+              "movement": 0.5006,
+              "nostalgia": 0.5004,
+              "rawness": 0.5,
+              "space": 0.5004,
+              "tension": 0.5,
+              "valence": 0.4998,
+              "warmth": 0.4996
+            },
+            "source": "",
+            "title": "Take Me Out",
+            "track_id": "288fa458ac942219806ab4c026140dfd",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2022-03-11"
+          },
+          {
+            "album": "Brain Invaders (Deluxe Edition)",
+            "artist": "zebrahead",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 7671.0,
+            "duration": 183.2420634920635,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\zebrahead - All My Friends Are Nobodies.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 9,
+            "scores": {
+              "complexity": 0.501,
+              "density": 0.5008,
+              "energy": 0.4999,
+              "movement": 0.5004,
+              "nostalgia": 0.5001,
+              "rawness": 0.5,
+              "space": 0.5003,
+              "tension": 0.5,
+              "valence": 0.4995,
+              "warmth": 0.4999
+            },
+            "source": "",
+            "title": "All My Friends Are Nobodies",
+            "track_id": "328eeaa68f7a11ccefa4e78d98d610a8",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2019-08-09"
+          },
+          {
+            "album": "Don't You Fake It",
+            "artist": "The Red Jumpsuit Apparatus",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 7490.0,
+            "duration": 192.0,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\The Red Jumpsuit Apparatus - Face Down.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 10,
+            "scores": {
+              "complexity": 0.5003,
+              "density": 0.5001,
+              "energy": 0.4997,
+              "movement": 0.5,
+              "nostalgia": 0.5008,
+              "rawness": 0.4994,
+              "space": 0.4998,
+              "tension": 0.5008,
+              "valence": 0.4999,
+              "warmth": 0.4997
+            },
+            "source": "",
+            "title": "Face Down",
+            "track_id": "aa9e4c37615046fb80eed6334aa64aaf",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.501,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.501
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2006-01-01"
+          },
+          {
+            "album": "The Essential Foo Fighters",
+            "artist": "Foo Fighters",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 6625.0,
+            "duration": 236.59818594104308,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Foo Fighters - Learn to Fly.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 11,
+            "scores": {
+              "complexity": 0.5004,
+              "density": 0.501,
+              "energy": 0.4998,
+              "movement": 0.5001,
+              "nostalgia": 0.5002,
+              "rawness": 0.4998,
+              "space": 0.5001,
+              "tension": 0.5004,
+              "valence": 0.4998,
+              "warmth": 0.4997
+            },
+            "source": "",
+            "title": "Learn to Fly",
+            "track_id": "c6fe2b2e8b9b9d2bcb9a43f04e83fef5",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "1997-05-20"
+          },
+          {
+            "album": "Collide With The Sky",
+            "artist": "Pierce The Veil",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 2826.0,
+            "duration": 236.29333333333332,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Pierce The Veil\\Collide With The Sky (2012-07-16)\\King For A Day.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 12,
+            "scores": {
+              "complexity": 0.5007,
+              "density": 0.5009,
+              "energy": 0.4999,
+              "movement": 0.5003,
+              "nostalgia": 0.5003,
+              "rawness": 0.5,
+              "space": 0.5002,
+              "tension": 0.5004,
+              "valence": 0.4999,
+              "warmth": 0.4998
+            },
+            "source": "",
+            "title": "King For A Day",
+            "track_id": "6fa91fede57b1250268f43842d6af500",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2012-07-16"
+          },
+          {
+            "album": "",
+            "artist": "2 Chainz",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 1333.0,
+            "duration": 216.792,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\2 Chainz - I'm Different.mp3",
+            "played_count": 0,
+            "quality": "unknown",
+            "relevance_rank": 13,
+            "scores": {
+              "complexity": 0.5004,
+              "density": 0.5002,
+              "energy": 0.4992,
+              "movement": 0.5007,
+              "nostalgia": 0.5,
+              "rawness": 0.4997,
+              "space": 0.5002,
+              "tension": 0.5003,
+              "valence": 0.5002,
+              "warmth": 0.4999
+            },
+            "source": "",
+            "title": "I'm Different",
+            "track_id": "49d31bf201282c60eb34b453dc8d2585",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": ""
+          },
+          {
+            "album": "Origin of Symmetry",
+            "artist": "Muse",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 7069.0,
+            "duration": 219.8,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Muse - Plug in Baby.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 15,
+            "scores": {
+              "complexity": 0.5006,
+              "density": 0.5009,
+              "energy": 0.4999,
+              "movement": 0.5002,
+              "nostalgia": 0.5004,
+              "rawness": 0.5001,
+              "space": 0.5003,
+              "tension": 0.5,
+              "valence": 0.4996,
+              "warmth": 0.5
+            },
+            "source": "",
+            "title": "Plug in Baby",
+            "track_id": "e87b1a44663744394befc7b9a7dfffbd",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2001-07-17"
+          },
+          {
+            "album": "Welcome To Shepherds Bush",
+            "artist": "The Rolling Stones",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 7491.0,
+            "duration": 288.3333333333333,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\The Rolling Stones - Brand New Car.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 16,
+            "scores": {
+              "complexity": 0.5002,
+              "density": 0.5,
+              "energy": 0.4997,
+              "movement": 0.4999,
+              "nostalgia": 0.5008,
+              "rawness": 0.4994,
+              "space": 0.4999,
+              "tension": 0.5009,
+              "valence": 0.4999,
+              "warmth": 0.4997
+            },
+            "source": "",
+            "title": "Brand New Car",
+            "track_id": "009a7dea346c25937c0e2590a570948c",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.501,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.501
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2024-12-06"
+          },
+          {
+            "album": "Let the Ocean Take Me ",
+            "artist": "The Amity Affliction",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 7406.0,
+            "duration": 239.12709750566893,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\The Amity Affliction - Pittsburgh .flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 17,
+            "scores": {
+              "complexity": 0.5003,
+              "density": 0.5008,
+              "energy": 0.4998,
+              "movement": 0.5003,
+              "nostalgia": 0.5001,
+              "rawness": 0.4997,
+              "space": 0.5001,
+              "tension": 0.5003,
+              "valence": 0.5,
+              "warmth": 0.4995
+            },
+            "source": "",
+            "title": "Pittsburgh (No Intro)",
+            "track_id": "82ca7dab456f5c01a8a56ad49f9eaa5a",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2014-06-09"
+          },
+          {
+            "album": "House of Strombo",
+            "artist": "Alexisonfire",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.7999999999999999,
+            "created_at": 6141.0,
+            "duration": 327.8292517006803,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Alexisonfire - Young Cardinals.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 18,
+            "scores": {
+              "complexity": 0.5003,
+              "density": 0.501,
+              "energy": 0.5,
+              "movement": 0.5005,
+              "nostalgia": 0.5002,
+              "rawness": 0.5001,
+              "space": 0.5006,
+              "tension": 0.4999,
+              "valence": 0.4997,
+              "warmth": 0.4996
+            },
+            "source": "",
+            "title": "Young Cardinals (LIVE in Toronto, ON 2019)",
+            "track_id": "ba29f2fd6068c1eabc685eec5e81406c",
+            "version_type": "live",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.499,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2025-11-28"
+          },
+          {
+            "album": "Killing Time",
+            "artist": "Bayside",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 2692.0,
+            "duration": 214.10666666666665,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Bayside\\Killing Time (2011-01-01)\\Sick, Sick, Sick.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 19,
+            "scores": {
+              "complexity": 0.5004,
+              "density": 0.5004,
+              "energy": 0.5001,
+              "movement": 0.5003,
+              "nostalgia": 0.5001,
+              "rawness": 0.4992,
+              "space": 0.5,
+              "tension": 0.5005,
+              "valence": 0.5002,
+              "warmth": 0.4993
+            },
+            "source": "",
+            "title": "Sick, Sick, Sick",
+            "track_id": "73ad1a76ee0e1785a67654299805fd0c",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.501
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2011-01-01"
+          },
+          {
+            "album": "Control System",
+            "artist": "Ab-Soul",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 6122.0,
+            "duration": 264.2842403628118,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Ab-Soul - Terrorist Threats (feat. Danny Brown & Jhene Aiko).flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 20,
+            "scores": {
+              "complexity": 0.5006,
+              "density": 0.4998,
+              "energy": 0.4992,
+              "movement": 0.5003,
+              "nostalgia": 0.5002,
+              "rawness": 0.5001,
+              "space": 0.5005,
+              "tension": 0.5001,
+              "valence": 0.5004,
+              "warmth": 0.5001
+            },
+            "source": "",
+            "title": "Terrorist Threats",
+            "track_id": "5960ee50be5624b41e153c3aebcbf230",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2012-05-11"
+          },
+          {
+            "album": "A Quiet Place to Die",
+            "artist": "Alpha Wolf",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 6146.0,
+            "duration": 157.411768707483,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Alpha Wolf - Akudama.flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 22,
+            "scores": {
+              "complexity": 0.5004,
+              "density": 0.5009,
+              "energy": 0.5,
+              "movement": 0.5004,
+              "nostalgia": 0.5002,
+              "rawness": 0.4997,
+              "space": 0.5,
+              "tension": 0.5004,
+              "valence": 0.4998,
+              "warmth": 0.4996
+            },
+            "source": "",
+            "title": "Akudama",
+            "track_id": "9281aa22ecce17c76007b2fead255480",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2020-09-25"
+          },
+          {
+            "album": "You Won't Go Before You're Supposed To",
+            "artist": "Knocked Loose",
+            "bitrate": null,
+            "bpm": null,
+            "confidence": 0.5,
+            "created_at": 6885.0,
+            "duration": 164.69577083333334,
+            "genre": "",
+            "path": "A:\\music\\Active Music\\Knocked Loose - Suffocate (feat. Poppy).flac",
+            "played_count": 0,
+            "quality": "lossless",
+            "relevance_rank": 23,
+            "scores": {
+              "complexity": 0.5001,
+              "density": 0.5001,
+              "energy": 0.4998,
+              "movement": 0.5004,
+              "nostalgia": 0.4998,
+              "rawness": 0.4999,
+              "space": 0.5004,
+              "tension": 0.4999,
+              "valence": 0.5,
+              "warmth": 0.4998
+            },
+            "source": "",
+            "title": "Suffocate",
+            "track_id": "2ed2629d991f29c76b4254c20a05dfb2",
+            "version_type": "original",
+            "vibe": {
+              "details": {
+                "bands": {
+                  "complexity": "medium",
+                  "density": "medium",
+                  "energy": "medium",
+                  "movement": "medium",
+                  "nostalgia": "medium",
+                  "rawness": "medium",
+                  "space": "medium",
+                  "tension": "medium",
+                  "valence": "medium",
+                  "warmth": "medium"
+                },
+                "emotional_depth": 0.5,
+                "intensity": 0.5,
+                "intimacy": 0.5,
+                "polish": 0.5
+              },
+              "summary": "balanced, steady energy, layered, mixed texture, mid-sized",
+              "tags": []
+            },
+            "year": "2024-05-10"
+          }
+        ],
+        "top_k": 20
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/library/validate",
+      "status": 200,
+      "body": {
+        "config": {
+          "apply": true,
+          "confidence": 0.7,
+          "force": false,
+          "full_rescan_if_needed": true,
+          "limit": 3,
+          "only_unvalidated": true,
+          "workers": 0
+        },
+        "results": {
+          "failed": 3,
+          "fixed": 0,
+          "skipped": 0,
+          "validated": 0,
+          "would_fix": 0
+        },
+        "status": "ok"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/library/tracks?limit=5",
+      "status": 200,
+      "body": {
+        "count": 5,
+        "tracks": [
+          {
+            "album": "Rock Male Hits 1 - Party Tyme (Backing Versions)",
+            "artist": "Party Tyme",
+            "confidence": 0.7999999999999999,
+            "title": "A Decade Under The Influence (made popular by Taking Back Sunday) [backing version]",
+            "track_id": "5371166085ee3be7c89f9bdf86ff9d1b",
+            "version_type": "remix",
+            "year": null
+          },
+          {
+            "album": null,
+            "artist": "A Day to Remember",
+            "confidence": null,
+            "title": "The Plot to Bomb the Panhandle",
+            "track_id": "eb0a99750034602cd6626540f6ebb29c",
+            "version_type": null,
+            "year": null
+          },
+          {
+            "album": null,
+            "artist": "A Day to Remember",
+            "confidence": 0.5,
+            "title": "Sometimes You\u2019re the Hammer, Sometimes You\u2019re the Nail",
+            "track_id": "54887a061db236792d6d4e702c7559e0",
+            "version_type": "original",
+            "year": null
+          },
+          {
+            "album": null,
+            "artist": "A Day to Remember",
+            "confidence": 0.5,
+            "title": "Paranoia",
+            "track_id": "7e3f8f7079934d6001b49cb1990a9962",
+            "version_type": "original",
+            "year": null
+          },
+          {
+            "album": null,
+            "artist": "A Day to Remember",
+            "confidence": 0.5,
+            "title": "Mr. Highway\u2019s Thinking About the End",
+            "track_id": "c26f7ba051804c59cc0c365ca8b2e894",
+            "version_type": "original",
+            "year": null
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/vibes",
+      "status": 200,
+      "body": {
+        "count": 3,
+        "vibes": [
+          {
+            "created_at": 1771918526.0443351,
+            "n": 5,
+            "name": "audit vibe",
+            "query": "test vibe",
+            "track_count": 5
+          },
+          {
+            "created_at": 1771906770.3195295,
+            "n": 3,
+            "name": "workout metalcore",
+            "query": "workout metalcore",
+            "track_count": 3
+          },
+          {
+            "created_at": 1771902865.2856293,
+            "n": 5,
+            "name": "qa_e81d8181",
+            "query": "dark ambient",
+            "track_count": 5
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/vibes/generate",
+      "status": 200,
+      "body": {
+        "generated": {
+          "llm": {
+            "base_url": "http://localhost:1234/v1",
+            "error": "model list unavailable or no model loaded",
+            "model": "qwen2.5-14b-instruct",
+            "ok": false,
+            "provider": "lmstudio",
+            "status": "unavailable"
+          },
+          "n": 5,
+          "name": "test vibe",
+          "narrative": "",
+          "query": "test vibe",
+          "used_llm": false
+        },
+        "prompt": "test vibe"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/vibes/create",
+      "status": 200,
+      "body": {
+        "generated": {
+          "llm": {
+            "base_url": "http://localhost:1234/v1",
+            "error": "model list unavailable or no model loaded",
+            "model": "qwen2.5-14b-instruct",
+            "ok": false,
+            "provider": "lmstudio",
+            "status": "unavailable"
+          },
+          "n": 5,
+          "name": "test vibe",
+          "narrative": "",
+          "query": "test vibe",
+          "used_llm": false
+        },
+        "name": "audit vibe",
+        "prompt": "test vibe",
+        "save": {
+          "created_at": 1771929935.0658176,
+          "name": "audit vibe",
+          "query": "test vibe",
+          "status": "success",
+          "track_count": 5
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/vibes/save",
+      "status": 200,
+      "body": {
+        "created_at": 1771929936.840016,
+        "name": "audit save",
+        "query": "indie warm",
+        "status": "success",
+        "track_count": 5
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/vibes/build",
+      "status": 200,
+      "body": {
+        "m3u8_path": "A:\\music\\Vibes\\audit save.m3u8",
+        "name": "audit save",
+        "status": "success",
+        "track_count": 5
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/vibes/narrate",
+      "status": 200,
+      "body": {
+        "arc_type": "journey",
+        "fallback": true,
+        "llm": {
+          "base_url": "http://localhost:1234/v1",
+          "error": "model list unavailable or no model loaded",
+          "model": "qwen2.5-14b-instruct",
+          "ok": false,
+          "provider": "lmstudio",
+          "status": "unavailable"
+        },
+        "name": "audit save",
+        "narrative": "Journey arc across 5 tracks, beginning with 2 Chainz - I'm Different and resolving at Massive Attack - Teardrop.",
+        "track_count": 5
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/vibes/refresh",
+      "status": 200,
+      "body": {
+        "refreshed": 1,
+        "results": [
+          {
+            "name": "audit save",
+            "result": {
+              "created_at": 1771929947.3325438,
+              "m3u8": {
+                "m3u8_path": "A:\\music\\Vibes\\audit save.m3u8",
+                "name": "audit save",
+                "status": "success",
+                "track_count": 5
+              },
+              "name": "audit save",
+              "query": "indie warm",
+              "status": "success",
+              "track_count": 5
+            }
+          }
+        ],
+        "status": "success"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/vibes/delete",
+      "status": 200,
+      "body": {
+        "deleted_materialized": false,
+        "name": "audit save",
+        "status": "success"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/curate/classify",
+      "status": 200,
+      "body": {
+        "cover": 0,
+        "junk": 2,
+        "live": 0,
+        "llm_applied": 0,
+        "llm_checked": 0,
+        "llm_errors": 0,
+        "llm_suggested": 0,
+        "original": 3,
+        "remix": 0,
+        "special": 0,
+        "total": 5,
+        "unknown": 0
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/curate/plan",
+      "status": 200,
+      "body": {
+        "result": {
+          "actions": [
+            {
+              "action": "quarantine",
+              "confidence": 0.7999999999999999,
+              "from_path": "A:\\music\\_Quarantine\\Junk\\A Day To Remember - A Day To Remember - The Downfall of Us All (Official Video) [CN4IIgFz93k].m4a",
+              "reason": "Junk file (confidence: 0.80)",
+              "to_path": "A:\\music\\_Quarantine\\Junk\\A Day To Remember - A Day To Remember - The Downfall of Us All (Official Video) [CN4IIgFz93k].m4a",
+              "track_id": "1d8a982fea1b2b114b6f040a88396330"
+            },
+            {
+              "action": "quarantine",
+              "confidence": 0.7999999999999999,
+              "from_path": "A:\\music\\_Quarantine\\Junk\\Bear Hands - Bear Hands - Giants (Official Music Video) [xadxu7tZJrg].m4a",
+              "reason": "Junk file (confidence: 0.80)",
+              "to_path": "A:\\music\\_Quarantine\\Junk\\Bear Hands - Bear Hands - Giants (Official Music Video) [xadxu7tZJrg].m4a",
+              "track_id": "b56d4b5a2988efdfad60c84a6b151363"
+            },
+            {
+              "action": "ignore",
+              "confidence": 1.0,
+              "from_path": "A:\\music\\Active Music\\Childish Gambino\\Camp (20241001)\\00 - Bonfire.m4a",
+              "reason": "Already in correct location",
+              "to_path": "A:\\music\\Active Music\\Childish Gambino\\Camp (20241001)\\00 - Bonfire.m4a",
+              "track_id": "c80380ffc5efde9d4b54c5859689845c"
+            },
+            {
+              "action": "ignore",
+              "confidence": 1.0,
+              "from_path": "A:\\music\\Active Music\\Childish Gambino\\Because the Internet (20241001)\\00 - I.Crawl.m4a",
+              "reason": "Already in correct location",
+              "to_path": "A:\\music\\Active Music\\Childish Gambino\\Because the Internet (20241001)\\00 - I.Crawl.m4a",
+              "track_id": "e84ec4dfa248ed73f7f1a2a8eafc3a11"
+            },
+            {
+              "action": "ignore",
+              "confidence": 1.0,
+              "from_path": "A:\\music\\Active Music\\Childish Gambino, Jason Martin\\Because the Internet (20241001)\\00 - IV. Sweatpants.m4a",
+              "reason": "Already in correct location",
+              "to_path": "A:\\music\\Active Music\\Childish Gambino, Jason Martin\\Because the Internet (20241001)\\00 - IV. Sweatpants.m4a",
+              "track_id": "e5c2dec8c8c440d39ee649a7f36f6a1d"
+            }
+          ],
+          "created_at": 1771929947.3627326,
+          "library_path": "A:\\music\\Active Music",
+          "plan_id": "20260224_054547",
+          "preset": "artist_album",
+          "summary": {
+            "ignore": 3,
+            "metadata_update": 0,
+            "move": 0,
+            "quarantine": 2,
+            "rename": 0
+          },
+          "total_tracks": 5
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/curate/apply",
+      "status": 400,
+      "body": {
+        "error": "Plan path is required"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/acquire/queue",
+      "status": 200,
+      "body": {
+        "count": 50,
+        "queue": [
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24271,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24272,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24273,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24274,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24275,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24276,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24277,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24278,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24279,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24280,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24281,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24282,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24283,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24284,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24285,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24286,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24287,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24288,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24289,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24290,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24291,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24292,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24293,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24294,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24295,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24296,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24297,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24298,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24299,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24300,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24301,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24302,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24303,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24304,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24305,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24306,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24307,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24308,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24309,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24310,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24311,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24312,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24313,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24314,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24315,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24316,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:28",
+            "error": null,
+            "id": 24317,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:08",
+            "error": null,
+            "id": 24239,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:08",
+            "error": null,
+            "id": 24240,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          },
+          {
+            "added_at": "2026-02-24 10:25:08",
+            "error": null,
+            "id": 24241,
+            "source": "discography",
+            "status": "complete",
+            "url": null
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/acquire/process",
+      "status": 200,
+      "body": {
+        "completed": 0,
+        "failed": 0
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/downloads",
+      "status": 200,
+      "body": {
+        "count": 8,
+        "downloads": [
+          {
+            "folder": "staging",
+            "name": "Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster).mp3",
+            "path": "C:\\MusicOracle\\staging\\Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster).mp3",
+            "size_mb": 8.129009246826172
+          },
+          {
+            "folder": "staging",
+            "name": "Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771914264.mp3",
+            "path": "C:\\MusicOracle\\staging\\Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771914264.mp3",
+            "size_mb": 8.129009246826172
+          },
+          {
+            "folder": "staging",
+            "name": "Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771914418.mp3",
+            "path": "C:\\MusicOracle\\staging\\Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771914418.mp3",
+            "size_mb": 8.129009246826172
+          },
+          {
+            "folder": "staging",
+            "name": "Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771914735.mp3",
+            "path": "C:\\MusicOracle\\staging\\Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771914735.mp3",
+            "size_mb": 8.129009246826172
+          },
+          {
+            "folder": "staging",
+            "name": "Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771915212.mp3",
+            "path": "C:\\MusicOracle\\staging\\Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771915212.mp3",
+            "size_mb": 8.129009246826172
+          },
+          {
+            "folder": "staging",
+            "name": "Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771915417.mp3",
+            "path": "C:\\MusicOracle\\staging\\Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771915417.mp3",
+            "size_mb": 8.129009246826172
+          },
+          {
+            "folder": "staging",
+            "name": "Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771915757.mp3",
+            "path": "C:\\MusicOracle\\staging\\Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771915757.mp3",
+            "size_mb": 8.129009246826172
+          },
+          {
+            "folder": "staging",
+            "name": "Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771916165.mp3",
+            "path": "C:\\MusicOracle\\staging\\Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)_1771916165.mp3",
+            "size_mb": 8.129009246826172
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/downloads/organize",
+      "status": 200,
+      "body": {
+        "duplicate": 0,
+        "error": 0,
+        "failed": 0,
+        "found": 8,
+        "success": 0
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/spotify/missing",
+      "status": 200,
+      "body": {
+        "count": 0,
+        "min_plays": 5,
+        "missing": [],
+        "ok": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/spotify/stats",
+      "status": 200,
+      "body": {
+        "ok": true,
+        "queue_completed": 1918,
+        "queue_failed": 108,
+        "queue_pending": 0,
+        "spotify_features_count": 0,
+        "spotify_history_count": 637860,
+        "spotify_library_count": 4015,
+        "top_artists": [
+          {
+            "name": "Coheed and Cambria",
+            "plays": 14905,
+            "score": 14905,
+            "total_ms": 2403385890
+          },
+          {
+            "name": "Kendrick Lamar",
+            "plays": 11660,
+            "score": 11660,
+            "total_ms": 1842915295
+          },
+          {
+            "name": "Brand New",
+            "plays": 10740,
+            "score": 10740,
+            "total_ms": 1887558755
+          },
+          {
+            "name": "Run The Jewels",
+            "plays": 9710,
+            "score": 9710,
+            "total_ms": 1206650215
+          },
+          {
+            "name": "Drake",
+            "plays": 9180,
+            "score": 9180,
+            "total_ms": 1254573405
+          },
+          {
+            "name": "Childish Gambino",
+            "plays": 8450,
+            "score": 8450,
+            "total_ms": 1207580440
+          },
+          {
+            "name": "Kanye West",
+            "plays": 7855,
+            "score": 7855,
+            "total_ms": 1185672890
+          },
+          {
+            "name": "J. Cole",
+            "plays": 7435,
+            "score": 7435,
+            "total_ms": 1027079420
+          },
+          {
+            "name": "JID",
+            "plays": 6330,
+            "score": 6330,
+            "total_ms": 890535670
+          },
+          {
+            "name": "Thrice",
+            "plays": 5920,
+            "score": 5920,
+            "total_ms": 837241510
+          },
+          {
+            "name": "Tyler, The Creator",
+            "plays": 5900,
+            "score": 5900,
+            "total_ms": 764643295
+          },
+          {
+            "name": "Aesop Rock",
+            "plays": 5795,
+            "score": 5795,
+            "total_ms": 813242400
+          },
+          {
+            "name": "Muse",
+            "plays": 5210,
+            "score": 5210,
+            "total_ms": 937178130
+          },
+          {
+            "name": "Arctic Monkeys",
+            "plays": 5200,
+            "score": 5200,
+            "total_ms": 717560580
+          },
+          {
+            "name": "Logic",
+            "plays": 5055,
+            "score": 5055,
+            "total_ms": 674028360
+          },
+          {
+            "name": "Bayside",
+            "plays": 4940,
+            "score": 4940,
+            "total_ms": 712841475
+          },
+          {
+            "name": "Mac Miller",
+            "plays": 4920,
+            "score": 4920,
+            "total_ms": 594644335
+          },
+          {
+            "name": "Taking Back Sunday",
+            "plays": 4810,
+            "score": 4810,
+            "total_ms": 691297180
+          },
+          {
+            "name": "Fall Out Boy",
+            "plays": 4460,
+            "score": 4460,
+            "total_ms": 625383445
+          },
+          {
+            "name": "Dreamville",
+            "plays": 4160,
+            "score": 4160,
+            "total_ms": 469004465
+          },
+          {
+            "name": "clipping.",
+            "plays": 4080,
+            "score": 4080,
+            "total_ms": 588101510
+          },
+          {
+            "name": "Glass Animals",
+            "plays": 3845,
+            "score": 3845,
+            "total_ms": 574241520
+          },
+          {
+            "name": "Senses Fail",
+            "plays": 3675,
+            "score": 3675,
+            "total_ms": 498899275
+          },
+          {
+            "name": "Manchester Orchestra",
+            "plays": 3620,
+            "score": 3620,
+            "total_ms": 636213040
+          },
+          {
+            "name": "Tech N9ne",
+            "plays": 3595,
+            "score": 3595,
+            "total_ms": 477996165
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/scout/cross-genre",
+      "status": 200,
+      "body": {
+        "count": 0,
+        "results": []
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/lore/trace",
+      "status": 200,
+      "body": {
+        "artist": "Deftones",
+        "connections": [
+          {
+            "metadata": {
+              "begin": "1988",
+              "end": "2008",
+              "role": "member of band"
+            },
+            "target": "Chi Cheng",
+            "type": "member_of"
+          },
+          {
+            "metadata": {
+              "begin": "1988",
+              "end": null,
+              "role": "member of band"
+            },
+            "target": "Stephen Carpenter",
+            "type": "member_of"
+          },
+          {
+            "metadata": {
+              "begin": "1988",
+              "end": null,
+              "role": "member of band"
+            },
+            "target": "Abe Cunningham",
+            "type": "member_of"
+          },
+          {
+            "metadata": {
+              "begin": "1988",
+              "end": null,
+              "role": "member of band"
+            },
+            "target": "Chino Moreno",
+            "type": "member_of"
+          },
+          {
+            "metadata": {
+              "begin": "1999",
+              "end": null,
+              "role": "member of band"
+            },
+            "target": "Frank Delgado",
+            "type": "member_of"
+          },
+          {
+            "metadata": {
+              "begin": "2009",
+              "end": "2021",
+              "role": "member of band"
+            },
+            "target": "Sergio Vega",
+            "type": "member_of"
+          }
+        ],
+        "mbid": "7527f6c2-d762-4b88-b5e2-9244f1e34c46",
+        "total": 6,
+        "traced_at": "2026-02-24T05:45:51.674707"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/lore/connections?artist=Deftones&hops=1&topk=5",
+      "status": 200,
+      "body": {
+        "artist": "Deftones",
+        "connections": [
+          {
+            "created_at": 1771914074.0,
+            "metadata": {
+              "begin": "1988",
+              "end": "2008",
+              "role": "member of band"
+            },
+            "target": "Chi Cheng",
+            "type": "member_of",
+            "weight": 0.8
+          },
+          {
+            "created_at": 1771914074.0,
+            "metadata": {
+              "begin": "1988",
+              "end": null,
+              "role": "member of band"
+            },
+            "target": "Stephen Carpenter",
+            "type": "member_of",
+            "weight": 0.8
+          },
+          {
+            "created_at": 1771914074.0,
+            "metadata": {
+              "begin": "1988",
+              "end": null,
+              "role": "member of band"
+            },
+            "target": "Abe Cunningham",
+            "type": "member_of",
+            "weight": 0.8
+          },
+          {
+            "created_at": 1771914074.0,
+            "metadata": {
+              "begin": "1988",
+              "end": null,
+              "role": "member of band"
+            },
+            "target": "Chino Moreno",
+            "type": "member_of",
+            "weight": 0.8
+          },
+          {
+            "created_at": 1771914074.0,
+            "metadata": {
+              "begin": "1999",
+              "end": null,
+              "role": "member of band"
+            },
+            "target": "Frank Delgado",
+            "type": "member_of",
+            "weight": 0.8
+          },
+          {
+            "created_at": 1771914074.0,
+            "metadata": {
+              "begin": "2009",
+              "end": "2021",
+              "role": "member of band"
+            },
+            "target": "Sergio Vega",
+            "type": "member_of",
+            "weight": 0.8
+          }
+        ],
+        "count": 6
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/dna/trace?track_id=00177ef30a31e2713365fb8c87d11d85",
+      "status": 200,
+      "body": {
+        "count": 0,
+        "samples": [],
+        "track_id": "00177ef30a31e2713365fb8c87d11d85"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/dna/pivot?track_id=00177ef30a31e2713365fb8c87d11d85",
+      "status": 200,
+      "body": {
+        "result": null
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/hunter/hunt",
+      "status": 400,
+      "body": {
+        "error": "query is required"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/hunter/acquire",
+      "status": 400,
+      "body": {
+        "error": "target is required"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/architect/analyze",
+      "status": 400,
+      "body": {
+        "error": "track_id and file_path are required"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/structure/00177ef30a31e2713365fb8c87d11d85",
+      "status": 200,
+      "body": {
+        "structure": null,
+        "track_id": "00177ef30a31e2713365fb8c87d11d85"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/radio/chaos",
+      "status": 200,
+      "body": {
+        "count": 5,
+        "results": [
+          {
+            "metadata": {
+              "artist": "Fetty Wap",
+              "title": "Trap Queen"
+            },
+            "track_id": "075048fee4c849c8f443480cfca18908"
+          },
+          {
+            "metadata": {
+              "artist": "Falling In Reverse",
+              "title": "Ronald"
+            },
+            "track_id": "47ecdd586781cbae2baa17b8a06c0495"
+          },
+          {
+            "metadata": {
+              "artist": "mewithoutYou",
+              "title": "Tie Me Up! Untie Me!"
+            },
+            "track_id": "72fe76bda1c17715c35fb6751b33d51c"
+          },
+          {
+            "metadata": {
+              "artist": "Big Sean",
+              "title": "Jump Out The Window"
+            },
+            "track_id": "0f0983412325817ace4aca0ad458f174"
+          },
+          {
+            "metadata": {
+              "artist": "2 Chainz, Drake",
+              "title": "No Lie"
+            },
+            "track_id": "99dfcc13eabc9418ce96d0464c49351f"
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/radio/flow",
+      "status": 400,
+      "body": {
+        "error": "track_id is required"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/radio/discovery?n=5",
+      "status": 200,
+      "body": {
+        "count": 1,
+        "results": [
+          {
+            "metadata": {
+              "artist": "Fall Out Boy",
+              "title": "Our Lawyer Made Us Change The Name Of This Song So We Wouldn't Get Sued"
+            },
+            "play_count": 0,
+            "track_id": "aa7996cb030a01802a523f740d7a7700"
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/radio/queue",
+      "status": 200,
+      "body": {
+        "count": 5,
+        "mode": "chaos",
+        "queue": [
+          {
+            "metadata": {
+              "artist": "Tyler The Creator",
+              "title": "Analog"
+            },
+            "track_id": "1c897b8bbaa4ea090d46e59e239ed544"
+          },
+          {
+            "metadata": {
+              "artist": "Drake",
+              "title": "0 To 100 / The Catch Up"
+            },
+            "track_id": "162ac41195f513094a66531402d8412c"
+          },
+          {
+            "metadata": {
+              "artist": "Brand New",
+              "title": "137"
+            },
+            "track_id": "ad208682bdb988ad329dd53c338bee63"
+          },
+          {
+            "metadata": {
+              "artist": "mewithoutYou",
+              "title": "Tie Me Up! Untie Me!"
+            },
+            "track_id": "72fe76bda1c17715c35fb6751b33d51c"
+          },
+          {
+            "metadata": {
+              "artist": "JID",
+              "title": "NEVER"
+            },
+            "track_id": "65bcd4ed7f674357064f3896dadb561f"
+          }
+        ]
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/playback/record",
+      "status": 200,
+      "body": {
+        "status": "ok"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/agent/query",
+      "status": 200,
+      "body": {
+        "action": "search",
+        "intent": {
+          "distortion": false,
+          "energy": "medium",
+          "intent": "general_discovery",
+          "source_genres": [],
+          "target_styles": []
+        },
+        "llm": {
+          "base_url": "http://localhost:1234/v1",
+          "error": "model list unavailable or no model loaded",
+          "model": "qwen2.5-14b-instruct",
+          "ok": false,
+          "provider": "lmstudio"
+        },
+        "next": {
+          "bridge_artists": [],
+          "keywords": []
+        },
+        "thought": "The trail went cold, Boss."
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/agent/fact-drop?track_id=00177ef30a31e2713365fb8c87d11d85",
+      "status": 200,
+      "body": {
+        "fact": null,
+        "track_id": "00177ef30a31e2713365fb8c87d11d85"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/journal",
+      "status": 200,
+      "body": {
+        "count": 0,
+        "transactions": []
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/undo",
+      "status": 200,
+      "body": {
+        "success": true,
+        "transactions": [],
+        "undone_count": 0
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/pipeline/start",
+      "status": 400,
+      "body": {
+        "error": "query is required"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/pipeline/status/invalid",
+      "status": 404,
+      "body": {
+        "error": "Job not found"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/pipeline/jobs",
+      "status": 200,
+      "body": {
+        "count": 12,
+        "jobs": [
+          {
+            "created_at": "2026-02-24T01:52:20.897903",
+            "error": "Duplicate exists: A:\\music\\Active Music\\Unknown Artist - Evalina.flac",
+            "job_id": "20260224_015220_897903_5663",
+            "query": "invalid",
+            "result": {
+              "artist": "Unknown Artist",
+              "elapsed": 0.5640329000016209,
+              "filepath": null,
+              "job_id": "20260224_015220_897903_5663",
+              "quality": "unknown",
+              "query": "invalid",
+              "rejection_reason": "Duplicate exists: A:\\music\\Active Music\\Unknown Artist - Evalina.flac",
+              "success": false,
+              "tier_used": 0,
+              "title": "invalid"
+            },
+            "result_json": "{\"job_id\": \"20260224_015220_897903_5663\", \"query\": \"invalid\", \"artist\": \"Unknown Artist\", \"title\": \"invalid\", \"success\": false, \"filepath\": null, \"quality\": \"unknown\", \"tier_used\": 0, \"rejection_reason\": \"Duplicate exists: A:\\\\music\\\\Active Music\\\\Unknown Artist - Evalina.flac\", \"elapsed\": 0.5640329000016209}",
+            "state": "failed",
+            "updated_at": "2026-02-24T01:52:21.467685"
+          },
+          {
+            "created_at": "2026-02-24T01:45:35.835436",
+            "error": "Duplicate exists: A:\\music\\Active Music\\Unknown Artist - Evalina.flac",
+            "job_id": "20260224_014535_835436_6903",
+            "query": "invalid",
+            "result": {
+              "artist": "Unknown Artist",
+              "elapsed": 0.5680005999965942,
+              "filepath": null,
+              "job_id": "20260224_014535_835436_6903",
+              "quality": "unknown",
+              "query": "invalid",
+              "rejection_reason": "Duplicate exists: A:\\music\\Active Music\\Unknown Artist - Evalina.flac",
+              "success": false,
+              "tier_used": 0,
+              "title": "invalid"
+            },
+            "result_json": "{\"job_id\": \"20260224_014535_835436_6903\", \"query\": \"invalid\", \"artist\": \"Unknown Artist\", \"title\": \"invalid\", \"success\": false, \"filepath\": null, \"quality\": \"unknown\", \"tier_used\": 0, \"rejection_reason\": \"Duplicate exists: A:\\\\music\\\\Active Music\\\\Unknown Artist - Evalina.flac\", \"elapsed\": 0.5680005999965942}",
+            "state": "failed",
+            "updated_at": "2026-02-24T01:45:36.408757"
+          },
+          {
+            "created_at": "2026-02-24T01:36:26.296292",
+            "error": "Duplicate exists: A:\\music\\Active Music\\Unknown Artist - Evalina.flac",
+            "job_id": "20260224_013626_296292_7437",
+            "query": "invalid",
+            "result": {
+              "artist": "Unknown Artist",
+              "elapsed": 0.5593502999981865,
+              "filepath": null,
+              "job_id": "20260224_013626_296292_7437",
+              "quality": "unknown",
+              "query": "invalid",
+              "rejection_reason": "Duplicate exists: A:\\music\\Active Music\\Unknown Artist - Evalina.flac",
+              "success": false,
+              "tier_used": 0,
+              "title": "invalid"
+            },
+            "result_json": "{\"job_id\": \"20260224_013626_296292_7437\", \"query\": \"invalid\", \"artist\": \"Unknown Artist\", \"title\": \"invalid\", \"success\": false, \"filepath\": null, \"quality\": \"unknown\", \"tier_used\": 0, \"rejection_reason\": \"Duplicate exists: A:\\\\music\\\\Active Music\\\\Unknown Artist - Evalina.flac\", \"elapsed\": 0.5593502999981865}",
+            "state": "failed",
+            "updated_at": "2026-02-24T01:36:26.864318"
+          },
+          {
+            "created_at": "2026-02-24T01:33:57.554345",
+            "error": "Duplicate exists: A:\\music\\Active Music\\Unknown Artist - Evalina.flac",
+            "job_id": "20260224_013357_554345_3768",
+            "query": "invalid",
+            "result": {
+              "artist": "Unknown Artist",
+              "elapsed": 0.5563238000031561,
+              "filepath": null,
+              "job_id": "20260224_013357_554345_3768",
+              "quality": "unknown",
+              "query": "invalid",
+              "rejection_reason": "Duplicate exists: A:\\music\\Active Music\\Unknown Artist - Evalina.flac",
+              "success": false,
+              "tier_used": 0,
+              "title": "invalid"
+            },
+            "result_json": "{\"job_id\": \"20260224_013357_554345_3768\", \"query\": \"invalid\", \"artist\": \"Unknown Artist\", \"title\": \"invalid\", \"success\": false, \"filepath\": null, \"quality\": \"unknown\", \"tier_used\": 0, \"rejection_reason\": \"Duplicate exists: A:\\\\music\\\\Active Music\\\\Unknown Artist - Evalina.flac\", \"elapsed\": 0.5563238000031561}",
+            "state": "failed",
+            "updated_at": "2026-02-24T01:33:58.115780"
+          },
+          {
+            "created_at": "2026-02-24T01:27:03.381119",
+            "error": null,
+            "job_id": "20260224_012703_381119_6751",
+            "query": "invalid",
+            "result": {
+              "artist": "Unknown Artist",
+              "elapsed": 13.53439349999826,
+              "filepath": "A:\\music\\Active Music\\Unknown Artist - Evalina (1).flac",
+              "job_id": "20260224_012703_381119_6751",
+              "quality": "flac",
+              "query": "invalid",
+              "rejection_reason": null,
+              "success": true,
+              "tier_used": 1,
+              "title": "invalid"
+            },
+            "result_json": "{\"job_id\": \"20260224_012703_381119_6751\", \"query\": \"invalid\", \"artist\": \"Unknown Artist\", \"title\": \"invalid\", \"success\": true, \"filepath\": \"A:\\\\music\\\\Active Music\\\\Unknown Artist - Evalina (1).flac\", \"quality\": \"flac\", \"tier_used\": 1, \"rejection_reason\": null, \"elapsed\": 13.53439349999826}",
+            "state": "completed",
+            "updated_at": "2026-02-24T01:27:16.923564"
+          },
+          {
+            "created_at": "2026-02-24T01:21:23.080218",
+            "error": null,
+            "job_id": "20260224_012123_080218_9128",
+            "query": "invalid",
+            "result": {
+              "artist": "Unknown Artist",
+              "elapsed": 16.84667929999705,
+              "filepath": "A:\\music\\Active Music\\Unknown Artist - Evalina.flac",
+              "job_id": "20260224_012123_080218_9128",
+              "quality": "flac",
+              "query": "invalid",
+              "rejection_reason": null,
+              "success": true,
+              "tier_used": 1,
+              "title": "invalid"
+            },
+            "result_json": "{\"job_id\": \"20260224_012123_080218_9128\", \"query\": \"invalid\", \"artist\": \"Unknown Artist\", \"title\": \"invalid\", \"success\": true, \"filepath\": \"A:\\\\music\\\\Active Music\\\\Unknown Artist - Evalina.flac\", \"quality\": \"flac\", \"tier_used\": 1, \"rejection_reason\": null, \"elapsed\": 16.84667929999705}",
+            "state": "completed",
+            "updated_at": "2026-02-24T01:21:39.932415"
+          },
+          {
+            "created_at": "2026-02-23T23:19:39.110204",
+            "error": null,
+            "job_id": "20260223_231939_110204_1973",
+            "query": "Aphex Twin - Xtal",
+            "result_json": null,
+            "state": "requested",
+            "updated_at": "2026-02-23T23:19:39.110204"
+          },
+          {
+            "created_at": "2026-02-23T23:19:39.117737",
+            "error": null,
+            "job_id": "20260223_231939_117737_6002",
+            "query": "not-a-job",
+            "result": {
+              "artist": "Unknown Artist",
+              "elapsed": 17.015612399998645,
+              "filepath": "A:\\music\\Active Music\\Unknown Artist - not-a-job.flac",
+              "job_id": "20260223_231939_117737_6002",
+              "quality": "flac",
+              "query": "not-a-job",
+              "rejection_reason": null,
+              "success": true,
+              "tier_used": 1,
+              "title": "not-a-job"
+            },
+            "result_json": "{\"job_id\": \"20260223_231939_117737_6002\", \"query\": \"not-a-job\", \"artist\": \"Unknown Artist\", \"title\": \"not-a-job\", \"success\": true, \"filepath\": \"A:\\\\music\\\\Active Music\\\\Unknown Artist - not-a-job.flac\", \"quality\": \"flac\", \"tier_used\": 1, \"rejection_reason\": null, \"elapsed\": 17.015612399998645}",
+            "state": "completed",
+            "updated_at": "2026-02-23T23:19:56.138446"
+          },
+          {
+            "created_at": "2026-02-23T22:21:01.478975",
+            "error": null,
+            "job_id": "20260223_222101_478975_6379",
+            "query": "Aphex Twin - Xtal",
+            "result_json": null,
+            "state": "requested",
+            "updated_at": "2026-02-23T22:21:01.478975"
+          },
+          {
+            "created_at": "2026-02-23T13:25:58.977029",
+            "error": null,
+            "job_id": "20260223_132558_977029_2359",
+            "query": "Massive Attack - Teardrop",
+            "result": {
+              "artist": "Massive Attack",
+              "elapsed": 9.218825299999935,
+              "filepath": "A:\\music\\Active Music\\Massive Attack - Teardrop.flac",
+              "job_id": "20260223_132558_977029_2359",
+              "quality": "flac",
+              "query": "Massive Attack - Teardrop",
+              "rejection_reason": null,
+              "success": true,
+              "tier_used": 1,
+              "title": "Teardrop"
+            },
+            "result_json": "{\"job_id\": \"20260223_132558_977029_2359\", \"query\": \"Massive Attack - Teardrop\", \"artist\": \"Massive Attack\", \"title\": \"Teardrop\", \"success\": true, \"filepath\": \"A:\\\\music\\\\Active Music\\\\Massive Attack - Teardrop.flac\", \"quality\": \"flac\", \"tier_used\": 1, \"rejection_reason\": null, \"elapsed\": 9.218825299999935}",
+            "state": "completed",
+            "updated_at": "2026-02-23T13:26:08.211341"
+          },
+          {
+            "created_at": "2026-02-19T22:28:29.271632",
+            "error": "Could not verify: Test Artist - Test Song",
+            "job_id": "20260219_222829_271603_7810",
+            "query": "Test Artist - Test Song",
+            "result": {
+              "artist": "Test Artist",
+              "elapsed": 2.131083399999625,
+              "filepath": null,
+              "job_id": "20260219_222829_271603_7810",
+              "quality": "unknown",
+              "query": "Test Artist - Test Song",
+              "rejection_reason": "Could not verify: Test Artist - Test Song",
+              "success": false,
+              "tier_used": 0,
+              "title": "Test Song"
+            },
+            "result_json": "{\"job_id\": \"20260219_222829_271603_7810\", \"query\": \"Test Artist - Test Song\", \"artist\": \"Test Artist\", \"title\": \"Test Song\", \"success\": false, \"filepath\": null, \"quality\": \"unknown\", \"tier_used\": 0, \"rejection_reason\": \"Could not verify: Test Artist - Test Song\", \"elapsed\": 2.131083399999625}",
+            "state": "failed",
+            "updated_at": "2026-02-19T22:28:31.417169"
+          },
+          {
+            "created_at": "2026-02-19T22:27:23.902857",
+            "error": "Could not verify: Test Artist - Test Song",
+            "job_id": "20260219_222723_902857_7675",
+            "query": "Test Artist - Test Song",
+            "result": {
+              "artist": "Test Artist",
+              "elapsed": 1.6859269999995377,
+              "filepath": null,
+              "job_id": "20260219_222723_902857_7675",
+              "quality": "unknown",
+              "query": "Test Artist - Test Song",
+              "rejection_reason": "Could not verify: Test Artist - Test Song",
+              "success": false,
+              "tier_used": 0,
+              "title": "Test Song"
+            },
+            "result_json": "{\"job_id\": \"20260219_222723_902857_7675\", \"query\": \"Test Artist - Test Song\", \"artist\": \"Test Artist\", \"title\": \"Test Song\", \"success\": false, \"filepath\": null, \"quality\": \"unknown\", \"tier_used\": 0, \"rejection_reason\": \"Could not verify: Test Artist - Test Song\", \"elapsed\": 1.6859269999995377}",
+            "state": "failed",
+            "updated_at": "2026-02-19T22:27:25.602601"
+          }
+        ],
+        "success": true
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/stream/00177ef30a31e2713365fb8c87d11d85",
+      "status": 200,
+      "body": null
+    }
+  ],
+  "ok": true
+}

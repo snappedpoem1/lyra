@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Dict, List, Optional
+=======
+from typing import Any, Dict, List, Optional
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 import json
 import os
 import time
@@ -16,7 +20,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VIBES_DIR = VIBES_FOLDER
 
 
+<<<<<<< HEAD
 def save_vibe(name: str, query: str, n: int = 200) -> Dict[str, any]:
+=======
+def save_vibe(name: str, query: str, n: int = 200) -> Dict[str, Any]:
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     """
     Save a vibe profile by running a semantic search and storing results.
     
@@ -89,7 +97,11 @@ def save_vibe(name: str, query: str, n: int = 200) -> Dict[str, any]:
     }
 
 
+<<<<<<< HEAD
 def list_vibes() -> List[Dict[str, any]]:
+=======
+def list_vibes() -> List[Dict[str, Any]]:
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     """
     List all saved vibes.
     
@@ -121,7 +133,11 @@ def list_vibes() -> List[Dict[str, any]]:
     return vibes
 
 
+<<<<<<< HEAD
 def build_vibe(name: str) -> Dict[str, any]:
+=======
+def build_vibe(name: str) -> Dict[str, Any]:
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     """
     Build M3U8 playlist file for a vibe.
     
@@ -185,7 +201,11 @@ def build_vibe(name: str) -> Dict[str, any]:
         return {'error': f'Failed to write M3U8: {e}'}
 
 
+<<<<<<< HEAD
 def materialize_vibe(name: str, mode: str = 'hardlink') -> Dict[str, any]:
+=======
+def materialize_vibe(name: str, mode: str = 'hardlink') -> Dict[str, Any]:
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     """
     Materialize a vibe as a folder with file links.
     
@@ -281,17 +301,36 @@ def materialize_vibe(name: str, mode: str = 'hardlink') -> Dict[str, any]:
                 stats['created'] += 1
             
             elif mode == 'symlink':
+<<<<<<< HEAD
                 os.symlink(str(source_path), str(link_path))
+=======
+                if os.name == 'nt':
+                    os.link(str(source_path), str(link_path))
+                else:
+                    os.symlink(str(source_path), str(link_path))
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 stats['created'] += 1
             
             elif mode == 'shortcut':
                 # Windows .lnk shortcut (requires pywin32 or manual creation)
+<<<<<<< HEAD
                 # For now, fallback to symlink
                 try:
                     os.symlink(str(source_path), str(link_path))
                     stats['created'] += 1
                 except Exception:
                     # If symlink fails (no admin), try hardlink
+=======
+                # For now, prefer hardlink on Windows and symlink elsewhere.
+                try:
+                    if os.name == 'nt':
+                        os.link(str(source_path), str(link_path))
+                    else:
+                        os.symlink(str(source_path), str(link_path))
+                    stats['created'] += 1
+                except Exception:
+                    # Fallback to hardlink if symlink fails.
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                     try:
                         os.link(str(source_path), str(link_path))
                         stats['created'] += 1
@@ -314,7 +353,11 @@ def materialize_vibe(name: str, mode: str = 'hardlink') -> Dict[str, any]:
     }
 
 
+<<<<<<< HEAD
 def refresh_vibes(vibe_name: Optional[str] = None) -> Dict[str, any]:
+=======
+def refresh_vibes(vibe_name: Optional[str] = None) -> Dict[str, Any]:
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     """
     Refresh vibe(s) by re-running search and updating database.
     
@@ -378,7 +421,11 @@ def refresh_vibes(vibe_name: Optional[str] = None) -> Dict[str, any]:
     }
 
 
+<<<<<<< HEAD
 def delete_vibe(name: str, delete_materialized: bool = False) -> Dict[str, any]:
+=======
+def delete_vibe(name: str, delete_materialized: bool = False) -> Dict[str, Any]:
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     """
     Delete a vibe profile.
     

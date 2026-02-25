@@ -13,8 +13,12 @@ from __future__ import annotations
 import re
 import sqlite3
 from collections import defaultdict
+<<<<<<< HEAD
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+=======
+from typing import List, Optional, Tuple
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 from difflib import SequenceMatcher
 
 

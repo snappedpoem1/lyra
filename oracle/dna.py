@@ -13,6 +13,7 @@ Features:
 Author: Lyra Oracle v9.0
 """
 
+<<<<<<< HEAD
 import os
 import logging
 import sqlite3
@@ -20,6 +21,11 @@ import json
 from typing import Optional, List, Dict
 from datetime import datetime
 from pathlib import Path
+=======
+import logging
+import json
+from typing import Optional, List, Dict
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from oracle.config import get_connection
 
@@ -33,7 +39,15 @@ class DNA:
     """The Sample Hunter - Traces audio lineage."""
     
     def __init__(self):
+<<<<<<< HEAD
         self.conn = get_connection()
+=======
+        pass
+
+    def _open_conn(self):
+        """Get a fresh connection per call (thread-safe)."""
+        return get_connection(timeout=10.0)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     def trace_samples(self, track_id: str) -> List[Dict]:
         """
@@ -47,6 +61,7 @@ class DNA:
         """
         logger.info(f"🧬 DNA: Tracing samples for track {track_id}")
         
+<<<<<<< HEAD
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT original_artist, original_title, original_year,
@@ -70,6 +85,35 @@ class DNA:
         
         logger.info(f"  → {len(samples)} samples identified")
         return samples
+=======
+        conn = self._open_conn()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT original_artist, original_title, original_year,
+                       sample_type, confidence, source, verified
+                FROM sample_lineage
+                WHERE track_id = ?
+                ORDER BY confidence DESC
+            """, (track_id,))
+
+            samples = []
+            for row in cursor.fetchall():
+                samples.append({
+                    "original_artist": row[0],
+                    "original_title": row[1],
+                    "original_year": row[2],
+                    "sample_type": row[3],
+                    "confidence": row[4],
+                    "source": row[5],
+                    "verified": bool(row[6])
+                })
+
+            logger.info(f"  → {len(samples)} samples identified")
+            return samples
+        finally:
+            conn.close()
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     def register_sample(
         self,
@@ -98,8 +142,14 @@ class DNA:
         """
         logger.info(f"📝 DNA: Registering sample [{original_artist} - {original_title}]")
         
+<<<<<<< HEAD
         cursor = self.conn.cursor()
         try:
+=======
+        conn = self._open_conn()
+        try:
+            cursor = conn.cursor()
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             cursor.execute("""
                 INSERT INTO sample_lineage
                 (track_id, original_artist, original_title, original_year,
@@ -109,13 +159,22 @@ class DNA:
                 track_id, original_artist, original_title, original_year,
                 sample_type, confidence, source
             ))
+<<<<<<< HEAD
             self.conn.commit()
+=======
+            conn.commit()
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             logger.info("  ✓ Sample registered")
             return True
         
         except Exception as e:
             logger.error(f"  ✗ Registration failed: {e}")
             return False
+<<<<<<< HEAD
+=======
+        finally:
+            conn.close()
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     def find_original_in_library(self, sample_info: Dict) -> Optional[str]:
         """
@@ -129,6 +188,7 @@ class DNA:
         Returns:
             track_id of original, or None if not in library
         """
+<<<<<<< HEAD
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT track_id
@@ -147,6 +207,30 @@ class DNA:
         
         logger.info("  ℹ Original not in library")
         return None
+=======
+        conn = self._open_conn()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT track_id
+                FROM tracks
+                WHERE artist LIKE ? AND title LIKE ?
+                LIMIT 1
+            """, (
+                f"%{sample_info['original_artist']}%",
+                f"%{sample_info['original_title']}%"
+            ))
+
+            result = cursor.fetchone()
+            if result:
+                logger.info(f"  ✓ Original found in library: {result[0]}")
+                return result[0]
+
+            logger.info("  ℹ Original not in library")
+            return None
+        finally:
+            conn.close()
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     def pivot_to_original(self, track_id: str) -> Optional[Dict]:
         """
@@ -177,6 +261,7 @@ class DNA:
         
         if original_track_id:
             # Get track details
+<<<<<<< HEAD
             cursor = self.conn.cursor()
             cursor.execute("""
                 SELECT artist, title, album, year, file_path
@@ -185,6 +270,18 @@ class DNA:
             """, (original_track_id,))
             
             row = cursor.fetchone()
+=======
+            conn = self._open_conn()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT artist, title, album, year, filepath
+                FROM tracks
+                WHERE track_id = ?
+            """, (original_track_id,))
+
+            row = cursor.fetchone()
+            conn.close()
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             if row:
                 return {
                     "status": "in_library",
@@ -193,7 +290,12 @@ class DNA:
                     "title": row[1],
                     "album": row[2],
                     "year": row[3],
+<<<<<<< HEAD
                     "file_path": row[4],
+=======
+                    "filepath": row[4],
+                    "file_path": row[4],  # Back-compat alias
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                     "sample_info": primary_sample
                 }
         
@@ -216,6 +318,7 @@ class DNA:
         Returns:
             List of modern tracks that sampled this one
         """
+<<<<<<< HEAD
         cursor = self.conn.cursor()
         
         # First get track info
@@ -248,6 +351,44 @@ class DNA:
         
         logger.info(f"  → {len(sampled_by)} tracks sample this")
         return sampled_by
+=======
+        conn = self._open_conn()
+        try:
+            cursor = conn.cursor()
+
+            # First get track info
+            cursor.execute("SELECT artist, title FROM tracks WHERE track_id = ?", (track_id,))
+            track = cursor.fetchone()
+            if not track:
+                return []
+
+            artist, title = track
+
+            # Find modern tracks that sample this
+            cursor.execute("""
+                SELECT sl.track_id, t.artist, t.title, t.year, sl.sample_type, sl.confidence
+                FROM sample_lineage sl
+                JOIN tracks t ON sl.track_id = t.track_id
+                WHERE sl.original_artist LIKE ? AND sl.original_title LIKE ?
+                ORDER BY t.year DESC
+            """, (f"%{artist}%", f"%{title}%"))
+
+            sampled_by = []
+            for row in cursor.fetchall():
+                sampled_by.append({
+                    "track_id": row[0],
+                    "artist": row[1],
+                    "title": row[2],
+                    "year": row[3],
+                    "sample_type": row[4],
+                    "confidence": row[5]
+                })
+
+            logger.info(f"  → {len(sampled_by)} tracks sample this")
+            return sampled_by
+        finally:
+            conn.close()
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     def suggest_sample_credits(self, track_id: str) -> str:
         """
@@ -298,9 +439,16 @@ class DNA:
                 data = json.load(f)
             
             imported = 0
+<<<<<<< HEAD
             for entry in data:
                 # Find track_id for modern track
                 cursor = self.conn.cursor()
+=======
+            conn = self._open_conn()
+            for entry in data:
+                # Find track_id for modern track
+                cursor = conn.cursor()
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 cursor.execute("""
                     SELECT track_id FROM tracks
                     WHERE artist LIKE ? AND title LIKE ?
@@ -321,6 +469,11 @@ class DNA:
                     )
                     if success:
                         imported += 1
+<<<<<<< HEAD
+=======
+
+            conn.close()
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             
             logger.info(f"  ✓ Imported {imported} samples")
             return imported

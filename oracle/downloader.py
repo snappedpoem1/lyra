@@ -5,12 +5,19 @@ Downloads audio from SoundCloud, YouTube, Bandcamp, etc. using yt-dlp.
 Applies rate limiting, embeds metadata, handles batch operations.
 """
 
+<<<<<<< HEAD
 import os
 import sys
 import time
 import json
 import logging
 import sqlite3
+=======
+import time
+import logging
+import sqlite3
+import importlib.util
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Callable
@@ -20,12 +27,19 @@ try:
 except ImportError:
     yt_dlp = None
 
+<<<<<<< HEAD
 try:
     from mutagen.mp4 import MP4
     from mutagen.easymp4 import EasyMP4
     HAS_MUTAGEN = True
 except ImportError:
     HAS_MUTAGEN = False
+=======
+HAS_MUTAGEN = (
+    importlib.util.find_spec("mutagen.mp4") is not None
+    and importlib.util.find_spec("mutagen.easymp4") is not None
+)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 import requests as http_requests
 
@@ -234,8 +248,11 @@ class Downloader:
 
                 # Find the actual downloaded file
                 dest = output_dir or self.download_dir
+<<<<<<< HEAD
                 # yt-dlp may have renamed with postprocessing
                 expected_stem = f"{artist} - {title}"
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 filepath = self._find_downloaded_file(dest, info.get('id', ''))
 
                 result = DownloadResult(

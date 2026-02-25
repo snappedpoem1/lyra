@@ -6,9 +6,13 @@ Every other module imports from here.
 """
 
 import os
+<<<<<<< HEAD
 import sys
 import shutil
 import sqlite3
+=======
+import shutil
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
@@ -25,7 +29,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if load_dotenv:
     env_file = PROJECT_ROOT / ".env"
     if env_file.exists():
+<<<<<<< HEAD
         load_dotenv(env_file, override=True)
+=======
+        # Preserve explicit runtime env vars set by callers/tests.
+        load_dotenv(env_file, override=False)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def _env_path(key: str, fallback: Path) -> Path:
@@ -78,6 +87,17 @@ def get_llm_settings() -> dict:
     }
 
 
+<<<<<<< HEAD
+=======
+def validate_required_env(required_keys: list[str]) -> None:
+    """Raise when any required environment key is missing/blank."""
+    missing = [key for key in required_keys if not os.environ.get(key, "").strip()]
+    if missing:
+        joined = ", ".join(sorted(missing))
+        raise RuntimeError(f"Missing required environment keys: {joined}")
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 def get_connection(timeout: float = 10.0):
     """Delegate to oracle.db.schema.get_connection (single source of truth + WAL pragmas)."""
     from oracle.db.schema import get_connection as _get_connection
@@ -188,15 +208,24 @@ def load_config(env_path: Optional[Path] = None) -> OracleConfig:
     # Try loading .env
     env_file = env_path or PROJECT_ROOT / ".env"
     if load_dotenv and env_file.exists():
+<<<<<<< HEAD
         # Ensure .env values override any existing environment variables
         load_dotenv(env_file, override=True)
+=======
+        # Respect process env as source-of-truth when explicitly provided.
+        load_dotenv(env_file, override=False)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     elif not env_file.exists():
         # Copy template if .env doesn't exist
         template = PROJECT_ROOT / ".env.template"
         if template.exists():
             shutil.copy2(template, env_file)
             if load_dotenv:
+<<<<<<< HEAD
                 load_dotenv(env_file, override=True)
+=======
+                load_dotenv(env_file, override=False)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
     def _env(key: str, default: str = "") -> str:
         return os.environ.get(key, default).strip()

@@ -16,13 +16,20 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
+<<<<<<< HEAD
 from pathlib import Path
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 from typing import Any, Dict, List, Optional
 
 from oracle.config import guard_bypass_allowed, guard_bypass_reason
 from oracle.db.schema import get_connection, get_write_mode
 
 logger = logging.getLogger(__name__)
+<<<<<<< HEAD
+=======
+MIN_GUARD_CONFIDENCE = 0.30
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 @dataclass
@@ -235,6 +242,10 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
             extract_hash_from_magnet,
             probe_magnet_cached,
         )
+<<<<<<< HEAD
+=======
+        from oracle.acquirers.guard import guard_file
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
         # Search for release (prefer FLAC)
         query = f"{artist} {album or title} FLAC"
@@ -330,6 +341,25 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
                     )
                     best_file = audio_files[0]
 
+<<<<<<< HEAD
+=======
+                guard_result = guard_file(best_file)
+                if not guard_result.allowed:
+                    logger.info(
+                        "[T3] Guard rejected downloaded file: %s (%s)",
+                        best_file.name,
+                        guard_result.rejection_reason or "rejected",
+                    )
+                    continue
+                if guard_result.confidence < MIN_GUARD_CONFIDENCE:
+                    logger.info(
+                        "[T3] Guard low confidence %.2f for %s",
+                        guard_result.confidence,
+                        best_file.name,
+                    )
+                    continue
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 return AcquisitionResult(
                     success=True,
                     tier=3,

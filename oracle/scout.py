@@ -16,18 +16,29 @@ Author: Lyra Oracle v9.0
 import os
 import logging
 import requests
+<<<<<<< HEAD
 import sqlite3
 from typing import Optional, List, Dict
 from datetime import datetime
 from pathlib import Path
 
 from oracle.config import get_connection
+=======
+from typing import Optional, List, Dict
+
+from oracle.config import get_connection
+from oracle.enrichers.cache import make_lookup_key, get_or_set_payload
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
 # Discogs API Configuration
 DISCOGS_API_TOKEN = os.getenv("DISCOGS_API_TOKEN", "") or os.getenv("DISCOGS_TOKEN", "")
 DISCOGS_BASE_URL = "https://api.discogs.com"
+<<<<<<< HEAD
+=======
+DISCOGS_CACHE_TTL_SECONDS = int(os.getenv("LYRA_CACHE_TTL_DISCOGS_SECONDS", "1209600") or "1209600")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 class Scout:
@@ -118,6 +129,7 @@ class Scout:
         if local_artists:
             logger.info(f"  → Found {len(local_artists)} bridge artists in local library")
             return local_artists
+<<<<<<< HEAD
         
         # Fallback: Query Discogs API
         if not DISCOGS_API_TOKEN:
@@ -151,6 +163,53 @@ class Scout:
             logger.error(f"  ✗ Discogs search failed: {e}")
             return []
     
+=======
+        # Fallback: Query Discogs API
+        if not DISCOGS_API_TOKEN:
+            logger.warning("  No Discogs token. Limited to local library.")
+            return []
+
+        lookup_key = make_lookup_key("scout_bridge_artists", genre1, genre2)
+
+        def _fetch() -> Dict:
+            try:
+                response = self.session.get(
+                    f"{DISCOGS_BASE_URL}/database/search",
+                    params={
+                        "type": "artist",
+                        "style": f"{genre1},{genre2}",
+                        "per_page": 50,
+                    },
+                    timeout=10,
+                )
+                if response.status_code != 200:
+                    logger.error(f"Discogs API error: {response.status_code}")
+                    return {"_miss": True}
+                data = response.json()
+                return {"results": data.get("results", [])}
+            except Exception as e:
+                logger.error(f"Discogs search failed: {e}")
+                return {"_miss": True}
+
+        payload = get_or_set_payload(
+            provider="scout_discogs",
+            lookup_key=lookup_key,
+            max_age_seconds=DISCOGS_CACHE_TTL_SECONDS,
+            fetcher=_fetch,
+            miss_payload={"_miss": True},
+        )
+        if payload.get("_miss"):
+            return []
+
+        artists = [
+            {"name": result.get("title"), "source": "discogs", "id": result.get("id")}
+            for result in payload.get("results", [])
+            if result.get("title")
+        ]
+        logger.info(f"  Found {len(artists)} bridge artists from Discogs")
+        return artists
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     def _get_artist_releases(
         self,
         artist_name: str,
@@ -279,7 +338,11 @@ class Scout:
         params = [f"%{g}%" for g in genres]
         
         cursor.execute(f"""
+<<<<<<< HEAD
             SELECT track_id, artist, title, genre, file_path
+=======
+            SELECT track_id, artist, title, genre, filepath
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             FROM tracks
             WHERE {placeholders}
             ORDER BY RANDOM()
@@ -292,7 +355,12 @@ class Scout:
                 "artist": row[1],
                 "title": row[2],
                 "genre": row[3],
+<<<<<<< HEAD
                 "file_path": row[4],
+=======
+                "filepath": row[4],
+                "file_path": row[4],  # Back-compat alias for legacy clients
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 "source": "local"
             }
             for row in cursor.fetchall()
@@ -335,3 +403,8 @@ if __name__ == "__main__":
         if target.get('discogs_url'):
             print(f"    URL: {target['discogs_url']}")
         print()
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)

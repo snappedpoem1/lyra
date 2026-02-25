@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Tuple
 import shutil
+<<<<<<< HEAD
 import os
 
 from oracle.config import LIBRARY_BASE
@@ -13,6 +14,13 @@ from oracle.db.schema import get_connection, get_write_mode, get_content_hash_fa
 from oracle.scanner import AUDIO_EXTS, extract_metadata
 from oracle.organizer import generate_target_path
 import time
+=======
+
+from oracle.config import LIBRARY_BASE
+from oracle.name_cleaner import clean_metadata, suggest_rename
+from oracle.db.schema import get_write_mode, get_content_hash_fast
+from oracle.scanner import AUDIO_EXTS, extract_metadata
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOWNLOADS_DIR = PROJECT_ROOT / "downloads"

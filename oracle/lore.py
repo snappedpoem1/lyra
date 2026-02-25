@@ -15,6 +15,7 @@ Author: Lyra Oracle v9.0
 import os
 import logging
 import requests
+<<<<<<< HEAD
 import sqlite3
 import time
 import json
@@ -22,12 +23,25 @@ from typing import Optional, List, Dict, Tuple
 from datetime import datetime
 
 from oracle.config import get_connection
+=======
+import time
+import json
+from typing import Optional, List, Dict
+from datetime import datetime
+
+from oracle.config import get_connection
+from oracle.enrichers.cache import make_lookup_key, get_or_set_payload
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
 # MusicBrainz API Configuration
 MB_BASE_URL = "https://musicbrainz.org/ws/2"
 MB_RATE_LIMIT = 1.0  # 1 request per second
+<<<<<<< HEAD
+=======
+MB_CACHE_TTL_SECONDS = int(os.getenv("LYRA_CACHE_TTL_MB_SECONDS", "2592000") or "2592000")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 class Lore:
@@ -43,6 +57,44 @@ class Lore:
     def _open_conn(self):
         """Get a fresh connection (thread-safe)."""
         return get_connection()
+<<<<<<< HEAD
+=======
+
+    def _mb_request_json(self, path: str, params: Dict[str, object], cache_scope: str) -> Dict:
+        """Fetch MusicBrainz payload with persistent cache + TTL."""
+        lookup_key = make_lookup_key(cache_scope, path, json.dumps(params, sort_keys=True))
+
+        def _fetch() -> Dict:
+            self._rate_limit()
+            try:
+                response = self.session.get(
+                    f"{MB_BASE_URL}{path}",
+                    params=params,
+                    timeout=10,
+                )
+                if response.status_code != 200:
+                    return {"_miss": True, "status_code": response.status_code}
+                return response.json()
+            except Exception as exc:
+                logger.error("  âœ— MusicBrainz request failed (%s): %s", path, exc)
+                return {"_miss": True}
+
+        return get_or_set_payload(
+            provider="lore_musicbrainz",
+            lookup_key=lookup_key,
+            max_age_seconds=MB_CACHE_TTL_SECONDS,
+            fetcher=_fetch,
+            miss_payload={"_miss": True},
+        )
+
+    def _get_artist_relationship_payload(self, mbid: str) -> Dict:
+        """Fetch artist relationship blob once (member + recording/work relations)."""
+        return self._mb_request_json(
+            path=f"/artist/{mbid}",
+            params={"inc": "artist-rels+recording-rels+work-rels", "fmt": "json"},
+            cache_scope="artist_rels_blob",
+        )
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     def trace_lineage(self, artist_name: str, depth: int = 2) -> Dict:
         """
@@ -136,19 +188,37 @@ class Lore:
         try:
             cursor = conn.cursor()
             cursor.execute("""
+<<<<<<< HEAD
                 SELECT target_artist, type, weight, metadata, created_at
                 FROM connections
                 WHERE source_artist = ?
+=======
+                SELECT target, type, weight, evidence, created_at
+                FROM connections
+                WHERE source = ?
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 ORDER BY weight DESC
             """, (artist_name,))
             
             connections = []
             for row in cursor.fetchall():
+<<<<<<< HEAD
+=======
+                raw_evidence = row[3] if row[3] else ""
+                try:
+                    parsed_evidence = json.loads(raw_evidence) if raw_evidence else {}
+                except Exception:
+                    parsed_evidence = {"raw": raw_evidence}
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 connections.append({
                     "target": row[0],
                     "type": row[1],
                     "weight": row[2],
+<<<<<<< HEAD
                     "metadata": json.loads(row[3]) if row[3] else {},
+=======
+                    "metadata": parsed_evidence,
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                     "created_at": row[4]
                 })
             
@@ -203,6 +273,7 @@ class Lore:
         
         logger.info(f"  ✗ No connection found within {max_hops} hops")
         return None
+<<<<<<< HEAD
     
     def _get_artist_mbid(self, artist_name: str) -> Optional[str]:
         """Search MusicBrainz for artist MBID."""
@@ -311,6 +382,70 @@ class Lore:
             logger.error(f"  ✗ Failed to get collaboration relationships: {e}")
             return []
     
+=======
+
+    def _get_artist_mbid(self, artist_name: str) -> Optional[str]:
+        """Search MusicBrainz for artist MBID."""
+        data = self._mb_request_json(
+            path="/artist",
+            params={"query": f"artist:{artist_name}", "fmt": "json", "limit": 1},
+            cache_scope="artist_search",
+        )
+        artists = data.get("artists") if isinstance(data, dict) else None
+        if artists:
+            return artists[0].get("id")
+        return None
+
+    def _get_member_relationships(self, mbid: str) -> List[Dict]:
+        """Get band membership relationships."""
+        data = self._get_artist_relationship_payload(mbid)
+        if not isinstance(data, dict) or data.get("_miss"):
+            return []
+
+        relations = data.get("relations", [])
+        members = []
+        for rel in relations:
+            if rel.get("type") in ["member of band", "founder of band"]:
+                artist_ref = rel.get("artist") or {}
+                target_name = artist_ref.get("name")
+                if not target_name:
+                    continue
+                members.append({
+                    "target": target_name,
+                    "type": "member_of",
+                    "metadata": {
+                        "begin": rel.get("begin"),
+                        "end": rel.get("end"),
+                        "role": rel.get("type"),
+                    },
+                })
+        return members
+
+    def _get_collaboration_relationships(self, mbid: str) -> List[Dict]:
+        """Get collaboration relationships."""
+        data = self._get_artist_relationship_payload(mbid)
+        if not isinstance(data, dict) or data.get("_miss"):
+            return []
+
+        relations = data.get("relations", [])
+        collabs = []
+        collaborators = set()
+
+        for rel in relations:
+            if rel.get("type") not in ["collaboration", "producer", "remixer"]:
+                continue
+            target_name = (rel.get("artist") or {}).get("name")
+            if target_name and target_name not in collaborators:
+                collaborators.add(target_name)
+                collabs.append({
+                    "target": target_name,
+                    "type": "collab",
+                    "metadata": {"role": rel.get("type")},
+                })
+
+        return collabs
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     def _get_influence_relationships(self, mbid: str) -> List[Dict]:
         """Get influence relationships (rare in MusicBrainz)."""
         # MusicBrainz has limited influence data
@@ -369,10 +504,19 @@ class Lore:
         try:
             cursor = conn.cursor()
             cursor.execute("""
+<<<<<<< HEAD
                 INSERT OR REPLACE INTO connections
                 (source_artist, target_artist, type, weight, metadata, verified)
                 VALUES (?, ?, ?, ?, ?, 1)
             """, (source, target, conn_type, weight, metadata))
+=======
+                INSERT INTO connections (source, target, type, weight, evidence, created_at)
+                SELECT ?, ?, ?, ?, ?, strftime('%s', 'now')
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM connections WHERE source = ? AND target = ? AND type = ?
+                )
+            """, (source, target, conn_type, weight, metadata, source, target, conn_type))
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             conn.commit()
         except Exception as e:
             logger.error(f"  ✗ Failed to store connection: {e}")
@@ -477,3 +621,10 @@ if __name__ == "__main__":
         print("No connections found.")
     
     print()
+<<<<<<< HEAD
+=======
+
+
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)

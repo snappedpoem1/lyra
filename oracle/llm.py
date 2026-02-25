@@ -15,12 +15,22 @@ from __future__ import annotations
 
 import json
 import logging
+<<<<<<< HEAD
+=======
+import time
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generator, List, Optional
 
 from oracle.config import get_llm_settings
 
 logger = logging.getLogger(__name__)
+<<<<<<< HEAD
+=======
+_STATUS_CACHE: Dict[str, Any] = {}
+_STATUS_CACHE_TS: float = 0.0
+_STATUS_CACHE_TTL_SECONDS = 15.0
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 @dataclass
@@ -109,6 +119,7 @@ class LLMClient:
     # Public API
     # ------------------------------------------------------------------ #
 
+<<<<<<< HEAD
     def check_available(self) -> LLMStatus:
         if not self._available():
             return LLMStatus(ok=False, provider=self.provider, model=self.model,
@@ -124,6 +135,61 @@ class LLMClient:
                              base_url=self.base_url)
         return LLMStatus(ok=False, provider=self.provider, model=model,
                          base_url=self.base_url, error=probe.get("error", "chat probe failed"))
+=======
+    def check_available(self, probe: bool = False) -> LLMStatus:
+        if not self._available():
+            return LLMStatus(ok=False, provider=self.provider, model=self.model,
+                             base_url=self.base_url, error="provider=none")
+
+        models = self._fetch_models()
+        if self.model:
+            model = self.model
+            if not models:
+                return LLMStatus(
+                    ok=False,
+                    provider=self.provider,
+                    model=model,
+                    base_url=self.base_url,
+                    error="model list unavailable or no model loaded",
+                )
+            if model not in models:
+                return LLMStatus(
+                    ok=False,
+                    provider=self.provider,
+                    model=model,
+                    base_url=self.base_url,
+                    error=f"configured model not loaded: {model}",
+                )
+        else:
+            if not models:
+                return LLMStatus(
+                    ok=False,
+                    provider=self.provider,
+                    model="",
+                    base_url=self.base_url,
+                    error="no model loaded in local LLM server",
+                )
+            model = models[0]
+            self.model = model
+
+        if probe:
+            probe_result = self.chat(
+                [{"role": "user", "content": "ping"}],
+                temperature=0.0,
+                max_tokens=1,
+                timeout=2.0,
+            )
+            if not probe_result.get("ok"):
+                return LLMStatus(
+                    ok=False,
+                    provider=self.provider,
+                    model=model,
+                    base_url=self.base_url,
+                    error=probe_result.get("error", "chat probe failed"),
+                )
+
+        return LLMStatus(ok=True, provider=self.provider, model=model, base_url=self.base_url)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
     def chat(
         self,
@@ -340,9 +406,28 @@ class LLMClient:
         return self._fetch_models()
 
 
+<<<<<<< HEAD
 def get_llm_status() -> Dict[str, Any]:
     client = LLMClient.from_env()
     status = client.check_available()
     payload = status.as_dict()
     payload["status"] = "ok" if status.ok else "unavailable"
+=======
+def get_llm_status(force_refresh: bool = False) -> Dict[str, Any]:
+    global _STATUS_CACHE, _STATUS_CACHE_TS
+    now = time.time()
+    if (
+        not force_refresh
+        and _STATUS_CACHE
+        and (now - _STATUS_CACHE_TS) < _STATUS_CACHE_TTL_SECONDS
+    ):
+        return dict(_STATUS_CACHE)
+
+    client = LLMClient.from_env()
+    status = client.check_available(probe=False)
+    payload = status.as_dict()
+    payload["status"] = "ok" if status.ok else "unavailable"
+    _STATUS_CACHE = dict(payload)
+    _STATUS_CACHE_TS = now
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     return payload

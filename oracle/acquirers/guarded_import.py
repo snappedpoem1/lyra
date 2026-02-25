@@ -11,11 +11,20 @@ import os
 import shutil
 import time
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Dict, List, Optional, Set, Tuple
 
 import mutagen
 
 from oracle.acquirers.guard import guard_file, guard_acquisition, GuardResult
+=======
+from typing import Dict, List, Set, Tuple
+
+import mutagen
+
+from oracle.acquirers.guard import guard_file, GuardResult
+from oracle.config import LIBRARY_BASE
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
@@ -305,7 +314,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Guarded Import Processor")
     parser.add_argument("command", choices=["scan", "import", "audit", "quarantine"])
     parser.add_argument("--downloads", default="downloads", help="Downloads folder")
+<<<<<<< HEAD
     parser.add_argument("--library", default=os.getenv("LIBRARY_BASE", "A:\\music\\Active Music"))
+=======
+    parser.add_argument("--library", default=str(LIBRARY_BASE))
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     parser.add_argument("--dry-run", action="store_true", help="Preview only")
     parser.add_argument("--delete-rejected", action="store_true", help="Delete rejected files")
     parser.add_argument("--min-confidence", type=float, default=0.3)

@@ -38,6 +38,9 @@ logs/
 # ── Archives & Backups ──────────────────────────────────────
 _archive/
 _backups/
+
+# Ignore Prowlarr database lock file
+Lyra_Oracle_System/config/prowlarr/prowlarr.db-shm
 Backups/
 *.rar
 *.zip

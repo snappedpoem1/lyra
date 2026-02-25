@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 import shutil
+<<<<<<< HEAD
 import socket
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 import subprocess
 import sys
 import time
@@ -105,7 +108,10 @@ def _http_get(url: str, timeout: int = 4) -> tuple[int, str]:
 
 def _check_prowlarr() -> CheckResult:
     url = os.getenv("PROWLARR_URL", "http://localhost:9696")
+<<<<<<< HEAD
     api_key = os.getenv("PROWLARR_API_KEY", "")
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     status, err = _http_get(f"{url}/health", timeout=4)
     if status == 200:
         return CheckResult("Prowlarr (T1)", "PASS", f"Live at {url}")

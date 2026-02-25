@@ -19,14 +19,21 @@ Enables:
 Author: Lyra Oracle v9.0
 """
 
+<<<<<<< HEAD
 import os
 import logging
 import sqlite3
+=======
+import logging
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 import json
 import numpy as np
 from typing import Optional, List, Dict, Tuple
 from datetime import datetime
+<<<<<<< HEAD
 from pathlib import Path
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 try:
     import librosa
@@ -169,7 +176,11 @@ class Architect:
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         
         # Compute recurrence matrix
+<<<<<<< HEAD
         R = librosa.segment.recurrence_matrix(
+=======
+        librosa.segment.recurrence_matrix(
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             mfcc,
             mode='affinity',
             metric='cosine',

@@ -1,4 +1,8 @@
 import importlib
+<<<<<<< HEAD
+=======
+import pkgutil
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 import unittest
 
 
@@ -12,6 +16,20 @@ class ImportIntegrityTests(unittest.TestCase):
         repair = importlib.import_module("oracle.repair")
         self.assertTrue(hasattr(repair, "check_directories"))
 
+<<<<<<< HEAD
+=======
+    def test_all_oracle_modules_import_cleanly(self) -> None:
+        oracle_pkg = importlib.import_module("oracle")
+        failures = []
+        for module in pkgutil.walk_packages(oracle_pkg.__path__, oracle_pkg.__name__ + "."):
+            name = module.name
+            try:
+                importlib.import_module(name)
+            except Exception as exc:
+                failures.append(f"{name}: {exc!r}")
+        self.assertEqual([], failures, "\n".join(failures))
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 if __name__ == "__main__":
     unittest.main()

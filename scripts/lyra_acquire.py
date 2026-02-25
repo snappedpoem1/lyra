@@ -19,6 +19,10 @@ Tier 2: SpotiFLAC (track-level FLAC via Tidal/Qobuz/Amazon)
 from __future__ import annotations
 
 import argparse
+<<<<<<< HEAD
+=======
+import atexit
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 import logging
 import os
 import re
@@ -26,7 +30,10 @@ import shutil
 import subprocess
 import sqlite3
 import sys
+<<<<<<< HEAD
 import time
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -34,7 +41,11 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env", override=True)
 
+<<<<<<< HEAD
 from oracle.config import get_connection, LIBRARY_BASE, LYRA_DB_PATH
+=======
+from oracle.config import get_connection, LIBRARY_BASE
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger("lyra.acquire")
 logging.basicConfig(
@@ -45,6 +56,13 @@ logging.basicConfig(
 
 # Audio extensions we care about when unpacking RD results
 AUDIO_EXTS = {".flac", ".mp3", ".m4a", ".ogg", ".opus", ".wav", ".aac", ".wma", ".alac"}
+<<<<<<< HEAD
+=======
+SPOTIFY_MAX_RETRY_AFTER_SECONDS = int(
+    os.getenv("LYRA_SPOTIFY_MAX_RETRY_AFTER_SECONDS", "120") or "120"
+)
+ACQUIRE_LOCK_PATH = Path("logs") / "lyra_acquire.lock"
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 # ──────────────────────────────────────────────────────────────
 # DB Helpers
@@ -163,6 +181,53 @@ def _normalize_artist_identity(name: str) -> str:
     return s
 
 
+<<<<<<< HEAD
+=======
+def _spotify_call(callable_obj, *args, **kwargs):
+    """Call Spotify API and fail fast on extreme rate-limit retry windows."""
+    try:
+        return callable_obj(*args, **kwargs)
+    except Exception as exc:
+        msg = str(exc)
+        retry_match = re.search(r"Retry will occur after:\s*(\d+)\s*s", msg, re.IGNORECASE)
+        if retry_match:
+            retry_after = int(retry_match.group(1))
+            if retry_after > SPOTIFY_MAX_RETRY_AFTER_SECONDS:
+                logger.warning(
+                    "Spotify rate-limit retry (%ss) exceeds cap (%ss); skipping call.",
+                    retry_after,
+                    SPOTIFY_MAX_RETRY_AFTER_SECONDS,
+                )
+                return None
+        raise
+
+
+def _acquire_run_lock() -> None:
+    """Ensure only one lyra_acquire process runs at a time."""
+    ACQUIRE_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if ACQUIRE_LOCK_PATH.exists():
+        try:
+            pid = int(ACQUIRE_LOCK_PATH.read_text(encoding="utf-8").strip())
+        except Exception:
+            pid = 0
+        if pid > 0:
+            try:
+                os.kill(pid, 0)
+                raise RuntimeError(f"lyra_acquire already running (pid={pid})")
+            except OSError:
+                pass
+    ACQUIRE_LOCK_PATH.write_text(str(os.getpid()), encoding="utf-8")
+
+
+def _release_run_lock() -> None:
+    try:
+        if ACQUIRE_LOCK_PATH.exists():
+            ACQUIRE_LOCK_PATH.unlink()
+    except Exception:
+        pass
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 # ──────────────────────────────────────────────────────────────
 # TIER 1 — Real-Debrid via Hunter (album-level FLAC torrents)
 # ──────────────────────────────────────────────────────────────
@@ -252,7 +317,10 @@ def acquire_via_realdebrid(
     try:
         hunter = Hunter()
         targets = []
+<<<<<<< HEAD
         used_query = None
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         for q in queries:
             logger.info(f"  🔎 TIER 1 (Real-Debrid): searching [{q}]")
             hits = hunter.hunt(q, quality_preference=quality_preference)
@@ -262,7 +330,10 @@ def acquire_via_realdebrid(
             viable = [h for h in hits if h.get("seeders", 0) > 0 or h.get("is_cached")]
             if viable:
                 targets = viable
+<<<<<<< HEAD
                 used_query = q
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 break
             else:
                 logger.info(f"  ⚠️  All {len(hits)} results have 0 seeders and not cached — trying next query")
@@ -895,12 +966,29 @@ def _get_spotify_client(scopes: Optional[str] = None):
         cache_path=str(cache_path),
         open_browser=True,
     )
+<<<<<<< HEAD
     return spotipy.Spotify(auth_manager=auth, requests_timeout=30)
+=======
+    return spotipy.Spotify(
+        auth_manager=auth,
+        requests_timeout=30,
+        retries=0,
+        status_retries=0,
+        backoff_factor=0.0,
+    )
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def _resolve_artist(sp, artist_name: str) -> Optional[Dict]:
     """Find the best-matching artist on Spotify."""
+<<<<<<< HEAD
     results = sp.search(q=f"artist:{artist_name}", type="artist", limit=5)
+=======
+    results = _spotify_call(sp.search, q=f"artist:{artist_name}", type="artist", limit=5)
+    if not results:
+        logger.warning(f"Spotify search unavailable/rate-limited for artist lookup: {artist_name}")
+        return None
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     artists = results.get("artists", {}).get("items", [])
     if not artists:
         logger.error(f"Artist not found on Spotify: {artist_name}")
@@ -930,7 +1018,20 @@ def _fetch_artist_albums(sp, artist_id: str) -> List[Dict]:
     for album_type in ["album,single,compilation", "appears_on"]:
         offset = 0
         while True:
+<<<<<<< HEAD
             resp = sp.artist_albums(artist_id, album_type=album_type, limit=50, offset=offset)
+=======
+            resp = _spotify_call(
+                sp.artist_albums,
+                artist_id,
+                album_type=album_type,
+                limit=50,
+                offset=offset,
+            )
+            if not resp:
+                logger.warning("Spotify artist_albums unavailable/rate-limited; stopping album fetch early.")
+                break
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             items = resp.get("items", [])
             if not items:
                 break
@@ -971,7 +1072,14 @@ def _search_sweep(sp, artist_name: str, artist_id: str, seen_uris: set[str]) -> 
         try:
             offset = 0
             while offset < 200:  # Cap at 200 results per query
+<<<<<<< HEAD
                 resp = sp.search(q=query, type="track", limit=50, offset=offset)
+=======
+                resp = _spotify_call(sp.search, q=query, type="track", limit=50, offset=offset)
+                if not resp:
+                    logger.warning("  ⚠️  Search sweep halted for query due Spotify rate-limit/offline.")
+                    break
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
                 tracks = resp.get("tracks", {}).get("items", [])
                 if not tracks:
                     break
@@ -1059,10 +1167,23 @@ def fetch_artist_discography(artist_name: str, sp: Optional[object] = None) -> L
     for alb in unique_albums:
         album_name = alb["name"]
 
+<<<<<<< HEAD
         tracks_resp = sp.album_tracks(alb["id"], limit=50)
         items = tracks_resp.get("items", [])
         while tracks_resp.get("next"):
             tracks_resp = sp.next(tracks_resp)
+=======
+        tracks_resp = _spotify_call(sp.album_tracks, alb["id"], limit=50)
+        if not tracks_resp:
+            logger.warning(f"    ⚠️  Album tracks fetch skipped due Spotify rate-limit: {album_name}")
+            continue
+        items = tracks_resp.get("items", [])
+        while tracks_resp.get("next"):
+            tracks_resp = _spotify_call(sp.next, tracks_resp)
+            if not tracks_resp:
+                logger.warning(f"    ⚠️  Pagination halted due Spotify rate-limit: {album_name}")
+                break
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             items.extend(tracks_resp.get("items", []))
 
         album_count = 0
@@ -1109,6 +1230,58 @@ def fetch_artist_discography(artist_name: str, sp: Optional[object] = None) -> L
     return all_tracks
 
 
+<<<<<<< HEAD
+=======
+def _fallback_discography_from_history(artist_name: str, limit: int = 5000) -> List[Dict]:
+    """Fallback discography source from local spotify_history when API is unavailable."""
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT artist, track, album, spotify_track_uri, COUNT(*) AS plays, MAX(played_at) AS last_played
+            FROM spotify_history
+            WHERE lower(artist) = lower(?)
+              AND track IS NOT NULL
+              AND trim(track) != ''
+            GROUP BY artist, track, album, spotify_track_uri
+            ORDER BY plays DESC, last_played DESC
+            LIMIT ?
+            """,
+            (artist_name, int(limit)),
+        )
+        rows = cur.fetchall()
+    except sqlite3.Error as exc:
+        logger.warning(f"  ⚠️  spotify_history fallback failed: {exc}")
+        rows = []
+    finally:
+        conn.close()
+
+    tracks: List[Dict] = []
+    seen: set[str] = set()
+    for artist, title, album, uri, _plays, _last_played in rows:
+        key = f"{_normalize(artist)}|||{_normalize(title)}|||{_normalize(album or '')}"
+        if key in seen:
+            continue
+        seen.add(key)
+        tracks.append(
+            {
+                "artist": artist or artist_name,
+                "title": title,
+                "album": album or "",
+                "spotify_uri": uri or "",
+                "track_number": 0,
+                "disc_number": 1,
+                "duration_ms": 0,
+                "source": "spotify_history_fallback",
+            }
+        )
+    if tracks:
+        logger.info(f"  📚 Fallback from spotify_history: {len(tracks)} tracks")
+    return tracks
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 def run_discography_mode(
     artist_name: str,
     dry_run: bool = False,
@@ -1128,8 +1301,21 @@ def run_discography_mode(
     logger.info(f"  DISCOGRAPHY MODE: {artist_name}")
     logger.info(f"{'='*60}\n")
 
+<<<<<<< HEAD
     disco_tracks = fetch_artist_discography(artist_name, sp=sp)
     if not disco_tracks:
+=======
+    try:
+        disco_tracks = fetch_artist_discography(artist_name, sp=sp)
+    except Exception as exc:
+        logger.warning(f"  ⚠️  Spotify API discography fetch failed: {exc}")
+        disco_tracks = []
+    if not disco_tracks:
+        logger.warning("  ⚠️  Spotify API discography unavailable; using local spotify_history fallback.")
+        disco_tracks = _fallback_discography_from_history(artist_name)
+    if not disco_tracks:
+        logger.warning("  ⚠️  No discography tracks available from API or local fallback.")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         return {}
 
     conn = get_connection()
@@ -1224,7 +1410,13 @@ def get_top_artists(limit: int = 20, time_range: str = "medium_term") -> Tuple[L
     # Spotify API (preferred)
     try:
         sp_client = _get_spotify_client(scopes="user-top-read user-library-read")
+<<<<<<< HEAD
         resp = sp_client.current_user_top_artists(limit=limit, time_range=time_range)
+=======
+        resp = _spotify_call(sp_client.current_user_top_artists, limit=limit, time_range=time_range)
+        if not resp:
+            raise RuntimeError("Spotify top artists unavailable/rate-limited")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         items = resp.get("items", []) if resp else []
         artists = [a.get("name", "") for a in items if a.get("name")]
         if artists:
@@ -1437,6 +1629,11 @@ Acquisition Waterfall:
     )
 
     args = parser.parse_args()
+<<<<<<< HEAD
+=======
+    _acquire_run_lock()
+    atexit.register(_release_run_lock)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
     # ── Liked Songs linking ──
     if args.link_liked:

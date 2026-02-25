@@ -19,9 +19,13 @@ Author: Lyra Oracle v10.0
 import sys
 import logging
 from typing import Optional
+<<<<<<< HEAD
 from pathlib import Path
 
 from oracle.config import PROJECT_ROOT
+=======
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +191,10 @@ def cmd_scan(paths: Optional[list] = None):
     """Scan library for metadata."""
     print("📡 Scanning library...\n")
     
+<<<<<<< HEAD
     from oracle.scanner import scan_library
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     try:
         # Get library base if no paths specified

@@ -11,9 +11,14 @@ Phase: 9 (Sentient Oracle)
 """
 
 import sqlite3
+<<<<<<< HEAD
 from pathlib import Path
 from datetime import datetime
 import logging
+=======
+import logging
+import re
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +153,13 @@ def rollback(conn: sqlite3.Connection) -> None:
     ]
     
     for table in tables:
+<<<<<<< HEAD
         cursor.execute(f"DROP TABLE IF EXISTS {table}")
+=======
+        if not re.fullmatch(r"[a-z_]+", table):
+            raise RuntimeError(f"Unsafe table identifier: {table}")
+        cursor.execute(f'DROP TABLE IF EXISTS "{table}"')
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         logger.info(f"  ✓ Dropped {table}")
     
     conn.commit()

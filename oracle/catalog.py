@@ -41,6 +41,12 @@ _SKIP_SECONDARY_TYPES = {"compilation", "dj-mix", "mixtape/street", "remix", "so
 _LIVE_TITLE_RE = re.compile(
     r"\bLive\s+(at|from|in)\b|\d{4}-\d{2}-\d{2}[\s:]", re.IGNORECASE
 )
+<<<<<<< HEAD
+=======
+_LOW_PRIORITY_TITLE_RE = re.compile(
+    r"\b(demo|untitled|instrumental|era|lullaby)\b", re.IGNORECASE
+)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def lookup_artist(name: str) -> Optional[Dict[str, Any]]:
@@ -205,7 +211,10 @@ def check_album_in_library(artist: str, album_title: str) -> Dict[str, Any]:
     ).fetchall()
     conn.close()
 
+<<<<<<< HEAD
     artist_lower = artist.lower()
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     album_lower = album_title.lower()
     owned: List[str] = []
 
@@ -414,6 +423,12 @@ def acquire_album(
             logger.warning(f"[catalog] Prowlarr search failed for '{query}': {exc}")
 
     if not results:
+<<<<<<< HEAD
+=======
+        fallback = _acquire_album_via_qobuz(artist, album_title, expected_tracks, album_dir)
+        if fallback.get("success"):
+            return fallback
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         return {"success": False, "error": "No Prowlarr results", "files": []}
 
     # Deduplicate by infoHash
@@ -557,9 +572,100 @@ def acquire_album(
                 delete_torrent(torrent_id)
             continue
 
+<<<<<<< HEAD
     return {"success": False, "error": "All Prowlarr results failed", "files": []}
 
 
+=======
+    fallback = _acquire_album_via_qobuz(artist, album_title, expected_tracks, album_dir)
+    if fallback.get("success"):
+        return fallback
+    return {"success": False, "error": "All Prowlarr results failed", "files": []}
+
+
+def _acquire_album_via_qobuz(
+    artist: str,
+    album_title: str,
+    expected_tracks: List[Dict[str, Any]],
+    album_dir: Path,
+) -> Dict[str, Any]:
+    """Fallback: acquire album tracks via Qobuz when album torrenting fails."""
+    try:
+        from oracle.acquirers.qobuz import download as qobuz_download
+    except Exception as exc:
+        logger.warning(f"[catalog] Qobuz fallback unavailable: {exc}")
+        return {"success": False, "error": "Qobuz fallback unavailable", "files": []}
+
+    if not expected_tracks:
+        return {"success": False, "error": "No expected tracks for Qobuz fallback", "files": []}
+
+    files: List[Path] = []
+    matched: List[Dict[str, Any]] = []
+    missing: List[str] = []
+
+    for i, track in enumerate(expected_tracks, start=1):
+        title = (track.get("title") or "").strip()
+        if not title:
+            continue
+        result = qobuz_download(artist, title)
+        if not result.get("success"):
+            missing.append(title)
+            continue
+        src = Path(result["path"])
+        if not src.exists():
+            missing.append(title)
+            continue
+        safe_title = re.sub(r'[<>:"/\\|?*]', "_", title)
+        dest = album_dir / f"{i:02d} - {safe_title}{src.suffix.lower()}"
+        try:
+            if src.resolve() != dest.resolve():
+                shutil.move(str(src), str(dest))
+        except Exception:
+            try:
+                shutil.copy2(str(src), str(dest))
+            except Exception:
+                missing.append(title)
+                continue
+
+        files.append(dest)
+        matched.append({
+            "track_title": title,
+            "file_path": str(dest),
+            "confidence": 1.0,
+            "position": track.get("position", i),
+        })
+
+    # Require at least half of the expected tracks to count as a usable fallback album
+    min_required = max(1, len(expected_tracks) // 2)
+    if len(files) < min_required:
+        return {
+            "success": False,
+            "error": f"Qobuz fallback incomplete ({len(files)}/{len(expected_tracks)})",
+            "files": [str(f) for f in files],
+            "matched": matched,
+            "missing": [t.get("title", "") for t in expected_tracks if t.get("title", "") not in {m['track_title'] for m in matched}],
+            "bonus": [],
+        }
+
+    logger.info(
+        "[catalog] Qobuz fallback succeeded: %s - %s (%d/%d tracks)",
+        artist,
+        album_title,
+        len(files),
+        len(expected_tracks),
+    )
+    return {
+        "success": True,
+        "files": [str(f) for f in files],
+        "matched": matched,
+        "missing": [t.get("title", "") for t in expected_tracks if t.get("title", "") not in {m['track_title'] for m in matched}],
+        "bonus": [],
+        "torrent_title": "",
+        "source": "qobuz_fallback",
+    }
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 def match_files_to_tracklist(
     files: List[Path],
     expected_tracks: List[Dict[str, Any]],
@@ -717,6 +823,18 @@ def catalog_acquire_artist(
 
     # Display plan
     pending = [r for r in releases if not (skip_existing and r.get("owned_count", 0) > 0)]
+<<<<<<< HEAD
+=======
+    # Prioritize likely mainline releases first to improve acquisition success.
+    pending.sort(
+        key=lambda r: (
+            1 if _LOW_PRIORITY_TITLE_RE.search(r.get("title", "")) else 0,
+            -(r.get("track_count") or 0),
+            -(r.get("year") or 0),
+            r.get("title", ""),
+        )
+    )
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     if limit > 0:
         pending = pending[:limit]
 

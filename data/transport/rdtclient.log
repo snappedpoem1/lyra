@@ -773,3 +773,28 @@ System.Threading.Tasks.TaskCanceledException: A task was canceled.
 2026-02-23 13:32:52.599 -05:00 [ERR] RdtClient.Service.BackgroundServices.DiskSpaceMonitor: Unexpected error in DiskSpaceMonitor: A task was canceled.
 System.Threading.Tasks.TaskCanceledException: A task was canceled.
    at RdtClient.Service.BackgroundServices.DiskSpaceMonitor.ExecuteAsync(CancellationToken stoppingToken) in /appserver/server/RdtClient.Service/BackgroundServices/DiskSpaceMonitor.cs:line 41
+<<<<<<< HEAD
+=======
+2026-02-24 12:59:16.210 -05:00 [WRN] RdtClient.Service.BackgroundServices.Startup: Starting host on version 2.0.120.0
+2026-02-24 13:45:26.932 -05:00 [ERR] RdtClient.Service.BackgroundServices.ProviderUpdater: Unexpected error occurred in ProviderUpdater: The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.
+System.Threading.Tasks.TaskCanceledException: The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.
+ ---> System.TimeoutException: A task was canceled.
+ ---> System.Threading.Tasks.TaskCanceledException: A task was canceled.
+   at Polly.Retry.AsyncRetryEngine.ImplementationAsync[TResult](Func`3 action, Context context, ExceptionPredicates shouldRetryExceptionPredicates, ResultPredicates`1 shouldRetryResultPredicates, Func`5 onRetryAsync, CancellationToken cancellationToken, Int32 permittedRetryCount, IEnumerable`1 sleepDurationsEnumerable, Func`4 sleepDurationProvider, Boolean continueOnCapturedContext)
+   at Polly.AsyncPolicy`1.ExecuteInternalAsync(Func`3 action, Context context, Boolean continueOnCapturedContext, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.PolicyHttpMessageHandler.SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+   at Microsoft.Extensions.Http.Logging.LoggingScopeHttpMessageHandler.<SendCoreAsync>g__Core|4_0(HttpRequestMessage request, Boolean useAsync, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   --- End of inner exception stack trace ---
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpClient.HandleFailure(Exception e, Boolean telemetryStarted, HttpResponseMessage response, CancellationTokenSource cts, CancellationToken cancellationToken, CancellationTokenSource pendingRequestsCts)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at RDNET.Requests.Request(String baseUrl, String url, String headerOutput, Boolean requireAuthentication, RequestType requestType, HttpContent data, CancellationToken cancellationToken)
+   at RDNET.Requests.Request(String baseUrl, String url, String headerOutput, Boolean requireAuthentication, RequestType requestType, HttpContent data, CancellationToken cancellationToken)
+   at RDNET.Requests.Request[T](String baseUrl, String url, Boolean requireAuthentication, RequestType requestType, HttpContent data, CancellationToken cancellationToken)
+   at RDNET.Requests.GetRequestAsync[T](String url, Boolean requireAuthentication, CancellationToken cancellationToken)
+   at RDNET.TorrentsApi.GetAsync(Nullable`1 offset, Nullable`1 limit, String filter, CancellationToken cancellationToken)
+   at RdtClient.Service.Services.TorrentClients.RealDebridTorrentClient.GetTorrents() in /appserver/server/RdtClient.Service/Services/TorrentClients/RealDebridTorrentClient.cs:line 25
+   at RdtClient.Service.Services.Torrents.UpdateRdData() in /appserver/server/RdtClient.Service/Services/Torrents.cs:line 563
+   at RdtClient.Service.BackgroundServices.ProviderUpdater.ExecuteAsync(CancellationToken stoppingToken) in /appserver/server/RdtClient.Service/BackgroundServices/ProviderUpdater.cs:line 54
+>>>>>>> fc77b41 (Update workspace state and diagnostics)

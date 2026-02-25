@@ -20,7 +20,11 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+<<<<<<< HEAD
 from typing import List, Optional
+=======
+from typing import List
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from dotenv import load_dotenv
 

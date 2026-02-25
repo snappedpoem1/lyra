@@ -1,0 +1,30 @@
+{
+  "generated_at_utc": "2026-02-24T10:49:28.403662+00:00",
+  "results": [
+    {
+      "backend": "lmstudio",
+      "ok": false,
+      "base_url": "http://127.0.0.1:1234/v1",
+      "model": "",
+      "detail": "Waking up LM Studio service...\nError: Timed out waiting for LM Studio daemon to start.\nError: Failed to start or connect to local LM Studio API server.\nLM Studio main.log tail:\n[2026-02-23 20:55:17.896] [error] [LmsProvider] Failed to extract lms attempt 2, retrying... Error: EPERM: operation not permitted, unlink 'C:\\Users\\Admin\\.lmstudio\\bin\\lms.exe'\n    at async unlink (node:internal/fs/promises:1067:10)\n    at async mayCopyFile (node:internal/fs/cp/cp:246:5)\n    at async Timeout._onTimeout (C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\resources\\app\\.webpack\\main\\index.js:200:27617)\n[2026-02-23 20:55:22.897] [error] [LmsProvider] Failed to extract lms attempt 3, retrying... Error: EPERM: operation not permitted, unlink 'C:\\Users\\Admin\\.lmstudio\\bin\\lms.exe'\n    at async unlink (node:internal/fs/promises:1067:10)\n    at async mayCopyFile (node:internal/fs/cp/cp:246:5)\n    at async Timeout._onTimeout (C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\resources\\app\\.webpack\\main\\index.js:200:27617)\n[2026-02-23 20:58:12.421] [error] (node:9248) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 close listeners added to [Server]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit\n(Use `LM Studio --trace-warnings ...` to show where the warning was created)\n[2026-02-23 22:14:53.701] [error] [LMSInternal][LMSAuthenticator][Client=LM Studio][Endpoint=predict] Error in channel handler: Error: The model has crashed without additional information. (Exit code: 1)\n    at _0x7ff406._0x48ef66 (C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\resources\\app\\.webpack\\main\\index.js:138:3094)\n    at _0x7ff406.emit (node:events:531:35)\n    at _0x7ff406.onChildExit (C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\resources\\app\\.webpack\\main\\index.js:123:27665)\n    at _0x547431.<anonymous> (C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\resources\\app\\.webpack\\main\\index.js:123:26973)\n    at _0x547431.emit (node:events:519:28)\n    at ForkUtilityProcess.<anonymous> (C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\resources\\app\\.webpack\\main\\index.js:807:17417)\n    at ForkUtilityProcess.emit (node:events:519:28)\n    at ForkUtilityProcess.a.emit (node:electron/js2c/browser_init:2:74657)\n    at UtilityProcessWrapper.callbackTrampoline (node:internal/async_hooks:130:17)\n[2026-02-23 22:14:53.712] [error] [LMSInternal][LMSAuthenticator][Client=LM Studio][Endpoint=predict] Error in channel handler: Error: The model has crashed without additional information. (Exit code: 1)\n    at _0x7ff406._0x48ef66 (C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\resources\\app\\.webpack\\main\\index.js:138:3094)\n    at _0x7ff406.emit (node:events:531:35)\n    at _0x7ff406.onChildExit (C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\resources\\app\\.webpack\\main\\index.js:123:27665)\n    at _0x547431.<anonymous> (C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\resources\\app\\.webpack\\main\\index.js:123:26973)\n    at _0x547431.emit (node:events:519:28)\n    at ForkUtilityProcess.<anonymous> (C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\resources\\app\\.webpack\\main\\index.js:807:17417)\n    at ForkUtilityProcess.emit (node:events:519:28)\n    at ForkUtilityProcess.a.emit (node:electron/js2c/browser_init:2:74657)\n    at UtilityProcessWrapper.callbackTrampoline (node:internal/async_hooks:130:17)\nRemediation attempted: launched C:\\Users\\Admin\\AppData\\Local\\Programs\\LM Studio\\LM Studio.exe",
+      "models": null
+    },
+    {
+      "backend": "ollama",
+      "ok": true,
+      "base_url": "http://127.0.0.1:11434/v1",
+      "model": "glm-4.7:cloud",
+      "detail": "",
+      "models": [
+        "glm-4.7:cloud",
+        "hf.co/bartowski/Qwen2.5-Coder-14B-Instruct-abliterated-GGUF:Q4_K_M",
+        "oracle-brain:latest",
+        "qwen2.5-coder:0.5b",
+        "llama3.2:3b",
+        "llama3:latest",
+        "deepseek-r1:8b"
+      ]
+    }
+  ],
+  "ok": false
+}

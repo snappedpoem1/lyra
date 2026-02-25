@@ -9,11 +9,16 @@ Features:
 - Contextual "Fact Drops" from lore database
 - Conversational music discovery
 
+<<<<<<< HEAD
 Uses local LLM (via Ollama) or OpenAI API.
+=======
+Uses local LLM via oracle.llm backend adapter.
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 Author: Lyra Oracle v9.0
 """
 
+<<<<<<< HEAD
 import os
 import logging
 import sqlite3
@@ -37,6 +42,25 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 USE_OPENAI = bool(OPENAI_API_KEY)
 
 
+=======
+import logging
+import json
+import ast
+from typing import Optional, Dict, Any
+from datetime import datetime
+
+from oracle.config import get_connection
+from oracle.llm import LLMClient
+from oracle.scout import scout
+from oracle.lore import lore
+from oracle.dna import dna
+from oracle.hunter import hunter
+from oracle.architect import architect
+from oracle.radio import radio
+
+logger = logging.getLogger(__name__)
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 class Agent:
     """The Soul - LLM-powered music intelligence."""
     
@@ -296,6 +320,7 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
         finally:
             conn.close()
     
+<<<<<<< HEAD
     def _query_ollama(self, prompt: str) -> str:
         """Query local Ollama LLM."""
         try:
@@ -350,6 +375,8 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
             logger.error(f"  ✗ OpenAI query failed: {e}")
             return f"Error: {str(e)}"
     
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     def _build_context(self, context: Dict) -> str:
         """Build context string for LLM."""
         parts = ["CONTEXT:"]
@@ -543,6 +570,7 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
         # Analyze recent playback history
         conn = get_connection()
         cursor = conn.cursor()
+<<<<<<< HEAD
         cursor.execute("""
             SELECT t.genre, COUNT(*) as count, AVG(ph.completion_rate) as avg_completion
             FROM playback_history ph
@@ -554,6 +582,34 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
         """)
         
         recent_genres = cursor.fetchall()
+=======
+        cursor.execute("PRAGMA table_info(playback_history)")
+        pb_cols = {row[1] for row in cursor.fetchall()}
+        if "played_at" in pb_cols:
+            cursor.execute("""
+                SELECT t.genre, COUNT(*) as count, AVG(ph.completion_rate) as avg_completion
+                FROM playback_history ph
+                JOIN tracks t ON ph.track_id = t.track_id
+                WHERE ph.played_at >= datetime('now', '-1 hour')
+                GROUP BY t.genre
+                ORDER BY count DESC
+                LIMIT 3
+            """)
+            recent_genres = cursor.fetchall()
+        elif "ts" in pb_cols:
+            cursor.execute("""
+                SELECT t.genre, COUNT(*) as count, AVG(ph.completion_rate) as avg_completion
+                FROM playback_history ph
+                JOIN tracks t ON ph.track_id = t.track_id
+                WHERE ph.ts >= (strftime('%s', 'now') - 3600)
+                GROUP BY t.genre
+                ORDER BY count DESC
+                LIMIT 3
+            """)
+            recent_genres = cursor.fetchall()
+        else:
+            recent_genres = []
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         conn.close()
         
         if recent_genres:
@@ -597,8 +653,13 @@ if __name__ == "__main__":
         print('  python -m oracle.agent query "Find EDM remixes of Punk tracks"')
         print('  python -m oracle.agent fact abc123')
         print("\nRequires:")
+<<<<<<< HEAD
         print("  - Ollama running on localhost:11434")
         print("  - OR OPENAI_API_KEY in .env\n")
+=======
+        print("  - Local LLM backend configured via LYRA_LLM_PROVIDER/LYRA_LLM_BASE_URL")
+        print("  - OR Launch-Lyra.ps1 auto bootstrap (LM Studio -> Ollama)\n")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         sys.exit(0)
     
     command = sys.argv[1]

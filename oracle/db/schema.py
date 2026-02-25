@@ -6,8 +6,11 @@ from pathlib import Path
 import hashlib
 import os
 import sqlite3
+<<<<<<< HEAD
 import time
 from typing import Optional
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from oracle.config import LYRA_DB_PATH
 
@@ -80,6 +83,10 @@ def migrate() -> bool:
             album TEXT,
             year TEXT,
             genre TEXT,
+<<<<<<< HEAD
+=======
+            subgenres TEXT,
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             duration REAL,
             bitrate INTEGER,
             source TEXT,
@@ -89,6 +96,18 @@ def migrate() -> bool:
             energy_level REAL,
             valence REAL,
             bpm REAL,
+<<<<<<< HEAD
+=======
+            artist_mbid TEXT,
+            recording_mbid TEXT,
+            release_mbid TEXT,
+            release_group_mbid TEXT,
+            isrc TEXT,
+            discogs_release_id TEXT,
+            metadata_source TEXT,
+            canonical_confidence REAL,
+            last_enriched_at REAL,
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
             content_hash TEXT,
             last_seen_at REAL,
             added_at REAL,
@@ -425,9 +444,41 @@ def migrate() -> bool:
         """
     )
 
+<<<<<<< HEAD
     # ── All indexes ───────────────────────────────────────────
     c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_filepath ON tracks(filepath)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_status ON tracks(status)")
+=======
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS llm_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            track_id TEXT NOT NULL,
+            regex_version_type TEXT,
+            regex_confidence REAL,
+            llm_version_type TEXT,
+            llm_confidence REAL,
+            llm_reason TEXT,
+            llm_raw_category TEXT,
+            llm_ok INTEGER DEFAULT 0,
+            llm_applied INTEGER DEFAULT 0,
+            llm_error TEXT,
+            created_at REAL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (track_id) REFERENCES tracks(track_id)
+        )
+        """
+    )
+    _ensure_llm_audit_columns(c)
+
+    # ── All indexes ───────────────────────────────────────────
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_filepath ON tracks(filepath)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_status ON tracks(status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_artist_title ON tracks(artist, title)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_artist_mbid ON tracks(artist_mbid)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_recording_mbid ON tracks(recording_mbid)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_release_mbid ON tracks(release_mbid)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_last_enriched_at ON tracks(last_enriched_at)")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     c.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_track ON embeddings(track_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_enrich_provider ON enrich_cache(provider)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_vibe_name ON vibe_tracks(vibe_name)")
@@ -439,6 +490,11 @@ def migrate() -> bool:
     c.execute("CREATE INDEX IF NOT EXISTS idx_history_uri ON spotify_history(spotify_track_uri)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_library_artist_title ON spotify_library(artist, title)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_library_source ON spotify_library(source)")
+<<<<<<< HEAD
+=======
+    c.execute("CREATE INDEX IF NOT EXISTS idx_llm_audit_track ON llm_audit(track_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_llm_audit_created_at ON llm_audit(created_at)")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
     conn.commit()
     conn.close()
@@ -457,6 +513,10 @@ def _ensure_tracks_columns(cursor: sqlite3.Cursor) -> None:
         "album": "TEXT",
         "year": "TEXT",
         "genre": "TEXT",
+<<<<<<< HEAD
+=======
+        "subgenres": "TEXT",
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         "duration": "REAL",
         "bitrate": "INTEGER",
         "source": "TEXT",
@@ -466,6 +526,18 @@ def _ensure_tracks_columns(cursor: sqlite3.Cursor) -> None:
         "energy_level": "REAL",
         "valence": "REAL",
         "bpm": "REAL",
+<<<<<<< HEAD
+=======
+        "artist_mbid": "TEXT",
+        "recording_mbid": "TEXT",
+        "release_mbid": "TEXT",
+        "release_group_mbid": "TEXT",
+        "isrc": "TEXT",
+        "discogs_release_id": "TEXT",
+        "metadata_source": "TEXT",
+        "canonical_confidence": "REAL",
+        "last_enriched_at": "REAL",
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         "content_hash": "TEXT",
         "last_seen_at": "REAL",
         "added_at": "REAL",
@@ -519,6 +591,30 @@ def _ensure_acquisition_queue_columns(cursor: sqlite3.Cursor) -> None:
             cursor.execute(f"ALTER TABLE acquisition_queue ADD COLUMN {name} {col_type}")
 
 
+<<<<<<< HEAD
+=======
+def _ensure_llm_audit_columns(cursor: sqlite3.Cursor) -> None:
+    cursor.execute("PRAGMA table_info(llm_audit)")
+    columns = {row[1] for row in cursor.fetchall()}
+    desired = {
+        "track_id": "TEXT NOT NULL",
+        "regex_version_type": "TEXT",
+        "regex_confidence": "REAL",
+        "llm_version_type": "TEXT",
+        "llm_confidence": "REAL",
+        "llm_reason": "TEXT",
+        "llm_raw_category": "TEXT",
+        "llm_ok": "INTEGER DEFAULT 0",
+        "llm_applied": "INTEGER DEFAULT 0",
+        "llm_error": "TEXT",
+        "created_at": "REAL DEFAULT (strftime('%s', 'now'))",
+    }
+    for name, col_type in desired.items():
+        if name not in columns:
+            cursor.execute(f"ALTER TABLE llm_audit ADD COLUMN {name} {col_type}")
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 def _print_result(success: bool) -> None:
     if success:
         print(f"DB READY: {DB_PATH}")

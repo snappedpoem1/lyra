@@ -8,7 +8,10 @@ Includes:
 from __future__ import annotations
 
 import random
+<<<<<<< HEAD
 from pathlib import Path
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
@@ -19,6 +22,19 @@ from oracle.embedders.clap_embedder import CLAPEmbedder
 from oracle.vibe_descriptors import describe_scores
 
 MODEL_NAME = "laion/clap-htsat-unfused"
+<<<<<<< HEAD
+=======
+REMIX_HINT_TOKENS = (
+    "remix",
+    "edit",
+    "rework",
+    "bootleg",
+    "vip",
+    "mashup",
+    "flip",
+    "mix",
+)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 
 def search(query_text: str, n: int = 10) -> List[Dict[str, str]]:
@@ -64,6 +80,114 @@ def search(query_text: str, n: int = 10) -> List[Dict[str, str]]:
     return output
 
 
+<<<<<<< HEAD
+=======
+def find_remixes(
+    artist: str | None = None,
+    album: str | None = None,
+    track: str | None = None,
+    n: int = 100,
+    include_candidates: bool = True,
+    sort_by: str = "recent",
+) -> List[Dict[str, Any]]:
+    """Find remix-like tracks with optional artist/album/track filters.
+
+    Uses explicit classifier labels (version_type='remix') and optional token-based
+    fallback matching for tracks that have not been classified as remix yet.
+    """
+    limit = max(1, min(int(n or 100), 1000))
+
+    def norm(s: Any) -> str:
+        return str(s or "").strip().lower()
+
+    where_parts: List[str] = ["t.status = 'active'"]
+    params: List[Any] = []
+
+    artist_q = norm(artist)
+    album_q = norm(album)
+    track_q = norm(track)
+
+    if artist_q:
+        like = f"%{artist_q}%"
+        where_parts.append("(lower(t.artist) LIKE ? OR lower(t.title) LIKE ?)")
+        params.extend([like, like])
+
+    if album_q:
+        where_parts.append("lower(COALESCE(t.album, '')) LIKE ?")
+        params.append(f"%{album_q}%")
+
+    if track_q:
+        where_parts.append("lower(t.title) LIKE ?")
+        params.append(f"%{track_q}%")
+
+    remix_predicates = ["lower(COALESCE(t.version_type, '')) = 'remix'"]
+    if include_candidates:
+        for token in REMIX_HINT_TOKENS:
+            remix_predicates.append("lower(t.title) LIKE ?")
+            params.append(f"%{token}%")
+            remix_predicates.append("lower(COALESCE(t.album, '')) LIKE ?")
+            params.append(f"%{token}%")
+
+    where_parts.append("(" + " OR ".join(remix_predicates) + ")")
+
+    order_sql = "t.updated_at DESC, t.rowid DESC"
+    sort_key = norm(sort_by)
+    if sort_key in {"confidence", "score"}:
+        order_sql = "t.confidence DESC, t.updated_at DESC, t.rowid DESC"
+    elif sort_key in {"artist"}:
+        order_sql = "lower(t.artist) ASC, lower(t.title) ASC"
+    elif sort_key in {"title", "track"}:
+        order_sql = "lower(t.title) ASC, lower(t.artist) ASC"
+
+    sql = f"""
+        SELECT
+            t.track_id,
+            t.artist,
+            t.title,
+            t.album,
+            t.year,
+            t.version_type,
+            t.confidence,
+            t.filepath
+        FROM tracks t
+        WHERE {' AND '.join(where_parts)}
+        ORDER BY {order_sql}
+        LIMIT ?
+    """
+    params.append(limit)
+
+    conn = get_connection(timeout=10.0)
+    cursor = conn.cursor()
+    cursor.execute(sql, tuple(params))
+    rows = cursor.fetchall()
+    conn.close()
+
+    results: List[Dict[str, Any]] = []
+    for row in rows:
+        track_id, artist_name, title, album_name, year, version_type, confidence, filepath = row
+        text_blob = f"{title or ''} {album_name or ''}".lower()
+        token_hits = [tok for tok in REMIX_HINT_TOKENS if tok in text_blob]
+        is_strict = norm(version_type) == "remix"
+        results.append(
+            {
+                "track_id": str(track_id),
+                "artist": artist_name or "Unknown",
+                "title": title or "Unknown",
+                "album": album_name or "",
+                "year": year or "",
+                "version_type": version_type or "",
+                "confidence": float(confidence) if confidence is not None else None,
+                "path": filepath or "",
+                "is_strict_remix": is_strict,
+                "match_type": "classified" if is_strict else "candidate",
+                "matched_tokens": token_hits,
+            }
+        )
+
+    return results
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 def hybrid_search(
     query: str | None = None,
     filters: dict[str, Any] | None = None,

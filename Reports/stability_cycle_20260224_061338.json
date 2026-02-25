@@ -1,0 +1,55 @@
+{
+  "generated_at_utc": "2026-02-24T06:13:38.372937+00:00",
+  "root": "C:\\MusicOracle",
+  "steps": [
+    {
+      "name": "llm_verify",
+      "ok": true,
+      "returncode": 0,
+      "duration_sec": 53.658018,
+      "command": [
+        "C:\\MusicOracle\\.venv\\Scripts\\python.exe",
+        "C:\\MusicOracle\\scripts\\verify_llm_usage.py",
+        "--provider",
+        "ollama",
+        "--base-url",
+        "http://localhost:11434/v1",
+        "--model",
+        "oracle-brain:latest",
+        "--timeout-seconds",
+        "60",
+        "--control-check",
+        "--shutdown"
+      ],
+      "stdout": "== LLM Usage Verification ==\nchosen_limit=4\nambiguous_found_in_window=3\napi_status=200\nelapsed_sec=52.72\nsummary={'cover': 0, 'junk': 2, 'live': 0, 'llm_applied': 0, 'llm_checked': 2, 'llm_errors': 0, 'llm_suggested': 0, 'original': 2, 'remix': 0, 'special': 0, 'total': 4, 'unknown': 0}\naudit_before=48\naudit_after=50\naudit_delta=2\nlatest_audit_rows=[('e84ec4dfa248ed73f7f1a2a8eafc3a11', 'original', 'original', 1.0, 1, 0, ''), ('c80380ffc5efde9d4b54c5859689845c', 'original', 'original', 1.0, 1, 0, ''), ('e84ec4dfa248ed73f7f1a2a8eafc3a11', 'original', 'original', 1.0, 1, 0, ''), ('c80380ffc5efde9d4b54c5859689845c', 'original', 'original', 1.0, 1, 0, ''), ('e84ec4dfa248ed73f7f1a2a8eafc3a11', 'original', 'original', 1.0, 1, 0, '')]\n== Control Check (use_llm=false) ==\napi_status=200\nsummary={'cover': 0, 'junk': 2, 'live': 0, 'llm_applied': 0, 'llm_checked': 0, 'llm_errors': 0, 'llm_suggested': 0, 'original': 2, 'remix': 0, 'special': 0, 'total': 4, 'unknown': 0}\naudit_delta=0\n[PASS] LLM second-pass path is active (checked=2, errors=0, suggested=0, applied=0)\n[INFO] Unloaded Ollama model: oracle-brain:latest\n",
+      "stderr": ""
+    },
+    {
+      "name": "local_qa",
+      "ok": true,
+      "returncode": 0,
+      "duration_sec": 22.713971,
+      "command": [
+        "C:\\MusicOracle\\.venv\\Scripts\\python.exe",
+        "C:\\MusicOracle\\scripts\\run_local_qa.py"
+      ],
+      "stdout": "== Baseline ==\n[PASS] python_version | 3.12.0\n[PASS] sqlite_version | 3.42.0\n\n== DB Checks ==\n[PASS] tables:oracle.db | 0 table(s)\n[PASS] tables:oracle_library.db | 1 table(s)\n[PASS] tables:lyra_registry.db | 22 table(s)\n[PASS] tracks_table | exists in oracle_library.db\n[PASS] tracks_columns | required columns present\n[PASS] tracks_filepath_not_null\n[PASS] tracks_filepath_unique\n[PASS] population_total_tracks | 3152\n[PASS] population_timestamps | scanned_at: min=2026-02-21T22:43:59.984083+00:00 max=2026-02-21T22:48:04.208252+00:00\n[PASS] population_freshness | 2.3 day(s) old\n[PASS] integrity:null_filepath\n[PASS] integrity:null_artist\n[PASS] integrity:null_title\n[PASS] integrity:bad_duration_nonpositive\n[PASS] integrity:missing_hash\n[PASS] integrity:dupe_filepath\n[PASS] accuracy:filepath_exists | missing 0/100 (0.00%)\n[PASS] accuracy:metadata_plausibility | short<30s=9, long>1200s=0, artist_4digits=5\n[PASS] accuracy:duplicate_hash_groups | 223\n[PASS] lyra:tracks_table | exists in lyra_registry.db\n[PASS] lyra:tracks_columns | required columns present\n[PASS] lyra:tracks_filepath_unique\n[PASS] lyra:population_total_tracks | 2332\n[PASS] lyra:population_timestamps | updated_at: min=2026-02-19T06:41:10.886981+00:00 max=2026-02-24T00:59:03.274045+00:00\n[PASS] lyra:population_freshness | 0.2 day(s) old\n[PASS] lyra:integrity:null_filepath\n[PASS] lyra:integrity:null_artist\n[PASS] lyra:integrity:null_title\n[PASS] lyra:integrity:bad_duration_nonpositive\n[PASS] lyra:integrity:missing_hash\n[PASS] lyra:integrity:dupe_filepath\n[PASS] lyra:accuracy:filepath_exists | missing 0/100 (0.00%)\n[PASS] lyra:accuracy:duplicate_hash_groups | 0\n[PASS] lyra:scorer:table | track_scores exists\n[PASS] lyra:scorer:columns | all scorer columns present\n[PASS] lyra:scorer:row_count | 2331\n[PASS] lyra:scorer:null_dimensions\n[PASS] lyra:scorer:range\n[PASS] lyra:scorer:orphans\n[PASS] lyra:scorer:active_coverage\n\n== API Checks ==\n[PASS] api:/health | 200\n[PASS] api:/api/status | tracks=2332\n[PASS] api:/api/library/tracks | count=10\n[PASS] api:/api/search | count=10 (n=10)\n[PASS] parity:/api/status_vs_sql | 2332\n\n== Summary ==\nFailures: 0\nWarnings: 0\n",
+      "stderr": "Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.\n"
+    },
+    {
+      "name": "pytest",
+      "ok": true,
+      "returncode": 0,
+      "duration_sec": 0.624284,
+      "command": [
+        "C:\\MusicOracle\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "stdout": "...............                                                          [100%]\n15 passed in 0.28s\n",
+      "stderr": ""
+    }
+  ],
+  "all_ok": true
+}

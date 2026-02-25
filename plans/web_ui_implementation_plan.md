@@ -25,17 +25,35 @@ Based on the complete lyra_api.py file, there are 16 distinct functional areas t
 
 ### 2. Search Capabilities  
 - `/api/search` - Semantic search endpoint
+<<<<<<< HEAD
 - `/api/search/hybrid` - Hybrid search with metadata filters and dimensional ranges
+=======
+- `/api/search/rewrite` - LLM rewrite to CLAP-friendly query
+- `/api/search/hybrid` - Hybrid search with metadata filters and dimensional ranges (supports optional LLM query rewrite)
+- `/api/remixes/search` - Remix-focused search/view by artist, album, or track scope
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 ### 3. Library Management
 - `/api/library/scan` - Trigger library scan
 - `/api/library/index` - Trigger library indexing  
+<<<<<<< HEAD
+=======
+- `/api/library/validate` - Validate + enrich metadata using cache-backed providers
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 - `/api/library/tracks` - Get list of tracks
 
 ### 4. Vibes System
 - `/api/vibes` - List all vibes
+<<<<<<< HEAD
 - `/api/vibes/save` - Create a new vibe
 - `/api/vibes/build` - Build M3U8 for a vibe
+=======
+- `/api/vibes/create` - One-shot vibe create from prompt (optional build/materialize)
+- `/api/vibes/generate` - LLM-generated vibe query/name from prompt
+- `/api/vibes/save` - Create a new vibe
+- `/api/vibes/build` - Build M3U8 for a vibe
+- `/api/vibes/narrate` - LLM narrative for vibe track arc
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 - `/api/vibes/materialize` - Materialize a vibe as folder
 - `/api/vibes/refresh` - Refresh vibe(s)
 - `/api/vibes/delete` - Delete a vibe
@@ -339,4 +357,8 @@ The web UI will interact with the SQLite database through:
 7. Implement acquisition pipeline UI
 8. Build advanced features like vibes and curation tools
 
+<<<<<<< HEAD
 This plan provides a comprehensive roadmap for implementing a full-featured web UI that exposes all existing Lyra Oracle functionality while maintaining excellent user experience and performance.
+=======
+This plan provides a comprehensive roadmap for implementing a full-featured web UI that exposes all existing Lyra Oracle functionality while maintaining excellent user experience and performance.
+>>>>>>> fc77b41 (Update workspace state and diagnostics)

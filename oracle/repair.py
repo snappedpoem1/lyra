@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 from pathlib import Path
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 import os
 import re
 import sys
 import shutil
 import time
+<<<<<<< HEAD
 from typing import Dict, List
+=======
+from typing import Dict
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 from oracle.db.schema import get_connection, migrate, get_write_mode
 from oracle.config import (
@@ -133,7 +140,11 @@ def check_chromadb() -> Dict[str, any]:
             settings=Settings(anonymized_telemetry=False, allow_reset=True)
         )
         
+<<<<<<< HEAD
         collection = client.get_or_create_collection(name="clap_embeddings")
+=======
+        client.get_or_create_collection(name="clap_embeddings")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         count = collection.count()
         
         print(f"  ✓ ChromaDB initialized")
@@ -178,7 +189,11 @@ def reinitialize_chromadb() -> Dict[str, any]:
             settings=Settings(anonymized_telemetry=False, allow_reset=True)
         )
         
+<<<<<<< HEAD
         collection = client.get_or_create_collection(name="clap_embeddings")
+=======
+        client.get_or_create_collection(name="clap_embeddings")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         
         print(f"  ✓ ChromaDB reinitialized")
         print(f"  ✓ Collection created: clap_embeddings")
@@ -224,7 +239,11 @@ def smoke_test() -> Dict[str, bool]:
             path=str(CHROMA_PATH),
             settings=Settings(anonymized_telemetry=False, allow_reset=True)
         )
+<<<<<<< HEAD
         collection = client.get_or_create_collection(name="clap_embeddings")
+=======
+        client.get_or_create_collection(name="clap_embeddings")
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
         print("    ✓ PASS")
         results["chromadb"] = True
     except Exception as e:
@@ -336,7 +355,10 @@ Examples:
 
 def main():
     """Main entry point."""
+<<<<<<< HEAD
     import time
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
     
     if len(sys.argv) < 2:
         print_help()

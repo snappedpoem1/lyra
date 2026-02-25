@@ -159,6 +159,10 @@ lyra agent "Find punk EDM remixes"  # LLM-powered queries
 - **[LYRA_V10_IMPLEMENTATION.md](LYRA_V10_IMPLEMENTATION.md)** — Safety Doctrine + Pipeline + Console (NEW)
 - **[THREAD_SAFETY_VALIDATION.md](THREAD_SAFETY_VALIDATION.md)** — Thread-safety validation report (NEW)
 - **[QUICKSTART_V10.md](QUICKSTART_V10.md)** — v10 quick start guide (NEW)
+<<<<<<< HEAD
+=======
+- **[plans/llm_access_points.md](plans/llm_access_points.md)** - Runtime LLM access and processing map (NEW)
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 ### Phase Documentation
 - **[PHASE_1_FOUNDATION.md](PHASE_1_FOUNDATION.md)** — Database, ChromaDB, configuration
@@ -647,3 +651,10 @@ Built with ❤️ for music lovers who want to truly own their collection.
 📬 **Issues:** GitHub Issues | **Discussions:** GitHub Discussions
 
 🎵 **Happy Listening!**
+<<<<<<< HEAD
+=======
+
+
+
+
+>>>>>>> fc77b41 (Update workspace state and diagnostics)

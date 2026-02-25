@@ -1,0 +1,67 @@
+{
+  "generated_at_utc": "2026-02-24T07:20:58.219823+00:00",
+  "root": "C:\\MusicOracle",
+  "steps": [
+    {
+      "name": "llm_verify",
+      "ok": false,
+      "returncode": 1,
+      "duration_sec": 3.038453,
+      "command": [
+        "C:\\Python314\\python.exe",
+        "C:\\MusicOracle\\scripts\\verify_llm_usage.py",
+        "--provider",
+        "ollama",
+        "--base-url",
+        "http://localhost:11434/v1",
+        "--model",
+        "oracle-brain:latest",
+        "--timeout-seconds",
+        "60",
+        "--control-check",
+        "--shutdown"
+      ],
+      "stdout": "",
+      "stderr": "C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\chromadb\\config.py:20: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.\n  from pydantic.v1 import BaseSettings\nTraceback (most recent call last):\n  File \"C:\\MusicOracle\\scripts\\verify_llm_usage.py\", line 212, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"C:\\MusicOracle\\scripts\\verify_llm_usage.py\", line 137, in main\n    status, summary = _call_classify(limit=limit, use_llm=True)\n                      ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\MusicOracle\\scripts\\verify_llm_usage.py\", line 84, in _call_classify\n    import lyra_api\n  File \"C:\\MusicOracle\\lyra_api.py\", line 26, in <module>\n    from oracle.search import search\n  File \"C:\\MusicOracle\\oracle\\search.py\", line 16, in <module>\n    from oracle.chroma_store import LyraChromaStore\n  File \"C:\\MusicOracle\\oracle\\chroma_store.py\", line 12, in <module>\n    import chromadb\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\chromadb\\__init__.py\", line 3, in <module>\n    from chromadb.api.client import Client as ClientCreator\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\chromadb\\api\\__init__.py\", line 51, in <module>\n    from chromadb.config import DEFAULT_DATABASE, DEFAULT_TENANT\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\chromadb\\config.py\", line 120, in <module>\n    class Settings(BaseSettings):  # type: ignore\n    ...<207 lines>...\n            env_file_encoding = \"utf-8\"\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\pydantic\\v1\\main.py\", line 221, in __new__\n    inferred = ModelField.infer(\n        name=var_name,\n    ...<3 lines>...\n        config=config,\n    )\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\pydantic\\v1\\fields.py\", line 504, in infer\n    return cls(\n        name=name,\n    ...<7 lines>...\n        field_info=field_info,\n    )\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\pydantic\\v1\\fields.py\", line 434, in __init__\n    self.prepare()\n    ~~~~~~~~~~~~^^\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\pydantic\\v1\\fields.py\", line 544, in prepare\n    self._set_default_and_type()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\pydantic\\v1\\fields.py\", line 576, in _set_default_and_type\n    raise errors_.ConfigError(f'unable to infer type for attribute \"{self.name}\"')\npydantic.v1.errors.ConfigError: unable to infer type for attribute \"chroma_server_nofile\"\n"
+    },
+    {
+      "name": "local_qa",
+      "ok": false,
+      "returncode": 1,
+      "duration_sec": 0.586055,
+      "command": [
+        "C:\\Python314\\python.exe",
+        "C:\\MusicOracle\\scripts\\run_local_qa.py"
+      ],
+      "stdout": "== Baseline ==\n[PASS] python_version | 3.14.2\n[PASS] sqlite_version | 3.50.4\n[WARN] python_version_expected | project target is Python 3.12\n\n== DB Checks ==\n[PASS] tables:oracle.db | 0 table(s)\n[PASS] tables:oracle_library.db | 1 table(s)\n[PASS] tables:lyra_registry.db | 22 table(s)\n[PASS] tracks_table | exists in oracle_library.db\n[PASS] tracks_columns | required columns present\n[PASS] tracks_filepath_not_null\n[PASS] tracks_filepath_unique\n[PASS] population_total_tracks | 3152\n[PASS] population_timestamps | scanned_at: min=2026-02-21T22:43:59.984083+00:00 max=2026-02-21T22:48:04.208252+00:00\n[PASS] population_freshness | 2.4 day(s) old\n[PASS] integrity:null_filepath\n[PASS] integrity:null_artist\n[PASS] integrity:null_title\n[PASS] integrity:bad_duration_nonpositive\n[PASS] integrity:missing_hash\n[PASS] integrity:dupe_filepath\n[PASS] accuracy:filepath_exists | missing 0/100 (0.00%)\n[PASS] accuracy:metadata_plausibility | short<30s=9, long>1200s=0, artist_4digits=5\n[PASS] accuracy:duplicate_hash_groups | 223\n[PASS] lyra:tracks_table | exists in lyra_registry.db\n[PASS] lyra:tracks_columns | required columns present\n[PASS] lyra:tracks_filepath_unique\n[PASS] lyra:population_total_tracks | 2334\n[PASS] lyra:population_timestamps | updated_at: min=2026-02-19T06:41:10.886981+00:00 max=2026-02-24T06:56:59.883675+00:00\n[PASS] lyra:population_freshness | 0.0 day(s) old\n[PASS] lyra:integrity:null_filepath\n[PASS] lyra:integrity:null_artist\n[PASS] lyra:integrity:null_title\n[PASS] lyra:integrity:bad_duration_nonpositive\n[PASS] lyra:integrity:missing_hash\n[PASS] lyra:integrity:dupe_filepath\n[PASS] lyra:accuracy:filepath_exists | missing 0/100 (0.00%)\n[PASS] lyra:accuracy:duplicate_hash_groups | 0\n[PASS] lyra:scorer:table | track_scores exists\n[PASS] lyra:scorer:columns | all scorer columns present\n[PASS] lyra:scorer:row_count | 2333\n[PASS] lyra:scorer:null_dimensions\n[PASS] lyra:scorer:range\n[PASS] lyra:scorer:orphans\n[PASS] lyra:scorer:active_coverage\n\n== API Checks ==\n[FAIL] api_import | unable to import lyra_api: unable to infer type for attribute \"chroma_server_nofile\"\n\n== Summary ==\nFailures: 1\nWarnings: 1\n  - api_import | unable to import lyra_api: unable to infer type for attribute \"chroma_server_nofile\"\n",
+      "stderr": "C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\chromadb\\config.py:20: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.\n  from pydantic.v1 import BaseSettings\n"
+    },
+    {
+      "name": "backend_surface_audit",
+      "ok": false,
+      "returncode": 1,
+      "duration_sec": 0.56078,
+      "command": [
+        "C:\\Python314\\python.exe",
+        "C:\\MusicOracle\\scripts\\run_backend_surface_audit.py"
+      ],
+      "stdout": "",
+      "stderr": "C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\chromadb\\config.py:20: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.\n  from pydantic.v1 import BaseSettings\nTraceback (most recent call last):\n  File \"C:\\MusicOracle\\scripts\\run_backend_surface_audit.py\", line 191, in <module>\n    raise SystemExit(main())\n                     ~~~~^^\n  File \"C:\\MusicOracle\\scripts\\run_backend_surface_audit.py\", line 114, in main\n    import lyra_api\n  File \"C:\\MusicOracle\\lyra_api.py\", line 26, in <module>\n    from oracle.search import search\n  File \"C:\\MusicOracle\\oracle\\search.py\", line 16, in <module>\n    from oracle.chroma_store import LyraChromaStore\n  File \"C:\\MusicOracle\\oracle\\chroma_store.py\", line 12, in <module>\n    import chromadb\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\chromadb\\__init__.py\", line 3, in <module>\n    from chromadb.api.client import Client as ClientCreator\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\chromadb\\api\\__init__.py\", line 51, in <module>\n    from chromadb.config import DEFAULT_DATABASE, DEFAULT_TENANT\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\chromadb\\config.py\", line 120, in <module>\n    class Settings(BaseSettings):  # type: ignore\n    ...<207 lines>...\n            env_file_encoding = \"utf-8\"\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\pydantic\\v1\\main.py\", line 221, in __new__\n    inferred = ModelField.infer(\n        name=var_name,\n    ...<3 lines>...\n        config=config,\n    )\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\pydantic\\v1\\fields.py\", line 504, in infer\n    return cls(\n        name=name,\n    ...<7 lines>...\n        field_info=field_info,\n    )\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\pydantic\\v1\\fields.py\", line 434, in __init__\n    self.prepare()\n    ~~~~~~~~~~~~^^\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\pydantic\\v1\\fields.py\", line 544, in prepare\n    self._set_default_and_type()\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^\n  File \"C:\\Users\\Admin\\AppData\\Roaming\\Python\\Python314\\site-packages\\pydantic\\v1\\fields.py\", line 576, in _set_default_and_type\n    raise errors_.ConfigError(f'unable to infer type for attribute \"{self.name}\"')\npydantic.v1.errors.ConfigError: unable to infer type for attribute \"chroma_server_nofile\"\n"
+    },
+    {
+      "name": "pytest",
+      "ok": false,
+      "returncode": 1,
+      "duration_sec": 0.027085,
+      "command": [
+        "C:\\Python314\\python.exe",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "stdout": "",
+      "stderr": "C:\\Python314\\python.exe: No module named pytest\n"
+    }
+  ],
+  "all_ok": false
+}

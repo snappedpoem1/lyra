@@ -10,7 +10,11 @@ type: public
 encoding: UTF-8
 # to fetch current domain use https://www.rantop.org/
 links:
+<<<<<<< HEAD
   - https://www-nortorrent.com/
+=======
+  - https://ww2-nortorrent.com/
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 legacylinks:
   # latest domains list
   - https://www.rantop.org/
@@ -26,7 +30,10 @@ legacylinks:
   - https://www.site-torrent.com/
   - https://www.rantop.my/
   # actual legacylinks
+<<<<<<< HEAD
   - https://www.nortorrent1.com/
+=======
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
   - https://www.nortorrent2.com/
   - https://www.nortorrent3.com/
   - https://www.nortorrent4.com/
@@ -41,6 +48,10 @@ legacylinks:
   - https://www.nortorrent7.com/
   - https://www.nortorrent8.com/
   - https://ww1-nortorrent.com/
+<<<<<<< HEAD
+=======
+  - https://www-nortorrent.com/
+>>>>>>> fc77b41 (Update workspace state and diagnostics)
 
 caps:
   categorymappings:
