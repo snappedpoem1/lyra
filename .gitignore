@@ -58,3 +58,28 @@ node_modules/
 # Prevent oversized/index lock artifacts from entering commits.
 data/node/data/search.db
 *.bak
+# --- Python virtualenvs ---
+.venv/
+.venv*/
+venv/
+__pycache__/
+
+# --- Databases & SQLite volatile files ---
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# --- Runtime data ---
+data/
+Lyra_Oracle_System/config/prowlarr/
+
+# --- Claude / tool worktrees & local tooling state ---
+.claude/worktrees/
+.claude/**
+
+# --- Secrets ---
+.env
+.env.*
