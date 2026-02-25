@@ -11,8 +11,8 @@ This folder is a **template** for a local Prowlarr runtime config.
 - `Lyra_Oracle_System/config/prowlarr/` (runtime folder)
 - databases, logs, keys, pid files
 
-## How to use
-If you need a bootstrap, copy this template folder to:
+## Bootstrap (optional)
+If you need a starting structure, copy this template folder to:
 `Lyra_Oracle_System/config/prowlarr/`
 
 Example (Git Bash):
