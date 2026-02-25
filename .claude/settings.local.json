@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker --version:*)",
+      "Bash(docker context:*)",
+      "Bash(docker context use:*)",
+      "Bash(powershell.exe -Command \"Start-Process ''C:\\\\Program Files\\\\Docker\\\\Docker\\\\Docker Desktop.exe'' -WindowStyle Hidden\")",
+      "Bash(docker exec:*)",
+      "Bash(MSYS_NO_PATHCONV=1 docker exec:*)",
+      "Bash(MSYS_NO_PATHCONV=1 docker inspect:*)",
+      "Bash(ls:*)",
+      "Bash(Get-ChildItem -LiteralPath 'C:\\\\MusicOracle\\\\staging' -Recurse -File)",
+      "Bash(Where-Object { $_Extension -match '^\\(?i\\)\\\\.\\(flac|mp3|m4a|wav|ogg|aac\\)$' })",
+      "Bash(Measure-Object)",
+      "Bash(Select-Object -ExpandProperty Count)",
+      "Bash(head -20 find /c/MusicOracle/downloads -type f \\\\\\( -iname \"*.flac\" -o -iname \"*.mp3\" -o -iname \"*.m4a\" \\\\\\))"
+    ]
+  }
+}
