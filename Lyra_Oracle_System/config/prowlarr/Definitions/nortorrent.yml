@@ -47,7 +47,7 @@ caps:
     - {id: Films, cat: Movies, desc: "Movies"}
     - {id: Animes, cat: TV/Anime, desc: "Anime"}
     - {id: Documentaires, cat: TV/Documentary, desc: "Documentaires"}
-    - {id: SÃ©ries, cat: TV, desc: "TV"}
+    - {id: Séries, cat: TV, desc: "TV"}
     - {id: Musiques, cat: Audio, desc: "Music"}
     - {id: Ebooks, cat: Books, desc: "Books"}
     - {id: Livres, cat: Books, desc: "Livres"}
@@ -59,7 +59,7 @@ caps:
     - {id: Spectacles, cat: TV/Other, desc: "Spectacles"}
     - {id: Sports, cat: TV/Sport, desc: "Sports"}
     - {id: Formations, cat: Other, desc: "Formations"}
-    - {id: VidÃ©os, cat: TV, desc: "VidÃ©os"}
+    - {id: Vidéos, cat: TV, desc: "Vidéos"}
 
   modes:
     search: [q]

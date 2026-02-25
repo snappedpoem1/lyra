@@ -10,14 +10,14 @@ links:
 
 caps:
   categorymappings:
-    - {id: 1, cat: Movies, desc: "PelÃ­culas"}
+    - {id: 1, cat: Movies, desc: "Películas"}
     - {id: 2, cat: TV, desc: "Series"}
-    - {id: 7, cat: Movies/Other, desc: "PelÃ­culas AnimaciÃ³n"}
-    - {id: 8, cat: TV/Other, desc: "Series AnimaciÃ³n"}
-    - {id: 9, cat: Movies/Other, desc: "PelÃ­culas Anime"}
+    - {id: 7, cat: Movies/Other, desc: "Películas Animación"}
+    - {id: 8, cat: TV/Other, desc: "Series Animación"}
+    - {id: 9, cat: Movies/Other, desc: "Películas Anime"}
     - {id: 10, cat: TV/Anime, desc: "Series Anime"}
     - {id: 6, cat: Other, desc: "Varios"}
-    - {id: 11, cat: Movies/UHD, desc: "PelÃ­culas 4K"}
+    - {id: 11, cat: Movies/UHD, desc: "Películas 4K"}
     # undocumented
     - {id: 4, cat: Console, desc: "Juegos"}
 

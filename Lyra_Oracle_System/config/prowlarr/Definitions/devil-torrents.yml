@@ -28,7 +28,7 @@ caps:
     - {id: 13, cat: Console, desc: "Konsole"}
     - {id: 14, cat: PC/Games, desc: "Gry PC"}
     - {id: 15, cat: Movies, desc: "Dla Dzieci"}
-    - {id: 16, cat: Books, desc: "KsiÄ…Å¼ki"}
+    - {id: 16, cat: Books, desc: "Książki"}
     - {id: 525, cat: PC/Mac, desc: "Mac"}
     - {id: 18, cat: PC, desc: "Linux"}
     - {id: 19, cat: TV/Sport, desc: "Sport"}
@@ -119,7 +119,7 @@ search:
         "div#kategoria-gatunek-1:contains(\"Konsole\")": 13
         "div#kategoria-gatunek-1:contains(\"Gry PC\")": 14
         "div#kategoria-gatunek-1:contains(\"Dla Dzieci\")": 15
-        "div#kategoria-gatunek-1:contains(\"KsiÄ…Å¼ki\")": 16
+        "div#kategoria-gatunek-1:contains(\"Książki\")": 16
         "div#kategoria-gatunek-1:contains(\"Mac\")": 525
         "div#kategoria-gatunek-1:contains(\"Linux\")": 18
         "div#kategoria-gatunek-1:contains(\"Sport\")": 19

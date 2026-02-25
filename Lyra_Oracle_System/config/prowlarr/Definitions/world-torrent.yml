@@ -12,7 +12,7 @@ links:
   - https://ww2-mania-torrent.com/
   - https://ww2-cine-torrent.com/
   - https://ww2-magnet-torrent.com/
-  - https://www-mega-torrent.com/
+  - https://ww2-mega-torrent.com/
   - https://ww3-zone-torrent.com/
   - https://ww2-warez-torrent.com/
 legacylinks:
@@ -29,13 +29,6 @@ legacylinks:
   - https://www.site-torrent.com/
   - https://www.rantop.my/
   # actual legacylinks
-  - https://wvw-zetorrents.com/
-  - https://www-zetorrents.com/
-  - https://www.zetorrents1.com/
-  - https://www.zetorrents.diy/
-  - https://www.zetorrents2.com/
-  - https://www.zetorrents.town/
-  - https://zetorrents-proxy.site/
   - https://ww1-zetorrents.me/
   - https://www.zetorrents.rent/
   - https://ww1-zetorrents.town/
@@ -50,6 +43,7 @@ legacylinks:
   - https://www-mania-torrent.com/
   - https://www.mega-torrent9.com/
   - https://ww1-mega-torrent.com/
+  - https://www-mega-torrent.com/
   - https://www.warez-torrent1.com/
   - https://ww1-warez-torrent.com/
   - https://www-warez-torrent.com/
@@ -66,7 +60,7 @@ caps:
     - {id: Films, cat: Movies, desc: "Movies"}
     - {id: Animes, cat: TV/Anime, desc: "Anime"}
     - {id: Documentaires, cat: TV/Documentary, desc: "Documentaires"}
-    - {id: SÃ©ries, cat: TV, desc: "TV"}
+    - {id: Séries, cat: TV, desc: "TV"}
     - {id: Musiques, cat: Audio, desc: "Music"}
     - {id: Ebooks, cat: Books, desc: "Books"}
     - {id: Livres, cat: Books, desc: "Livres"}
@@ -78,7 +72,7 @@ caps:
     - {id: Spectacles, cat: TV/Other, desc: "Spectacles"}
     - {id: Sports, cat: TV/Sport, desc: "Sports"}
     - {id: Formations, cat: Other, desc: "Formations"}
-    - {id: VidÃ©os, cat: TV, desc: "VidÃ©os"}
+    - {id: Vidéos, cat: TV, desc: "Vidéos"}
 
   modes:
     search: [q]
