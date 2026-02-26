@@ -709,6 +709,8 @@ This section documents the latest queue/acquisition/scoring hardening.
   - `acousticbrainz` (Essentia-derived high-level descriptors)
   - `musicnn` (optional local neural tag inference; set `MUSICNN_ENABLED=1`)
 - Score validation now includes tag-alignment checks in `oracle score-audit`.
+- Streamrip (`T2`) requires at least one configured source in `%APPDATA%\\streamrip\\config.toml`
+  (Qobuz/Deezer/SoundCloud). If not configured, it fails fast and waterfall continues to `T3+`.
 
 Recommended adjacent throughput mode:
 

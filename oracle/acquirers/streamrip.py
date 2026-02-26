@@ -9,6 +9,7 @@ clear error and lets the waterfall continue.
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import subprocess
 import tempfile
@@ -19,8 +20,10 @@ from typing import Dict, List, Optional
 from oracle.config import STAGING_FOLDER
 
 logger = logging.getLogger(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 _AUDIO_EXTS = {".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".wav"}
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def _find_rip_executable() -> Optional[str]:
@@ -28,6 +31,10 @@ def _find_rip_executable() -> Optional[str]:
     candidates = [
         "rip",
         "streamrip",
+        str(PROJECT_ROOT / ".venv" / "Scripts" / "rip.exe"),
+        str(PROJECT_ROOT / ".venv" / "Scripts" / "streamrip.exe"),
+        str(PROJECT_ROOT / ".venv" / "bin" / "rip"),
+        str(PROJECT_ROOT / ".venv" / "bin" / "streamrip"),
         str(Path.home() / ".local" / "bin" / "rip"),
         str(Path.home() / "AppData" / "Roaming" / "Python" / "Python312" / "Scripts" / "rip.exe"),
         str(Path.home() / "AppData" / "Roaming" / "Python" / "Python313" / "Scripts" / "rip.exe"),
@@ -57,6 +64,19 @@ def _build_query(artist: str, title: str, album: Optional[str] = None) -> str:
     return " ".join(part for part in parts if part)
 
 
+def _compact_error(text: str) -> str:
+    cleaned = _ANSI_RE.sub("", text or "")
+    lines = [ln.strip() for ln in cleaned.splitlines() if ln.strip()]
+    if not lines:
+        return "unknown streamrip error"
+    for ln in reversed(lines):
+        if ln.startswith("Exception:"):
+            return ln
+        if "Error:" in ln:
+            return ln
+    return lines[-1][:300]
+
+
 def download(artist: str, title: str, album: Optional[str] = None, timeout_seconds: int = 240) -> Dict:
     """Attempt acquisition via streamrip CLI.
 
@@ -72,12 +92,23 @@ def download(artist: str, title: str, album: Optional[str] = None, timeout_secon
     if not query:
         return {"success": False, "error": "empty query", "tier": 2, "source": "streamrip"}
 
-    # Try several CLI shapes for compatibility across streamrip versions.
-    # We consider it a success only if an audio file appears in the temp dir.
+    # streamrip 2.x CLI shape:
+    #   rip [global-opts] search SOURCE MEDIA_TYPE QUERY --first
+    # Try multiple sources in order; we consider success only if an audio file appears.
+    sources = ["qobuz", "deezer", "soundcloud"]
     commands = [
-        [rip, "search", query, "--first", "--output", "."],
-        [rip, "search", query, "--first", "--output-dir", "."],
-        [rip, "search", query, "--first"],
+        [
+            rip,
+            "--folder",
+            ".",
+            "--no-progress",
+            "search",
+            src,
+            "track",
+            query,
+            "--first",
+        ]
+        for src in sources
     ]
 
     errors: List[str] = []
@@ -114,7 +145,7 @@ def download(artist: str, title: str, album: Optional[str] = None, timeout_secon
                     }
                 err = (proc.stderr or proc.stdout or "").strip()
                 if err:
-                    errors.append(err[:300])
+                    errors.append(_compact_error(err))
             except subprocess.TimeoutExpired:
                 errors.append(f"timeout after {timeout_seconds}s")
             except Exception as exc:
@@ -131,4 +162,3 @@ def download(artist: str, title: str, album: Optional[str] = None, timeout_secon
         "source": "streamrip",
         "elapsed": time.perf_counter() - start,
     }
-
