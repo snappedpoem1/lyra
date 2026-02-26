@@ -52,7 +52,8 @@ class _WatcherLock:
                 pid = int(self._path.read_text().strip())
                 if sys.platform == "win32":
                     import ctypes
-                    handle = ctypes.windll.kernel32.OpenProcess(0x100000, False, pid)
+                    # PROCESS_QUERY_LIMITED_INFORMATION (0x1000) is sufficient to test liveness.
+                    handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
                     alive = handle != 0
                     if handle:
                         ctypes.windll.kernel32.CloseHandle(handle)
@@ -178,7 +179,11 @@ def _reconcile_downloaded_queue_rows() -> int:
                     SELECT 1
                     FROM tracks t
                     WHERE t.status='active'
-                      AND lower(trim(t.artist)) = lower(trim(acquisition_queue.artist))
+                      AND (
+                        lower(trim(t.artist)) = lower(trim(acquisition_queue.artist))
+                        OR lower(trim(t.artist)) LIKE lower(trim(acquisition_queue.artist)) || '%'
+                        OR lower(trim(acquisition_queue.artist)) LIKE lower(trim(t.artist)) || '%'
+                      )
                       AND (
                         lower(trim(t.title)) = lower(trim(acquisition_queue.title))
                         OR lower(trim(t.title)) LIKE lower(trim(acquisition_queue.title)) || '%'
@@ -194,6 +199,56 @@ def _reconcile_downloaded_queue_rows() -> int:
                 time.sleep(0.05 * attempt)
                 continue
             logger.warning("[INGEST] Queue reconciliation failed: %s", exc)
+    return 0
+
+
+def _requeue_stale_downloaded_rows(max_age_minutes: int = 45) -> int:
+    """Re-queue downloaded rows that never materialized in the active library.
+
+    This prevents queue deadlocks where rows remain `downloaded` forever after
+    a partial ingest crash or source mismatch.
+    """
+    import sqlite3
+
+    from oracle.db.schema import get_connection
+    attempts = 4
+    for attempt in range(1, attempts + 1):
+        conn = get_connection(timeout=10.0)
+        try:
+            cur = conn.execute(
+                """
+                UPDATE acquisition_queue
+                SET status='pending',
+                    retry_count=COALESCE(retry_count, 0) + 1,
+                    error='stale downloaded row re-queued by watcher reconciliation'
+                WHERE status='downloaded'
+                  AND datetime(COALESCE(completed_at, added_at))
+                      < datetime('now', '-' || ? || ' minutes')
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM tracks t
+                    WHERE t.status='active'
+                      AND (
+                        lower(trim(t.artist)) = lower(trim(acquisition_queue.artist))
+                        OR lower(trim(t.artist)) LIKE lower(trim(acquisition_queue.artist)) || '%'
+                        OR lower(trim(acquisition_queue.artist)) LIKE lower(trim(t.artist)) || '%'
+                      )
+                      AND (
+                        lower(trim(t.title)) = lower(trim(acquisition_queue.title))
+                        OR lower(trim(t.title)) LIKE lower(trim(acquisition_queue.title)) || '%'
+                        OR lower(trim(acquisition_queue.title)) LIKE lower(trim(t.title)) || '%'
+                      )
+                  )
+                """,
+                (str(int(max_age_minutes)),),
+            )
+            conn.commit()
+            return int(cur.rowcount or 0)
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc).lower() and attempt < attempts:
+                time.sleep(0.05 * attempt)
+                continue
+            logger.warning("[INGEST] Stale downloaded requeue failed: %s", exc)
             return 0
         finally:
             conn.close()
@@ -257,6 +312,9 @@ def _sweep(watch_dirs: List[Path],
             completed = _reconcile_downloaded_queue_rows()
             if completed:
                 logger.info("[INGEST] Queue reconcile: %d downloaded item(s) marked completed", completed)
+            requeued = _requeue_stale_downloaded_rows(max_age_minutes=45)
+            if requeued:
+                logger.info("[INGEST] Queue reconcile: %d stale downloaded item(s) re-queued", requeued)
         except Exception as exc:
             logger.error("[INGEST] Beets import failed: %s", exc)
 

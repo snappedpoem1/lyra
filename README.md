@@ -250,7 +250,7 @@ Discography FLAC â†’ Album FLAC â†’ Track FLAC
 
 **Enrichment Sources:** MusicBrainz, AcoustID, Last.fm, Genius (with rate limiting)
 
-**Key Files:** `oracle/metadata_enricher.py`, `oracle/musicbrainz.py`, `oracle/acoustid.py`, `oracle/lastfm.py`, `oracle/genius.py`
+**Key Files:** `oracle/enrichers/unified.py`, `oracle/enrichers/musicbrainz.py`, `oracle/enrichers/acoustid.py`, `oracle/enrichers/lastfm.py`, `oracle/enrichers/genius.py`
 
 ---
 

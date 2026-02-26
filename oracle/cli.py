@@ -107,7 +107,7 @@ def main() -> None:
 
     enrich_parser = subparsers.add_parser("enrich", help="Enrich track metadata")
     enrich_parser.add_argument("--track-id", required=True, help="Track ID to enrich")
-    enrich_parser.add_argument("--providers", default="musicbrainz,acoustid,discogs", help="Comma list")
+    enrich_parser.add_argument("--providers", default="musicbrainz,acoustid,discogs,lastfm,genius", help="Comma list")
 
     curate_parser = subparsers.add_parser("curate", help="Curation operations")
     curate_sub = curate_parser.add_subparsers(dest="curate_command")
@@ -186,6 +186,7 @@ def main() -> None:
     score_parser.add_argument('--limit', type=int, default=0, help='Limit tracks to score (0=all)')
     score_parser.add_argument('--force', action='store_true', help='Rescore already-scored tracks')
     score_parser.add_argument('--workers', type=int, default=0, help='Score worker threads (0=auto by profile)')
+    subparsers.add_parser('score-audit', help='Run score sanity audit report')
 
     # Library maintenance commands
     normalize_parser = subparsers.add_parser('normalize', help='Normalize artist/title metadata across library')
@@ -200,6 +201,7 @@ def main() -> None:
 
     enrich_all_parser = subparsers.add_parser('enrich-all', help='Enrich all tracks with genre/metadata from Last.fm')
     enrich_all_parser.add_argument('--limit', type=int, default=0, help='Limit tracks')
+    enrich_all_parser.add_argument('--providers', default='lastfm,genius,musicbrainz', help='Comma list')
 
     # Smart acquisition
     smart_acquire_parser = subparsers.add_parser('smart-acquire', help='Smart acquisition with validation')
@@ -908,6 +910,11 @@ def main() -> None:
         print(_json.dumps(result, indent=2))
         return
 
+    if args.command == "score-audit":
+        from oracle.score_audit import run_audit
+        print(json.dumps(run_audit(), indent=2))
+        return
+
     if args.command == "normalize":
         from oracle.normalizer import normalize_library
         normalize_library(apply=args.apply)
@@ -946,8 +953,49 @@ def main() -> None:
         return
 
     if args.command == "enrich-all":
-        import subprocess
-        subprocess.run([sys.executable, "enrich_genres.py"], cwd=".")
+        if get_write_mode() != "apply_allowed":
+            print("WRITE BLOCKED: LYRA_WRITE_MODE must be apply_allowed to enrich.")
+            return
+
+        from oracle.enrichers.unified import enrich_track
+        from oracle.db.schema import get_connection
+
+        providers = [p.strip() for p in (args.providers or "").split(",") if p.strip()]
+        conn = get_connection()
+        cur = conn.cursor()
+        sql = "SELECT track_id, artist, title FROM tracks WHERE status='active' ORDER BY rowid DESC"
+        params = ()
+        if int(args.limit or 0) > 0:
+            sql += " LIMIT ?"
+            params = (int(args.limit),)
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        conn.close()
+
+        total = len(rows)
+        done = 0
+        failures = 0
+        provider_hits = {p: 0 for p in providers}
+        for track_id, artist, title in rows:
+            try:
+                result = enrich_track(track_id, providers=providers)
+                for p in providers:
+                    payload = result.get(p, {})
+                    if isinstance(payload, dict) and payload:
+                        provider_hits[p] += 1
+                done += 1
+                if done % 25 == 0 or done == total:
+                    print(f"[{done}/{total}] enriched")
+            except Exception as exc:
+                failures += 1
+                print(f"[FAIL] {artist} - {title}: {exc}")
+
+        print(json.dumps({
+            "total": total,
+            "enriched": done,
+            "failures": failures,
+            "providers": provider_hits,
+        }, indent=2))
         return
 
     if args.command == "smart-acquire":
