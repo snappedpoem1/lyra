@@ -8,7 +8,9 @@ clear error and lets the waterfall continue.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -24,6 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 _AUDIO_EXTS = {".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".wav"}
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_WINDOWS_INVALID_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1F]')
 
 
 def _find_rip_executable() -> Optional[str]:
@@ -54,7 +57,61 @@ def _streamrip_config_path() -> Path:
     return appdata / "streamrip" / "config.toml"
 
 
+def _qobuz_password_for_streamrip(raw_password: str) -> str:
+    """Convert plaintext password to streamrip's expected qobuz format.
+
+    streamrip/qobuz config expects md5 hash when `use_auth_token=false`.
+    """
+    value = (raw_password or "").strip()
+    if not value:
+        return ""
+    if re.fullmatch(r"[a-fA-F0-9]{32}", value):
+        return value.lower()
+    return hashlib.md5(value.encode("utf-8")).hexdigest()
+
+
+def _hydrate_streamrip_credentials_from_env() -> None:
+    """Sync Lyra env credentials into streamrip config when missing."""
+    cfg = _streamrip_config_path()
+    if not cfg.exists():
+        return
+
+    username = (os.getenv("QOBUZ_USERNAME", "") or os.getenv("QOBUZ_EMAIL", "")).strip()
+    password_raw = (os.getenv("QOBUZ_PASSWORD", "") or os.getenv("QOBUZ_PASS", "")).strip()
+    password = _qobuz_password_for_streamrip(password_raw)
+    if not username or not password:
+        return
+
+    try:
+        import tomlkit
+
+        data = tomlkit.parse(cfg.read_text(encoding="utf-8"))
+        qobuz = data.get("qobuz")
+        if qobuz is None:
+            qobuz = tomlkit.table()
+            data["qobuz"] = qobuz
+
+        changed = False
+        current_user = str(qobuz.get("email_or_userid", "")).strip()
+        current_pass = str(qobuz.get("password_or_token", "")).strip()
+        if not current_user:
+            qobuz["email_or_userid"] = username
+            changed = True
+        if not current_pass:
+            qobuz["password_or_token"] = password
+            changed = True
+        if "use_auth_token" not in qobuz:
+            qobuz["use_auth_token"] = False
+            changed = True
+
+        if changed:
+            cfg.write_text(tomlkit.dumps(data), encoding="utf-8")
+    except Exception as exc:
+        logger.debug("Failed to hydrate streamrip config from env: %s", exc)
+
+
 def _has_configured_source() -> bool:
+    _hydrate_streamrip_credentials_from_env()
     cfg = _streamrip_config_path()
     if not cfg.exists():
         return False
@@ -73,9 +130,7 @@ def _has_configured_source() -> bool:
         str(qobuz.get("password_or_token", "")).strip()
     )
     deezer_ok = bool(str(deezer.get("arl", "")).strip())
-    soundcloud_ok = bool(str(soundcloud.get("client_id", "")).strip()) and bool(
-        str(soundcloud.get("app_version", "")).strip()
-    )
+    soundcloud_ok = bool(str(soundcloud.get("client_id", "")).strip()) and bool(str(soundcloud.get("app_version", "")).strip())
     return qobuz_ok or deezer_ok or soundcloud_ok
 
 
@@ -92,6 +147,13 @@ def _build_query(artist: str, title: str, album: Optional[str] = None) -> str:
     if album and album.strip():
         parts.append(album.strip())
     return " ".join(part for part in parts if part)
+
+
+def _sanitize_filename_component(value: str) -> str:
+    """Return a Windows-safe filename component."""
+    cleaned = _WINDOWS_INVALID_CHARS.sub("", (value or "").strip())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned or "Unknown"
 
 
 def _compact_error(text: str) -> str:
@@ -113,6 +175,7 @@ def download(artist: str, title: str, album: Optional[str] = None, timeout_secon
     Returns a dict compatible with waterfall acquisition adapters.
     """
     start = time.perf_counter()
+    _hydrate_streamrip_credentials_from_env()
     rip = _find_rip_executable()
     if not rip:
         return {"success": False, "error": "streamrip CLI not available", "tier": 2, "source": "streamrip"}
@@ -152,42 +215,55 @@ def download(artist: str, title: str, album: Optional[str] = None, timeout_secon
     with tempfile.TemporaryDirectory(prefix="streamrip_", dir=str(STAGING_FOLDER.parent)) as tmp:
         tmp_path = Path(tmp)
         for cmd in commands:
-            try:
-                proc = subprocess.run(
-                    cmd,
-                    cwd=str(tmp_path),
-                    capture_output=True,
-                    text=True,
-                    timeout=int(timeout_seconds),
-                    check=False,
-                )
-                files = _find_audio_files(tmp_path)
-                if files:
-                    src = max(files, key=lambda p: p.stat().st_mtime)
-                    safe_name = f"{artist} - {title}{src.suffix.lower()}"
-                    dst = STAGING_FOLDER / safe_name
-                    i = 1
-                    while dst.exists():
-                        dst = STAGING_FOLDER / f"{artist} - {title}_{i}{src.suffix.lower()}"
-                        i += 1
-                    shutil.move(str(src), str(dst))
-                    return {
-                        "success": True,
-                        "path": str(dst),
-                        "artist": artist,
-                        "title": title,
-                        "tier": 2,
-                        "source": "streamrip",
-                        "elapsed": time.perf_counter() - start,
-                    }
-                err = (proc.stderr or proc.stdout or "").strip()
-                if err:
-                    errors.append(_compact_error(err))
-            except subprocess.TimeoutExpired:
-                errors.append(f"timeout after {timeout_seconds}s")
-            except Exception as exc:
-                logger.debug("Streamrip attempt failed: %s", exc)
-                errors.append(str(exc)[:300])
+            for attempt in (1, 2):
+                try:
+                    proc = subprocess.run(
+                        cmd,
+                        cwd=str(tmp_path),
+                        capture_output=True,
+                        text=True,
+                        timeout=int(timeout_seconds),
+                        check=False,
+                    )
+                    files = _find_audio_files(tmp_path)
+                    if files:
+                        src = max(files, key=lambda p: p.stat().st_mtime)
+                        safe_artist = _sanitize_filename_component(artist)
+                        safe_title = _sanitize_filename_component(title)
+                        safe_name = f"{safe_artist} - {safe_title}{src.suffix.lower()}"
+                        dst = STAGING_FOLDER / safe_name
+                        i = 1
+                        while dst.exists():
+                            dst = STAGING_FOLDER / f"{safe_artist} - {safe_title}_{i}{src.suffix.lower()}"
+                            i += 1
+                        shutil.move(str(src), str(dst))
+                        return {
+                            "success": True,
+                            "path": str(dst),
+                            "artist": artist,
+                            "title": title,
+                            "tier": 2,
+                            "source": "streamrip",
+                            "elapsed": time.perf_counter() - start,
+                        }
+                    err = (proc.stderr or proc.stdout or "").strip()
+                    compact = _compact_error(err) if err else "streamrip no output"
+                    transient = any(token in compact for token in ("AssertionError", "401", "total items"))
+                    if transient and attempt < 2:
+                        time.sleep(1.0 * attempt)
+                        continue
+                    errors.append(compact)
+                    break
+                except subprocess.TimeoutExpired:
+                    if attempt < 2:
+                        time.sleep(1.0 * attempt)
+                        continue
+                    errors.append(f"timeout after {timeout_seconds}s")
+                    break
+                except Exception as exc:
+                    logger.debug("Streamrip attempt failed: %s", exc)
+                    errors.append(str(exc)[:300])
+                    break
 
     error = "streamrip did not produce an audio file"
     if errors:

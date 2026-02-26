@@ -34,7 +34,8 @@ JUNK_PATTERNS: List[str] = [
     # Karaoke/covers/backing tracks
     r'\bkaraoke\b',
     r'\btribute\s*(to|band|players)?\b',
-    r'\bcover\s*(version|by)?\b',
+    r'\bcover\s+version\b',
+    r'\bcover(?:ed)?\s+by\b',
     r'\bmade\s*famous\b',
     r'\bmade\s*popular\b',
     r'\bin\s*the\s*style\s*of\b',
@@ -73,6 +74,7 @@ TITLE_JUNK_PATTERNS: List[str] = [
     r'\bringtone\b',
     r'\bmusic\s*box\b',
     r'\blullaby\s*(version|mix|edit|cover)?\b',
+    r'[\(\[]\s*cover\s*[\)\]]',
 
     # Instrumental/stripped versions (the user wants the actual song)
     r'[-â€“(]\s*instrumental\b',

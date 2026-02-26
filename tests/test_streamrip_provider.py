@@ -15,7 +15,10 @@ class StreamripProviderTests(unittest.TestCase):
         self.assertFalse(result.get("success"))
         self.assertEqual(result.get("source"), "streamrip")
 
+    def test_sanitize_filename_component_removes_windows_invalid_chars(self) -> None:
+        cleaned = streamrip._sanitize_filename_component("Do I Wanna Know?: <live>|*")
+        self.assertEqual(cleaned, "Do I Wanna Know live")
+
 
 if __name__ == "__main__":
     unittest.main()
-

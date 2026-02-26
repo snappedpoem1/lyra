@@ -160,6 +160,45 @@ python -m oracle score-audit
 python -m oracle enrich-all --limit 500 --providers lastfm,genius,musicbrainz
 ```
 
+### 2026-02-26 Demo Audit (Verified)
+- End-to-end pipeline verified: `drain -> import/watch -> scan -> index -> score -> search`.
+- Queue source prioritization active in `drain`: `playlist > liked > top_tracks > history > discography`.
+- Guarded acquisition remains fail-closed (duplicates, instrumentals, junk variants blocked before library import).
+- Streamrip tier hardened:
+  - auto-hydrates Qobuz credentials from environment if streamrip config is missing values,
+  - sanitizes Windows-invalid filename characters before staging moves,
+  - retries transient streamrip failures once before hard fail.
+- Guard false-positive fixed for legitimate titles such as `Under Cover of Darkness`.
+- Score coverage validated with `oracle score-audit`.
+
+Current validated runtime snapshot:
+- `tracks(active)=357`
+- `embeddings=357`
+- `scored=357`
+- test suite: `35 passed`
+
+Known non-blocking gaps:
+- Streamrip still has intermittent upstream failures (`AssertionError`, occasional `401`/`total items`) on some tracks.
+- Tier fallback mitigates this (`Qobuz -> Streamrip -> Slskd -> RD -> SpotDL`) during normal `drain` runs.
+- `LM Studio` can be offline without blocking acquisition/index/score workflows.
+
+Parallel run pattern (recommended for throughput):
+```powershell
+# Terminal A: acquisition
+python -m oracle drain --limit 50 --source playlist --max-tier 5 --workers 6
+
+# Terminal B: ingest + reconcile in loop
+python -m oracle watch --once
+
+# Terminal C: backfill scoring
+python -m oracle score --all
+```
+
+Open-source alternatives reviewed for gap coverage:
+- `beets` (already integrated): canonical organization/tagging/import pipeline.
+- `Lidarr` + `Prowlarr`: robust queue/indexer orchestration if acquisition automation needs deeper scheduler controls.
+- `Essentia`: additional audio descriptor extraction for cross-validating 10-dimension scoring trends.
+
 ### ðŸ›¡ï¸ **Safety Doctrine** (NEW v10)
 Time-travel undo for all file operations:
 ```powershell
