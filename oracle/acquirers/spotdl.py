@@ -118,11 +118,20 @@ class SpotDLAcquirer:
             import mutagen
             
             audio = mutagen.File(str(filepath), easy=True)
-            if not audio:
-                return {"valid": True, "warning": "Could not read metadata"}
+            if audio is None:
+                return {"valid": False, "reason": "Could not read metadata from downloaded file"}
             
             file_artist = audio.get("artist", [""])[0] if audio.get("artist") else ""
             file_title = audio.get("title", [""])[0] if audio.get("title") else ""
+
+            # Some malformed files parse but expose no artist/title tags.
+            if not file_artist.strip() or not file_title.strip():
+                return {
+                    "valid": False,
+                    "reason": "Downloaded file missing artist/title metadata tags",
+                    "file_artist": file_artist,
+                    "file_title": file_title,
+                }
             
             # Check if downloaded file matches what we expected
             from difflib import SequenceMatcher
@@ -167,7 +176,7 @@ class SpotDLAcquirer:
             
         except Exception as e:
             logger.warning(f"Post-flight check failed: {e}")
-            return {"valid": True, "warning": str(e)}
+            return {"valid": False, "reason": f"Post-flight validation error: {e}"}
 
     def _ytdlp_fallback(self, artist: str, title: str) -> Dict:
         """Fall back to yt-dlp YouTube search when spotdl/Spotify is unavailable."""

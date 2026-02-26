@@ -42,6 +42,8 @@ QUARANTINE_PATH = _env_path("QUARANTINE_PATH", LIBRARY_BASE.parent / "_Quarantin
 VIBES_FOLDER = _env_path("VIBES_FOLDER", PROJECT_ROOT / "Vibes")
 REPORTS_FOLDER = _env_path("REPORTS_FOLDER", PROJECT_ROOT / "Reports")
 PLAYLISTS_FOLDER = _env_path("PLAYLISTS_FOLDER", PROJECT_ROOT / "playlists")
+ACOUSTID_API_KEY = os.environ.get("ACOUSTID_API_KEY", "").strip()
+FPCALC_PATH = os.environ.get("FPCALC_PATH", "").strip()
 
 
 def guard_bypass_allowed() -> bool:

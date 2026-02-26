@@ -1,9 +1,10 @@
-"""Ingest Watcher â€” polls downloads/ dir and auto-ingests completed files.
+"""Ingest Watcher -- polls downloads/ and staging/ dirs and auto-ingests
+completed files via beets.
 
-Runs as a background daemon. When a new audio file appears in the downloads
-directory (and hasn't changed size for 10s, indicating complete download),
-it runs the full ingest pipeline: scan â†’ guard check â†’ move to library â†’
-index â†’ score â†’ update DB.
+Runs as a background daemon.  When new audio files appear and are stable
+(size unchanged for 10 s), the watcher runs:
+
+    guard check -> beets import (auto-tag + move) -> scan -> index -> score
 
 Usage:
     python -m oracle.ingest_watcher          # run as daemon
@@ -15,13 +16,10 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import sqlite3
-import shutil
-import time
-import re
 import sys
+import time
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +50,6 @@ class _WatcherLock:
         if self._path.exists():
             try:
                 pid = int(self._path.read_text().strip())
-                # Check if that PID is still alive
                 if sys.platform == "win32":
                     import ctypes
                     handle = ctypes.windll.kernel32.OpenProcess(0x100000, False, pid)
@@ -89,55 +86,6 @@ class _WatcherLock:
         self.release()
 
 
-def _sanitize_component(value: str, fallback: str) -> str:
-    clean = re.sub(r'[<>:"/\\|?*]', "_", (value or "").strip())
-    clean = re.sub(r"\s+", " ", clean).strip(". ")
-    return clean or fallback
-
-
-def _primary_album_artist(artist: str) -> str:
-    raw = (artist or "").strip()
-    if not raw:
-        return "Unknown Artist"
-    split_patterns = [
-        r"\s*,\s*",
-        r"\s+feat\.?\s+",
-        r"\s+featuring\s+",
-        r"\s+ft\.?\s+",
-        r"\s+x\s+",
-        r"\s+with\s+",
-    ]
-    primary = raw
-    for pattern in split_patterns:
-        parts = re.split(pattern, primary, maxsplit=1, flags=re.IGNORECASE)
-        if parts and parts[0].strip():
-            primary = parts[0].strip()
-            if primary != raw:
-                break
-    return primary or "Unknown Artist"
-
-
-def _extract_album_track(filepath: Path) -> tuple[Optional[str], Optional[int]]:
-    try:
-        import mutagen
-        audio = mutagen.File(str(filepath), easy=True)
-        if not audio:
-            return None, None
-        album = None
-        track_num = None
-        album_values = audio.get("album", [])
-        if album_values:
-            album = str(album_values[0]).strip() or None
-        track_values = audio.get("tracknumber", [])
-        if track_values:
-            raw = str(track_values[0]).split("/")[0].strip()
-            if raw.isdigit():
-                track_num = int(raw)
-        return album, track_num
-    except Exception:
-        return None, None
-
-
 def _get_downloads_dir() -> Path:
     from oracle.config import DOWNLOADS_FOLDER
     p = Path(DOWNLOADS_FOLDER)
@@ -164,71 +112,18 @@ def _is_stable(path: Path, prev_sizes: Dict[str, int]) -> bool:
     return prev is not None and prev == size
 
 
-def _extract_tag(tags: dict, *keys: str, fallback: str = "") -> str:
-    """Safely extract a tag value from mutagen tags (ID3 or Vorbis)."""
-    for key in keys:
-        val = tags.get(key)
-        if val is None:
-            continue
-        # mutagen ID3 frames are subscriptable; Vorbis returns lists
-        try:
-            text = str(val[0]) if hasattr(val, "__getitem__") else str(val)
-        except (IndexError, TypeError):
-            continue
-        if text.strip():
-            return text.strip()
-    return fallback
-
-
-def _guard_check(filepath: Path) -> dict:
-    """Run acquisition guard on a downloaded file."""
-    try:
-        from oracle.acquirers.guard import guard_acquisition
-        import mutagen
-        audio = mutagen.File(str(filepath))
-        artist = ""
-        title = filepath.stem
-        if audio and hasattr(audio, "tags") and audio.tags:
-            tags = audio.tags
-            artist = _extract_tag(tags, "TPE1", "artist")
-            title = _extract_tag(tags, "TIT2", "title", fallback=filepath.stem)
-        result = guard_acquisition(artist=artist, title=title)
-        return {
-            "allowed": result.allowed,
-            "reason": result.rejection_reason,
-            "artist": result.artist or artist,
-            "title": result.title or title,
-            "confidence": float(result.confidence or 0.0),
-        }
-    except Exception as e:
-        logger.warning(f"Guard check error (rejecting): {e}")
-        return {"allowed": False, "reason": f"guard error: {e}"}
-
-
-def _move_to_library(filepath: Path, library_dir: Path) -> Path:
-    """Move file to Artist/Album/Song layout."""
-    guard = _guard_check(filepath)
-    artist = _sanitize_component(
-        _primary_album_artist(guard.get("artist", "")),
-        "Unknown Artist",
-    )
-    title = _sanitize_component(guard.get("title", "") or filepath.stem, filepath.stem)
-    album_tag, track_num = _extract_album_track(filepath)
-    album = _sanitize_component(album_tag or "Singles", "Singles")
-    prefix = f"{track_num:02d} - " if track_num else ""
-    filename = f"{prefix}{title}{filepath.suffix}"
-    dest = library_dir / artist / album / filename
-    # Handle filename collision
-    if dest.exists():
-        stem = dest.stem
-        suffix = filepath.suffix
-        dest = dest.parent / f"{stem}_{int(time.time())}{suffix}"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(filepath), str(dest))
-    return dest
+def _has_audio_files(directory: Path) -> bool:
+    """Check if a directory contains any audio files."""
+    for path in directory.rglob("*"):
+        if path.is_file() and path.suffix.lower() in AUDIO_EXTENSIONS:
+            return True
+    return False
 
 
 def _mark_queue_completed(artist: str, title: str) -> None:
+    """Mark matching acquisition_queue rows as completed."""
+    import sqlite3
+
     if not artist or not title:
         return
     from oracle.db.schema import get_connection
@@ -256,104 +151,122 @@ def _mark_queue_completed(artist: str, title: str) -> None:
             if "locked" in str(exc).lower() and attempt < attempts:
                 time.sleep(0.05 * attempt)
                 continue
-            logger.warning("[INGEST] Queue completion update failed for %s - %s: %s", artist, title, exc)
+            logger.warning(
+                "[INGEST] Queue completion update failed for %s - %s: %s",
+                artist, title, exc,
+            )
             return
         finally:
             conn.close()
 
 
-def _move_file(filepath: Path, library_dir: Path) -> Optional[tuple[Path, dict]]:
-    """Guard check + move to library. Returns (dest, guard) on success, None on rejection."""
-    logger.info(f"[INGEST] Processing: {filepath.name}")
+def _reconcile_downloaded_queue_rows() -> int:
+    """Mark downloaded queue items completed when the track exists in library DB."""
+    import sqlite3
 
-    guard = _guard_check(filepath)
-    if not guard["allowed"]:
-        logger.warning(f"[INGEST] REJECTED by guard: {filepath.name} â€” {guard['reason']}")
-        q_dir = library_dir.parent / "_Quarantine" / "Junk"
-        q_dir.mkdir(parents=True, exist_ok=True)
+    from oracle.db.schema import get_connection
+    attempts = 4
+    for attempt in range(1, attempts + 1):
+        conn = get_connection(timeout=10.0)
         try:
-            shutil.move(str(filepath), str(q_dir / filepath.name))
-        except Exception as exc:
-            logger.error("[INGEST] Failed to quarantine rejected file %s: %s", filepath, exc)
-        return None
+            cur = conn.execute(
+                """
+                UPDATE acquisition_queue
+                SET status='completed', completed_at=datetime('now'), error=NULL
+                WHERE status='downloaded'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM tracks t
+                    WHERE t.status='active'
+                      AND lower(trim(t.artist)) = lower(trim(acquisition_queue.artist))
+                      AND (
+                        lower(trim(t.title)) = lower(trim(acquisition_queue.title))
+                        OR lower(trim(t.title)) LIKE lower(trim(acquisition_queue.title)) || '%'
+                        OR lower(trim(acquisition_queue.title)) LIKE lower(trim(t.title)) || '%'
+                      )
+                  )
+                """
+            )
+            conn.commit()
+            return int(cur.rowcount or 0)
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc).lower() and attempt < attempts:
+                time.sleep(0.05 * attempt)
+                continue
+            logger.warning("[INGEST] Queue reconciliation failed: %s", exc)
+            return 0
+        finally:
+            conn.close()
 
-    try:
-        dest = _move_to_library(filepath, library_dir)
-        logger.info(f"[INGEST] Moved: {dest.name}")
-        return dest, guard
-    except Exception as e:
-        logger.error(f"[INGEST] Move failed: {e}")
-        return None
 
+def _sweep(watch_dirs: List[Path],
+           prev_sizes: Dict[str, int],
+           ingested: Set[str]) -> int:
+    """One sweep -- collect stable directories with audio, import via beets.
 
-def _sweep(downloads_dir: Path, library_dir: Path,
-           prev_sizes: Dict[str, int], ingested: Set[str]) -> int:
-    """One sweep of the downloads directory.
-
-    Moves all stable files into the library, then runs scan+index once as a batch.
-    CLAP model is loaded once per sweep, not once per file.
+    Stable files are detected, then beets handles guard + move + tag.
+    Post-import scan+index happens inside ``beets_import_and_ingest``.
     """
-    moved: List[Path] = []
-    moved_guard: List[dict] = []
+    from oracle.integrations.beets_import import beets_import_and_ingest
 
-    for path in sorted(downloads_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        if path.suffix.lower() not in AUDIO_EXTENSIONS:
-            continue
-        key = str(path)
-        if key in ingested:
-            continue
-        if not _is_stable(path, prev_sizes):
-            continue  # Still downloading
+    total_imported = 0
 
-        ingested.add(key)
+    for watch_dir in watch_dirs:
+        # Find files that are stable (size unchanged since last check)
+        ready_files: List[Path] = []
+        for path in sorted(watch_dir.rglob("*")):
+            if not path.is_file():
+                continue
+            if path.suffix.lower() not in AUDIO_EXTENSIONS:
+                continue
+            key = str(path)
+            if key in ingested:
+                continue
+            if not _is_stable(path, prev_sizes):
+                continue
+            ready_files.append(path)
+            ingested.add(key)
+
+        if not ready_files:
+            continue
+
+        logger.info(
+            "[INGEST] %d stable file(s) in %s -- importing via beets",
+            len(ready_files), watch_dir,
+        )
+
+        # Flat files in staging come from Qobuz/acquirers with good tags;
+        # use --singletons --noautotag to avoid MusicBrainz match failures.
+        has_subdirs = any(p.is_dir() for p in watch_dir.iterdir()
+                         if not p.name.startswith("_"))
+        kwargs: Dict[str, bool] = {}
+        if not has_subdirs:
+            kwargs["singleton"] = True
+            kwargs["no_autotag"] = True
+
         try:
-            payload = _move_file(path, library_dir)
-            if payload:
-                dest, guard = payload
-                moved.append(dest)
-                moved_guard.append(guard)
-        except Exception as e:
-            logger.error(f"[INGEST] Unhandled error on {path.name}: {e}")
+            result = beets_import_and_ingest(watch_dir, **kwargs)
+            imported = result.get("imported", 0)
+            quarantined = result.get("quarantined", 0)
+            errors = result.get("errors", 0)
+            logger.info(
+                "[INGEST] Beets: %d imported, %d quarantined, %d errors",
+                imported, quarantined, errors,
+            )
+            total_imported += imported
+            completed = _reconcile_downloaded_queue_rows()
+            if completed:
+                logger.info("[INGEST] Queue reconcile: %d downloaded item(s) marked completed", completed)
+        except Exception as exc:
+            logger.error("[INGEST] Beets import failed: %s", exc)
 
-    if not moved:
-        return 0
-
-    # Batch scan + index once for all moved files
-    scan_ok = False
-    try:
-        from oracle.scanner import scan_paths
-        result = scan_paths(moved)
-        logger.info(f"[INGEST] Batch scan: {result}")
-        scan_ok = True
-    except Exception as e:
-        logger.error(f"[INGEST] Scan failed: {e}")
-        return len(moved)
-
-    index_ok = False
-    try:
-        from oracle.indexer import index_track_ids
-        track_ids = result.get("track_ids", []) if isinstance(result, dict) else []
-        result = index_track_ids(track_ids) if track_ids else {"indexed": 0, "failed": 0, "scored": 0}
-        logger.info(f"[INGEST] Batch index: {result}")
-        index_ok = True
-    except Exception as e:
-        logger.error(f"[INGEST] Index failed: {e}")
-
-    if scan_ok and index_ok:
-        for guard in moved_guard:
-            _mark_queue_completed(guard.get("artist", ""), guard.get("title", ""))
-
-    logger.info(f"[INGEST] Done. {len(moved)} file(s) ingested.")
-    return len(moved)
+    return total_imported
 
 
 def run_watcher(once: bool = False) -> None:
-    """Main loop. If once=True, does one sweep and exits.
+    """Main loop.  If *once* is True, does one sweep and exits.
 
-    Lock enforcement: only one watcher may run at a time. A second invocation
-    will exit immediately with a warning rather than creating a race condition.
+    Lock enforcement: only one watcher may run at a time.
     """
     logging.basicConfig(
         level=logging.INFO,
@@ -376,30 +289,22 @@ def run_watcher(once: bool = False) -> None:
 
 
 def _run_watcher_locked(once: bool = False) -> None:
-    """Internal watcher body â€” called after lock is acquired."""
+    """Internal watcher body -- called after lock is acquired."""
     downloads_dir = _get_downloads_dir()
     staging_dir = PROJECT_ROOT / "staging"
     staging_dir.mkdir(parents=True, exist_ok=True)
-    library_dir = _get_library_dir()
 
-    # Watch both downloads/ (slskd T2) and staging/ (T3 yt-dlp post-flight)
     watch_dirs = [d for d in [downloads_dir, staging_dir] if d.exists()]
 
-    logger.info(f"[WATCHER] Watching: {', '.join(str(d) for d in watch_dirs)}")
-    logger.info(f"[WATCHER] Library dir: {library_dir}")
+    logger.info("[WATCHER] Watching: %s", ", ".join(str(d) for d in watch_dirs))
+    logger.info("[WATCHER] Library dir: %s", _get_library_dir())
 
     prev_sizes: Dict[str, int] = {}
     ingested: Set[str] = set()
     now = time.time()
 
-    def _sweep_all() -> int:
-        total = 0
-        for d in watch_dirs:
-            total += _sweep(d, library_dir, prev_sizes, ingested)
-        return total
-
     if once:
-        # Collect audio files and check whether any are too new to be stable.
+        # Pre-populate sizes for stability check
         audio_files: List[Path] = []
         needs_wait = False
         for d in watch_dirs:
@@ -413,7 +318,6 @@ def _run_watcher_locked(once: bool = False) -> None:
                     size = path.stat().st_size
                     mtime = path.stat().st_mtime
                     prev_sizes[str(path)] = size
-                    # File modified very recently â†’ might still be writing
                     if (now - mtime) < ALREADY_STABLE_AGE:
                         needs_wait = True
                 except OSError:
@@ -424,26 +328,32 @@ def _run_watcher_locked(once: bool = False) -> None:
             return
 
         if needs_wait:
-            logger.info(f"[WATCHER] {len(audio_files)} file(s) found. Waiting {STABLE_SECONDS}s for stability...")
+            logger.info(
+                "[WATCHER] %d file(s) found. Waiting %ds for stability...",
+                len(audio_files), STABLE_SECONDS,
+            )
             time.sleep(STABLE_SECONDS)
         else:
-            logger.info(f"[WATCHER] {len(audio_files)} file(s) found (already stable). Ingesting immediately.")
+            logger.info(
+                "[WATCHER] %d file(s) found (already stable). Ingesting immediately.",
+                len(audio_files),
+            )
 
-        n = _sweep_all()
-        logger.info(f"[WATCHER] Done. Ingested {n} file(s).")
+        n = _sweep(watch_dirs, prev_sizes, ingested)
+        logger.info("[WATCHER] Done. Ingested %d file(s).", n)
         return
 
-    logger.info(f"[WATCHER] Polling every {POLL_INTERVAL}s. Ctrl+C to stop.")
+    logger.info("[WATCHER] Polling every %ds. Ctrl+C to stop.", POLL_INTERVAL)
     while True:
         try:
-            n = _sweep_all()
+            n = _sweep(watch_dirs, prev_sizes, ingested)
             if n:
-                logger.info(f"[WATCHER] Ingested {n} file(s) this sweep.")
+                logger.info("[WATCHER] Ingested %d file(s) this sweep.", n)
         except KeyboardInterrupt:
             logger.info("[WATCHER] Stopped.")
             break
-        except Exception as e:
-            logger.error(f"[WATCHER] Sweep error: {e}")
+        except Exception as exc:
+            logger.error("[WATCHER] Sweep error: %s", exc)
         time.sleep(POLL_INTERVAL)
 
 

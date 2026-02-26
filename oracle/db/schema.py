@@ -517,6 +517,8 @@ def _ensure_tracks_columns(cursor: sqlite3.Cursor) -> None:
         "added_at": "REAL",
         "created_at": "REAL",
         "updated_at": "REAL",
+        "track_number": "INTEGER",
+        "disc_number": "INTEGER",
     }
 
     for name, col_type in desired.items():

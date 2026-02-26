@@ -274,6 +274,18 @@ def main() -> None:
     watch_parser = subparsers.add_parser("watch", help="Watch downloads/ and auto-ingest new audio files")
     watch_parser.add_argument("--once", action="store_true", help="Process existing files and exit")
 
+    import_parser = subparsers.add_parser(
+        "import", help="Import audio files via beets (auto-tag + organize + scan)"
+    )
+    import_parser.add_argument(
+        "--source", default="staging",
+        help="Source: 'staging', 'downloads', or an absolute path (default: staging)",
+    )
+    import_parser.add_argument("--dry-run", action="store_true", help="Preview without moving files")
+    import_parser.add_argument("--no-autotag", action="store_true", help="Skip MusicBrainz lookup")
+    import_parser.add_argument("--singletons", action="store_true", help="Import as non-album tracks")
+    import_parser.add_argument("--copy", action="store_true", help="Copy instead of move")
+
     # Playback signal â€” log plays/skips for taste learning without the server
     played_parser = subparsers.add_parser(
         "played", help="Log a playback signal for taste learning"
@@ -290,6 +302,7 @@ def main() -> None:
     drain_parser.add_argument("--max-tier", type=int, default=4, help="Max acquisition tier (1=Qobuz, 2=Slskd, 3=RD, 4=SpotDL)")
     drain_parser.add_argument("--workers", type=int, default=0, help="Parallel download workers (0=auto)")
     drain_parser.add_argument("--max-retries", type=int, default=3, help="Mark failed after N attempts")
+    drain_parser.add_argument("--source", help="Filter by source (liked, playlist, history, top_tracks, discography)")
 
     perf_parser = subparsers.add_parser("perf", help="Performance profile and runtime pause controls")
     perf_sub = perf_parser.add_subparsers(dest="perf_command")
@@ -761,13 +774,19 @@ def main() -> None:
         return
 
     if args.command == "downloads" and args.downloads_command == "organize":
-        from oracle.download_processor import process_downloads
-        results = process_downloads(
-            target_library=args.library,
-            clean_names=not args.no_clean,
+        print("NOTE: 'oracle downloads organize' is deprecated. Use 'oracle import' instead.")
+        print("Redirecting to beets import...")
+        import logging as _logging
+        _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+        from oracle.integrations.beets_import import beets_import_and_ingest
+        from oracle.config import DOWNLOADS_FOLDER
+        result = beets_import_and_ingest(
+            Path(DOWNLOADS_FOLDER),
             dry_run=args.dry_run,
-            scan_after=not args.no_scan
         )
+        print(f"Beets import: {result.get('imported', 0)} imported, "
+              f"{result.get('quarantined', 0)} quarantined, "
+              f"{result.get('errors', 0)} errors")
         return
 
     if args.command == "vibe" and args.vibe_command == "save":
@@ -1218,6 +1237,33 @@ def main() -> None:
         run_watcher(once=args.once)
         return
 
+    if args.command == "import":
+        import logging as _logging
+        from pathlib import Path as _Path
+        _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+        from oracle.integrations.beets_import import beets_import_and_ingest
+        from oracle.config import STAGING_FOLDER, DOWNLOADS_FOLDER
+        source_map = {
+            "staging": STAGING_FOLDER,
+            "downloads": DOWNLOADS_FOLDER,
+        }
+        source = source_map.get(args.source, _Path(args.source))
+        result = beets_import_and_ingest(
+            source,
+            dry_run=getattr(args, "dry_run", False),
+            no_autotag=getattr(args, "no_autotag", False),
+            singleton=getattr(args, "singletons", False),
+            move=not getattr(args, "copy", False),
+        )
+        print(f"Beets import: {result.get('imported', 0)} imported, "
+              f"{result.get('quarantined', 0)} quarantined, "
+              f"{result.get('errors', 0)} errors")
+        if result.get("scan"):
+            print(f"Scan: {result['scan']}")
+        if result.get("index"):
+            print(f"Index: {result['index']}")
+        return
+
     if args.command == "drain":
         import logging as _logging
         import threading
@@ -1230,17 +1276,30 @@ def main() -> None:
 
         conn = get_connection()
         cur = conn.cursor()
+        # Priority: playlist=4, liked=3, top_tracks=2, history=1, other=0
         q = (
             "SELECT id, artist, title, album, spotify_uri, COALESCE(retry_count, 0) "
             "FROM acquisition_queue "
             "WHERE status = 'pending' AND artist != '' AND title != '' "
-            "AND artist IS NOT NULL AND title IS NOT NULL"
+            "AND artist IS NOT NULL AND title IS NOT NULL "
+            "AND COALESCE(error, '') NOT LIKE 'slskd queued remote candidate%'"
         )
         params: list = []
         if args.artist:
             q += " AND artist LIKE ?"
             params.append(f"%{args.artist}%")
-        q += " ORDER BY COALESCE(priority_score, 0) DESC, datetime(added_at) ASC, id ASC"
+        if args.source:
+            q += " AND source = ?"
+            params.append(args.source)
+        q += (
+            " ORDER BY CASE source "
+            "   WHEN 'playlist' THEN 4 "
+            "   WHEN 'liked' THEN 3 "
+            "   WHEN 'top_tracks' THEN 2 "
+            "   WHEN 'history' THEN 1 "
+            "   ELSE 0 END DESC, "
+            "COALESCE(priority_score, 0) DESC, datetime(added_at) ASC, id ASC"
+        )
         if args.limit:
             q += " LIMIT ?"
             params.append(args.limit)
@@ -1285,9 +1344,28 @@ def main() -> None:
                     result.error = f"DB update failed: {exc}"
             else:
                 # Partial/failed attempt: retry until max_retries, then hard fail.
-                next_retry = int(retry_count or 0) + 1
-                retryable_error = result.error or "acquisition did not yield a local file"
-                target_status = "pending" if next_retry < args.max_retries else "failed"
+                if result.success and result.source == "slskd" and not file_ready:
+                    # Slskd returns a remote candidate path; keep pending without consuming retries.
+                    next_retry = int(retry_count or 0)
+                    retryable_error = (
+                        f"slskd queued remote candidate; waiting for local ingest: "
+                        f"{result.path or '(no path)'}"
+                    )
+                    target_status = "pending"
+                else:
+                    next_retry = int(retry_count or 0) + 1
+                    if result.error:
+                        retryable_error = result.error
+                    elif result.success and result.path:
+                        retryable_error = (
+                            f"{result.source} reported success but local file is missing: {result.path}"
+                        )
+                    elif result.success:
+                        retryable_error = f"{result.source} reported success without a local file path"
+                    else:
+                        retryable_error = "acquisition did not yield a local file"
+                    target_status = "pending" if next_retry < args.max_retries else "failed"
+                result.error = retryable_error
                 try:
                     wconn = get_connection()
                     wconn.execute(

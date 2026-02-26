@@ -107,6 +107,14 @@ def extract_metadata(file_path: Path) -> Dict[str, str]:
                 meta["album"] = audio_easy.tags["album"][0]
             if "date" in audio_easy.tags and audio_easy.tags["date"]:
                 meta["year"] = audio_easy.tags["date"][0]
+            if "tracknumber" in audio_easy.tags and audio_easy.tags["tracknumber"]:
+                raw_tn = str(audio_easy.tags["tracknumber"][0]).split("/")[0].strip()
+                if raw_tn.isdigit():
+                    meta["track_number"] = raw_tn
+            if "discnumber" in audio_easy.tags and audio_easy.tags["discnumber"]:
+                raw_dn = str(audio_easy.tags["discnumber"][0]).split("/")[0].strip()
+                if raw_dn.isdigit():
+                    meta["disc_number"] = raw_dn
 
         duration_source = audio_easy
         if not (duration_source and duration_source.info and getattr(duration_source.info, "length", None)):
@@ -211,11 +219,15 @@ def scan_library(library_path: str, limit: int = 0) -> Dict[str, int]:
 
             if existing:
                 duration_value = _sanitize_duration(meta.get("duration"))
+                tn = int(meta["track_number"]) if meta.get("track_number") else None
+                dn = int(meta["disc_number"]) if meta.get("disc_number") else None
                 cursor.execute(
                     """
                     UPDATE tracks
                     SET artist = ?, title = ?, album = ?, year = ?, genre = ?,
                         duration = COALESCE(?, duration),
+                        track_number = COALESCE(?, track_number),
+                        disc_number = COALESCE(?, disc_number),
                         content_hash = ?, last_seen_at = ?, updated_at = ?, status = 'active'
                     WHERE filepath = ?
                     """,
@@ -226,6 +238,8 @@ def scan_library(library_path: str, limit: int = 0) -> Dict[str, int]:
                         meta.get("year"),
                         meta.get("genre"),
                         duration_value,
+                        tn,
+                        dn,
                         content_hash,
                         now,
                         now,
@@ -235,12 +249,15 @@ def scan_library(library_path: str, limit: int = 0) -> Dict[str, int]:
                 stats["updated"] += 1
             else:
                 duration_value = _sanitize_duration(meta.get("duration"))
+                tn = int(meta["track_number"]) if meta.get("track_number") else None
+                dn = int(meta["disc_number"]) if meta.get("disc_number") else None
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO tracks (
                         track_id, filepath, artist, title, album, year, genre, duration,
+                        track_number, disc_number,
                         content_hash, last_seen_at, status, added_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
                     """,
                     (
                         track_id,
@@ -251,6 +268,8 @@ def scan_library(library_path: str, limit: int = 0) -> Dict[str, int]:
                         meta.get("year"),
                         meta.get("genre"),
                         duration_value,
+                        tn,
+                        dn,
                         content_hash,
                         now,
                         now,
@@ -345,11 +364,15 @@ def scan_paths(paths: Iterable[Path]) -> Dict[str, object]:
 
             if existing:
                 duration_value = _sanitize_duration(meta.get("duration"))
+                tn = int(meta["track_number"]) if meta.get("track_number") else None
+                dn = int(meta["disc_number"]) if meta.get("disc_number") else None
                 cursor.execute(
                     """
                     UPDATE tracks
                     SET artist = ?, title = ?, album = ?, year = ?, genre = ?,
                         duration = COALESCE(?, duration),
+                        track_number = COALESCE(?, track_number),
+                        disc_number = COALESCE(?, disc_number),
                         content_hash = ?, last_seen_at = ?, updated_at = ?, status = 'active'
                     WHERE filepath = ?
                     """,
@@ -360,6 +383,8 @@ def scan_paths(paths: Iterable[Path]) -> Dict[str, object]:
                         meta.get("year"),
                         meta.get("genre"),
                         duration_value,
+                        tn,
+                        dn,
                         content_hash,
                         now,
                         now,
@@ -369,12 +394,15 @@ def scan_paths(paths: Iterable[Path]) -> Dict[str, object]:
                 stats["updated"] = int(stats["updated"]) + 1
             else:
                 duration_value = _sanitize_duration(meta.get("duration"))
+                tn = int(meta["track_number"]) if meta.get("track_number") else None
+                dn = int(meta["disc_number"]) if meta.get("disc_number") else None
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO tracks (
                         track_id, filepath, artist, title, album, year, genre, duration,
+                        track_number, disc_number,
                         content_hash, last_seen_at, status, added_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
                     """,
                     (
                         track_id,
@@ -385,6 +413,8 @@ def scan_paths(paths: Iterable[Path]) -> Dict[str, object]:
                         meta.get("year"),
                         meta.get("genre"),
                         duration_value,
+                        tn,
+                        dn,
                         content_hash,
                         now,
                         now,
