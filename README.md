@@ -128,6 +128,38 @@ python lyra_acquire.py --artist "NIN" --limit 10 --quality MP3-320
 ### ðŸŒ **API Interface**
 Active interface is REST API under `/api/*` plus CLI commands.
 
+### ðŸ”§ **2026-02-26 Hardening Update**
+- Queue drain now supports source-targeted execution (`playlist`, `liked`, `top_tracks`, `history`) and prioritizes queue ordering for demo workflows.
+- Ingest watcher reconciliation now:
+  - marks `downloaded -> completed` when imported tracks are present,
+  - re-queues stale `downloaded` rows that never materialize.
+- Enrichment providers now include production modules for:
+  - MusicBrainz
+  - AcoustID
+  - Discogs
+  - Last.fm
+  - Genius
+- Score sanity audit command added (`oracle score-audit`) to validate 10-dimension coverage and trend checks.
+
+**Operational sequence (recommended):**
+```powershell
+# 1) Drain queue in source order (playlist first, then liked)
+python -m oracle drain --limit 25 --source playlist --max-tier 3 --workers 4
+python -m oracle drain --limit 25 --source liked --max-tier 3 --workers 4
+
+# 2) Ingest + reconcile
+python -m oracle watch --once
+
+# 3) Ensure all active tracks are scored
+python -m oracle score --all
+
+# 4) Validate dimension coverage and sanity
+python -m oracle score-audit
+
+# 5) Run enrichment providers in batch
+python -m oracle enrich-all --limit 500 --providers lastfm,genius,musicbrainz
+```
+
 ### ðŸ›¡ï¸ **Safety Doctrine** (NEW v10)
 Time-travel undo for all file operations:
 ```powershell
@@ -251,6 +283,12 @@ Discography FLAC â†’ Album FLAC â†’ Track FLAC
 **Enrichment Sources:** MusicBrainz, AcoustID, Last.fm, Genius (with rate limiting)
 
 **Key Files:** `oracle/enrichers/unified.py`, `oracle/enrichers/musicbrainz.py`, `oracle/enrichers/acoustid.py`, `oracle/enrichers/lastfm.py`, `oracle/enrichers/genius.py`
+
+**Implementation notes (current):**
+- Unified enrichment caches provider payloads in `enrich_cache`.
+- Last.fm is used for tags, play/listener context, and similar-track/artist signals.
+- Genius is used for canonical song metadata and context (description, release date, pageviews).
+- Empty provider payloads are not persisted to cache to avoid stale misses.
 
 ---
 
