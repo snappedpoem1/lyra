@@ -172,10 +172,15 @@ python -m oracle enrich-all --limit 500 --providers lastfm,genius,musicbrainz
 - Score coverage validated with `oracle score-audit`.
 
 Current validated runtime snapshot:
-- `tracks(active)=357`
-- `embeddings=357`
-- `scored=357`
+- `tracks(active)=368`
+- `embeddings=368`
+- `scored=368`
 - test suite: `35 passed`
+
+Acquisition verification snapshot:
+- Streamrip-only stress run (20 pending playlist items): `3/20` success.
+- Full waterfall run on comparable playlist batch (20 items): `11 downloaded`, remainder mostly duplicate/junk guard rejections.
+- Practical guidance: do not run streamrip-only as primary path; use full waterfall tiers.
 
 Known non-blocking gaps:
 - Streamrip still has intermittent upstream failures (`AssertionError`, occasional `401`/`total items`) on some tracks.
