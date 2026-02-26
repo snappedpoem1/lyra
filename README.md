@@ -690,3 +690,41 @@ Built with â¤ï¸ for music lovers who want to truly own their collection.
 
 
 
+
+---
+
+## 2026-02-27 Operational Addendum
+
+This section documents the latest queue/acquisition/scoring hardening.
+
+- Waterfall order is now:
+  - `T1` Qobuz
+  - `T2` Streamrip (promoted fallback)
+  - `T3` Slskd
+  - `T4` Prowlarr + Real-Debrid
+  - `T5` SpotDL
+- Queue execution supports source targeting (`playlist`, `liked`, `top_tracks`, `history`) and priority ordering.
+- Enrichment providers now include:
+  - `musicbrainz`, `acoustid`, `discogs`, `lastfm`, `genius`
+  - `acousticbrainz` (Essentia-derived high-level descriptors)
+  - `musicnn` (optional local neural tag inference; set `MUSICNN_ENABLED=1`)
+- Score validation now includes tag-alignment checks in `oracle score-audit`.
+
+Recommended adjacent throughput mode:
+
+```powershell
+# Terminal A
+python -m oracle drain --limit 50 --max-tier 5 --workers 6
+
+# Terminal B
+python -m oracle watch --once
+python -m oracle score --all
+```
+
+Recommended validation sequence:
+
+```powershell
+python -m oracle.cli status
+python -m oracle.cli score-audit
+python -m pytest -q
+```

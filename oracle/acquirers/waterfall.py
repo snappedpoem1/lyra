@@ -1,13 +1,14 @@
-"""Unified Acquisition Waterfall.
+﻿"""Unified Acquisition Waterfall.
 
 Lyra's tiered acquisition strategy:
-  T1: Qobuz      (hi-fi streaming API â†’ FLAC up to 24-bit/96kHz)
-  T2: Slskd      (peer-to-peer FLAC search via Soulseek)
-  T3: Real-Debrid (Prowlarr search â†’ RD cache â†’ direct download)
-  T4: SpotDL     (YouTube with Spotify metadata - always available fallback)
+  T1: Qobuz       (hi-fi streaming API -> FLAC up to 24-bit/96kHz)
+  T2: Streamrip   (alternative hi-fi ripper fallback)
+  T3: Slskd       (peer-to-peer FLAC search via Soulseek)
+  T4: Real-Debrid (Prowlarr search -> RD cache -> direct download)
+  T5: SpotDL      (YouTube with Spotify metadata - final fallback)
 
 Each tier gracefully degrades if services aren't running.
-Quality: FLAC hi-res (T1) â†’ FLAC (T2/T3) â†’ 320k MP3 (T4)
+Quality: FLAC hi-res (T1/T2) -> FLAC (T3/T4) -> 320k MP3 (T5)
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ class AcquisitionResult:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
-# â”€â”€ Availability Checks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Ã¢â€â‚¬Ã¢â€â‚¬ Availability Checks Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 
 def _check_qobuz_available() -> bool:
@@ -59,6 +60,16 @@ def _check_slskd_available() -> bool:
         response = requests.get(f"{url}/api/v0/application", timeout=5)
         return response.status_code in (200, 401)  # 401 = needs auth but running
     except Exception:
+        return False
+
+
+def _check_streamrip_available() -> bool:
+    """Check if streamrip CLI is available."""
+    try:
+        from oracle.acquirers.streamrip import is_available
+
+        return is_available()
+    except ImportError:
         return False
 
 
@@ -109,7 +120,7 @@ def _check_spotdl_available() -> bool:
         return False
 
 
-# â”€â”€ Tier Implementations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Ã¢â€â‚¬Ã¢â€â‚¬ Tier Implementations Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 
 def _try_tier1_qobuz(artist: str, title: str) -> AcquisitionResult:
@@ -207,8 +218,47 @@ def _try_tier2_slskd(artist: str, title: str) -> AcquisitionResult:
         )
 
 
-def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) -> AcquisitionResult:
-    """Tier 3: Prowlarr â†’ Real-Debrid (cached torrents, FLAC quality)."""
+def _try_tier2_streamrip(artist: str, title: str, album: Optional[str] = None) -> AcquisitionResult:
+    """Tier 2: Streamrip fallback (if configured)."""
+    start = time.perf_counter()
+    if not _check_streamrip_available():
+        return AcquisitionResult(
+            success=False,
+            tier=2,
+            source="streamrip",
+            error="Streamrip not available",
+            elapsed=time.perf_counter() - start,
+        )
+
+    try:
+        from oracle.acquirers.streamrip import download
+
+        result = download(artist, title, album=album)
+        return AcquisitionResult(
+            success=result.get("success", False),
+            tier=2,
+            source="streamrip",
+            path=result.get("path"),
+            artist=result.get("artist", artist),
+            title=result.get("title", title),
+            error=result.get("error"),
+            elapsed=result.get("elapsed", time.perf_counter() - start),
+            metadata=result.get("metadata", {}),
+        )
+
+    except Exception as e:
+        logger.exception("[T2] Streamrip error")
+        return AcquisitionResult(
+            success=False,
+            tier=2,
+            source="streamrip",
+            error=str(e),
+            elapsed=time.perf_counter() - start,
+        )
+
+
+def _try_tier4_realdebrid(artist: str, title: str, album: Optional[str] = None) -> AcquisitionResult:
+    """Tier 3: Prowlarr Ã¢â€ â€™ Real-Debrid (cached torrents, FLAC quality)."""
     start = time.perf_counter()
 
     if not _check_prowlarr_available():
@@ -258,7 +308,7 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
         # Build magnet list from Prowlarr results.
         # Prowlarr field map (verified empirically):
         #   guid      = actual magnet URI  ("magnet:?xt=urn:btih:...") for TPB-style indexers
-        #   infoHash  = raw hex hash (most reliable â€” use to construct magnet if guid isn't one)
+        #   infoHash  = raw hex hash (most reliable Ã¢â‚¬â€ use to construct magnet if guid isn't one)
         #   magnetUrl = Prowlarr proxy URL (do NOT send this to RD; use guid/infoHash instead)
         magnets: List[Dict] = []
         for r in results:
@@ -296,7 +346,7 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
 
         # RD instantAvailability is deprecated (returns 403). Instead: add each
         # magnet, poll for 20s. Cached torrents go to "downloaded" in <5s.
-        # Non-cached ones time out â€” we delete them and move on.
+        # Non-cached ones time out Ã¢â‚¬â€ we delete them and move on.
         # Limit to top 3 to keep T3 bounded (<60s total before falling to T4).
         for entry in magnets[:3]:
             magnet = entry["magnet"]
@@ -317,7 +367,7 @@ def _try_tier3_realdebrid(artist: str, title: str, album: Optional[str] = None) 
                     if f.suffix.lower() in {".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus"}
                 ]
                 if not audio_files:
-                    logger.debug("[T3] No audio files in download â€” skipping")
+                    logger.debug("[T3] No audio files in download Ã¢â‚¬â€ skipping")
                     continue
 
                 best_file = audio_files[0]
@@ -419,7 +469,7 @@ def _try_tier4_spotdl(artist: str, title: str, spotify_uri: Optional[str] = None
         )
 
 
-# â”€â”€ Guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Ã¢â€â‚¬Ã¢â€â‚¬ Guard Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 
 def _guard_check(artist: str, title: str, skip_guard: bool = False) -> Dict[str, Any]:
@@ -487,7 +537,7 @@ def _guard_check(artist: str, title: str, skip_guard: bool = False) -> Dict[str,
         }
 
 
-# â”€â”€ Main Waterfall â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Ã¢â€â‚¬Ã¢â€â‚¬ Main Waterfall Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 
 def acquire(
@@ -496,13 +546,13 @@ def acquire(
     album: Optional[str] = None,
     spotify_uri: Optional[str] = None,
     skip_tiers: Optional[List[int]] = None,
-    max_tier: int = 4,
+    max_tier: int = 5,
     skip_guard: bool = False,
 ) -> AcquisitionResult:
     """Run the acquisition waterfall with guard protection.
 
     Tries each tier in order:
-      T1 (Qobuz) â†’ T2 (Slskd) â†’ T3 (Real-Debrid) â†’ T4 (SpotDL)
+      T1 (Qobuz) -> T2 (Streamrip) -> T3 (Slskd) -> T4 (Real-Debrid) -> T5 (SpotDL)
 
     GUARD CHECK runs first to reject:
     - Karaoke/tribute/cover versions
@@ -513,10 +563,11 @@ def acquire(
     Args:
         artist: Artist name
         title: Track title
-        album: Optional album name (helps T3 search)
-        spotify_uri: Optional Spotify URI (helps T4)
-        skip_tiers: List of tier numbers to skip (1=Qobuz, 2=Slskd, 3=RD, 4=SpotDL)
-        max_tier: Stop after this tier (1-4)
+        album: Optional album name (helps T4 search)
+        spotify_uri: Optional Spotify URI (helps T5)
+        skip_tiers: List of tier numbers to skip
+            (1=Qobuz, 2=Streamrip, 3=Slskd, 4=RD, 5=SpotDL)
+        max_tier: Stop after this tier (1-5)
         skip_guard: Skip guard check (not recommended)
 
     Returns:
@@ -551,7 +602,7 @@ def acquire(
         for w in guard.get("warnings", []):
             logger.info(f"  [WARN] {w}")
 
-    # Tier 1: Qobuz (hi-fi FLAC â€” priority, authenticated, reliable)
+    # Tier 1: Qobuz (hi-fi FLAC Ã¢â‚¬â€ priority, authenticated, reliable)
     if 1 not in skip_tiers and max_tier >= 1:
         logger.info("  [T1] Trying Qobuz...")
         result = _try_tier1_qobuz(artist, title)
@@ -561,11 +612,10 @@ def acquire(
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T1: {result.error}")
-
-    # Tier 2: Slskd (P2P FLAC)
+    # Tier 2: Streamrip (alternative hi-fi fallback)
     if 2 not in skip_tiers and max_tier >= 2:
-        logger.info("  [T2] Trying Slskd...")
-        result = _try_tier2_slskd(artist, title)
+        logger.info("  [T2] Trying Streamrip...")
+        result = _try_tier2_streamrip(artist, title, album)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T2 SUCCESS ({result.elapsed:.1f}s)")
@@ -573,10 +623,11 @@ def acquire(
             return result
         logger.info(f"  [--] T2: {result.error}")
 
-    # Tier 3: Real-Debrid (Prowlarr â†’ cached torrents)
+    # Tier 3: Slskd (P2P FLAC)
     if 3 not in skip_tiers and max_tier >= 3:
-        logger.info("  [T3] Trying Real-Debrid...")
-        result = _try_tier3_realdebrid(artist, title, album)
+        logger.info("  [T3] Trying Slskd...")
+        result = _try_tier2_slskd(artist, title)
+        result.tier = 3
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T3 SUCCESS ({result.elapsed:.1f}s)")
@@ -584,16 +635,29 @@ def acquire(
             return result
         logger.info(f"  [--] T3: {result.error}")
 
-    # Tier 4: SpotDL (YouTube 320k fallback)
+    # Tier 4: Real-Debrid (Prowlarr + cached torrents)
     if 4 not in skip_tiers and max_tier >= 4:
-        logger.info("  [T4] Trying SpotDL...")
-        result = _try_tier4_spotdl(artist, title, spotify_uri)
+        logger.info("  [T4] Trying Real-Debrid...")
+        result = _try_tier4_realdebrid(artist, title, album)
+        result.tier = 4
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T4 SUCCESS ({result.elapsed:.1f}s)")
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T4: {result.error}")
+
+    # Tier 5: SpotDL (YouTube 320k fallback)
+    if 5 not in skip_tiers and max_tier >= 5:
+        logger.info("  [T5] Trying SpotDL...")
+        result = _try_tier4_spotdl(artist, title, spotify_uri)
+        result.tier = 5
+        attempts.append(result)
+        if result.success:
+            logger.info(f"  [OK] T5 SUCCESS ({result.elapsed:.1f}s)")
+            _log_acquisition(artist, title, result)
+            return result
+        logger.info(f"  [--] T5: {result.error}")
 
     # All failed
     logger.warning(f"  [FAIL] All tiers failed for: {artist} - {title}")
@@ -640,17 +704,21 @@ def get_tier_status() -> Dict[str, Dict[str, Any]]:
             "available": _check_qobuz_available(),
             "description": "Qobuz hi-fi (FLAC up to 24-bit/96kHz)",
         },
-        "tier2_slskd": {
+        "tier2_streamrip": {
+            "available": _check_streamrip_available(),
+            "description": "Streamrip hi-fi fallback",
+        },
+        "tier3_slskd": {
             "available": _check_slskd_available(),
             "description": "Slskd peer-to-peer (FLAC)",
         },
-        "tier3_realdebrid": {
+        "tier4_realdebrid": {
             "available": _check_prowlarr_available() and _check_realdebrid_available(),
             "prowlarr": _check_prowlarr_available(),
             "realdebrid": _check_realdebrid_available(),
             "description": "Prowlarr + Real-Debrid (FLAC torrents)",
         },
-        "tier4_spotdl": {
+        "tier5_spotdl": {
             "available": _check_spotdl_available(),
             "description": "SpotDL YouTube (320k MP3)",
         },
@@ -684,3 +752,4 @@ if __name__ == "__main__":
     if result.error:
         print(f"  Error: {result.error}")
     print(f"  Elapsed: {result.elapsed:.1f}s")
+

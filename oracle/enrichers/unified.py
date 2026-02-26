@@ -10,7 +10,7 @@ import time
 from dotenv import load_dotenv
 
 from oracle.db.schema import get_connection, get_write_mode
-from oracle.enrichers import musicbrainz, acoustid, discogs, lastfm, genius
+from oracle.enrichers import acousticbrainz, acoustid, discogs, genius, lastfm, musicbrainz, musicnn
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +51,10 @@ def _set_cached(cursor, provider: str, key: str, payload: Dict) -> None:
     )
 
 
-def _apply_lastfm_tags(cursor, track_id: str, payload: Dict) -> None:
-    tags = payload.get("tags") if isinstance(payload, dict) else None
+def _apply_tag_payload(cursor, track_id: str, payload: Dict, source: str) -> None:
+    if not isinstance(payload, dict):
+        return
+    tags = payload.get("tags") or payload.get("top_tags")
     if not isinstance(tags, list) or not tags:
         return
     clean_tags = [str(t).strip().lower() for t in tags if str(t).strip()]
@@ -65,11 +67,11 @@ def _apply_lastfm_tags(cursor, track_id: str, payload: Dict) -> None:
         UPDATE tracks
         SET genre = CASE WHEN genre IS NULL OR trim(genre) = '' THEN ? ELSE genre END,
             subgenres = CASE WHEN subgenres IS NULL OR trim(subgenres) = '' THEN ? ELSE subgenres END,
-            metadata_source = COALESCE(metadata_source, 'lastfm'),
+            metadata_source = COALESCE(metadata_source, ?),
             last_enriched_at = ?
         WHERE track_id = ?
         """,
-        (genre, subgenres, time.time(), track_id),
+        (genre, subgenres, source, time.time(), track_id),
     )
 
 
@@ -77,7 +79,15 @@ def enrich_track(track_id: str, providers: Optional[List[str]] = None) -> Dict:
     if get_write_mode() != "apply_allowed":
         return {"error": "WRITE BLOCKED"}
 
-    providers = providers or ["musicbrainz", "acoustid", "discogs", "lastfm", "genius"]
+    providers = providers or [
+        "musicbrainz",
+        "acoustid",
+        "discogs",
+        "lastfm",
+        "genius",
+        "acousticbrainz",
+        "musicnn",
+    ]
 
     conn = get_connection(timeout=10.0)
     cursor = conn.cursor()
@@ -134,7 +144,7 @@ def enrich_track(track_id: str, providers: Optional[List[str]] = None) -> Dict:
             if payload:
                 _set_cached(cursor, "lastfm", key, payload)
             summary["lastfm"] = payload
-            _apply_lastfm_tags(cursor, track_id, payload)
+            _apply_tag_payload(cursor, track_id, payload, "lastfm")
         else:
             summary["lastfm"] = cached
 
@@ -148,6 +158,38 @@ def enrich_track(track_id: str, providers: Optional[List[str]] = None) -> Dict:
             summary["genius"] = payload
         else:
             summary["genius"] = cached
+
+    if "acousticbrainz" in providers and artist and title:
+        key = _cache_key("acousticbrainz", track_id)
+        cached = _get_cached(cursor, "acousticbrainz", key)
+        if cached is None:
+            payload = acousticbrainz.build_track_profile(
+                artist=artist,
+                title=title,
+                recording_mbid=summary.get("musicbrainz", {}).get("recording_mbid")
+                if isinstance(summary.get("musicbrainz"), dict)
+                else None,
+                album=album,
+                duration=duration,
+            )
+            if payload:
+                _set_cached(cursor, "acousticbrainz", key, payload)
+            summary["acousticbrainz"] = payload
+            _apply_tag_payload(cursor, track_id, payload, "acousticbrainz")
+        else:
+            summary["acousticbrainz"] = cached
+
+    if "musicnn" in providers and filepath:
+        key = _cache_key("musicnn", track_id)
+        cached = _get_cached(cursor, "musicnn", key)
+        if cached is None:
+            payload = musicnn.build_track_profile(filepath)
+            if payload:
+                _set_cached(cursor, "musicnn", key, payload)
+            summary["musicnn"] = payload
+            _apply_tag_payload(cursor, track_id, payload, "musicnn")
+        else:
+            summary["musicnn"] = cached
 
     conn.commit()
     conn.close()

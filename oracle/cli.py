@@ -94,11 +94,11 @@ def main() -> None:
     acquire_lyra = acquire_sub.add_parser("lyra", help="Run Lyra Protocol swarm acquisition")
     acquire_lyra.add_argument("--artist", required=True, help="Artist name")
     acquire_lyra.add_argument("--title", required=True, help="Track title")
-    acquire_waterfall = acquire_sub.add_parser("waterfall", help="Run full acquisition waterfall (T1-T4)")
+    acquire_waterfall = acquire_sub.add_parser("waterfall", help="Run full acquisition waterfall (T1-T5)")
     acquire_waterfall.add_argument("--artist", required=True, help="Artist name")
     acquire_waterfall.add_argument("--title", required=True, help="Track title")
     acquire_waterfall.add_argument("--album", help="Album name (helps T1 search)")
-    acquire_waterfall.add_argument("--max-tier", type=int, default=4, help="Stop after tier N (1-4)")
+    acquire_waterfall.add_argument("--max-tier", type=int, default=5, help="Stop after tier N (1-5)")
 
     batch_parser = subparsers.add_parser("batch", help="Process acquisition queue")
     batch_sub = batch_parser.add_subparsers(dest="batch_command")
@@ -107,7 +107,11 @@ def main() -> None:
 
     enrich_parser = subparsers.add_parser("enrich", help="Enrich track metadata")
     enrich_parser.add_argument("--track-id", required=True, help="Track ID to enrich")
-    enrich_parser.add_argument("--providers", default="musicbrainz,acoustid,discogs,lastfm,genius", help="Comma list")
+    enrich_parser.add_argument(
+        "--providers",
+        default="musicbrainz,acoustid,discogs,lastfm,genius,acousticbrainz,musicnn",
+        help="Comma list",
+    )
 
     curate_parser = subparsers.add_parser("curate", help="Curation operations")
     curate_sub = curate_parser.add_subparsers(dest="curate_command")
@@ -199,9 +203,13 @@ def main() -> None:
     validate_parser.add_argument('--confidence', type=float, default=0.7, help='Min validation confidence (0-1)')
     validate_parser.add_argument('--full-scan', action='store_true', help='Force full validation scan, including already white-gloved tracks')
 
-    enrich_all_parser = subparsers.add_parser('enrich-all', help='Enrich all tracks with genre/metadata from Last.fm')
+    enrich_all_parser = subparsers.add_parser('enrich-all', help='Enrich all tracks with metadata providers')
     enrich_all_parser.add_argument('--limit', type=int, default=0, help='Limit tracks')
-    enrich_all_parser.add_argument('--providers', default='lastfm,genius,musicbrainz', help='Comma list')
+    enrich_all_parser.add_argument(
+        '--providers',
+        default='lastfm,genius,musicbrainz,acousticbrainz,musicnn',
+        help='Comma list',
+    )
 
     # Smart acquisition
     smart_acquire_parser = subparsers.add_parser('smart-acquire', help='Smart acquisition with validation')
@@ -298,10 +306,15 @@ def main() -> None:
     played_parser.add_argument("--weight", type=float, default=1.0, help="Signal weight (default 1.0)")
 
     # Queue drain
-    drain_parser = subparsers.add_parser("drain", help="Drain acquisition queue via guarded waterfall (T1-T4)")
+    drain_parser = subparsers.add_parser("drain", help="Drain acquisition queue via guarded waterfall (T1-T5)")
     drain_parser.add_argument("--limit", type=int, default=10, help="Number of tracks to acquire")
     drain_parser.add_argument("--artist", help="Filter by artist")
-    drain_parser.add_argument("--max-tier", type=int, default=4, help="Max acquisition tier (1=Qobuz, 2=Slskd, 3=RD, 4=SpotDL)")
+    drain_parser.add_argument(
+        "--max-tier",
+        type=int,
+        default=5,
+        help="Max acquisition tier (1=Qobuz, 2=Streamrip, 3=Slskd, 4=RD, 5=SpotDL)",
+    )
     drain_parser.add_argument("--workers", type=int, default=0, help="Parallel download workers (0=auto)")
     drain_parser.add_argument("--max-retries", type=int, default=3, help="Mark failed after N attempts")
     drain_parser.add_argument("--source", help="Filter by source (liked, playlist, history, top_tracks, discography)")

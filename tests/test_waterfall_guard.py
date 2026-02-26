@@ -8,9 +8,10 @@ class WaterfallGuardTests(unittest.TestCase):
     def test_guard_reject_stops_all_tiers(self) -> None:
         with mock.patch("oracle.acquirers.waterfall._guard_check", return_value={"allowed": False, "reason": "bad track", "category": "karaoke"}), \
              mock.patch("oracle.acquirers.waterfall._try_tier1_qobuz") as t1, \
-             mock.patch("oracle.acquirers.waterfall._try_tier2_slskd") as t2, \
-             mock.patch("oracle.acquirers.waterfall._try_tier3_realdebrid") as t3, \
-             mock.patch("oracle.acquirers.waterfall._try_tier4_spotdl") as t4:
+             mock.patch("oracle.acquirers.waterfall._try_tier2_streamrip") as t2, \
+             mock.patch("oracle.acquirers.waterfall._try_tier2_slskd") as t3, \
+             mock.patch("oracle.acquirers.waterfall._try_tier4_realdebrid") as t4, \
+             mock.patch("oracle.acquirers.waterfall._try_tier4_spotdl") as t5:
             result = waterfall.acquire("Artist", "Title")
 
         self.assertFalse(result.success)
@@ -20,6 +21,7 @@ class WaterfallGuardTests(unittest.TestCase):
         t2.assert_not_called()
         t3.assert_not_called()
         t4.assert_not_called()
+        t5.assert_not_called()
 
     def test_guard_exception_fails_closed(self) -> None:
         with mock.patch("oracle.acquirers.waterfall.guard_bypass_allowed", return_value=False), \
