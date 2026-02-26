@@ -49,8 +49,38 @@ def _find_rip_executable() -> Optional[str]:
     return None
 
 
+def _streamrip_config_path() -> Path:
+    appdata = Path.home() / "AppData" / "Roaming"
+    return appdata / "streamrip" / "config.toml"
+
+
+def _has_configured_source() -> bool:
+    cfg = _streamrip_config_path()
+    if not cfg.exists():
+        return False
+    try:
+        import tomllib
+
+        data = tomllib.loads(cfg.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+
+    qobuz = data.get("qobuz", {}) if isinstance(data, dict) else {}
+    deezer = data.get("deezer", {}) if isinstance(data, dict) else {}
+    soundcloud = data.get("soundcloud", {}) if isinstance(data, dict) else {}
+
+    qobuz_ok = bool(str(qobuz.get("email_or_userid", "")).strip()) and bool(
+        str(qobuz.get("password_or_token", "")).strip()
+    )
+    deezer_ok = bool(str(deezer.get("arl", "")).strip())
+    soundcloud_ok = bool(str(soundcloud.get("client_id", "")).strip()) and bool(
+        str(soundcloud.get("app_version", "")).strip()
+    )
+    return qobuz_ok or deezer_ok or soundcloud_ok
+
+
 def is_available() -> bool:
-    return _find_rip_executable() is not None
+    return _find_rip_executable() is not None and _has_configured_source()
 
 
 def _find_audio_files(root: Path) -> List[Path]:
@@ -86,6 +116,13 @@ def download(artist: str, title: str, album: Optional[str] = None, timeout_secon
     rip = _find_rip_executable()
     if not rip:
         return {"success": False, "error": "streamrip CLI not available", "tier": 2, "source": "streamrip"}
+    if not _has_configured_source():
+        return {
+            "success": False,
+            "error": "streamrip has no configured source credentials",
+            "tier": 2,
+            "source": "streamrip",
+        }
 
     STAGING_FOLDER.mkdir(parents=True, exist_ok=True)
     query = _build_query(artist, title, album)
