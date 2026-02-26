@@ -221,6 +221,21 @@ def _check_realdebrid() -> CheckResult:
         return CheckResult("Real-Debrid API", "WARNING", f"Could not reach API: {exc}")
 
 
+def _check_lidarr() -> CheckResult:
+    url = os.getenv("LIDARR_URL", "http://localhost:8686")
+    key = os.getenv("LIDARR_API_KEY", "")
+    if not key:
+        return CheckResult("Lidarr (discovery)", "WARNING", "No API key (LIDARR_API_KEY)")
+    status, err = _http_get(f"{url}/api/v1/system/status", timeout=4)
+    if status == 200:
+        return CheckResult("Lidarr (discovery)", "PASS", f"Live at {url}")
+    if status in (401, 403):
+        return CheckResult("Lidarr (discovery)", "WARNING", f"Running but API key invalid ({url})")
+    if status == 0:
+        return CheckResult("Lidarr (discovery)", "FAIL", f"Not reachable at {url} -- run: docker-compose up -d")
+    return CheckResult("Lidarr (discovery)", "WARNING", f"HTTP {status} from {url}")
+
+
 def _check_spotdl() -> CheckResult:
     if shutil.which("spotdl"):
         return CheckResult("spotdl (T3)", "PASS", shutil.which("spotdl"))
@@ -266,6 +281,8 @@ def run_doctor() -> List[CheckResult]:
         _check_rdtclient(),
         _check_slskd(),
         _check_spotdl(),
+        # Discovery
+        _check_lidarr(),
         # LLM
         _check_lmstudio(),
     ]

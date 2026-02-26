@@ -273,6 +273,22 @@ def main() -> None:
     catalog_status_cmd = catalog_sub.add_parser('status', help='Show catalog acquisition status')
     catalog_status_cmd.add_argument('--artist', help='Filter by artist')
 
+    # Lidarr artist monitoring
+    lidarr_parser = subparsers.add_parser("lidarr", help="Lidarr artist monitoring and discovery")
+    lidarr_sub = lidarr_parser.add_subparsers(dest="lidarr_command")
+
+    lidarr_sub.add_parser("status", help="Check Lidarr connection status")
+
+    lidarr_sync = lidarr_sub.add_parser("sync", help="Sync wanted albums to acquisition queue")
+    lidarr_sync.add_argument("--limit", type=int, default=50, help="Max wanted albums to process")
+    lidarr_sync.add_argument("--dry-run", action="store_true", help="Preview without inserting")
+
+    lidarr_add = lidarr_sub.add_parser("add-artist", help="Add artist to Lidarr monitoring")
+    lidarr_add.add_argument("name", help="Artist name")
+    lidarr_add.add_argument("--mbid", help="MusicBrainz artist ID (optional)")
+
+    lidarr_sub.add_parser("artists", help="List monitored artists")
+
     # Ingest watcher
     # foobar2000 BeefWeb bridge
     listen_parser = subparsers.add_parser(
@@ -1281,6 +1297,64 @@ def main() -> None:
             return
 
         print("Usage: oracle catalog {lookup|acquire|status}")
+        return
+
+    if args.command == "lidarr":
+        import logging as _logging
+        _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+        from oracle.integrations.lidarr import (
+            add_artist,
+            get_artists,
+            get_status,
+            is_available,
+            sync_wanted_to_queue,
+        )
+
+        if args.lidarr_command == "status":
+            if not is_available():
+                print("Lidarr: NOT REACHABLE (check LIDARR_URL and LIDARR_API_KEY in .env)")
+                return
+            status = get_status()
+            print(f"Lidarr: ONLINE (v{status.get('version', '?')})")
+            artists = get_artists()
+            monitored = [a for a in artists if a.get("monitored")]
+            print(f"  Artists: {len(artists)} total, {len(monitored)} monitored")
+            return
+
+        if args.lidarr_command == "sync":
+            stats = sync_wanted_to_queue(limit=args.limit, dry_run=args.dry_run)
+            prefix = "[DRY RUN] " if args.dry_run else ""
+            print(f"\n{prefix}Lidarr sync complete:")
+            print(f"  Albums checked: {stats['albums_checked']}")
+            print(f"  Tracks found:   {stats['tracks_found']}")
+            print(f"  Inserted:       {stats['inserted']}")
+            print(f"  Skipped:        {stats['skipped']}")
+            print(f"  Errors:         {stats['errors']}")
+            return
+
+        if args.lidarr_command == "add-artist":
+            try:
+                result = add_artist(args.name, musicbrainz_id=args.mbid)
+                print(f"Added: {result.get('artistName', args.name)} (ID: {result.get('id')})")
+            except Exception as exc:
+                print(f"Failed to add artist: {exc}")
+            return
+
+        if args.lidarr_command == "artists":
+            artists = get_artists()
+            if not artists:
+                print("No artists in Lidarr.")
+                return
+            print(f"\n{'Artist':<35s} {'Albums':<8s} {'Monitored':<10s}")
+            print("-" * 55)
+            for a in sorted(artists, key=lambda x: x.get("artistName", "").lower()):
+                name = a.get("artistName", "?")[:34]
+                albums = a.get("statistics", {}).get("albumCount", "?")
+                mon = "Yes" if a.get("monitored") else "No"
+                print(f"{name:<35s} {str(albums):<8s} {mon:<10s}")
+            return
+
+        print("Usage: oracle lidarr {status|sync|add-artist|artists}")
         return
 
     if args.command == "listen":

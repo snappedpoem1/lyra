@@ -1,6 +1,11 @@
 """AcousticBrainz high-level descriptors provider.
 
-AcousticBrainz is built from Essentia models and provides mood/genre descriptors
+.. deprecated::
+    AcousticBrainz was shut down in 2022 and no longer returns data.
+    Use the Essentia Docker microservice (``oracle/enrichers/essentia.py``)
+    for acoustic descriptor analysis instead.
+
+AcousticBrainz was built from Essentia models and provided mood/genre descriptors
 for MusicBrainz recording IDs.
 """
 
@@ -101,7 +106,19 @@ def build_track_profile(
     album: Optional[str] = None,
     duration: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Return normalized AcousticBrainz payload for one track."""
+    """Return normalized AcousticBrainz payload for one track.
+
+    .. deprecated::
+        AcousticBrainz shut down in 2022. This function will always return
+        an empty dict. Use the Essentia enricher instead.
+    """
+    import warnings
+
+    warnings.warn(
+        "AcousticBrainz shut down in 2022; use the Essentia enricher instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     mbid = (recording_mbid or "").strip()
     if not mbid and artist and title:
         try:

@@ -168,11 +168,64 @@ def _fit_distance(track: Dict[str, Any], targets: Dict[str, float]) -> Optional[
     return dist / used
 
 
+def _enrich_with_genius(journey: List[Dict[str, Any]]) -> None:
+    """Attach cached Genius context to journey tracks (in-place).
+
+    Reads from enrich_cache to add release_date, description snippet,
+    and annotation_count to each track dict under a ``genius`` key.
+    This enriches arc narration with song context without extra API calls.
+    """
+    try:
+        import json as _json
+        from oracle.db.schema import get_connection
+
+        track_ids = [t.get("track_id") for t in journey if t.get("track_id")]
+        if not track_ids:
+            return
+
+        conn = get_connection(timeout=5.0)
+        cursor = conn.cursor()
+
+        placeholders = ",".join("?" for _ in track_ids)
+        cursor.execute(
+            f"SELECT lookup_key, payload_json FROM enrich_cache "
+            f"WHERE provider = 'genius' AND lookup_key IN ({placeholders})",
+            [f"genius:{tid}" for tid in track_ids],
+        )
+
+        cache_map: Dict[str, Dict[str, Any]] = {}
+        for lookup_key, payload_json in cursor.fetchall():
+            try:
+                payload = _json.loads(payload_json)
+                # Extract the track_id from "genius:<track_id>"
+                tid = lookup_key.split(":", 1)[1] if ":" in lookup_key else lookup_key
+                cache_map[tid] = payload
+            except Exception:
+                continue
+
+        conn.close()
+
+        for track in journey:
+            tid = track.get("track_id", "")
+            cached = cache_map.get(tid)
+            if not cached:
+                continue
+            track["genius"] = {
+                "release_date": cached.get("release_date"),
+                "description": (cached.get("description") or "")[:200] or None,
+                "annotation_count": cached.get("annotation_count"),
+                "url": cached.get("url"),
+            }
+    except Exception:
+        pass  # Genius enrichment is best-effort
+
+
 def sequence_tracks(
     tracks: List[Dict[str, Any]],
     arc_id: str,
     *,
     count: Optional[int] = None,
+    enrich_genius: bool = True,
 ) -> Dict[str, Any]:
     """Sequence tracks into an arc.
 
@@ -180,6 +233,7 @@ def sequence_tracks(
         tracks: Candidate tracks. Each may include `scores` and `bpm`.
         arc_id: Template ID.
         count: Desired output length.
+        enrich_genius: Attach cached Genius context to journey tracks.
 
     Returns:
         {arc, journey, transition_avg, used_scores}
@@ -253,6 +307,9 @@ def sequence_tracks(
         transitions.append(_transition_score(ordered[i - 1], ordered[i]))
 
     transition_avg = sum(transitions) / len(transitions) if transitions else 0.0
+
+    if enrich_genius and ordered:
+        _enrich_with_genius(ordered)
 
     return {
         "arc": arc_id,

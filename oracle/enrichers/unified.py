@@ -10,7 +10,7 @@ import time
 from dotenv import load_dotenv
 
 from oracle.db.schema import get_connection, get_write_mode
-from oracle.enrichers import acousticbrainz, acoustid, discogs, genius, lastfm, musicbrainz, musicnn
+from oracle.enrichers import acoustid, discogs, genius, lastfm, musicbrainz, musicnn
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def enrich_track(track_id: str, providers: Optional[List[str]] = None) -> Dict:
         "discogs",
         "lastfm",
         "genius",
-        "acousticbrainz",
+        "essentia",  # Replaces acousticbrainz (shut down 2022)
         "musicnn",
     ]
 
@@ -159,25 +159,17 @@ def enrich_track(track_id: str, providers: Optional[List[str]] = None) -> Dict:
         else:
             summary["genius"] = cached
 
-    if "acousticbrainz" in providers and artist and title:
-        key = _cache_key("acousticbrainz", track_id)
-        cached = _get_cached(cursor, "acousticbrainz", key)
+    if "essentia" in providers and filepath:
+        key = _cache_key("essentia", track_id)
+        cached = _get_cached(cursor, "essentia", key)
         if cached is None:
-            payload = acousticbrainz.build_track_profile(
-                artist=artist,
-                title=title,
-                recording_mbid=summary.get("musicbrainz", {}).get("recording_mbid")
-                if isinstance(summary.get("musicbrainz"), dict)
-                else None,
-                album=album,
-                duration=duration,
-            )
+            from oracle.enrichers import essentia
+            payload = essentia.build_track_profile(filepath)
             if payload:
-                _set_cached(cursor, "acousticbrainz", key, payload)
-            summary["acousticbrainz"] = payload
-            _apply_tag_payload(cursor, track_id, payload, "acousticbrainz")
+                _set_cached(cursor, "essentia", key, payload)
+            summary["essentia"] = payload
         else:
-            summary["acousticbrainz"] = cached
+            summary["essentia"] = cached
 
     if "musicnn" in providers and filepath:
         key = _cache_key("musicnn", track_id)

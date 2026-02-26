@@ -1,4 +1,4 @@
-"""spotDL acquisition backend (Tier 3) - WITH GUARD INTEGRATION.
+"""spotDL acquisition backend (Tier 5) - WITH GUARD INTEGRATION.
 
 Uses spotdl CLI to download from YouTube with Spotify metadata matching.
 Now includes pre-flight and post-flight guard checks.

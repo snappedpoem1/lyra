@@ -45,7 +45,7 @@ JUNK_PATTERNS: List[str] = [
     r'\borchestral\s*tribute\b',
     r'\bbacking\s*(version|track|vocal)?\b',
 
-    # Specific junk artists (full band names â€” safe to match anywhere)
+    # Specific junk artists (full band names -- safe to match anywhere)
     r'\bparty\s*tyme\b',
     r'\bprosource\b',
     r'\bzzang\b',
@@ -65,7 +65,7 @@ JUNK_PATTERNS: List[str] = [
     r'\bchopped\s*not\s*slopped\b',
 ]
 
-# Title-only junk patterns â€” content descriptors that could legitimately be part
+# Title-only junk patterns -- content descriptors that could legitimately be part
 # of a band name (e.g. "A Static Lullaby", "8-Bit Misfits") but are junk when
 # they appear in a track or album title.
 TITLE_JUNK_PATTERNS: List[str] = [
@@ -93,7 +93,7 @@ TITLE_JUNK_PATTERNS: List[str] = [
     r'\bepic\s+version\b',
     r'\brave\s+version\b',
 
-    # Classical catalog numbers â€” Handel (HWV), Bach (BWV), Purcell (Z.)
+    # Classical catalog numbers -- Handel (HWV), Bach (BWV), Purcell (Z.)
     # These indicate classical compositions misattributed to rock/hip-hop artists
     r'\bHWV\s*\d',
     r'\bBWV\s*\d',
@@ -199,7 +199,7 @@ def _check_junk(artist: str, title: str) -> Optional[Tuple[str, str]]:
     """Check if track matches junk patterns.
 
     JUNK_PATTERNS are checked against artist+title combined.
-    TITLE_JUNK_PATTERNS are checked against title only â€” these are content
+    TITLE_JUNK_PATTERNS are checked against title only -- these are content
     descriptors that could legitimately appear in a band name (e.g. "A Static
     Lullaby", "8-Bit Misfits") but signal junk when in a track title.
 
@@ -436,6 +436,49 @@ def _validate_musicbrainz(artist: str, title: str) -> Optional[Dict[str, Any]]:
 
 
 # =============================================================================
+# LAST.FM CONFIDENCE BOOST
+# =============================================================================
+
+def _lastfm_confidence_boost(artist: str, title: str, base_confidence: float) -> float:
+    """Boost borderline MusicBrainz confidence using Last.fm listener counts.
+
+    If a track has significant Last.fm listeners (>100), it's likely a real
+    track even if the MusicBrainz fuzzy match was weak. Adds up to +0.15
+    to the base confidence, scaled by listener count.
+
+    Args:
+        artist: Artist name.
+        title: Track title.
+        base_confidence: MusicBrainz confidence score (0-1).
+
+    Returns:
+        Boosted confidence (capped at base + 0.15).
+    """
+    try:
+        from oracle.enrichers.lastfm import track_get_info
+
+        payload = track_get_info(artist, title)
+        track_node = payload.get("track", {}) if isinstance(payload, dict) else {}
+        listeners_raw = track_node.get("listeners")
+        if not listeners_raw:
+            return base_confidence
+
+        listeners = int(listeners_raw)
+        if listeners < 100:
+            return base_confidence
+
+        # Scale boost: 100 listeners -> +0.05, 1000+ -> +0.10, 10000+ -> +0.15
+        import math
+        # log10(100)=2, log10(1000)=3, log10(10000)=4
+        log_listeners = math.log10(max(listeners, 1))
+        boost = min(0.15, max(0.0, (log_listeners - 2.0) * 0.075))
+        return min(1.0, base_confidence + boost)
+    except Exception as exc:
+        logger.debug("Last.fm confidence boost failed: %s", exc)
+        return base_confidence
+
+
+# =============================================================================
 # MAIN GUARD FUNCTION
 # =============================================================================
 
@@ -447,6 +490,7 @@ def guard_acquisition(
     skip_validation: bool = False,
     skip_duplicate_check: bool = False,
     min_confidence: float = 0.6,
+    lastfm_boost: bool = False,
 ) -> GuardResult:
     """Main guard function - check if track should be allowed into library.
     
@@ -529,9 +573,26 @@ def guard_acquisition(
                 warnings=warnings,
             )
         elif validated:
-            # Low confidence match
-            warnings.append(f"Low confidence MusicBrainz match: {validated.get('confidence', 0):.2f}")
-    
+            # Low confidence match -- try Last.fm boost if enabled
+            mb_conf = validated.get("confidence", 0)
+            warnings.append(f"Low confidence MusicBrainz match: {mb_conf:.2f}")
+
+            if lastfm_boost and 0.3 <= mb_conf < min_confidence:
+                boosted = _lastfm_confidence_boost(artist_clean, title_clean, mb_conf)
+                if boosted >= min_confidence:
+                    warnings.append(f"Last.fm boosted confidence: {mb_conf:.2f} -> {boosted:.2f}")
+                    return GuardResult(
+                        allowed=True,
+                        confidence=boosted,
+                        artist=validated.get("artist", artist_clean),
+                        title=validated.get("title", title_clean),
+                        album=validated.get("album") or album,
+                        year=validated.get("year"),
+                        validated_by="musicbrainz+lastfm",
+                        external_id=validated.get("mb_id"),
+                        warnings=warnings,
+                    )
+
     # Step 7: If no validation or low confidence, still allow but warn
     if skip_validation:
         return GuardResult(

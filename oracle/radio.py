@@ -425,6 +425,80 @@ class Radio:
         conn.close()
         return tracks
     
+    def get_lastfm_discovery(self, count: int = 10) -> List[Dict]:
+        """Discover tracks via Last.fm similar_tracks data in enrich_cache.
+
+        Queries cached Last.fm enrichment data for similar tracks that are NOT
+        already in the library. These become discovery candidates that complement
+        the CLAP-distance-based discovery.
+
+        Returns:
+            List of discovery candidate dicts with artist, title, source_track.
+        """
+        logger.info("RADIO: Querying Last.fm similar tracks for discovery")
+
+        conn = self._open_conn()
+        cursor = conn.cursor()
+
+        # Get all cached Last.fm enrichment data
+        cursor.execute(
+            "SELECT lookup_key, payload_json FROM enrich_cache WHERE provider = 'lastfm'"
+        )
+
+        import json as _json
+
+        candidates: List[Dict] = []
+        seen: set = set()
+
+        for lookup_key, payload_json in cursor.fetchall():
+            try:
+                payload = _json.loads(payload_json)
+            except Exception:
+                continue
+
+            similar = payload.get("similar_tracks", [])
+            if not isinstance(similar, list):
+                continue
+
+            source_artist = payload.get("artist", "")
+            source_title = payload.get("title", "")
+
+            for sim in similar:
+                if not isinstance(sim, dict):
+                    continue
+                sim_artist = sim.get("artist", "").strip()
+                sim_title = sim.get("title", "").strip()
+                if not sim_artist or not sim_title:
+                    continue
+
+                key = f"{sim_artist.lower()}|{sim_title.lower()}"
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                # Check if already in library
+                cursor.execute(
+                    "SELECT 1 FROM tracks WHERE LOWER(artist) = LOWER(?) AND LOWER(title) = LOWER(?) LIMIT 1",
+                    (sim_artist, sim_title),
+                )
+                if cursor.fetchone():
+                    continue
+
+                candidates.append({
+                    "artist": sim_artist,
+                    "title": sim_title,
+                    "source_track": f"{source_artist} - {source_title}",
+                    "match_score": float(sim.get("match", 0.0)),
+                })
+
+        conn.close()
+
+        # Sort by match score descending
+        candidates.sort(key=lambda x: x.get("match_score", 0), reverse=True)
+        result = candidates[:count]
+        logger.info("  Found %d Last.fm discovery candidates", len(result))
+        return result
+
     def _update_taste_profile(self, track_id: str, positive: bool) -> None:
         """Update taste profile based on playback feedback."""
         try:

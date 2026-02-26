@@ -228,6 +228,47 @@ def beets_import(
 
 
 # ---------------------------------------------------------------------------
+# Auto-enrich helpers
+# ---------------------------------------------------------------------------
+
+def _enrich_recent_tracks(max_age_seconds: float = 300.0) -> int:
+    """Enrich tracks added in the last *max_age_seconds* with Last.fm + Genius.
+
+    Returns the number of tracks enriched.
+    """
+    try:
+        from oracle.db.schema import get_connection
+        from oracle.enrichers.unified import enrich_track
+
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+        cutoff = time.time() - max_age_seconds
+        cursor.execute(
+            "SELECT track_id FROM tracks WHERE added_at >= ? AND status = 'active'",
+            (cutoff,),
+        )
+        track_ids = [row[0] for row in cursor.fetchall()]
+        conn.close()
+
+        if not track_ids:
+            return 0
+
+        enriched = 0
+        for tid in track_ids:
+            try:
+                enrich_track(tid, providers=["lastfm", "genius"])
+                enriched += 1
+            except Exception as exc:
+                logger.debug("[BEETS] Enrich failed for %s: %s", tid, exc)
+
+        logger.info("[BEETS] Auto-enriched %d/%d tracks (lastfm + genius)", enriched, len(track_ids))
+        return enriched
+    except Exception as exc:
+        logger.error("[BEETS] Auto-enrich failed: %s", exc)
+        return 0
+
+
+# ---------------------------------------------------------------------------
 # Full pipeline: beets import -> scan -> index -> score
 # ---------------------------------------------------------------------------
 
@@ -264,5 +305,8 @@ def beets_import_and_ingest(
         except Exception as exc:
             logger.error("[BEETS] Index failed: %s", exc)
             result["index_error"] = str(exc)
+
+        # --- Phase 4: Auto-enrich newly ingested tracks -----------------------
+        result["enriched"] = _enrich_recent_tracks()
 
     return result

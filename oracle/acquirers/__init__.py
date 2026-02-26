@@ -1,4 +1,4 @@
-﻿"""Acquisition backends for Lyra Oracle.
+"""Acquisition backends for Lyra Oracle.
 
 Tiered waterfall strategy:
   T1: Qobuz      (hi-fi streaming API -> FLAC up to 24-bit/96kHz)

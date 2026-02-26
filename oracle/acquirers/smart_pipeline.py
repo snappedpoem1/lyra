@@ -227,6 +227,7 @@ class SmartAcquisition:
             album=canonical_album,
             spotify_uri=request.spotify_uri,
             skip_guard=self.skip_guard,
+            pre_validated=self.require_validation,
         )
 
         if not waterfall_result.success:
