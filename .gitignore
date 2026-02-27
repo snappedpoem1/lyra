@@ -152,3 +152,4 @@ Lyra_Oracle_System/config/prowlarr/
 *.tmp
 *.bak
 *~
+journal.jsonl
