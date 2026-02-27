@@ -6,5 +6,5 @@ cd /d "%~dp0"
 if exist ".venv\Scripts\python.exe" (
     ".venv\Scripts\python.exe" -m oracle.cli %*
 ) else (
-    python -m oracle.cli %*
+    py -3.12 -m oracle.cli %*
 )

@@ -717,7 +717,7 @@ def generate_acquisition_queue(
 
     # ── Step 2: Add library tracks (liked/playlists/top) ──
     logger.info("  Cross-referencing library data...")
-    cursor.execute("SELECT spotify_uri, artist, title, album, source FROM spotify_library")
+    cursor.execute("SELECT spotify_uri, artist, title, album, source, playlist_name FROM spotify_library")
 
     library_tracks = {}
     for row in cursor.fetchall():
@@ -728,6 +728,7 @@ def generate_acquisition_queue(
             "title": row[2],
             "album": row[3],
             "source": row[4],
+            "playlist_name": row[5],
         }
 
     logger.info(f"    {len(library_tracks):,} unique library tracks")
@@ -752,6 +753,7 @@ def generate_acquisition_queue(
         album = hist.get("album") or lib.get("album", "")
         uri = hist.get("uri") or lib.get("uri", "")
         source = lib.get("source", "history")
+        playlist_name = lib.get("playlist_name")
 
         play_count = hist.get("play_count", 0)
         total_ms = hist.get("total_ms", 0)
@@ -788,6 +790,7 @@ def generate_acquisition_queue(
             "album": album,
             "uri": uri,
             "source": source,
+            "playlist_name": playlist_name,
             "play_count": play_count,
             "score": round(score, 2),
         })
@@ -823,11 +826,12 @@ def generate_acquisition_queue(
         cursor.execute("""
             INSERT INTO acquisition_queue (
                 artist, title, album, spotify_uri,
-                priority_score, play_count, source, search_query
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                priority_score, play_count, source, playlist_name, search_query
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             track["artist"], track["title"], track["album"], track["uri"],
-            track["score"], track["play_count"], track["source"], search_query,
+            track["score"], track["play_count"], track["source"],
+            track.get("playlist_name"), search_query,
         ))
 
     conn.commit()

@@ -94,6 +94,14 @@ def _find_beet_executable() -> list:
     except Exception:
         pass
 
+    # Check known Python version user-script dirs (beets may be on a different Python)
+    import os as _os
+    appdata = Path(_os.environ.get("APPDATA", ""))
+    for ver in ["Python314", "Python313", "Python312", "Python311"]:
+        candidate = appdata / "Python" / ver / "Scripts" / "beet.exe"
+        if candidate.exists():
+            return [str(candidate)]
+
     # Last resort: python -m beets
     return [sys.executable, "-m", "beets"]
 

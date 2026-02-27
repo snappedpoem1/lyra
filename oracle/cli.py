@@ -6,6 +6,7 @@ import asyncio
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -35,8 +36,8 @@ def main() -> None:
     db_sub.add_parser("migrate", help="Create or update database schema")
 
     subparsers.add_parser("doctor", help="Run system diagnostics")
-    subparsers.add_parser("audit", help="Run database audit â€” row counts and health check")
-    subparsers.add_parser("status", help="Quick status check â€” row counts and system state")
+    subparsers.add_parser("audit", help="Run database audit  --  row counts and health check")
+    subparsers.add_parser("status", help="Quick status check  --  row counts and system state")
 
     ops_parser = subparsers.add_parser("ops", help="Operational run sequence + markdown report")
     ops_sub = ops_parser.add_subparsers(dest="ops_command")
@@ -94,11 +95,11 @@ def main() -> None:
     acquire_lyra = acquire_sub.add_parser("lyra", help="Run Lyra Protocol swarm acquisition")
     acquire_lyra.add_argument("--artist", required=True, help="Artist name")
     acquire_lyra.add_argument("--title", required=True, help="Track title")
-    acquire_waterfall = acquire_sub.add_parser("waterfall", help="Run full acquisition waterfall (T1-T5)")
+    acquire_waterfall = acquire_sub.add_parser("waterfall", help="Run full acquisition waterfall (T1-T4)")
     acquire_waterfall.add_argument("--artist", required=True, help="Artist name")
     acquire_waterfall.add_argument("--title", required=True, help="Track title")
     acquire_waterfall.add_argument("--album", help="Album name (helps T1 search)")
-    acquire_waterfall.add_argument("--max-tier", type=int, default=5, help="Stop after tier N (1-5)")
+    acquire_waterfall.add_argument("--max-tier", type=int, default=4, help="Stop after tier N (1-4)")
 
     batch_parser = subparsers.add_parser("batch", help="Process acquisition queue")
     batch_sub = batch_parser.add_subparsers(dest="batch_command")
@@ -107,11 +108,7 @@ def main() -> None:
 
     enrich_parser = subparsers.add_parser("enrich", help="Enrich track metadata")
     enrich_parser.add_argument("--track-id", required=True, help="Track ID to enrich")
-    enrich_parser.add_argument(
-        "--providers",
-        default="musicbrainz,acoustid,discogs,lastfm,genius,acousticbrainz,musicnn",
-        help="Comma list",
-    )
+    enrich_parser.add_argument("--providers", default="musicbrainz,acoustid,discogs", help="Comma list")
 
     curate_parser = subparsers.add_parser("curate", help="Curation operations")
     curate_sub = curate_parser.add_subparsers(dest="curate_command")
@@ -190,7 +187,6 @@ def main() -> None:
     score_parser.add_argument('--limit', type=int, default=0, help='Limit tracks to score (0=all)')
     score_parser.add_argument('--force', action='store_true', help='Rescore already-scored tracks')
     score_parser.add_argument('--workers', type=int, default=0, help='Score worker threads (0=auto by profile)')
-    subparsers.add_parser('score-audit', help='Run score sanity audit report')
 
     # Library maintenance commands
     normalize_parser = subparsers.add_parser('normalize', help='Normalize artist/title metadata across library')
@@ -203,13 +199,8 @@ def main() -> None:
     validate_parser.add_argument('--confidence', type=float, default=0.7, help='Min validation confidence (0-1)')
     validate_parser.add_argument('--full-scan', action='store_true', help='Force full validation scan, including already white-gloved tracks')
 
-    enrich_all_parser = subparsers.add_parser('enrich-all', help='Enrich all tracks with metadata providers')
+    enrich_all_parser = subparsers.add_parser('enrich-all', help='Enrich all tracks with genre/metadata from Last.fm')
     enrich_all_parser.add_argument('--limit', type=int, default=0, help='Limit tracks')
-    enrich_all_parser.add_argument(
-        '--providers',
-        default='lastfm,genius,musicbrainz,acousticbrainz,musicnn',
-        help='Comma list',
-    )
 
     # Smart acquisition
     smart_acquire_parser = subparsers.add_parser('smart-acquire', help='Smart acquisition with validation')
@@ -273,22 +264,6 @@ def main() -> None:
     catalog_status_cmd = catalog_sub.add_parser('status', help='Show catalog acquisition status')
     catalog_status_cmd.add_argument('--artist', help='Filter by artist')
 
-    # Lidarr artist monitoring
-    lidarr_parser = subparsers.add_parser("lidarr", help="Lidarr artist monitoring and discovery")
-    lidarr_sub = lidarr_parser.add_subparsers(dest="lidarr_command")
-
-    lidarr_sub.add_parser("status", help="Check Lidarr connection status")
-
-    lidarr_sync = lidarr_sub.add_parser("sync", help="Sync wanted albums to acquisition queue")
-    lidarr_sync.add_argument("--limit", type=int, default=50, help="Max wanted albums to process")
-    lidarr_sync.add_argument("--dry-run", action="store_true", help="Preview without inserting")
-
-    lidarr_add = lidarr_sub.add_parser("add-artist", help="Add artist to Lidarr monitoring")
-    lidarr_add.add_argument("name", help="Artist name")
-    lidarr_add.add_argument("--mbid", help="MusicBrainz artist ID (optional)")
-
-    lidarr_sub.add_parser("artists", help="List monitored artists")
-
     # Ingest watcher
     # foobar2000 BeefWeb bridge
     listen_parser = subparsers.add_parser(
@@ -312,7 +287,7 @@ def main() -> None:
     import_parser.add_argument("--singletons", action="store_true", help="Import as non-album tracks")
     import_parser.add_argument("--copy", action="store_true", help="Copy instead of move")
 
-    # Playback signal â€” log plays/skips for taste learning without the server
+    # Playback signal  --  log plays/skips for taste learning without the server
     played_parser = subparsers.add_parser(
         "played", help="Log a playback signal for taste learning"
     )
@@ -322,20 +297,16 @@ def main() -> None:
     played_parser.add_argument("--weight", type=float, default=1.0, help="Signal weight (default 1.0)")
 
     # Queue drain
-    drain_parser = subparsers.add_parser("drain", help="Drain acquisition queue via guarded waterfall (T1-T5)")
+    drain_parser = subparsers.add_parser("drain", help="Drain acquisition queue via guarded waterfall (T1-T4)")
     drain_parser.add_argument("--limit", type=int, default=10, help="Number of tracks to acquire")
     drain_parser.add_argument("--artist", help="Filter by artist")
-    drain_parser.add_argument(
-        "--max-tier",
-        type=int,
-        default=5,
-        help="Max acquisition tier (1=Qobuz, 2=Streamrip, 3=Slskd, 4=RD, 5=SpotDL)",
-    )
+    drain_parser.add_argument("--source", help="Filter by source: liked, playlist, history, top_tracks, discography")
+    drain_parser.add_argument("--playlist", help="Filter by playlist name (e.g. 'Act 1', 'Act 2'); implies --source playlist")
+    drain_parser.add_argument("--max-tier", type=int, default=4, help="Max acquisition tier (1=Qobuz, 2=Slskd, 3=RD, 4=SpotDL)")
     drain_parser.add_argument("--workers", type=int, default=0, help="Parallel download workers (0=auto)")
     drain_parser.add_argument("--max-retries", type=int, default=3, help="Mark failed after N attempts")
-    drain_parser.add_argument("--source", help="Filter by source (liked, playlist, history, top_tracks, discography)")
 
-    perf_parser = subparsers.add_parser("per", help="Performance profile and runtime pause controls")
+    perf_parser = subparsers.add_parser("perf", help="Performance profile and runtime pause controls")
     perf_sub = perf_parser.add_subparsers(dest="perf_command")
     perf_sub.add_parser("status", help="Show current performance profile and pause state")
     perf_profile = perf_sub.add_parser("profile", help="Set performance profile")
@@ -454,7 +425,7 @@ def main() -> None:
                         icon = "[OK]"
                         label = f"HTTP {req.status}"
                     except urllib.error.HTTPError as he:
-                        # 4xx means service is up but needs auth â€” still live
+                        # 4xx means service is up but needs auth  --  still live
                         if he.code < 500:
                             icon = "[OK]"
                             label = f"HTTP {he.code} (live)"
@@ -592,7 +563,7 @@ def main() -> None:
         from oracle.indexer import index_library
         
         print("\n" + "="*60)
-        print("LYRA PIPELINE: Scan â†’ Index â†’ Score")
+        print("LYRA PIPELINE: Scan â†' Index â†' Score")
         print("="*60 + "\n")
         
         print("[1/2] Scanning library...")
@@ -698,7 +669,7 @@ def main() -> None:
             album=getattr(args, 'album', None),
             max_tier=getattr(args, 'max_tier', 4),
         )
-        print("\nResult:")
+        print(f"\nResult:")
         print(f"  Success: {result.success}")
         print(f"  Tier: {result.tier}")
         print(f"  Source: {result.source}")
@@ -725,7 +696,7 @@ def main() -> None:
     if args.command == "curate" and args.curate_command == "classify":
         from oracle.classifier import classify_library
         if args.llm:
-            print("[classify] LLM second pass enabled â€” LM Studio must be running.")
+            print("[classify] LLM second pass enabled  --  LM Studio must be running.")
         results = classify_library(limit=args.limit, use_llm=args.llm)
         print(f"\nClassification Summary ({results['total']} tracks):")
         for k, v in results.items():
@@ -795,7 +766,7 @@ def main() -> None:
                 cleaned_count += 1
                 action = "Would rename" if args.dry_run else "Renamed"
                 print(f"{action}: {file_path.name}")
-                print(f"       â†’ {new_path.name}")
+                print(f"       â†' {new_path.name}")
         
         if cleaned_count == 0:
             print("All filenames are already clean.")
@@ -826,7 +797,7 @@ def main() -> None:
         if 'error' in result:
             print(f"ERROR: {result['error']}")
             return
-        print(f"\nâœ“ Vibe saved: {result['name']}")
+        print(f"\n[OK]  Vibe saved: {result['name']}")
         print(f"  Query: {result['query']}")
         print(f"  Tracks: {result['track_count']}")
         return
@@ -853,7 +824,7 @@ def main() -> None:
         if 'error' in result:
             print(f"ERROR: {result['error']}")
             return
-        print(f"\nâœ“ M3U8 playlist built: {result['m3u8_path']}")
+        print(f"\n[OK]  M3U8 playlist built: {result['m3u8_path']}")
         print(f"  Tracks: {result['track_count']}")
         return
 
@@ -863,7 +834,7 @@ def main() -> None:
         if 'error' in result:
             print(f"ERROR: {result['error']}")
             return
-        print(f"\nâœ“ Vibe materialized: {result['folder']}")
+        print(f"\n[OK]  Vibe materialized: {result['folder']}")
         print(f"  Mode: {result['mode']}")
         stats = result['stats']
         print(f"  Created: {stats['created']}")
@@ -879,13 +850,13 @@ def main() -> None:
         if 'error' in result:
             print(f"ERROR: {result['error']}")
             return
-        print(f"\nâœ“ Refreshed {result['refreshed']} vibe(s)")
+        print(f"\n[OK]  Refreshed {result['refreshed']} vibe(s)")
         for item in result['results']:
             print(f"\nâ€¢ {item['name']}")
             if 'error' in item['result']:
                 print(f"  âœ— {item['result']['error']}")
             else:
-                print(f"  âœ“ {item['result']['track_count']} tracks")
+                print(f"  [OK]  {item['result']['track_count']} tracks")
         return
 
     if args.command == "vibe" and args.vibe_command == "delete":
@@ -894,9 +865,9 @@ def main() -> None:
         if 'error' in result:
             print(f"ERROR: {result['error']}")
             return
-        print(f"\nâœ“ Vibe deleted: {result['name']}")
+        print(f"\n[OK]  Vibe deleted: {result['name']}")
         if result.get('deleted_materialized'):
-            print("  Folder also deleted")
+            print(f"  Folder also deleted")
         return
 
     if args.command == "serve":
@@ -939,11 +910,6 @@ def main() -> None:
         print(_json.dumps(result, indent=2))
         return
 
-    if args.command == "score-audit":
-        from oracle.score_audit import run_audit
-        print(json.dumps(run_audit(), indent=2))
-        return
-
     if args.command == "normalize":
         from oracle.normalizer import normalize_library
         normalize_library(apply=args.apply)
@@ -982,49 +948,8 @@ def main() -> None:
         return
 
     if args.command == "enrich-all":
-        if get_write_mode() != "apply_allowed":
-            print("WRITE BLOCKED: LYRA_WRITE_MODE must be apply_allowed to enrich.")
-            return
-
-        from oracle.enrichers.unified import enrich_track
-        from oracle.db.schema import get_connection
-
-        providers = [p.strip() for p in (args.providers or "").split(",") if p.strip()]
-        conn = get_connection()
-        cur = conn.cursor()
-        sql = "SELECT track_id, artist, title FROM tracks WHERE status='active' ORDER BY rowid DESC"
-        params = ()
-        if int(args.limit or 0) > 0:
-            sql += " LIMIT ?"
-            params = (int(args.limit),)
-        cur.execute(sql, params)
-        rows = cur.fetchall()
-        conn.close()
-
-        total = len(rows)
-        done = 0
-        failures = 0
-        provider_hits = {p: 0 for p in providers}
-        for track_id, artist, title in rows:
-            try:
-                result = enrich_track(track_id, providers=providers)
-                for p in providers:
-                    payload = result.get(p, {})
-                    if isinstance(payload, dict) and payload:
-                        provider_hits[p] += 1
-                done += 1
-                if done % 25 == 0 or done == total:
-                    print(f"[{done}/{total}] enriched")
-            except Exception as exc:
-                failures += 1
-                print(f"[FAIL] {artist} - {title}: {exc}")
-
-        print(json.dumps({
-            "total": total,
-            "enriched": done,
-            "failures": failures,
-            "providers": provider_hits,
-        }, indent=2))
+        import subprocess
+        subprocess.run([sys.executable, "enrich_genres.py"], cwd=".")
         return
 
     if args.command == "smart-acquire":
@@ -1064,7 +989,7 @@ def main() -> None:
             result = pipeline.acquire(request)
             
             if result.success:
-                print(f"\nâœ“ Acquired: {result.filepath}")
+                print(f"\n[OK]  Acquired: {result.filepath}")
                 print(f"  Artist: {result.canonical_artist}")
                 print(f"  Title: {result.canonical_title}")
                 print(f"  Quality: {result.quality}")
@@ -1086,17 +1011,17 @@ def main() -> None:
         print(f"{'='*60}")
         
         if result.allowed:
-            print("\nâœ… ALLOWED")
+            print(f"\nâœ… ALLOWED")
             print(f"  Confidence: {result.confidence:.0%}")
             print(f"  Canonical: {result.artist} - {result.title}")
             if result.validated_by:
                 print(f"  Validated by: {result.validated_by}")
             if result.warnings:
-                print("  Warnings:")
+                print(f"  Warnings:")
                 for w in result.warnings:
                     print(f"    âš ï¸ {w}")
         else:
-            print("\nâŒ REJECTED")
+            print(f"\nâŒ REJECTED")
             print(f"  Reason: {result.rejection_reason}")
             print(f"  Category: {result.rejection_category}")
         return
@@ -1122,7 +1047,7 @@ def main() -> None:
         print(f"Rejected: {len(rejected)}")
         
         if rejected:
-            print("\nâŒ REJECTED:")
+            print(f"\nâŒ REJECTED:")
             for filepath, result in rejected:
                 print(f"  â€¢ {filepath.name[:50]}")
                 print(f"    {result.rejection_reason}")
@@ -1143,7 +1068,7 @@ def main() -> None:
         )
         
         print(f"\n{'='*60}")
-        print("GUARDED IMPORT")
+        print(f"GUARDED IMPORT")
         print(f"{'='*60}")
         print(f"Total: {summary.get('total', 0)}")
         print(f"Imported: {summary.get('imported', 0)}")
@@ -1170,7 +1095,7 @@ def main() -> None:
         print(f"Junk: {audit['junk']}")
         
         if audit["junk_files"]:
-            print("\nâŒ JUNK FILES:")
+            print(f"\nâŒ JUNK FILES:")
             for item in audit["junk_files"][:20]:
                 filepath = Path(item["file"])
                 print(f"  â€¢ {filepath.name[:50]}")
@@ -1187,7 +1112,7 @@ def main() -> None:
         result = quarantine_junk(library, dry_run=args.dry_run)
         
         print(f"\n{'='*60}")
-        print("QUARANTINE RESULTS")
+        print(f"QUARANTINE RESULTS")
         print(f"{'='*60}")
         
         if result.get("dry_run"):
@@ -1299,64 +1224,6 @@ def main() -> None:
         print("Usage: oracle catalog {lookup|acquire|status}")
         return
 
-    if args.command == "lidarr":
-        import logging as _logging
-        _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
-        from oracle.integrations.lidarr import (
-            add_artist,
-            get_artists,
-            get_status,
-            is_available,
-            sync_wanted_to_queue,
-        )
-
-        if args.lidarr_command == "status":
-            if not is_available():
-                print("Lidarr: NOT REACHABLE (check LIDARR_URL and LIDARR_API_KEY in .env)")
-                return
-            status = get_status()
-            print(f"Lidarr: ONLINE (v{status.get('version', '?')})")
-            artists = get_artists()
-            monitored = [a for a in artists if a.get("monitored")]
-            print(f"  Artists: {len(artists)} total, {len(monitored)} monitored")
-            return
-
-        if args.lidarr_command == "sync":
-            stats = sync_wanted_to_queue(limit=args.limit, dry_run=args.dry_run)
-            prefix = "[DRY RUN] " if args.dry_run else ""
-            print(f"\n{prefix}Lidarr sync complete:")
-            print(f"  Albums checked: {stats['albums_checked']}")
-            print(f"  Tracks found:   {stats['tracks_found']}")
-            print(f"  Inserted:       {stats['inserted']}")
-            print(f"  Skipped:        {stats['skipped']}")
-            print(f"  Errors:         {stats['errors']}")
-            return
-
-        if args.lidarr_command == "add-artist":
-            try:
-                result = add_artist(args.name, musicbrainz_id=args.mbid)
-                print(f"Added: {result.get('artistName', args.name)} (ID: {result.get('id')})")
-            except Exception as exc:
-                print(f"Failed to add artist: {exc}")
-            return
-
-        if args.lidarr_command == "artists":
-            artists = get_artists()
-            if not artists:
-                print("No artists in Lidarr.")
-                return
-            print(f"\n{'Artist':<35s} {'Albums':<8s} {'Monitored':<10s}")
-            print("-" * 55)
-            for a in sorted(artists, key=lambda x: x.get("artistName", "").lower()):
-                name = a.get("artistName", "?")[:34]
-                albums = a.get("statistics", {}).get("albumCount", "?")
-                mon = "Yes" if a.get("monitored") else "No"
-                print(f"{name:<35s} {str(albums):<8s} {mon:<10s}")
-            return
-
-        print("Usage: oracle lidarr {status|sync|add-artist|artists}")
-        return
-
     if args.command == "listen":
         import logging as _logging
         import asyncio as _asyncio
@@ -1411,30 +1278,23 @@ def main() -> None:
 
         conn = get_connection()
         cur = conn.cursor()
-        # Priority: playlist=4, liked=3, top_tracks=2, history=1, other=0
         q = (
             "SELECT id, artist, title, album, spotify_uri, COALESCE(retry_count, 0) "
             "FROM acquisition_queue "
             "WHERE status = 'pending' AND artist != '' AND title != '' "
-            "AND artist IS NOT NULL AND title IS NOT NULL "
-            "AND COALESCE(error, '') NOT LIKE 'slskd queued remote candidate%'"
+            "AND artist IS NOT NULL AND title IS NOT NULL"
         )
         params: list = []
         if args.artist:
             q += " AND artist LIKE ?"
             params.append(f"%{args.artist}%")
-        if args.source:
+        if getattr(args, "playlist", None):
+            q += " AND playlist_name = ?"
+            params.append(args.playlist)
+        elif getattr(args, "source", None):
             q += " AND source = ?"
             params.append(args.source)
-        q += (
-            " ORDER BY CASE source "
-            "   WHEN 'playlist' THEN 4 "
-            "   WHEN 'liked' THEN 3 "
-            "   WHEN 'top_tracks' THEN 2 "
-            "   WHEN 'history' THEN 1 "
-            "   ELSE 0 END DESC, "
-            "COALESCE(priority_score, 0) DESC, datetime(added_at) ASC, id ASC"
-        )
+        q += " ORDER BY COALESCE(priority_score, 0) DESC, datetime(added_at) ASC, id ASC"
         if args.limit:
             q += " LIMIT ?"
             params.append(args.limit)
@@ -1448,113 +1308,177 @@ def main() -> None:
         else:
             workers = int(args.workers)
         workers = max(1, min(workers, 32))
-        print(f"\nDraining {len(items)} track(s) from queue (max tier: T{args.max_tier}, workers: {workers})...")
+        # Tier-parallel pipeline: every tier runs its own dedicated workers simultaneously.
+        # T1 failures cascade immediately into T2's live queue — no tier sits idle.
+        import queue as _queue
+        from oracle.acquirers.waterfall import (
+            _guard_check,
+            _try_tier1_qobuz,
+            _try_tier2_streamrip,
+            _try_tier3_slskd,
+            _try_tier4_realdebrid,
+            _try_tier5_spotdl,
+            AcquisitionResult,
+        )
 
+        TIER_NAMES = {1: "Qobuz", 2: "Streamrip", 3: "Slskd", 4: "RD", 5: "SpotDL"}
+        TIER_WORKERS = {1: 2, 2: 2, 3: 3, 4: 2, 5: 2}  # dedicated threads per tier
+
+        max_tier = args.max_tier
+        lock = threading.Lock()
         downloaded_count = 0
         failed_count = 0
         retried_count = 0
         hard_failed_count = 0
-        lock = threading.Lock()
 
-        def _drain_one(item):
-            wait_if_paused("drain")
-            queue_id, artist, title, album, spotify_uri, retry_count = item
-            result = acquire(artist, title, album=album, spotify_uri=spotify_uri, max_tier=args.max_tier)
-            file_ready = bool(result.path) and _Path(result.path).exists()
+        def _call_tier(tier_num: int, artist: str, title: str, album: str, uri: str) -> AcquisitionResult:
+            """Dispatch to the correct tier function."""
+            if tier_num == 1: return _try_tier1_qobuz(artist, title)
+            if tier_num == 2: return _try_tier2_streamrip(artist, title, album)
+            if tier_num == 3: return _try_tier3_slskd(artist, title)
+            if tier_num == 4: return _try_tier4_realdebrid(artist, title, album)
+            if tier_num == 5: return _try_tier5_spotdl(artist, title, uri)
+            return AcquisitionResult(success=False, tier=tier_num, source="none",
+                                     error=f"No handler for tier {tier_num}")
 
-            new_state = "failed"
-            if result.success and file_ready:
-                # Download succeeded; watcher marks final completion after post-flight ingest.
-                try:
-                    wconn = get_connection()
-                    wconn.execute(
-                        "UPDATE acquisition_queue SET status='downloaded', completed_at=NULL, error=NULL WHERE id=?",
-                        (queue_id,),
-                    )
-                    wconn.commit()
-                    wconn.close()
-                    new_state = "downloaded"
-                except Exception as exc:
-                    new_state = "failed"
-                    result.error = f"DB update failed: {exc}"
+        def _db_success(qid: int) -> None:
+            try:
+                c = get_connection()
+                c.execute("UPDATE acquisition_queue SET status='downloaded', "
+                          "completed_at=NULL, error=NULL WHERE id=?", (qid,))
+                c.commit(); c.close()
+            except Exception as exc:
+                _logging.warning(f"DB success update failed: {exc}")
+
+        def _db_fail(qid: int, retry_count: int, err: str) -> str:
+            nxt = int(retry_count or 0) + 1
+            status = "pending" if nxt < args.max_retries else "failed"
+            try:
+                c = get_connection()
+                c.execute("UPDATE acquisition_queue SET status=?, retry_count=?, "
+                          "error=? WHERE id=?", (status, nxt, err[:500], qid))
+                c.commit(); c.close()
+            except Exception as exc:
+                _logging.warning(f"DB fail update failed: {exc}")
+            return "retried" if status == "pending" else "failed"
+
+        # Guard pre-flight: run all metadata checks upfront before the pipeline starts
+        print(f"\nDraining {len(items)} track(s) — tier-parallel pipeline (T1-T{max_tier})...")
+        print("  Guard pre-flight...")
+        valid_items = []
+        for item in items:
+            qid, artist, title, album, uri, retry = item
+            guard = _guard_check(artist, title)
+            if guard.get("allowed"):
+                valid_items.append((
+                    qid,
+                    guard.get("artist", artist),
+                    guard.get("title", title),
+                    album, uri, retry,
+                ))
             else:
-                # Partial/failed attempt: retry until max_retries, then hard fail.
-                if result.success and result.source == "slskd" and not file_ready:
-                    # Slskd returns a remote candidate path; keep pending without consuming retries.
-                    next_retry = int(retry_count or 0)
-                    retryable_error = (
-                        "slskd queued remote candidate; waiting for local ingest: "
-                        f"{result.path or '(no path)'}"
-                    )
-                    target_status = "pending"
-                else:
-                    next_retry = int(retry_count or 0) + 1
-                    if result.error:
-                        retryable_error = result.error
-                    elif result.success and result.path:
-                        retryable_error = (
-                            f"{result.source} reported success but local file is missing: {result.path}"
-                        )
-                    elif result.success:
-                        retryable_error = f"{result.source} reported success without a local file path"
-                    else:
-                        retryable_error = "acquisition did not yield a local file"
-                    target_status = "pending" if next_retry < args.max_retries else "failed"
-                result.error = retryable_error
-                try:
-                    wconn = get_connection()
-                    wconn.execute(
-                        "UPDATE acquisition_queue SET status=?, retry_count=?, error=? WHERE id=?",
-                        (target_status, next_retry, retryable_error, queue_id),
-                    )
-                    wconn.commit()
-                    wconn.close()
-                    new_state = "retried" if target_status == "pending" else "failed"
-                except Exception as exc:
-                    new_state = "failed"
-                    result.error = f"{retryable_error}; DB update failed: {exc}"
+                reason = guard.get("reason", "guard rejected")
+                print(f"  [GUARD] {artist} - {title}: {reason}")
+                _db_fail(qid, retry, f"Guard rejected: {reason}")
 
-            return artist, title, result, new_state
+        if not valid_items:
+            print("All items rejected by guard.")
+            return
 
-        if workers == 1:
-            for item in items:
-                _, artist, title, album, spotify_uri, _ = item
-                print(f"\n  {artist} - {title}")
-                _, _, result, state = _drain_one(item)
-                if state == "downloaded":
-                    print(f"    [OK] T{result.tier} ({result.source}) â€” {result.elapsed:.1f}s")
-                    if result.path:
-                        print(f"         {result.path}")
-                    downloaded_count += 1
-                else:
-                    if state == "retried":
-                        print(f"    [~~] RETRY QUEUED: {result.error}")
-                        retried_count += 1
+        # Per-tier work queues + completion tracking
+        tier_qs = {t: _queue.Queue() for t in range(1, max_tier + 1)}
+        done_q: _queue.Queue = _queue.Queue()
+        remaining = [len(valid_items)]
+        all_done = threading.Event()
+
+        def mark_done() -> None:
+            with lock:
+                remaining[0] -= 1
+                if remaining[0] <= 0:
+                    all_done.set()
+
+        def make_worker(tier_num: int):
+            """Factory: returns a worker function bound to the given tier."""
+            q = tier_qs[tier_num]
+            next_q = tier_qs.get(tier_num + 1)
+            tier_name = TIER_NAMES.get(tier_num, f"T{tier_num}")
+
+            def _worker() -> None:
+                while True:
+                    try:
+                        item = q.get(timeout=0.5)
+                    except _queue.Empty:
+                        if all_done.is_set():
+                            return
+                        continue
+                    wait_if_paused("drain")
+                    qid, artist, title, album, uri, retry = item
+                    try:
+                        result = _call_tier(tier_num, artist, title, album or "", uri or "")
+                    except Exception as exc:
+                        result = AcquisitionResult(success=False, tier=tier_num,
+                                                   source=tier_name.lower(), error=str(exc)[:200])
+
+                    file_ready = result.success and bool(result.path) and _Path(result.path).exists()
+                    if file_ready:
+                        _db_success(qid)
+                        done_q.put((artist, title, tier_num, tier_name, result, "downloaded"))
+                        mark_done()
+                    elif next_q is not None:
+                        next_q.put(item)  # cascade — item still inflight, no mark_done
                     else:
-                        print(f"    [--] FAILED: {result.error}")
-                        hard_failed_count += 1
-                    failed_count += 1
-        else:
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = {pool.submit(_drain_one, item): item for item in items}
-                for future in as_completed(futures):
-                    artist, title, result, state = future.result()
-                    with lock:
-                        if state == "downloaded":
-                            print(f"  [OK] {artist} - {title} | T{result.tier} ({result.source}) {result.elapsed:.1f}s")
-                            downloaded_count += 1
-                        else:
-                            if state == "retried":
-                                print(f"  [~~] {artist} - {title} | retry queued | {result.error}")
-                                retried_count += 1
-                            else:
-                                print(f"  [--] {artist} - {title} | {result.error}")
-                                hard_failed_count += 1
-                            failed_count += 1
+                        state = _db_fail(qid, retry, result.error or "all tiers exhausted")
+                        done_q.put((artist, title, tier_num, tier_name, result, state))
+                        mark_done()
+                    q.task_done()
+
+            return _worker
+
+        # Load T1 queue and start ALL tier pools simultaneously
+        for item in valid_items:
+            tier_qs[1].put(item)
+
+        tier_pools = {}
+        for tier in range(1, max_tier + 1):
+            n = min(TIER_WORKERS.get(tier, 2), max(1, workers))
+            pool = ThreadPoolExecutor(max_workers=n, thread_name_prefix=f"T{tier}")
+            tier_pools[tier] = pool
+            for _ in range(n):
+                pool.submit(make_worker(tier))
+
+        tier_summary = " | ".join(
+            f"T{t}={TIER_NAMES[t]}x{min(TIER_WORKERS.get(t, 2), max(1, workers))}"
+            for t in range(1, max_tier + 1)
+        )
+        print(f"  Pipeline: {tier_summary}")
+        print(f"  {len(valid_items)} tracks entering T1...\n")
+
+        # Stream results as they arrive from any tier
+        while not all_done.is_set() or not done_q.empty():
+            try:
+                artist, title, tier_num, tier_name, result, state = done_q.get(timeout=0.5)
+            except _queue.Empty:
+                continue
+            if state == "downloaded":
+                print(f"  [OK] {artist} - {title} | T{tier_num} {tier_name} {result.elapsed:.1f}s")
+                if result.path:
+                    print(f"       {result.path}")
+                downloaded_count += 1
+            elif state == "retried":
+                print(f"  [~~] {artist} - {title} | retry queued | {result.error}")
+                retried_count += 1
+                failed_count += 1
+            else:
+                print(f"  [--] {artist} - {title} | {result.error}")
+                hard_failed_count += 1
+                failed_count += 1
+
+        for pool in tier_pools.values():
+            pool.shutdown(wait=False)
 
         print(f"\nDone. {downloaded_count} downloaded, {failed_count} failed.")
         if retried_count or hard_failed_count:
-            print(f"Retries queued: {retried_count} | Hard failed: {hard_failed_count}")
+            print(f"  Retries queued: {retried_count} | Hard failed: {hard_failed_count}")
         if downloaded_count:
             print("Run 'oracle watch --once' to ingest and mark queue items completed.")
         return

@@ -211,6 +211,7 @@ def migrate() -> bool:
             priority_score REAL DEFAULT 0.0,
             play_count INTEGER DEFAULT 0,
             source TEXT,
+            playlist_name TEXT,
             search_query TEXT,
             status TEXT DEFAULT 'pending',
             url TEXT,
@@ -556,6 +557,7 @@ def _ensure_acquisition_queue_columns(cursor: sqlite3.Cursor) -> None:
     columns = {row[1] for row in cursor.fetchall()}
     desired = {
         "priority_score": "REAL DEFAULT 0.0",
+        "playlist_name": "TEXT",
         "added_at": "TEXT DEFAULT (datetime('now'))",
         "completed_at": "TEXT",
         "url": "TEXT",

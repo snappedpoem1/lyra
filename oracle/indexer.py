@@ -159,7 +159,7 @@ def _index_rows(
     workers: int,
     embed_batch: int,
 ) -> Dict[str, int]:
-    embedder = CLAPEmbedder(model_name=MODEL_NAME, cache_dir=os.getenv("HF_HOME"))
+    embedder = CLAPEmbedder(model_name=MODEL_NAME, cache_dir=os.getenv("HF_HOME"), use_fallback=False)
     store = LyraChromaStore(persist_dir="./chroma_storage")
 
     batch_ids: List[str] = []
@@ -298,14 +298,24 @@ def _auto_score_tracks(track_ids: List[str], workers: int = 0) -> int:
         Number of tracks successfully scored
     """
     try:
-        from oracle.scorer import score_track
+        from oracle.scorer import score_track, _get_embedder, _anchor_embeddings
     except ImportError:
         logger.warning("Scorer not available, skipping auto-score")
         return 0
 
+    # Pre-warm embedder + anchor embeddings in the main thread so lru_cache is
+    # populated before worker threads start. Without this, 32 threads race to
+    # load the CLAP model simultaneously causing meta-tensor errors.
+    try:
+        _get_embedder()
+        _anchor_embeddings()
+    except Exception as e:
+        logger.warning(f"Scorer pre-warm failed: {e}")
+        return 0
+
     if workers <= 0:
         workers = auto_workers("cpu")
-    workers = max(1, min(int(workers), 24))
+    workers = max(1, min(int(workers), 8))  # cap at 8 — scoring is GPU-bound, more = contention
 
     scored = 0
 

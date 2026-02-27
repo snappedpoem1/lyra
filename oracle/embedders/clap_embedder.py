@@ -67,21 +67,19 @@ class CLAPEmbedder:
             project_cache = Path(__file__).resolve().parents[2] / "hf_cache"
             project_cache.mkdir(parents=True, exist_ok=True)
             self.cache_dir = str(project_cache)
-            # Also set env var so transformers uses it
+            # hf_cache/ IS the hub cache (models are stored directly here)
             os.environ["HF_HOME"] = self.cache_dir
-            os.environ["HUGGINGFACE_HUB_CACHE"] = str(project_cache / "hub")
+            os.environ["HUGGINGFACE_HUB_CACHE"] = self.cache_dir
+            os.environ["TRANSFORMERS_CACHE"] = self.cache_dir
         
         self.use_fallback = use_fallback
         self.processor = None
         self.model = None
         self._load_model_with_retry()
 
-    # laion/larger_clap_music stores weights in a PR branch, not main.
-    # Specifying this revision lets us skip all HF API network calls (~30-60s)
-    # when the cache is warm.  Override via LYRA_CLAP_REVISION env var if needed.
-    _REVISION_HINTS: dict[str, str] = {
-        "laion/larger_clap_music": "refs/pr/5",
-    }
+    # Revision hints removed — processor_config not cached under refs/pr/5 so
+    # local load always fails. Network load takes ~2s with warm cache anyway.
+    _REVISION_HINTS: dict[str, str] = {}
 
     def _load_model_with_retry(self, retries: int = 3, backoff: float = 2.0) -> None:
         models_to_try = [self.model_name]
@@ -100,10 +98,12 @@ class CLAPEmbedder:
             load_variants: list[dict] = []
             if revision_hint:
                 load_variants.append(
-                    {"revision": revision_hint, "local_files_only": True, "use_safetensors": True}
+                    {"revision": revision_hint, "local_files_only": True}
                 )
-            # Always include a network-enabled fallback (no revision pin)
-            load_variants.append({"use_safetensors": True})
+            # Auto-detect: HF tries safetensors then bin silently (no noisy error)
+            load_variants.append({})
+            # Explicit bin fallback in case auto-detect has issues
+            load_variants.append({"use_safetensors": False})
 
             for attempt in range(1, retries + 1):
                 for kwargs in load_variants:
@@ -119,13 +119,17 @@ class CLAPEmbedder:
                             revision=kwargs.get("revision"),
                             local_files_only=local_only,
                         )
+                        fp_kwargs: dict = {"low_cpu_mem_usage": True}
+                        if "use_safetensors" in kwargs:
+                            fp_kwargs["use_safetensors"] = kwargs["use_safetensors"]
+                        if kwargs.get("revision"):
+                            fp_kwargs["revision"] = kwargs["revision"]
+                        if local_only:
+                            fp_kwargs["local_files_only"] = True
                         self.model = ClapModel.from_pretrained(
                             model_name,
                             cache_dir=self.cache_dir,
-                            revision=kwargs.get("revision"),
-                            local_files_only=local_only,
-                            use_safetensors=kwargs.get("use_safetensors", False),
-                            low_cpu_mem_usage=True,
+                            **fp_kwargs,
                         ).to(self.device)
                         self.model.eval()
                         self.model_name = model_name
