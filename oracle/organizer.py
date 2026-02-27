@@ -205,9 +205,9 @@ def generate_target_path(
     title_safe = _sanitize_filename(title or "Unknown Title")
     album_safe = _sanitize_filename(album or "Unknown Album")
 
-    # Track/disc numbers â€” try to pull from enrichment cache later
-    # For now default to 00 (will be filled by enrichment pipeline)
-    track_number = _get_track_number(cursor, track_id) if False else None
+    # Track/disc numbers — enrichment pipeline will fill these later.
+    # Default to None (represented as 00 in filenames).
+    track_number = None
     disc_number = None
 
     track_str = f"{track_number:02d}" if track_number else "00"

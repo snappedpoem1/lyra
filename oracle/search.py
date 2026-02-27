@@ -12,9 +12,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 
-from oracle.chroma_store import LyraChromaStore
+# chromadb can be troublesome on Python 3.14; import lazily
+# so that lightweight operations (like remix search tests) don't fail.
+try:
+    from oracle.chroma_store import LyraChromaStore
+except Exception:  # pragma: no cover - environment may not have chromadb or pydantic errors
+    LyraChromaStore = None
+
 from oracle.db.schema import get_connection
-from oracle.embedders.clap_embedder import CLAPEmbedder
+# CLAPEmbedder is heavy (librosa) so import inside search when needed
 from oracle.vibe_descriptors import describe_scores
 
 MODEL_NAME = "laion/clap-htsat-unfused"
@@ -31,6 +37,13 @@ REMIX_HINT_TOKENS = (
 
 
 def search(query_text: str, n: int = 10) -> List[Dict[str, str]]:
+    if LyraChromaStore is None:
+        # chromadb not available; semantic search cannot run
+        raise RuntimeError("LyraChromaStore unavailable (chromadb import failed)")
+
+    # import here to avoid librosa dependency during tests that never need it
+    from oracle.embedders.clap_embedder import CLAPEmbedder
+
     embedder = CLAPEmbedder(model_name=MODEL_NAME)
     store = LyraChromaStore(persist_dir="./chroma_storage")
 

@@ -228,7 +228,7 @@ class Radio:
         
         "Find the hidden gems"
         """
-        logger.info(f"ðŸ”­ RADIO: Discovering hidden gems")
+        logger.info("ðŸ”­ RADIO: Discovering hidden gems")
         
         conn = self._open_conn()
         cursor = conn.cursor()
@@ -600,7 +600,7 @@ if __name__ == "__main__":
         seed = sys.argv[2] if len(sys.argv) > 2 else None
         tracks = radio.get_chaos_track(seed, count=5)
         
-        print(f"\nðŸŽ² CHAOS TRACKS:\n")
+        print("\nðŸŽ² CHAOS TRACKS:\n")
         for i, track in enumerate(tracks, 1):
             print(f"{i}. {track['metadata']['artist']} - {track['metadata']['title']}")
             if 'similarity' in track:
@@ -611,7 +611,7 @@ if __name__ == "__main__":
         seed = sys.argv[2]
         tracks = radio.get_flow_track(seed, count=5)
         
-        print(f"\nðŸŒŠ FLOW TRACKS:\n")
+        print("\nðŸŒŠ FLOW TRACKS:\n")
         for i, track in enumerate(tracks, 1):
             print(f"{i}. {track['metadata']['artist']} - {track['metadata']['title']}")
             if 'compatibility' in track:
@@ -621,7 +621,7 @@ if __name__ == "__main__":
     elif command == "discover":
         tracks = radio.get_discovery_track(count=5)
         
-        print(f"\nðŸ”­ DISCOVERIES:\n")
+        print("\nðŸ”­ DISCOVERIES:\n")
         for i, track in enumerate(tracks, 1):
             print(f"{i}. {track['metadata']['artist']} - {track['metadata']['title']}")
             print(f"   Plays: {track.get('play_count', 0)}")

@@ -197,7 +197,7 @@ def cmd_scan(paths: Optional[list] = None):
             # TODO: Implement scan_library() in scanner.py
             # result = scan_library(path)
         
-        print(f"âœ… Scan complete")
+        print("âœ… Scan complete")
         return 0
     
     except Exception as e:

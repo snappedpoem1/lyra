@@ -467,7 +467,7 @@ def acquire_from_magnet(
     if info_hash:
         availability = check_instant_availability([info_hash])
         if availability.get(info_hash):
-            logger.info(f"Torrent is cached (instant availability)")
+            logger.info("Torrent is cached (instant availability)")
 
     # Add magnet
     torrent_id = add_magnet(magnet)

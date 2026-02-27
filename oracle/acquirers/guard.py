@@ -693,7 +693,7 @@ def print_guard_summary(results: List[Tuple[Path, GuardResult]]) -> None:
     rejected = [r for r in results if not r[1].allowed]
     
     print(f"\n{'='*60}")
-    print(f"ACQUISITION GUARD SUMMARY")
+    print("ACQUISITION GUARD SUMMARY")
     print(f"{'='*60}")
     print(f"Total files: {len(results)}")
     print(f"Allowed: {len(allowed)}")

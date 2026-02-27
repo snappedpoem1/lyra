@@ -395,19 +395,19 @@ if __name__ == "__main__":
         track_id = sys.argv[2]
         result = dna.pivot_to_original(track_id)
         
-        print(f"\nðŸ”„ PIVOT RESULT:\n")
+        print("\nðŸ”„ PIVOT RESULT:\n")
         if result:
             if result["status"] == "in_library":
-                print(f"âœ“ Original found in library!")
+                print("âœ“ Original found in library!")
                 print(f"  Artist: {result['artist']}")
                 print(f"  Title: {result['title']}")
                 print(f"  Path: {result['file_path']}")
             else:
-                print(f"âš ï¸  Original not in library")
+                print("âš ï¸  Original not in library")
                 print(f"  Artist: {result['artist']}")
                 print(f"  Title: {result['title']}")
                 print(f"  Year: {result['year']}")
-                print(f"  Action: Acquire this track")
+                print("  Action: Acquire this track")
         else:
             print("No samples registered for this track.\n")
     
@@ -420,7 +420,7 @@ if __name__ == "__main__":
         if success:
             print(f"\nâœ“ Sample registered: {original_artist} - {original_title}\n")
         else:
-            print(f"\nâœ— Registration failed\n")
+            print("\nâœ— Registration failed\n")
     
     else:
         print("\nâœ— Invalid command. Run with no args for help.\n")

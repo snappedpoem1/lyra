@@ -258,7 +258,7 @@ async def scan_library_async(
             processed = min(i + batch_size, total_files)
             print(f"Progress: {processed}/{total_files} ({processed*100//total_files}%)")
 
-    print(f"\nScan complete:")
+    print("\nScan complete:")
     print(f"  Scanned: {stats['scanned']}")
     print(f"  Added:   {stats['added']}")
     print(f"  Updated: {stats['updated']}")

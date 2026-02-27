@@ -167,7 +167,7 @@ class Hunter:
         
         logger.info(f"  â†’ {len(targets)} targets ranked (top seeders: {targets[0].get('seeders', 0) if targets else 'n/a'})")
         if targets and targets[0]["is_cached"]:
-            logger.info(f"  âš¡ CACHED torrent available! Instant download ready.")
+            logger.info("  âš¡ CACHED torrent available! Instant download ready.")
         
         return targets
     
@@ -279,7 +279,7 @@ class Hunter:
                 data = response.json()
                 # If data is not empty, torrent is cached
                 if data.get(torrent_hash):
-                    logger.info(f"  âš¡ Torrent cached on Real-Debrid!")
+                    logger.info("  âš¡ Torrent cached on Real-Debrid!")
                     return True, None
             
             return False, None

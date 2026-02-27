@@ -330,13 +330,13 @@ if __name__ == "__main__":
         print(f"Rejected: {len(rejected)}")
         
         if rejected:
-            print(f"\nâŒ REJECTED:")
+            print("\nâŒ REJECTED:")
             for filepath, result in rejected:
                 print(f"  â€¢ {filepath.name[:50]}")
                 print(f"    Reason: {result.rejection_reason}")
         
         if allowed:
-            print(f"\nâœ… ALLOWED:")
+            print("\nâœ… ALLOWED:")
             for filepath, result in allowed[:10]:
                 print(f"  â€¢ {result.artist[:25]:25s} - {result.title[:30]}")
             if len(allowed) > 10:
@@ -352,7 +352,7 @@ if __name__ == "__main__":
         )
         
         print(f"\n{'='*60}")
-        print(f"IMPORT SUMMARY")
+        print("IMPORT SUMMARY")
         print(f"{'='*60}")
         print(f"Total scanned: {summary.get('total', 0)}")
         print(f"Imported: {summary.get('imported', 0)}")
@@ -374,7 +374,7 @@ if __name__ == "__main__":
         print(f"Junk: {audit['junk']}")
         
         if audit["junk_files"]:
-            print(f"\nâŒ JUNK FILES:")
+            print("\nâŒ JUNK FILES:")
             for item in audit["junk_files"][:20]:
                 filepath = Path(item["file"])
                 print(f"  â€¢ {filepath.name[:50]}")
@@ -386,7 +386,7 @@ if __name__ == "__main__":
         result = quarantine_junk(library, dry_run=args.dry_run)
         
         print(f"\n{'='*60}")
-        print(f"QUARANTINE RESULTS")
+        print("QUARANTINE RESULTS")
         print(f"{'='*60}")
         
         if result.get("dry_run"):

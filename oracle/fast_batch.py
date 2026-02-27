@@ -164,7 +164,7 @@ def fast_batch(
 
     # â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print(f"\n{'='*60}")
-    print(f"  COMPLETE")
+    print("  COMPLETE")
     print(f"  Downloads: {ok}/{total} in {t_download:.1f}s")
     if pipeline_stats:
         print(f"  Scan:      {pipeline_stats.get('scan_time', 0)}s")
@@ -196,7 +196,7 @@ def _main():
 
     parser = argparse.ArgumentParser(description="Fast parallel batch downloader + pipeline")
     parser.add_argument("queries", nargs="*", help="Search queries")
-    parser.add_argument("--file", "-f", help="Text file with one query per line")
+    parser.add_argument("--file", "-", help="Text file with one query per line")
     parser.add_argument("--workers", "-w", type=int, default=DEFAULT_WORKERS, help="Parallel workers (default: 4)")
     parser.add_argument("--no-pipeline", action="store_true", help="Skip scan/index/score after download")
     parser.add_argument("--sleep-min", type=int, default=FAST_SLEEP_MIN, help="yt-dlp sleep_interval")

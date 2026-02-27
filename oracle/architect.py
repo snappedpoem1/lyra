@@ -410,7 +410,7 @@ if __name__ == "__main__":
         result = architect.analyze_structure(track_id, file_path)
         
         if "error" not in result:
-            print(f"\nðŸ—ï¸  STRUCTURE ANALYSIS:\n")
+            print("\nðŸ—ï¸  STRUCTURE ANALYSIS:\n")
             print(f"BPM: {result['bpm']:.1f}")
             print(f"Key: {result['key']}")
             print(f"Drop: {'YES ðŸ’¥ at ' + str(result['drop_timestamp']) + 's' if result['has_drop'] else 'NO'}")
@@ -425,7 +425,7 @@ if __name__ == "__main__":
         structure = architect.get_structure(track_id)
         
         if structure:
-            print(f"\nðŸ—ï¸  STORED STRUCTURE:\n")
+            print("\nðŸ—ï¸  STORED STRUCTURE:\n")
             print(json.dumps(structure, indent=2))
         else:
             print(f"\nâœ— No structure analysis found for track {track_id}\n")

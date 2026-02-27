@@ -96,7 +96,7 @@ class Lore:
         # Get or create artist MBID
         mbid = self._get_artist_mbid(artist_name)
         if not mbid:
-            logger.warning(f"  âš ï¸  Artist not found in MusicBrainz")
+            logger.warning("  âš ï¸  Artist not found in MusicBrainz")
             return {"artist": artist_name, "connections": [], "error": "not_found"}
         
         # Fetch relationships
@@ -405,7 +405,7 @@ class Lore:
             # Add edge with color based on type
             color_map = {
                 "collab": "blue",
-                "member_of": "green",
+                "member_o": "green",
                 "influence": "purple",
                 "rivalry": "red"
             }
@@ -465,7 +465,7 @@ if __name__ == "__main__":
         for conn in lineage["connections"]:
             icon = {
                 "collab": "ðŸ¤",
-                "member_of": "ðŸŽ¸",
+                "member_o": "ðŸŽ¸",
                 "influence": "ðŸ’¡",
                 "rivalry": "âš”ï¸"
             }.get(conn["type"], "â€¢")

@@ -212,7 +212,7 @@ def generate_plan(
     print(f"\nPlan generated: {plan_id}")
     print(f"  JSON: {json_path}")
     print(f"  CSV: {csv_path}")
-    print(f"\nSummary:")
+    print("\nSummary:")
     for action_type, count in summary.items():
         if count > 0:
             print(f"  {action_type}: {count}")
@@ -340,7 +340,7 @@ def apply_plan(
                     to_hash = get_content_hash_fast(to_path)
                     
                     if from_hash != to_hash:
-                        print(f"ERROR: Hash mismatch after copy! Removing dest file.")
+                        print("ERROR: Hash mismatch after copy! Removing dest file.")
                         to_path.unlink()
                         raise RuntimeError("Hash verification failed")
                     
@@ -397,7 +397,7 @@ def apply_plan(
         
         print(f"\nJournal saved: {journal_path}")
     
-    print(f"\nResults:")
+    print("\nResults:")
     print(f"  Applied: {stats['applied']}")
     print(f"  Skipped: {stats['skipped']}")
     print(f"  Errors: {stats['errors']}")
@@ -454,7 +454,7 @@ def undo_plan(journal_path: str, dry_run: bool = False) -> Dict:
             if not dry_run:
                 # Check current file exists
                 if not to_path.exists():
-                    print(f"  WARNING: Destination file missing, skipping")
+                    print("  WARNING: Destination file missing, skipping")
                     stats["errors"] += 1
                     continue
                 
@@ -480,7 +480,7 @@ def undo_plan(journal_path: str, dry_run: bool = False) -> Dict:
     
     conn.close()
     
-    print(f"\nResults:")
+    print("\nResults:")
     print(f"  Reverted: {stats['reverted']}")
     print(f"  Errors: {stats['errors']}")
     

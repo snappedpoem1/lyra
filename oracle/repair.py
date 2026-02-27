@@ -132,11 +132,11 @@ def check_chromadb() -> Dict[str, any]:
             settings=Settings(anonymized_telemetry=False, allow_reset=True)
         )
         
-        client.get_or_create_collection(name="clap_embeddings")
+        collection = client.get_or_create_collection(name="clap_embeddings")
         count = collection.count()
         
-        print(f"  âœ“ ChromaDB initialized")
-        print(f"  âœ“ Collection: clap_embeddings")
+        print("  âœ“ ChromaDB initialized")
+        print("  âœ“ Collection: clap_embeddings")
         print(f"  âœ“ Embeddings: {count}")
         
         return {
@@ -179,8 +179,8 @@ def reinitialize_chromadb() -> Dict[str, any]:
         
         client.get_or_create_collection(name="clap_embeddings")
         
-        print(f"  âœ“ ChromaDB reinitialized")
-        print(f"  âœ“ Collection created: clap_embeddings")
+        print("  âœ“ ChromaDB reinitialized")
+        print("  âœ“ Collection created: clap_embeddings")
         
         return {
             "status": "ok",

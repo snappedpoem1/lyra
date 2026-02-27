@@ -87,7 +87,7 @@ class Scout:
                     "tags": [
                         f"fusion:{source_genre.lower()}_{target_genre.lower()}",
                         "context:bridge",
-                        f"scout:cross_genre"
+                        "scout:cross_genre"
                     ],
                     "acquisition_priority": self._calculate_priority(release, source_genre, target_genre)
                 })
@@ -289,7 +289,7 @@ class Scout:
         placeholders = " OR ".join(["genre LIKE ?" for _ in genres])
         params = [f"%{g}%" for g in genres]
         
-        cursor.execute(f"""
+        cursor.execute("""
             SELECT track_id, artist, title, genre, filepath
             FROM tracks
             WHERE {placeholders}

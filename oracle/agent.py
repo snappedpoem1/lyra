@@ -147,7 +147,7 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
             "timestamp": datetime.now().isoformat()
         })
         
-        logger.info(f"  âœ“ Response generated")
+        logger.info("  âœ“ Response generated")
         return parsed
 
     def run_agent(self, user_input: str, context: Optional[Dict] = None) -> Dict[str, Any]:
@@ -584,7 +584,7 @@ if __name__ == "__main__":
         if fact:
             print(f"\nðŸ“– FACT: {fact}\n")
         else:
-            print(f"\nðŸ“– No interesting facts for this track.\n")
+            print("\nðŸ“– No interesting facts for this track.\n")
     
     else:
         print("\nâœ— Invalid command. Run with no args for help.\n")

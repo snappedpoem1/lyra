@@ -335,7 +335,7 @@ def main() -> None:
     drain_parser.add_argument("--max-retries", type=int, default=3, help="Mark failed after N attempts")
     drain_parser.add_argument("--source", help="Filter by source (liked, playlist, history, top_tracks, discography)")
 
-    perf_parser = subparsers.add_parser("perf", help="Performance profile and runtime pause controls")
+    perf_parser = subparsers.add_parser("per", help="Performance profile and runtime pause controls")
     perf_sub = perf_parser.add_subparsers(dest="perf_command")
     perf_sub.add_parser("status", help="Show current performance profile and pause state")
     perf_profile = perf_sub.add_parser("profile", help="Set performance profile")
@@ -698,7 +698,7 @@ def main() -> None:
             album=getattr(args, 'album', None),
             max_tier=getattr(args, 'max_tier', 4),
         )
-        print(f"\nResult:")
+        print("\nResult:")
         print(f"  Success: {result.success}")
         print(f"  Tier: {result.tier}")
         print(f"  Source: {result.source}")
@@ -896,7 +896,7 @@ def main() -> None:
             return
         print(f"\nâœ“ Vibe deleted: {result['name']}")
         if result.get('deleted_materialized'):
-            print(f"  Folder also deleted")
+            print("  Folder also deleted")
         return
 
     if args.command == "serve":
@@ -1086,17 +1086,17 @@ def main() -> None:
         print(f"{'='*60}")
         
         if result.allowed:
-            print(f"\nâœ… ALLOWED")
+            print("\nâœ… ALLOWED")
             print(f"  Confidence: {result.confidence:.0%}")
             print(f"  Canonical: {result.artist} - {result.title}")
             if result.validated_by:
                 print(f"  Validated by: {result.validated_by}")
             if result.warnings:
-                print(f"  Warnings:")
+                print("  Warnings:")
                 for w in result.warnings:
                     print(f"    âš ï¸ {w}")
         else:
-            print(f"\nâŒ REJECTED")
+            print("\nâŒ REJECTED")
             print(f"  Reason: {result.rejection_reason}")
             print(f"  Category: {result.rejection_category}")
         return
@@ -1122,7 +1122,7 @@ def main() -> None:
         print(f"Rejected: {len(rejected)}")
         
         if rejected:
-            print(f"\nâŒ REJECTED:")
+            print("\nâŒ REJECTED:")
             for filepath, result in rejected:
                 print(f"  â€¢ {filepath.name[:50]}")
                 print(f"    {result.rejection_reason}")
@@ -1143,7 +1143,7 @@ def main() -> None:
         )
         
         print(f"\n{'='*60}")
-        print(f"GUARDED IMPORT")
+        print("GUARDED IMPORT")
         print(f"{'='*60}")
         print(f"Total: {summary.get('total', 0)}")
         print(f"Imported: {summary.get('imported', 0)}")
@@ -1170,7 +1170,7 @@ def main() -> None:
         print(f"Junk: {audit['junk']}")
         
         if audit["junk_files"]:
-            print(f"\nâŒ JUNK FILES:")
+            print("\nâŒ JUNK FILES:")
             for item in audit["junk_files"][:20]:
                 filepath = Path(item["file"])
                 print(f"  â€¢ {filepath.name[:50]}")
@@ -1187,7 +1187,7 @@ def main() -> None:
         result = quarantine_junk(library, dry_run=args.dry_run)
         
         print(f"\n{'='*60}")
-        print(f"QUARANTINE RESULTS")
+        print("QUARANTINE RESULTS")
         print(f"{'='*60}")
         
         if result.get("dry_run"):
@@ -1483,7 +1483,7 @@ def main() -> None:
                     # Slskd returns a remote candidate path; keep pending without consuming retries.
                     next_retry = int(retry_count or 0)
                     retryable_error = (
-                        f"slskd queued remote candidate; waiting for local ingest: "
+                        "slskd queued remote candidate; waiting for local ingest: "
                         f"{result.path or '(no path)'}"
                     )
                     target_status = "pending"
