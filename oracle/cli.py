@@ -36,8 +36,8 @@ def main() -> None:
     db_sub.add_parser("migrate", help="Create or update database schema")
 
     subparsers.add_parser("doctor", help="Run system diagnostics")
-    subparsers.add_parser("audit", help="Run database audit  --  row counts and health check")
-    subparsers.add_parser("status", help="Quick status check  --  row counts and system state")
+    subparsers.add_parser("audit", help="Run database audit â€” row counts and health check")
+    subparsers.add_parser("status", help="Quick status check â€” row counts and system state")
 
     ops_parser = subparsers.add_parser("ops", help="Operational run sequence + markdown report")
     ops_sub = ops_parser.add_subparsers(dest="ops_command")
@@ -265,13 +265,6 @@ def main() -> None:
     catalog_status_cmd.add_argument('--artist', help='Filter by artist')
 
     # Ingest watcher
-    # foobar2000 BeefWeb bridge
-    listen_parser = subparsers.add_parser(
-        "listen", help="Bridge foobar2000 (BeefWeb) playback events to oracle taste learning"
-    )
-    listen_parser.add_argument("--host", default="localhost", help="BeefWeb host (default: localhost)")
-    listen_parser.add_argument("--port", type=int, default=8880, help="BeefWeb port (default: 8880)")
-
     watch_parser = subparsers.add_parser("watch", help="Watch downloads/ and auto-ingest new audio files")
     watch_parser.add_argument("--once", action="store_true", help="Process existing files and exit")
 
@@ -287,7 +280,7 @@ def main() -> None:
     import_parser.add_argument("--singletons", action="store_true", help="Import as non-album tracks")
     import_parser.add_argument("--copy", action="store_true", help="Copy instead of move")
 
-    # Playback signal  --  log plays/skips for taste learning without the server
+    # Playback signal â€” log plays/skips for taste learning without the server
     played_parser = subparsers.add_parser(
         "played", help="Log a playback signal for taste learning"
     )
@@ -300,8 +293,6 @@ def main() -> None:
     drain_parser = subparsers.add_parser("drain", help="Drain acquisition queue via guarded waterfall (T1-T4)")
     drain_parser.add_argument("--limit", type=int, default=10, help="Number of tracks to acquire")
     drain_parser.add_argument("--artist", help="Filter by artist")
-    drain_parser.add_argument("--source", help="Filter by source: liked, playlist, history, top_tracks, discography")
-    drain_parser.add_argument("--playlist", help="Filter by playlist name (e.g. 'Act 1', 'Act 2'); implies --source playlist")
     drain_parser.add_argument("--max-tier", type=int, default=4, help="Max acquisition tier (1=Qobuz, 2=Slskd, 3=RD, 4=SpotDL)")
     drain_parser.add_argument("--workers", type=int, default=0, help="Parallel download workers (0=auto)")
     drain_parser.add_argument("--max-retries", type=int, default=3, help="Mark failed after N attempts")
@@ -425,7 +416,7 @@ def main() -> None:
                         icon = "[OK]"
                         label = f"HTTP {req.status}"
                     except urllib.error.HTTPError as he:
-                        # 4xx means service is up but needs auth  --  still live
+                        # 4xx means service is up but needs auth â€” still live
                         if he.code < 500:
                             icon = "[OK]"
                             label = f"HTTP {he.code} (live)"
@@ -563,7 +554,7 @@ def main() -> None:
         from oracle.indexer import index_library
         
         print("\n" + "="*60)
-        print("LYRA PIPELINE: Scan â†' Index â†' Score")
+        print("LYRA PIPELINE: Scan â†’ Index â†’ Score")
         print("="*60 + "\n")
         
         print("[1/2] Scanning library...")
@@ -696,7 +687,7 @@ def main() -> None:
     if args.command == "curate" and args.curate_command == "classify":
         from oracle.classifier import classify_library
         if args.llm:
-            print("[classify] LLM second pass enabled  --  LM Studio must be running.")
+            print("[classify] LLM second pass enabled â€” LM Studio must be running.")
         results = classify_library(limit=args.limit, use_llm=args.llm)
         print(f"\nClassification Summary ({results['total']} tracks):")
         for k, v in results.items():
@@ -766,7 +757,7 @@ def main() -> None:
                 cleaned_count += 1
                 action = "Would rename" if args.dry_run else "Renamed"
                 print(f"{action}: {file_path.name}")
-                print(f"       â†' {new_path.name}")
+                print(f"       â†’ {new_path.name}")
         
         if cleaned_count == 0:
             print("All filenames are already clean.")
@@ -797,7 +788,7 @@ def main() -> None:
         if 'error' in result:
             print(f"ERROR: {result['error']}")
             return
-        print(f"\n[OK]  Vibe saved: {result['name']}")
+        print(f"\nâœ“ Vibe saved: {result['name']}")
         print(f"  Query: {result['query']}")
         print(f"  Tracks: {result['track_count']}")
         return
@@ -824,7 +815,7 @@ def main() -> None:
         if 'error' in result:
             print(f"ERROR: {result['error']}")
             return
-        print(f"\n[OK]  M3U8 playlist built: {result['m3u8_path']}")
+        print(f"\nâœ“ M3U8 playlist built: {result['m3u8_path']}")
         print(f"  Tracks: {result['track_count']}")
         return
 
@@ -834,7 +825,7 @@ def main() -> None:
         if 'error' in result:
             print(f"ERROR: {result['error']}")
             return
-        print(f"\n[OK]  Vibe materialized: {result['folder']}")
+        print(f"\nâœ“ Vibe materialized: {result['folder']}")
         print(f"  Mode: {result['mode']}")
         stats = result['stats']
         print(f"  Created: {stats['created']}")
@@ -850,13 +841,13 @@ def main() -> None:
         if 'error' in result:
             print(f"ERROR: {result['error']}")
             return
-        print(f"\n[OK]  Refreshed {result['refreshed']} vibe(s)")
+        print(f"\nâœ“ Refreshed {result['refreshed']} vibe(s)")
         for item in result['results']:
             print(f"\nâ€¢ {item['name']}")
             if 'error' in item['result']:
                 print(f"  âœ— {item['result']['error']}")
             else:
-                print(f"  [OK]  {item['result']['track_count']} tracks")
+                print(f"  âœ“ {item['result']['track_count']} tracks")
         return
 
     if args.command == "vibe" and args.vibe_command == "delete":
@@ -865,7 +856,7 @@ def main() -> None:
         if 'error' in result:
             print(f"ERROR: {result['error']}")
             return
-        print(f"\n[OK]  Vibe deleted: {result['name']}")
+        print(f"\nâœ“ Vibe deleted: {result['name']}")
         if result.get('deleted_materialized'):
             print(f"  Folder also deleted")
         return
@@ -989,7 +980,7 @@ def main() -> None:
             result = pipeline.acquire(request)
             
             if result.success:
-                print(f"\n[OK]  Acquired: {result.filepath}")
+                print(f"\nâœ“ Acquired: {result.filepath}")
                 print(f"  Artist: {result.canonical_artist}")
                 print(f"  Title: {result.canonical_title}")
                 print(f"  Quality: {result.quality}")
@@ -1224,14 +1215,6 @@ def main() -> None:
         print("Usage: oracle catalog {lookup|acquire|status}")
         return
 
-    if args.command == "listen":
-        import logging as _logging
-        import asyncio as _asyncio
-        _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
-        from oracle.integrations.beefweb_listener import run_listener
-        _asyncio.run(run_listener(host=args.host, port=args.port))
-        return
-
     if args.command == "watch":
         import logging as _logging
         _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
@@ -1288,12 +1271,6 @@ def main() -> None:
         if args.artist:
             q += " AND artist LIKE ?"
             params.append(f"%{args.artist}%")
-        if getattr(args, "playlist", None):
-            q += " AND playlist_name = ?"
-            params.append(args.playlist)
-        elif getattr(args, "source", None):
-            q += " AND source = ?"
-            params.append(args.source)
         q += " ORDER BY COALESCE(priority_score, 0) DESC, datetime(added_at) ASC, id ASC"
         if args.limit:
             q += " LIMIT ?"
@@ -1308,177 +1285,94 @@ def main() -> None:
         else:
             workers = int(args.workers)
         workers = max(1, min(workers, 32))
-        # Tier-parallel pipeline: every tier runs its own dedicated workers simultaneously.
-        # T1 failures cascade immediately into T2's live queue — no tier sits idle.
-        import queue as _queue
-        from oracle.acquirers.waterfall import (
-            _guard_check,
-            _try_tier1_qobuz,
-            _try_tier2_streamrip,
-            _try_tier3_slskd,
-            _try_tier4_realdebrid,
-            _try_tier5_spotdl,
-            AcquisitionResult,
-        )
+        print(f"\nDraining {len(items)} track(s) from queue (max tier: T{args.max_tier}, workers: {workers})...")
 
-        TIER_NAMES = {1: "Qobuz", 2: "Streamrip", 3: "Slskd", 4: "RD", 5: "SpotDL"}
-        TIER_WORKERS = {1: 2, 2: 2, 3: 3, 4: 2, 5: 2}  # dedicated threads per tier
-
-        max_tier = args.max_tier
-        lock = threading.Lock()
         downloaded_count = 0
         failed_count = 0
         retried_count = 0
         hard_failed_count = 0
+        lock = threading.Lock()
 
-        def _call_tier(tier_num: int, artist: str, title: str, album: str, uri: str) -> AcquisitionResult:
-            """Dispatch to the correct tier function."""
-            if tier_num == 1: return _try_tier1_qobuz(artist, title)
-            if tier_num == 2: return _try_tier2_streamrip(artist, title, album)
-            if tier_num == 3: return _try_tier3_slskd(artist, title)
-            if tier_num == 4: return _try_tier4_realdebrid(artist, title, album)
-            if tier_num == 5: return _try_tier5_spotdl(artist, title, uri)
-            return AcquisitionResult(success=False, tier=tier_num, source="none",
-                                     error=f"No handler for tier {tier_num}")
+        def _drain_one(item):
+            wait_if_paused("drain")
+            queue_id, artist, title, album, spotify_uri, retry_count = item
+            result = acquire(artist, title, album=album, spotify_uri=spotify_uri, max_tier=args.max_tier)
+            file_ready = bool(result.path) and _Path(result.path).exists()
 
-        def _db_success(qid: int) -> None:
-            try:
-                c = get_connection()
-                c.execute("UPDATE acquisition_queue SET status='downloaded', "
-                          "completed_at=NULL, error=NULL WHERE id=?", (qid,))
-                c.commit(); c.close()
-            except Exception as exc:
-                _logging.warning(f"DB success update failed: {exc}")
-
-        def _db_fail(qid: int, retry_count: int, err: str) -> str:
-            nxt = int(retry_count or 0) + 1
-            status = "pending" if nxt < args.max_retries else "failed"
-            try:
-                c = get_connection()
-                c.execute("UPDATE acquisition_queue SET status=?, retry_count=?, "
-                          "error=? WHERE id=?", (status, nxt, err[:500], qid))
-                c.commit(); c.close()
-            except Exception as exc:
-                _logging.warning(f"DB fail update failed: {exc}")
-            return "retried" if status == "pending" else "failed"
-
-        # Guard pre-flight: run all metadata checks upfront before the pipeline starts
-        print(f"\nDraining {len(items)} track(s) — tier-parallel pipeline (T1-T{max_tier})...")
-        print("  Guard pre-flight...")
-        valid_items = []
-        for item in items:
-            qid, artist, title, album, uri, retry = item
-            guard = _guard_check(artist, title)
-            if guard.get("allowed"):
-                valid_items.append((
-                    qid,
-                    guard.get("artist", artist),
-                    guard.get("title", title),
-                    album, uri, retry,
-                ))
+            new_state = "failed"
+            if result.success and file_ready:
+                # Download succeeded; watcher marks final completion after post-flight ingest.
+                try:
+                    wconn = get_connection()
+                    wconn.execute(
+                        "UPDATE acquisition_queue SET status='downloaded', completed_at=NULL, error=NULL WHERE id=?",
+                        (queue_id,),
+                    )
+                    wconn.commit()
+                    wconn.close()
+                    new_state = "downloaded"
+                except Exception as exc:
+                    new_state = "failed"
+                    result.error = f"DB update failed: {exc}"
             else:
-                reason = guard.get("reason", "guard rejected")
-                print(f"  [GUARD] {artist} - {title}: {reason}")
-                _db_fail(qid, retry, f"Guard rejected: {reason}")
+                # Partial/failed attempt: retry until max_retries, then hard fail.
+                next_retry = int(retry_count or 0) + 1
+                retryable_error = result.error or "acquisition did not yield a local file"
+                target_status = "pending" if next_retry < args.max_retries else "failed"
+                try:
+                    wconn = get_connection()
+                    wconn.execute(
+                        "UPDATE acquisition_queue SET status=?, retry_count=?, error=? WHERE id=?",
+                        (target_status, next_retry, retryable_error, queue_id),
+                    )
+                    wconn.commit()
+                    wconn.close()
+                    new_state = "retried" if target_status == "pending" else "failed"
+                except Exception as exc:
+                    new_state = "failed"
+                    result.error = f"{retryable_error}; DB update failed: {exc}"
 
-        if not valid_items:
-            print("All items rejected by guard.")
-            return
+            return artist, title, result, new_state
 
-        # Per-tier work queues + completion tracking
-        tier_qs = {t: _queue.Queue() for t in range(1, max_tier + 1)}
-        done_q: _queue.Queue = _queue.Queue()
-        remaining = [len(valid_items)]
-        all_done = threading.Event()
-
-        def mark_done() -> None:
-            with lock:
-                remaining[0] -= 1
-                if remaining[0] <= 0:
-                    all_done.set()
-
-        def make_worker(tier_num: int):
-            """Factory: returns a worker function bound to the given tier."""
-            q = tier_qs[tier_num]
-            next_q = tier_qs.get(tier_num + 1)
-            tier_name = TIER_NAMES.get(tier_num, f"T{tier_num}")
-
-            def _worker() -> None:
-                while True:
-                    try:
-                        item = q.get(timeout=0.5)
-                    except _queue.Empty:
-                        if all_done.is_set():
-                            return
-                        continue
-                    wait_if_paused("drain")
-                    qid, artist, title, album, uri, retry = item
-                    try:
-                        result = _call_tier(tier_num, artist, title, album or "", uri or "")
-                    except Exception as exc:
-                        result = AcquisitionResult(success=False, tier=tier_num,
-                                                   source=tier_name.lower(), error=str(exc)[:200])
-
-                    file_ready = result.success and bool(result.path) and _Path(result.path).exists()
-                    if file_ready:
-                        _db_success(qid)
-                        done_q.put((artist, title, tier_num, tier_name, result, "downloaded"))
-                        mark_done()
-                    elif next_q is not None:
-                        next_q.put(item)  # cascade — item still inflight, no mark_done
+        if workers == 1:
+            for item in items:
+                _, artist, title, album, spotify_uri, _ = item
+                print(f"\n  {artist} - {title}")
+                _, _, result, state = _drain_one(item)
+                if state == "downloaded":
+                    print(f"    [OK] T{result.tier} ({result.source}) â€” {result.elapsed:.1f}s")
+                    if result.path:
+                        print(f"         {result.path}")
+                    downloaded_count += 1
+                else:
+                    if state == "retried":
+                        print(f"    [~~] RETRY QUEUED: {result.error}")
+                        retried_count += 1
                     else:
-                        state = _db_fail(qid, retry, result.error or "all tiers exhausted")
-                        done_q.put((artist, title, tier_num, tier_name, result, state))
-                        mark_done()
-                    q.task_done()
-
-            return _worker
-
-        # Load T1 queue and start ALL tier pools simultaneously
-        for item in valid_items:
-            tier_qs[1].put(item)
-
-        tier_pools = {}
-        for tier in range(1, max_tier + 1):
-            n = min(TIER_WORKERS.get(tier, 2), max(1, workers))
-            pool = ThreadPoolExecutor(max_workers=n, thread_name_prefix=f"T{tier}")
-            tier_pools[tier] = pool
-            for _ in range(n):
-                pool.submit(make_worker(tier))
-
-        tier_summary = " | ".join(
-            f"T{t}={TIER_NAMES[t]}x{min(TIER_WORKERS.get(t, 2), max(1, workers))}"
-            for t in range(1, max_tier + 1)
-        )
-        print(f"  Pipeline: {tier_summary}")
-        print(f"  {len(valid_items)} tracks entering T1...\n")
-
-        # Stream results as they arrive from any tier
-        while not all_done.is_set() or not done_q.empty():
-            try:
-                artist, title, tier_num, tier_name, result, state = done_q.get(timeout=0.5)
-            except _queue.Empty:
-                continue
-            if state == "downloaded":
-                print(f"  [OK] {artist} - {title} | T{tier_num} {tier_name} {result.elapsed:.1f}s")
-                if result.path:
-                    print(f"       {result.path}")
-                downloaded_count += 1
-            elif state == "retried":
-                print(f"  [~~] {artist} - {title} | retry queued | {result.error}")
-                retried_count += 1
-                failed_count += 1
-            else:
-                print(f"  [--] {artist} - {title} | {result.error}")
-                hard_failed_count += 1
-                failed_count += 1
-
-        for pool in tier_pools.values():
-            pool.shutdown(wait=False)
+                        print(f"    [--] FAILED: {result.error}")
+                        hard_failed_count += 1
+                    failed_count += 1
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {pool.submit(_drain_one, item): item for item in items}
+                for future in as_completed(futures):
+                    artist, title, result, state = future.result()
+                    with lock:
+                        if state == "downloaded":
+                            print(f"  [OK] {artist} - {title} | T{result.tier} ({result.source}) {result.elapsed:.1f}s")
+                            downloaded_count += 1
+                        else:
+                            if state == "retried":
+                                print(f"  [~~] {artist} - {title} | retry queued | {result.error}")
+                                retried_count += 1
+                            else:
+                                print(f"  [--] {artist} - {title} | {result.error}")
+                                hard_failed_count += 1
+                            failed_count += 1
 
         print(f"\nDone. {downloaded_count} downloaded, {failed_count} failed.")
         if retried_count or hard_failed_count:
-            print(f"  Retries queued: {retried_count} | Hard failed: {hard_failed_count}")
+            print(f"Retries queued: {retried_count} | Hard failed: {hard_failed_count}")
         if downloaded_count:
             print("Run 'oracle watch --once' to ingest and mark queue items completed.")
         return
