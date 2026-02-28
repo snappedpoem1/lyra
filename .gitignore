@@ -18,14 +18,16 @@ ENV/
 *.swo
 *~
 
-# Secrets & Environment
+# Secrets & Credentials
 .env
 .env.*
 !.env.template
 *.pem
 *.key
+/.spotify_cache
+scripts/.spotify_cache
 
-# Databases (runtime)
+# Databases (all runtime SQLite)
 *.db
 *.db-shm
 *.db-wal
@@ -38,10 +40,7 @@ dist/
 build/
 node_modules/
 
-# Lyra Runtime Data (large / machine-generated)
-lyra_registry.db
-lyra_registry.db-journal
-lyra_registry.db-wal
+# Runtime Data (large / machine-generated / personal)
 chroma_storage/
 hf_cache/
 downloads/
@@ -49,14 +48,14 @@ staging/
 logs/
 journal.jsonl
 Reports/
-/playlists/
-data/
 Backups/
+/playlists/
+/data/
 
 # Beets
-.beets/beets_library.db
+.beets/
 
-# Archives
+# Archives & Binaries
 _archive/
 _backups/
 *.rar
@@ -70,14 +69,10 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
-# Claude tool state
-.claude/worktrees/
+# Claude Code
 .claude/**
 !.claude/CLAUDE.md
 !.claude/settings.json
 
-# Prowlarr runtime config
+# Docker runtime config (mounted volumes)
 Lyra_Oracle_System/config/prowlarr/
-Lyra_Oracle_System/config/prowlarr.template/.gitkeep
-/.spotify_cache
-scripts/.spotify_cache
