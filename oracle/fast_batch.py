@@ -32,9 +32,6 @@ logger = logging.getLogger("oracle.fast_batch")
 # Defaults
 # ---------------------------------------------------------------------------
 DEFAULT_WORKERS = 4
-FAST_SLEEP_MIN = 0          # No yt-dlp inter-request sleep
-FAST_SLEEP_MAX = 1          # Minimal cap
-INTER_DOWNLOAD_SLEEP = 0    # No Python-level sleep between items
 
 
 def _download_one(query: str, idx: int, total: int) -> dict:
