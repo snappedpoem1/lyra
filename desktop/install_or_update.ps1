@@ -32,9 +32,16 @@ function Get-NewestInstaller {
         throw "Desktop dist folder not found at '$distDir'. Build the desktop app first or pass -InstallerPath."
     }
 
-    $installer = Get-ChildItem -Path $distDir -Filter "Lyra Oracle Setup *.exe" |
-        Sort-Object LastWriteTimeUtc -Descending |
-        Select-Object -First 1
+    $patterns = @("Lyra Setup *.exe", "Lyra Oracle Setup *.exe")
+    $installer = $null
+    foreach ($pattern in $patterns) {
+        $installer = Get-ChildItem -Path $distDir -Filter $pattern |
+            Sort-Object LastWriteTimeUtc -Descending |
+            Select-Object -First 1
+        if ($installer) {
+            break
+        }
+    }
 
     if (-not $installer) {
         throw "No Lyra installer EXE found in '$distDir'."
@@ -54,7 +61,7 @@ function Resolve-InstallDir {
     }
 
     $localAppData = [Environment]::GetFolderPath("LocalApplicationData")
-    $defaultDir = Join-Path $localAppData "Programs\Lyra Oracle"
+    $defaultDir = Join-Path $localAppData "Programs\Lyra"
     return $defaultDir
 }
 
@@ -108,6 +115,8 @@ if ($process.ExitCode -ne 0) {
 }
 
 $exeCandidates = @(
+    (Join-Path $resolvedInstallDir "Lyra.exe"),
+    (Join-Path $resolvedInstallDir "Lyra\Lyra.exe"),
     (Join-Path $resolvedInstallDir "Lyra Oracle.exe"),
     (Join-Path $resolvedInstallDir "Lyra Oracle\Lyra Oracle.exe")
 )

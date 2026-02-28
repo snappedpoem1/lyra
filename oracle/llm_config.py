@@ -8,6 +8,10 @@ import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
+from dotenv import load_dotenv
+
+
+load_dotenv(override=False)
 
 
 PROVIDER_ALIASES = {

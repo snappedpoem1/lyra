@@ -38,51 +38,91 @@ REMIX_HINT_TOKENS = (
 
 def search(query_text: str, n: int = 10) -> List[Dict[str, str]]:
     if LyraChromaStore is None:
-        # chromadb not available; semantic search cannot run
-        raise RuntimeError("LyraChromaStore unavailable (chromadb import failed)")
+        return fallback_text_search(query_text, n=n, reason="chromadb unavailable")
 
-    # import here to avoid librosa dependency during tests that never need it
-    from oracle.embedders.clap_embedder import CLAPEmbedder
+    try:
+        # import here to avoid librosa dependency during tests that never need it
+        from oracle.embedders.clap_embedder import CLAPEmbedder
 
-    embedder = CLAPEmbedder(model_name=MODEL_NAME)
-    store = LyraChromaStore(persist_dir="./chroma_storage")
+        embedder = CLAPEmbedder(model_name=MODEL_NAME)
+        store = LyraChromaStore(persist_dir="./chroma_storage")
 
-    vector = embedder.embed_text(query_text)
-    if vector is None:
-        return []
+        vector = embedder.embed_text(query_text)
+        if vector is None:
+            return fallback_text_search(query_text, n=n, reason="text embedding unavailable")
 
-    results = store.search(vector.tolist(), n=n)
-    ids = results.get("ids", [[]])[0]
+        results = store.search(vector.tolist(), n=n)
+        ids = results.get("ids", [[]])[0]
 
-    if not ids:
-        return []
+        if not ids:
+            return []
 
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+
+        output: List[Dict[str, str]] = []
+        for idx, track_id in enumerate(ids, 1):
+            cursor.execute(
+                "SELECT artist, title, album, year, filepath FROM tracks WHERE track_id = ?",
+                (track_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                output.append(
+                    {
+                        "rank": str(idx),
+                        "track_id": track_id,
+                        "artist": row[0] or "Unknown",
+                        "title": row[1] or "Unknown",
+                        "album": row[2] or "",
+                        "year": row[3] or "",
+                        "path": row[4] or "",
+                    }
+                )
+            else:
+                output.append({"rank": str(idx), "track_id": track_id, "path": track_id})
+
+        conn.close()
+        return output
+    except Exception as exc:
+        return fallback_text_search(query_text, n=n, reason=str(exc))
+
+
+def fallback_text_search(query_text: str, n: int = 10, reason: str = "") -> List[Dict[str, str]]:
+    """Fallback metadata search when semantic search is unavailable."""
+    terms = [term.strip() for term in str(query_text or "").split() if term.strip()]
     conn = get_connection(timeout=10.0)
     cursor = conn.cursor()
-
-    output: List[Dict[str, str]] = []
-    for idx, track_id in enumerate(ids, 1):
-        cursor.execute(
-            "SELECT artist, title, album, year, filepath FROM tracks WHERE track_id = ?",
-            (track_id,)
-        )
-        row = cursor.fetchone()
-        if row:
-            output.append(
-                {
-                    "rank": str(idx),
-                    "track_id": track_id,
-                    "artist": row[0] or "Unknown",
-                    "title": row[1] or "Unknown",
-                    "album": row[2] or "",
-                    "year": row[3] or "",
-                    "path": row[4] or "",
-                }
-            )
-        else:
-            output.append({"rank": str(idx), "track_id": track_id, "path": track_id})
-
+    where_parts = ["status = 'active'"]
+    params: List[Any] = []
+    for term in terms[:6]:
+        like = f"%{term}%"
+        where_parts.append("(artist LIKE ? OR title LIKE ? OR album LIKE ?)")
+        params.extend([like, like, like])
+    sql = f"""
+        SELECT track_id, artist, title, album, year, filepath
+        FROM tracks
+        WHERE {' AND '.join(where_parts)}
+        ORDER BY artist COLLATE NOCASE ASC, album COLLATE NOCASE ASC, title COLLATE NOCASE ASC
+        LIMIT ?
+    """
+    cursor.execute(sql, (*params, max(1, int(n or 10))))
+    rows = cursor.fetchall()
     conn.close()
+    output: List[Dict[str, str]] = []
+    for idx, row in enumerate(rows, 1):
+        output.append(
+            {
+                "rank": str(idx),
+                "track_id": row[0],
+                "artist": row[1] or "Unknown",
+                "title": row[2] or "Unknown",
+                "album": row[3] or "",
+                "year": row[4] or "",
+                "path": row[5] or "",
+                "fallback_reason": reason or "metadata fallback",
+            }
+        )
     return output
 
 

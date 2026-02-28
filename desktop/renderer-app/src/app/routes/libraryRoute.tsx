@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LibraryOmensPanel } from "@/features/library/LibraryOmensPanel";
 import { audioEngine } from "@/services/audio/audioEngine";
-import { getLibraryTracks } from "@/services/lyraGateway/queries";
+import { getLibraryAlbums, getLibraryArtists, getLibraryTracks } from "@/services/lyraGateway/queries";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
 
@@ -12,13 +12,24 @@ export function LibraryRoute() {
   const [offset, setOffset] = useState(0);
   const [sortKey, setSortKey] = useState<"title" | "artist" | "album">("artist");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const pageSize = 20;
+  const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
+  const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
+  const pageSize = 80;
   const replaceQueue = useQueueStore((state) => state.replaceQueue);
+  const appendTracks = useQueueStore((state) => state.appendTracks);
   const setCurrentTrack = useQueueStore((state) => state.setCurrentTrack);
   const setTrack = usePlayerStore((state) => state.setTrack);
   const { data } = useQuery({
-    queryKey: ["library-tracks", pageSize, offset, query],
-    queryFn: () => getLibraryTracks(pageSize, offset, query),
+    queryKey: ["library-tracks", pageSize, offset, query, selectedArtist, selectedAlbum],
+    queryFn: () => getLibraryTracks(pageSize, offset, query, selectedArtist, selectedAlbum),
+  });
+  const { data: artistOptions = [] } = useQuery({
+    queryKey: ["library-artists", query],
+    queryFn: () => getLibraryArtists(query),
+  });
+  const { data: albumOptions = [] } = useQuery({
+    queryKey: ["library-albums", query, selectedArtist],
+    queryFn: () => getLibraryAlbums(query, selectedArtist),
   });
 
   useEffect(() => {
@@ -29,23 +40,29 @@ export function LibraryRoute() {
     return () => window.clearTimeout(timeout);
   }, [draftQuery]);
 
+  useEffect(() => {
+    setOffset(0);
+  }, [selectedArtist, selectedAlbum]);
+
   const tracks = [...(data?.tracks ?? [])].sort((a, b) => {
     const av = String((sortKey === "title" ? a.title : sortKey === "album" ? a.album ?? "" : a.artist) ?? "").toLowerCase();
     const bv = String((sortKey === "title" ? b.title : sortKey === "album" ? b.album ?? "" : b.artist) ?? "").toLowerCase();
     const order = av.localeCompare(bv);
     return sortDir === "asc" ? order : -order;
   });
+  const filteredTracks = tracks;
   const total = data?.total ?? 0;
   const hasPrevPage = offset > 0;
   const hasNextPage = offset + pageSize < total;
 
   const playTrack = async (track: typeof tracks[number]) => {
+    const currentIndex = Math.max(0, filteredTracks.findIndex((item) => item.trackId === track.trackId));
     replaceQueue({
       queueId: `library-${track.trackId}`,
       origin: "library",
       reorderable: true,
-      currentIndex: 0,
-      items: [track],
+      currentIndex,
+      items: filteredTracks,
     });
     setCurrentTrack(track.trackId);
     setTrack(track, "Library", track.reason);
@@ -53,24 +70,33 @@ export function LibraryRoute() {
   };
 
   const queueTrack = (track: typeof tracks[number]) => {
-    replaceQueue({
-      queueId: `library-page-${offset}`,
-      origin: "library",
-      reorderable: true,
-      currentIndex: Math.max(0, tracks.findIndex((item) => item.trackId === track.trackId)),
-      items: tracks,
-    });
+    const existingItems = useQueueStore.getState().queue.items;
+    if (!existingItems.length) {
+      replaceQueue({
+        queueId: `library-page-${offset}`,
+        origin: "library",
+        reorderable: true,
+        currentIndex: Math.max(0, filteredTracks.findIndex((item) => item.trackId === track.trackId)),
+        items: filteredTracks,
+      });
+      setCurrentTrack(track.trackId);
+      return;
+    }
+    appendTracks([track]);
     setCurrentTrack(track.trackId);
   };
 
-  const toggleSort = (nextKey: "title" | "artist" | "album") => {
-    if (sortKey === nextKey) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-      return;
+  useEffect(() => {
+    if (selectedArtist && !artistOptions.some((item) => item.name === selectedArtist)) {
+      setSelectedArtist(null);
     }
-    setSortKey(nextKey);
-    setSortDir("asc");
-  };
+  }, [artistOptions, selectedArtist]);
+
+  useEffect(() => {
+    if (selectedAlbum && !albumOptions.some((item) => item.name === selectedAlbum)) {
+      setSelectedAlbum(null);
+    }
+  }, [albumOptions, selectedAlbum]);
 
   return (
     <div className="route-stack">
@@ -79,9 +105,22 @@ export function LibraryRoute() {
         <h1>{total} tracks ready for listening</h1>
       </section>
       <LibraryOmensPanel
-        tracks={tracks}
+        tracks={filteredTracks}
         total={total}
         query={draftQuery}
+        selectedArtist={selectedArtist}
+        selectedAlbum={selectedAlbum}
+        artistOptions={artistOptions}
+        albumOptions={albumOptions}
+        onSelectArtist={(value) => {
+          setSelectedArtist(value);
+          setSelectedAlbum(null);
+        }}
+        onSelectAlbum={setSelectedAlbum}
+        onClearFilters={() => {
+          setSelectedArtist(null);
+          setSelectedAlbum(null);
+        }}
         onQueryChange={setDraftQuery}
         onPlayTrack={(track) => void playTrack(track)}
         onQueueTrack={queueTrack}
@@ -95,4 +134,13 @@ export function LibraryRoute() {
       />
     </div>
   );
+
+  function toggleSort(nextKey: "title" | "artist" | "album") {
+    if (sortKey === nextKey) {
+      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(nextKey);
+    setSortDir("asc");
+  }
 }

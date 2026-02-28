@@ -324,6 +324,23 @@ def _load_vibe_detail(name: str) -> dict | None:
     }
 
 
+def _library_filter_state(query: str = "", artist: str = "", album: str = "") -> tuple[str, list]:
+    clauses = []
+    params: list = []
+    if query:
+        like = f"%{query}%"
+        clauses.append("(artist LIKE ? OR title LIKE ? OR album LIKE ?)")
+        params.extend([like, like, like])
+    if artist:
+        clauses.append("artist = ?")
+        params.append(artist)
+    if album:
+        clauses.append("COALESCE(album, '') = ?")
+        params.append("" if album == "Singles / Unknown Album" else album)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    return where, params
+
+
 # ============================================================================
 # HEALTH & STATUS
 # ============================================================================
@@ -801,21 +818,42 @@ def api_tracks():
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
         query = (request.args.get('q') or '').strip()
+        artist = (request.args.get('artist') or '').strip()
+        album = (request.args.get('album') or '').strip()
         
         conn = get_connection(timeout=10.0)
         cursor = conn.cursor()
 
-        where = ""
-        params = []
-        if query:
-            where = "WHERE artist LIKE ? OR title LIKE ? OR album LIKE ?"
-            like = f"%{query}%"
-            params.extend([like, like, like])
+        where, params = _library_filter_state(query=query, artist=artist, album=album)
 
         total_row = cursor.execute(
             f"SELECT COUNT(*) FROM tracks {where}",
             params,
         ).fetchone()
+
+        artist_rows = cursor.execute(
+            f"""
+            SELECT artist, COUNT(*)
+            FROM tracks
+            {where}
+            GROUP BY artist
+            ORDER BY artist COLLATE NOCASE ASC
+            LIMIT 200
+            """,
+            params,
+        ).fetchall()
+
+        album_rows = cursor.execute(
+            f"""
+            SELECT COALESCE(album, ''), COUNT(*)
+            FROM tracks
+            {where}
+            GROUP BY COALESCE(album, '')
+            ORDER BY COALESCE(album, '') COLLATE NOCASE ASC
+            LIMIT 200
+            """,
+            params,
+        ).fetchall()
 
         cursor.execute(
             f"""
@@ -845,8 +883,87 @@ def api_tracks():
                 'file_exists': bool(row[8] and Path(row[8]).exists()),
             })
         
-        return jsonify({'tracks': tracks, 'count': len(tracks), 'total': int(total_row[0] or 0), 'offset': offset, 'limit': limit, 'query': query})
+        return jsonify({
+            'tracks': tracks,
+            'count': len(tracks),
+            'total': int(total_row[0] or 0),
+            'offset': offset,
+            'limit': limit,
+            'query': query,
+            'artist': artist or None,
+            'album': album or None,
+            'artists': [
+                {'name': row[0] or 'Unknown Artist', 'count': int(row[1] or 0)}
+                for row in artist_rows
+            ],
+            'albums': [
+                {'name': row[0] or 'Singles / Unknown Album', 'count': int(row[1] or 0)}
+                for row in album_rows
+            ],
+        })
     
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@app.route('/api/library/artists', methods=['GET'])
+def api_library_artists():
+    """Get artist navigation rows for the library browser."""
+    try:
+        limit = request.args.get('limit', 200, type=int)
+        query = (request.args.get('q') or '').strip()
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+        where, params = _library_filter_state(query=query)
+        rows = cursor.execute(
+            f"""
+            SELECT artist, COUNT(*)
+            FROM tracks
+            {where}
+            GROUP BY artist
+            ORDER BY artist COLLATE NOCASE ASC
+            LIMIT ?
+            """,
+            (*params, limit),
+        ).fetchall()
+        conn.close()
+        return jsonify({
+            'artists': [{'name': row[0] or 'Unknown Artist', 'count': int(row[1] or 0)} for row in rows],
+            'count': len(rows),
+            'query': query,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@app.route('/api/library/albums', methods=['GET'])
+def api_library_albums():
+    """Get album navigation rows for the library browser."""
+    try:
+        limit = request.args.get('limit', 200, type=int)
+        query = (request.args.get('q') or '').strip()
+        artist = (request.args.get('artist') or '').strip()
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+        where, params = _library_filter_state(query=query, artist=artist)
+        rows = cursor.execute(
+            f"""
+            SELECT COALESCE(album, ''), COUNT(*)
+            FROM tracks
+            {where}
+            GROUP BY COALESCE(album, '')
+            ORDER BY COALESCE(album, '') COLLATE NOCASE ASC
+            LIMIT ?
+            """,
+            (*params, limit),
+        ).fetchall()
+        conn.close()
+        return jsonify({
+            'albums': [{'name': row[0] or 'Singles / Unknown Album', 'count': int(row[1] or 0)} for row in rows],
+            'count': len(rows),
+            'query': query,
+            'artist': artist or None,
+        })
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 

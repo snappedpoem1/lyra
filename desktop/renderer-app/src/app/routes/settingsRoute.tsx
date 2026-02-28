@@ -6,10 +6,12 @@ export function SettingsRoute() {
   const apiToken = useSettingsStore((state) => state.apiToken);
   const fixtureMode = useSettingsStore((state) => state.fixtureMode);
   const developerHud = useSettingsStore((state) => state.developerHud);
+  const resumeSession = useSettingsStore((state) => state.resumeSession);
   const setApiBaseUrl = useSettingsStore((state) => state.setApiBaseUrl);
   const setApiToken = useSettingsStore((state) => state.setApiToken);
   const setFixtureMode = useSettingsStore((state) => state.setFixtureMode);
   const setDeveloperHud = useSettingsStore((state) => state.setDeveloperHud);
+  const setResumeSession = useSettingsStore((state) => state.setResumeSession);
 
   return (
     <div className="route-stack">
@@ -34,6 +36,10 @@ export function SettingsRoute() {
         <label>
           <input type="checkbox" checked={developerHud} onChange={(event) => setDeveloperHud(event.target.checked)} />
           Show developer HUD
+        </label>
+        <label>
+          <input type="checkbox" checked={resumeSession} onChange={(event) => setResumeSession(event.target.checked)} />
+          Restore last queue when Lyra opens
         </label>
       </section>
       <BackendStatusPanel />

@@ -1,7 +1,7 @@
 {
   "name": "lyra-oracle",
   "version": "1.0.0",
-  "description": "Playlist-first local music oracle desktop shell",
+  "description": "Local-first music library and desktop player",
   "author": "Christian Wilson",
   "main": "main.js",
   "scripts": {
@@ -25,7 +25,7 @@
       "package.json",
       "renderer-app/dist/**/*"
     ],
-    "productName": "Lyra Oracle",
+    "productName": "Lyra",
     "extraResources": [
       {
         "to": "extra/oracle-engine.exe",
@@ -36,7 +36,7 @@
       "target": "nsis",
       "icon": "icon.ico"
     },
-    "appId": "com.snapped.lyraoracle",
+    "appId": "com.snapped.lyra",
     "nsis": {
       "oneClick": false,
       "createDesktopShortcut": true,

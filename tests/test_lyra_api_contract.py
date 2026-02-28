@@ -71,6 +71,78 @@ def test_auth_required_when_configured(client, monkeypatch):
     monkeypatch.setattr(lyra_api, "API_TOKEN", "")
 
 
+def test_library_tracks_filters(client, monkeypatch):
+    class FakeCursor:
+        def __init__(self):
+            self.calls = 0
+
+        def execute(self, query, params=()):
+            self.calls += 1
+            self.last_query = query
+            self.last_params = params
+            return self
+
+        def fetchone(self):
+            return (2,)
+
+        def fetchall(self):
+            if "SELECT artist, COUNT(*)" in self.last_query:
+                return [("Artist A", 2)]
+            if "SELECT COALESCE(album, ''), COUNT(*)" in self.last_query:
+                return [("Album A", 2)]
+            return [
+                ("track-1", "Artist A", "Song 1", "Album A", "2020", "", 0.9, 180, "C:/music/song1.flac"),
+                ("track-2", "Artist A", "Song 2", "Album A", "2021", "", 0.8, 210, "C:/music/song2.flac"),
+            ]
+
+    class FakeConn:
+        def cursor(self):
+            return FakeCursor()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(lyra_api, "get_connection", lambda timeout=10.0: FakeConn())
+
+    response = client.get("/api/library/tracks?artist=Artist%20A&album=Album%20A&q=Song")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["artist"] == "Artist A"
+    assert payload["album"] == "Album A"
+    assert payload["artists"][0]["name"] == "Artist A"
+    assert payload["albums"][0]["name"] == "Album A"
+    assert len(payload["tracks"]) == 2
+
+
+def test_library_navigation_endpoints(client, monkeypatch):
+    class FakeCursor:
+        def execute(self, query, params=()):
+            self.last_query = query
+            return self
+
+        def fetchall(self):
+            if "SELECT artist, COUNT(*)" in self.last_query:
+                return [("Artist A", 4), ("Artist B", 2)]
+            return [("Album A", 3), ("", 1)]
+
+    class FakeConn:
+        def cursor(self):
+            return FakeCursor()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(lyra_api, "get_connection", lambda timeout=10.0: FakeConn())
+
+    artists = client.get("/api/library/artists?q=Artist")
+    assert artists.status_code == 200
+    assert artists.get_json()["artists"][0]["name"] == "Artist A"
+
+    albums = client.get("/api/library/albums?artist=Artist%20A")
+    assert albums.status_code == 200
+    assert albums.get_json()["albums"][1]["name"] == "Singles / Unknown Album"
+
+
 import pytest
 
 

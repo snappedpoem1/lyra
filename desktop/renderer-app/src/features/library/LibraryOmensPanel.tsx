@@ -7,6 +7,13 @@ export function LibraryOmensPanel({
   tracks,
   total,
   query,
+  selectedArtist,
+  selectedAlbum,
+  artistOptions,
+  albumOptions,
+  onSelectArtist,
+  onSelectAlbum,
+  onClearFilters,
   onQueryChange,
   onPlayTrack,
   onQueueTrack,
@@ -21,6 +28,13 @@ export function LibraryOmensPanel({
   tracks: TrackListItem[];
   total: number;
   query: string;
+  selectedArtist: string | null;
+  selectedAlbum: string | null;
+  artistOptions: Array<{ name: string; count: number }>;
+  albumOptions: Array<{ name: string; count: number }>;
+  onSelectArtist: (value: string | null) => void;
+  onSelectAlbum: (value: string | null) => void;
+  onClearFilters: () => void;
   onQueryChange: (value: string) => void;
   onPlayTrack: (track: TrackListItem) => void;
   onQueueTrack: (track: TrackListItem) => void;
@@ -33,6 +47,7 @@ export function LibraryOmensPanel({
   hasNextPage: boolean;
 }) {
   const openDossier = useUiStore((state) => state.openDossier);
+
   return (
     <LyraPanel className="library-panel">
       <div className="section-heading">
@@ -50,33 +65,90 @@ export function LibraryOmensPanel({
           <LyraButton onClick={() => onSortChange("artist")}>Artist {sortKey === "artist" ? sortDir : ""}</LyraButton>
           <LyraButton onClick={() => onSortChange("album")}>Album {sortKey === "album" ? sortDir : ""}</LyraButton>
           <LyraButton onClick={() => onSortChange("title")}>Title {sortKey === "title" ? sortDir : ""}</LyraButton>
+          <LyraButton onClick={onClearFilters}>Reset</LyraButton>
         </div>
       </div>
-      <div className="library-header-row">
-        <span>Track</span>
-        <span>Context</span>
-        <span>Actions</span>
-      </div>
-      <div className="track-rows">
-        {tracks.map((track) => (
-          <div key={track.trackId} className="track-row">
-            <div className="track-meta">
-              <strong>{track.title}</strong>
-              <span>{track.artist} · {track.album ?? "Single"}</span>
-            </div>
-            <div className="track-reason">{track.reason}</div>
-            <div className="track-actions">
-              <LyraButton onClick={() => onPlayTrack(track)}>Play</LyraButton>
-              <LyraButton onClick={() => onQueueTrack(track)}>Queue</LyraButton>
-              <LyraButton onClick={() => openDossier(track.trackId)}>Inspect</LyraButton>
+      <div className="library-browser">
+        <div className="library-browser-nav">
+          <div className="library-nav-section">
+            <span className="insight-kicker">Artists</span>
+            <div className="compact-list">
+              <button className={`thread-row ${selectedArtist === null ? "is-selected" : ""}`} onClick={() => onSelectArtist(null)}>
+                <div>
+                  <strong>All artists</strong>
+                  <p>Current result page</p>
+                </div>
+                <span>{artistOptions.length}</span>
+              </button>
+              {artistOptions.map((artist) => (
+                <button
+                  key={artist.name}
+                  className={`thread-row ${selectedArtist === artist.name ? "is-selected" : ""}`}
+                  onClick={() => onSelectArtist(artist.name)}
+                >
+                  <div>
+                    <strong>{artist.name}</strong>
+                    <p>{artist.count} matching tracks</p>
+                  </div>
+                  <span>Artist</span>
+                </button>
+              ))}
             </div>
           </div>
-        ))}
-        {!tracks.length && <p className="text-dim">No tracks matched this filter.</p>}
-      </div>
-      <div className="library-pagination">
-        <LyraButton onClick={onPrevPage} disabled={!hasPrevPage}>Prev</LyraButton>
-        <LyraButton onClick={onNextPage} disabled={!hasNextPage}>Next</LyraButton>
+          <div className="library-nav-section">
+            <span className="insight-kicker">Albums</span>
+            <div className="compact-list">
+              <button className={`thread-row ${selectedAlbum === null ? "is-selected" : ""}`} onClick={() => onSelectAlbum(null)}>
+                <div>
+                  <strong>All albums</strong>
+                  <p>{selectedArtist ?? "All artists"}</p>
+                </div>
+                <span>{albumOptions.length}</span>
+              </button>
+              {albumOptions.map((album) => (
+                <button
+                  key={album.name}
+                  className={`thread-row ${selectedAlbum === album.name ? "is-selected" : ""}`}
+                  onClick={() => onSelectAlbum(album.name)}
+                >
+                  <div>
+                    <strong>{album.name}</strong>
+                    <p>{album.count} matching tracks</p>
+                  </div>
+                  <span>Album</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="library-browser-main">
+          <div className="library-header-row">
+            <span>Track</span>
+            <span>Context</span>
+            <span>Actions</span>
+          </div>
+          <div className="track-rows">
+            {tracks.map((track) => (
+              <div key={track.trackId} className="track-row">
+                <div className="track-meta">
+                  <strong>{track.title}</strong>
+                  <span>{track.artist} | {track.album ?? "Single"}</span>
+                </div>
+                <div className="track-reason">{track.reason}</div>
+                <div className="track-actions">
+                  <LyraButton onClick={() => onPlayTrack(track)}>Play</LyraButton>
+                  <LyraButton onClick={() => onQueueTrack(track)}>Queue</LyraButton>
+                  <LyraButton onClick={() => openDossier(track.trackId)}>Inspect</LyraButton>
+                </div>
+              </div>
+            ))}
+            {!tracks.length && <p className="text-dim">No tracks matched this filter.</p>}
+          </div>
+          <div className="library-pagination">
+            <LyraButton onClick={onPrevPage} disabled={!hasPrevPage}>Prev</LyraButton>
+            <LyraButton onClick={onNextPage} disabled={!hasNextPage}>Next</LyraButton>
+          </div>
+        </div>
       </div>
     </LyraPanel>
   );

@@ -5,6 +5,7 @@ import { OracleRecommendationDeck } from "@/features/oracle/OracleRecommendation
 import { ConnectivityBadge } from "@/features/system/ConnectivityBadge";
 import { audioEngine } from "@/services/audio/audioEngine";
 import { getConstellation, getLibraryTracks, getOracleRecommendations, getPlaylistDetail, getPlaylists } from "@/services/lyraGateway/queries";
+import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
 import { useUiStore } from "@/stores/uiStore";
 import { LyraButton } from "@/ui/LyraButton";
@@ -16,11 +17,15 @@ export function HomeRoute() {
   const { data: recommendations = [] } = useQuery({ queryKey: ["oracle", "home"], queryFn: () => getOracleRecommendations("flow") });
   const { data: library } = useQuery({ queryKey: ["home-library"], queryFn: () => getLibraryTracks(10, 0, "") });
   const { data: constellation } = useQuery({ queryKey: ["constellation"], queryFn: getConstellation });
+  const player = usePlayerStore();
+  const queue = useQueueStore((state) => state.queue);
+  const setCurrentIndex = useQueueStore((state) => state.setCurrentIndex);
   const replaceQueue = useQueueStore((state) => state.replaceQueue);
   const openDossier = useUiStore((state) => state.openDossier);
   const leadPlaylist = playlists[0];
   const secondaryPlaylist = playlists[1];
   const libraryTracks = library?.tracks ?? [];
+  const currentTrack = player.track ?? queue.items[queue.currentIndex] ?? null;
   const playLead = async () => {
     if (!leadPlaylist) return;
     const detail = await getPlaylistDetail(leadPlaylist.id);
@@ -53,6 +58,43 @@ export function HomeRoute() {
       </section>
 
       <section className="player-workspace">
+        <section className="lyra-panel workspace-column">
+          <div className="section-heading">
+            <h2>Current Thread</h2>
+            <span>{queue.items.length} queued</span>
+          </div>
+          <div className="compact-list">
+            <button className="thread-row" onClick={() => currentTrack && openDossier(currentTrack.trackId)}>
+              <div>
+                <strong>{currentTrack?.title ?? "No active track"}</strong>
+                <p>{currentTrack ? `${currentTrack.artist} | ${currentTrack.album ?? "Single"}` : "Start from library, thread, or Auto-DJ."}</p>
+              </div>
+              <span>{player.status}</span>
+            </button>
+            {queue.items.slice(queue.currentIndex + 1, queue.currentIndex + 4).map((track, index) => (
+              <button
+                key={`${track.trackId}-${index}`}
+                className="thread-row"
+                onClick={() => {
+                  const nextIndex = queue.items.findIndex((item) => item.trackId === track.trackId);
+                  setCurrentIndex(nextIndex);
+                  void audioEngine.playTrack(track);
+                }}
+              >
+                <div>
+                  <strong>{track.title}</strong>
+                  <p>{track.artist}</p>
+                </div>
+                <span>Next</span>
+              </button>
+            ))}
+          </div>
+          <div className="hero-actions">
+            <LyraButton onClick={() => currentTrack && void audioEngine.playTrack(currentTrack)} disabled={!currentTrack}>Resume</LyraButton>
+            <LyraButton onClick={() => navigate({ to: "/queue" })}>Open queue</LyraButton>
+          </div>
+        </section>
+
         <section className="lyra-panel workspace-column">
           <div className="section-heading">
             <h2>Saved Threads</h2>
@@ -89,7 +131,16 @@ export function HomeRoute() {
               <button
                 key={track.trackId}
                 className="thread-row"
-                onClick={() => void audioEngine.playTrack(track)}
+                onClick={() => {
+                  replaceQueue({
+                    queueId: `home-library-${track.trackId}`,
+                    origin: "home-library",
+                    reorderable: true,
+                    currentIndex: 0,
+                    items: [track],
+                  });
+                  void audioEngine.playTrack(track);
+                }}
               >
                 <div>
                   <strong>{track.title}</strong>
@@ -115,15 +166,19 @@ export function HomeRoute() {
               <button
                 key={item.id}
                 className="thread-row"
-                onClick={() =>
+                onClick={() => {
+                  const firstTrack = item.previewTracks[0];
                   replaceQueue({
                     queueId: item.id,
                     origin: "home",
                     reorderable: true,
                     currentIndex: 0,
                     items: item.previewTracks,
-                  })
-                }
+                  });
+                  if (firstTrack) {
+                    void audioEngine.playTrack(firstTrack);
+                  }
+                }}
               >
                 <div>
                   <span className="insight-kicker">{item.mode}</span>

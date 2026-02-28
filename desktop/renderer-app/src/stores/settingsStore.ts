@@ -8,11 +8,12 @@ type SettingsSnapshot = {
   apiToken: string;
   fixtureMode: boolean;
   developerHud: boolean;
+  resumeSession: boolean;
 };
 
 function loadInitial(): SettingsSnapshot {
   if (typeof window === "undefined") {
-    return { apiBaseUrl: DEFAULT_API_BASE, apiToken: "", fixtureMode: false, developerHud: false };
+    return { apiBaseUrl: DEFAULT_API_BASE, apiToken: "", fixtureMode: false, developerHud: false, resumeSession: true };
   }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -22,9 +23,10 @@ function loadInitial(): SettingsSnapshot {
       apiToken: String(parsed.apiToken || getEnvApiToken()),
       fixtureMode: Boolean(parsed.fixtureMode),
       developerHud: Boolean(parsed.developerHud),
+      resumeSession: parsed.resumeSession !== false,
     };
   } catch {
-    return { apiBaseUrl: getEnvApiBase(), apiToken: getEnvApiToken(), fixtureMode: false, developerHud: false };
+    return { apiBaseUrl: getEnvApiBase(), apiToken: getEnvApiToken(), fixtureMode: false, developerHud: false, resumeSession: true };
   }
 }
 
@@ -38,6 +40,7 @@ interface SettingsStore extends SettingsSnapshot {
   setApiToken: (value: string) => void;
   setFixtureMode: (value: boolean) => void;
   setDeveloperHud: (value: boolean) => void;
+  setResumeSession: (value: boolean) => void;
 }
 
 const initial = loadInitial();
@@ -63,5 +66,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const next = { ...get(), developerHud: value };
     persist(next);
     set({ developerHud: value });
+  },
+  setResumeSession: (value) => {
+    const next = { ...get(), resumeSession: value };
+    persist(next);
+    set({ resumeSession: value });
   },
 }));

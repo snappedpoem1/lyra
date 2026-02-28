@@ -34,6 +34,13 @@ export function BottomTransportDock() {
       const state = usePlayerStore.getState();
       if (state.track && state.status === "ended") {
         reportPlayback(state.track.trackId, 1, false);
+        const queueState = useQueueStore.getState();
+        const nextIndex = queueState.queue.currentIndex + 1;
+        const nextTrack = queueState.queue.items[nextIndex];
+        if (nextTrack) {
+          queueState.setCurrentIndex(nextIndex);
+          void audioEngine.playTrack(nextTrack);
+        }
       }
     });
 

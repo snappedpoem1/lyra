@@ -70,6 +70,15 @@ class AudioEngine {
     this.audio.pause();
   }
 
+  stop(): void {
+    this.audio.pause();
+    this.audio.currentTime = 0;
+    this.audio.removeAttribute("src");
+    this.audio.load();
+    usePlayerStore.getState().setTrack(null);
+    this.emit();
+  }
+
   seek(progress: number): void {
     const duration = this.audio.duration || usePlayerStore.getState().durationSec;
     if (duration > 0) {

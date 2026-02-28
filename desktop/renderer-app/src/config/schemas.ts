@@ -105,6 +105,23 @@ export const libraryTracksSchema = z.object({
   offset: z.number(),
   limit: z.number(),
   query: z.string().optional(),
+  artist: z.string().nullable().optional(),
+  album: z.string().nullable().optional(),
+  artists: z.array(z.object({ name: z.string(), count: z.number() })).optional(),
+  albums: z.array(z.object({ name: z.string(), count: z.number() })).optional(),
+});
+
+export const libraryArtistsSchema = z.object({
+  artists: z.array(z.object({ name: z.string(), count: z.number() })),
+  count: z.number(),
+  query: z.string().optional(),
+});
+
+export const libraryAlbumsSchema = z.object({
+  albums: z.array(z.object({ name: z.string(), count: z.number() })),
+  count: z.number(),
+  query: z.string().optional(),
+  artist: z.string().nullable().optional(),
 });
 
 export const agentSuggestionSchema = z.object({

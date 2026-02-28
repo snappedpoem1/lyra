@@ -335,6 +335,7 @@ async function createWindow() {
     minHeight: 860,
     frame: false,
     titleBarStyle: "hidden",
+    title: "Lyra",
     backgroundColor: "#080808",
     webPreferences: {
       nodeIntegration: false,

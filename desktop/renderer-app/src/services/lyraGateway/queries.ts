@@ -1,6 +1,6 @@
 import { constellationEdges, constellationNodes, dossier, oracleRecommendations, playlistDetails, playlistSummaries, searchResults } from "@/mocks/fixtures/data";
 import { fixtureModeEnabled } from "@/mocks/fixtures/mode";
-import { agentSuggestionSchema, dossierSchema, healthSchema, libraryTracksSchema, playlistDetailSchema, queueSchema, radioResultsSchema, searchSchema, vibesSchema } from "@/config/schemas";
+import { agentSuggestionSchema, dossierSchema, healthSchema, libraryAlbumsSchema, libraryArtistsSchema, libraryTracksSchema, playlistDetailSchema, queueSchema, radioResultsSchema, searchSchema, vibesSchema } from "@/config/schemas";
 import type {
   AgentFactDrop,
   AgentSuggestion,
@@ -134,13 +134,35 @@ export async function getTrackDossier(trackId: string): Promise<TrackDossier> {
   }
 }
 
-export async function getLibraryTracks(limit = 24, offset = 0, query = ""): Promise<{ tracks: TrackListItem[]; total: number; offset: number; limit: number; query: string }> {
+export async function getLibraryTracks(
+  limit = 24,
+  offset = 0,
+  query = "",
+  artist?: string | null,
+  album?: string | null,
+): Promise<{
+  tracks: TrackListItem[];
+  total: number;
+  offset: number;
+  limit: number;
+  query: string;
+  artist: string | null;
+  album: string | null;
+  artists: Array<{ name: string; count: number }>;
+  albums: Array<{ name: string; count: number }>;
+}> {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
   });
   if (query.trim()) {
     params.set("q", query.trim());
+  }
+  if (artist?.trim()) {
+    params.set("artist", artist.trim());
+  }
+  if (album?.trim()) {
+    params.set("album", album.trim());
   }
   const payload = await requestJson(`/api/library/tracks?${params.toString()}`, libraryTracksSchema);
   return {
@@ -149,7 +171,32 @@ export async function getLibraryTracks(limit = 24, offset = 0, query = ""): Prom
     offset: payload.offset,
     limit: payload.limit,
     query: payload.query ?? "",
+    artist: payload.artist ?? null,
+    album: payload.album ?? null,
+    artists: payload.artists ?? [],
+    albums: payload.albums ?? [],
   };
+}
+
+export async function getLibraryArtists(query = "", limit = 200): Promise<Array<{ name: string; count: number }>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (query.trim()) {
+    params.set("q", query.trim());
+  }
+  const payload = await requestJson(`/api/library/artists?${params.toString()}`, libraryArtistsSchema);
+  return payload.artists;
+}
+
+export async function getLibraryAlbums(query = "", artist?: string | null, limit = 200): Promise<Array<{ name: string; count: number }>> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (query.trim()) {
+    params.set("q", query.trim());
+  }
+  if (artist?.trim()) {
+    params.set("artist", artist.trim());
+  }
+  const payload = await requestJson(`/api/library/albums?${params.toString()}`, libraryAlbumsSchema);
+  return payload.albums;
 }
 
 export async function getConstellation(): Promise<{ nodes: ConstellationNode[]; edges: ConstellationEdge[] }> {
