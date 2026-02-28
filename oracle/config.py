@@ -16,6 +16,8 @@ try:
 except ImportError:
     load_dotenv = None
 
+from oracle.llm_config import load_llm_config
+
 
 # â”€â”€ Resolve project root (wherever start.py lives) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -60,23 +62,13 @@ def guard_bypass_reason() -> str:
 
 def get_llm_settings() -> dict:
     """Return LLM settings from environment."""
-    provider = os.environ.get("LYRA_LLM_PROVIDER", "lmstudio").strip() or "lmstudio"
-    base_url = os.environ.get("LYRA_LLM_BASE_URL", "http://localhost:1234/v1").strip()
-    model = os.environ.get("LYRA_LLM_MODEL", "").strip()
-    api_key = os.environ.get("LYRA_LLM_API_KEY", "").strip()
-    timeout_raw = os.environ.get("LYRA_LLM_TIMEOUT_SECONDS", "30").strip()
-    try:
-        timeout_seconds = int(timeout_raw)
-    except ValueError:
-        timeout_seconds = 30
-
-    return {
-        "provider": provider,
-        "base_url": base_url,
-        "model": model,
-        "api_key": api_key,
-        "timeout_seconds": timeout_seconds,
-    }
+    config = load_llm_config()
+    settings = config.masked_summary()
+    settings["provider"] = config.provider_type
+    settings["api_key"] = config.api_key
+    settings["fallback_model"] = config.fallback_model
+    settings["timeout_seconds"] = config.timeout_seconds
+    return settings
 
 
 def validate_required_env(required_keys: list[str]) -> None:

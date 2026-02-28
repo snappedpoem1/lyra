@@ -16,7 +16,7 @@ export function NowPlayingAltar() {
     <LyraPanel className="now-playing-altar">
       <div className="altar-header">
         <div className="section-heading">
-          <h2>Now Playing</h2>
+          <h2>Deck A</h2>
           <LyraPill>{player.status}</LyraPill>
         </div>
         <div className="altar-status-line">
@@ -48,10 +48,10 @@ export function NowPlayingAltar() {
       <div className="altar-insight-grid">
         <div className="altar-insight-panel">
           <span className="insight-kicker">Why this track</span>
-          <p className="altar-copy">{player.explanation ?? track?.reason ?? "No recommendation context available."}</p>
+          <p className="altar-copy">{player.errorMessage ?? player.explanation ?? track?.reason ?? "No recommendation context available."}</p>
         </div>
         <div className="altar-insight-panel">
-          <span className="insight-kicker">Source</span>
+          <span className="insight-kicker">File</span>
           <p className="altar-copy">{track?.provenance ?? "Select a track to see its provenance."}</p>
         </div>
       </div>

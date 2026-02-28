@@ -10,7 +10,7 @@ import json
 import traceback
 import sqlite3
 
-from flask import Flask, request, jsonify, send_from_directory, Response
+from flask import Flask, request, jsonify, send_from_directory, Response, g
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -31,7 +31,8 @@ from oracle.curator import generate_plan, apply_plan
 from oracle.classifier import classify_library
 from oracle.acquirers.ytdlp import YTDLPAcquirer
 from oracle.acquisition import process_queue
-from oracle.download_processor import list_downloads, process_downloads
+from oracle.download_processor import list_downloads
+from oracle.acquirers.guarded_import import process_downloads
 from oracle.validation import (
     validate_search_request,
     validate_vibe_save_request,
@@ -113,9 +114,18 @@ if _import_warnings:
     for w in _import_warnings:
         _logger.warning(f"Optional subsystem unavailable: {w}")
 app = Flask(__name__)
-CORS(app)
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,null",
+    ).split(",")
+    if origin.strip()
+]
+CORS(app, resources={r"/api/*": {"origins": CORS_ALLOWED_ORIGINS or "*"}})
 
 VERSION = "1.0.0"
+API_TOKEN = os.getenv("LYRA_API_TOKEN", "").strip()
 
 
 def _json_safe(value):
@@ -142,6 +152,178 @@ def _fallback_vibe_narrative(tracks: List[Dict[str, str]], arc_type: str) -> str
     )
 
 
+def _feature_flags() -> dict:
+    return {
+        "agent": bool(agent_engine),
+        "radio": bool(radio_engine),
+        "dna": bool(dna_engine),
+        "lore": bool(lore_engine),
+        "architect": bool(architect_engine),
+        "pipeline": bool(get_pipeline),
+        "auth_required": bool(API_TOKEN),
+    }
+
+
+def _db_health() -> dict:
+    try:
+        conn = get_connection(timeout=5.0)
+        cursor = conn.cursor()
+        track_count = cursor.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]
+        vibe_count = cursor.execute("SELECT COUNT(*) FROM vibe_profiles").fetchone()[0]
+        conn.close()
+        return {"ok": True, "track_count": int(track_count or 0), "vibe_count": int(vibe_count or 0)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def _library_health() -> dict:
+    try:
+        base = Path(LIBRARY_BASE)
+        return {
+            "ok": base.exists(),
+            "path": str(base),
+            "exists": base.exists(),
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@app.before_request
+def require_api_token():
+    if not request.path.startswith("/api/"):
+        return None
+    if request.path == "/api/health":
+        return None
+    g.authenticated = not API_TOKEN
+    if not API_TOKEN:
+        return None
+    auth_header = request.headers.get("Authorization", "").strip()
+    expected = f"Bearer {API_TOKEN}"
+    if auth_header != expected:
+        return jsonify({"error": "Unauthorized", "status": 401}), 401
+    g.authenticated = True
+    return None
+
+
+def _track_row_to_dict(row) -> dict:
+    return {
+        "track_id": row[0],
+        "artist": row[1],
+        "title": row[2],
+        "album": row[3],
+        "year": row[4],
+        "version_type": row[5],
+        "confidence": row[6],
+        "duration": row[7],
+        "filepath": row[8],
+    }
+
+
+def _load_track(track_id: str) -> dict | None:
+    conn = get_connection(timeout=10.0)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT track_id, artist, title, album, year, version_type, confidence, duration, filepath
+        FROM tracks
+        WHERE track_id = ?
+        """,
+        (track_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return _track_row_to_dict(row) if row else None
+
+
+def _load_vibe_detail(name: str) -> dict | None:
+    conn = get_connection(timeout=10.0)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT name, query_json, created_at, track_count
+        FROM vibe_profiles
+        WHERE name = ?
+        """,
+        (name,),
+    )
+    vibe_row = cursor.fetchone()
+    if not vibe_row:
+        conn.close()
+        return None
+
+    cursor.execute(
+        """
+        SELECT t.track_id, t.artist, t.title, t.album, t.year, t.version_type, t.confidence, t.duration, t.filepath
+        FROM vibe_tracks vt
+        JOIN tracks t ON vt.track_id = t.track_id
+        WHERE vt.vibe_name = ?
+        ORDER BY vt.position
+        """,
+        (name,),
+    )
+    track_rows = cursor.fetchall()
+    cursor.execute(
+        """
+        SELECT name, query_json, created_at, track_count
+        FROM vibe_profiles
+        WHERE name != ?
+        ORDER BY created_at DESC
+        LIMIT 4
+        """,
+        (name,),
+    )
+    related_rows = cursor.fetchall()
+    conn.close()
+
+    query_data = json.loads(vibe_row[1]) if vibe_row[1] else {}
+    tracks = [_track_row_to_dict(row) for row in track_rows]
+    story_beats = [
+        f"Lead thread seeded from: {query_data.get('query', 'saved vibe')}",
+        f"Sequence runs {len(tracks)} tracks in saved order.",
+        "Use Oracle mode to pivot without losing the thread.",
+    ]
+    arc = []
+    for idx, _track in enumerate(tracks[:8], start=1):
+        scale = max(1, len(tracks[:8]))
+        energy = round(min(0.95, 0.3 + (idx / scale) * 0.45), 2)
+        arc.append({"step": idx, "energy": energy, "valence": 0.52, "tension": round(0.38 + idx * 0.04, 2)})
+
+    def _related(row) -> dict:
+        qd = json.loads(row[1]) if row[1] else {}
+        return {
+            "id": row[0],
+            "kind": "vibe",
+            "title": row[0],
+            "subtitle": qd.get("query", "Saved vibe"),
+            "narrative": f"Saved listening thread for {qd.get('query', 'your library')}.",
+            "trackCount": int(row[3] or 0),
+            "freshnessLabel": "Saved vibe",
+            "coverMosaic": [row[0][:1].upper() or "L"],
+            "emotionalSignature": [],
+            "lastTouchedLabel": "Saved",
+        }
+
+    return {
+        "id": vibe_row[0],
+        "kind": "vibe",
+        "title": vibe_row[0],
+        "subtitle": query_data.get("query", "Saved vibe"),
+        "narrative": _fallback_vibe_narrative(tracks, "saved thread"),
+        "trackCount": int(vibe_row[3] or len(tracks)),
+        "freshnessLabel": "Saved vibe",
+        "coverMosaic": [vibe_row[0][:1].upper() or "L"],
+        "emotionalSignature": [],
+        "lastTouchedLabel": "Saved",
+        "query": query_data.get("query", ""),
+        "tracks": tracks,
+        "storyBeats": story_beats,
+        "arc": arc,
+        "relatedPlaylists": [_related(row) for row in related_rows],
+        "oraclePivots": [],
+        "createdAt": vibe_row[2],
+    }
+
+
 # ============================================================================
 # HEALTH & STATUS
 # ============================================================================
@@ -159,12 +341,21 @@ def api_health():
 
 
 def _build_health_payload() -> dict:
+    db = _db_health()
+    library = _library_health()
     return {
         'status': 'ok',
         'ok': True,
         'service': 'lyra-oracle',
         'version': VERSION,
+        'timestamp': time.time(),
+        'profile': os.getenv("LYRA_PROFILE", "balanced"),
         'write_mode': get_write_mode(),
+        'db': db,
+        'library': library,
+        'feature_flags': _feature_flags(),
+        'auth': {'enabled': bool(API_TOKEN)},
+        'cors': {'allowed_origins': CORS_ALLOWED_ORIGINS},
         'llm': get_llm_status()
     }
 
@@ -609,18 +800,32 @@ def api_tracks():
     try:
         limit = request.args.get('limit', 50, type=int)
         offset = request.args.get('offset', 0, type=int)
+        query = (request.args.get('q') or '').strip()
         
         conn = get_connection(timeout=10.0)
         cursor = conn.cursor()
-        
+
+        where = ""
+        params = []
+        if query:
+            where = "WHERE artist LIKE ? OR title LIKE ? OR album LIKE ?"
+            like = f"%{query}%"
+            params.extend([like, like, like])
+
+        total_row = cursor.execute(
+            f"SELECT COUNT(*) FROM tracks {where}",
+            params,
+        ).fetchone()
+
         cursor.execute(
-            """
-            SELECT track_id, artist, title, album, year, version_type, confidence
+            f"""
+            SELECT track_id, artist, title, album, year, version_type, confidence, duration, filepath
             FROM tracks
-            ORDER BY COALESCE(updated_at, created_at, added_at, 0) DESC, rowid DESC
+            {where}
+            ORDER BY artist COLLATE NOCASE ASC, album COLLATE NOCASE ASC, title COLLATE NOCASE ASC
             LIMIT ? OFFSET ?
             """,
-            (limit, offset)
+            (*params, limit, offset)
         )
         rows = cursor.fetchall()
         conn.close()
@@ -634,10 +839,13 @@ def api_tracks():
                 'album': row[3],
                 'year': row[4],
                 'version_type': row[5],
-                'confidence': row[6]
+                'confidence': row[6],
+                'duration': row[7],
+                'filepath': row[8],
+                'file_exists': bool(row[8] and Path(row[8]).exists()),
             })
         
-        return jsonify({'tracks': tracks, 'count': len(tracks)})
+        return jsonify({'tracks': tracks, 'count': len(tracks), 'total': int(total_row[0] or 0), 'offset': offset, 'limit': limit, 'query': query})
     
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
@@ -654,6 +862,18 @@ def api_vibes_list():
         vibes = list_vibes()
         return jsonify({'vibes': vibes, 'count': len(vibes)})
     
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@app.route('/api/playlists/<playlist_id>', methods=['GET'])
+def api_playlist_detail(playlist_id: str):
+    """Return canonical playlist/listening-thread detail."""
+    try:
+        detail = _load_vibe_detail(playlist_id)
+        if not detail:
+            return jsonify({'error': 'Playlist not found'}), 404
+        return jsonify(detail)
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
@@ -1650,11 +1870,21 @@ def api_radio_flow():
             return jsonify({'error': 'Radio engine not available â€” check server logs'}), 503
 
         data = request.get_json() or {}
-        track_id = (data.get('track_id') or '').strip()
+        track_id = (data.get('track_id') or data.get('seed_track') or '').strip()
         count = int(data.get('count', 1))
 
         if not track_id:
-            return jsonify({'error': 'track_id is required'}), 400
+            conn = get_connection(timeout=5.0)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT track_id FROM tracks WHERE status = 'active' ORDER BY COALESCE(updated_at, created_at, added_at, 0) DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                track_id = row[0]
+            else:
+                return jsonify({'error': 'track_id is required for flow mode when no active library track is available'}), 400
 
         results = radio_engine.get_flow_track(track_id, count=count)
         return jsonify({'results': results, 'count': len(results)})
@@ -1984,6 +2214,60 @@ def api_stream_track(track_id: str):
             mimetype=mime
         )
     
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@app.route('/api/tracks/<track_id>/dossier', methods=['GET'])
+def api_track_dossier(track_id: str):
+    """Unified dossier endpoint for a track."""
+    try:
+        track = _load_track(track_id)
+        if not track:
+            return jsonify({'error': 'Track not found'}), 404
+
+        structure = None
+        if architect_engine:
+            try:
+                structure = architect_engine.get_structure(track_id)
+            except Exception:
+                structure = None
+
+        connections = []
+        if lore_engine and track.get('artist'):
+            try:
+                connections = lore_engine.get_artist_connections(track['artist'])
+            except Exception:
+                connections = []
+
+        samples = []
+        if dna_engine:
+            try:
+                samples = dna_engine.trace_samples(track_id)
+            except Exception:
+                samples = []
+
+        fact = None
+        if agent_engine:
+            try:
+                fact = agent_engine.fact_drop(track_id)
+            except Exception:
+                fact = None
+
+        return jsonify({
+            'track': track,
+            'structure': structure,
+            'lineage': connections,
+            'samples': samples,
+            'fact': fact,
+            'provenance_notes': [
+                track.get('filepath') or 'Track path unavailable',
+                'Bundled dossier view assembled from Lyra back-end services.',
+            ],
+            'acquisition_notes': [
+                'Playback and queue state are managed in the desktop client.',
+            ],
+        })
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 

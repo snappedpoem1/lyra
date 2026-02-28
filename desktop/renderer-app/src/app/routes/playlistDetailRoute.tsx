@@ -8,6 +8,7 @@ import { TrackTable } from "@/features/playlists/TrackTable";
 import { audioEngine } from "@/services/audio/audioEngine";
 import { getConstellation, getPlaylistDetail } from "@/services/lyraGateway/queries";
 import { useQueueStore } from "@/stores/queueStore";
+import { usePlayerStore } from "@/stores/playerStore";
 import { LyraPanel } from "@/ui/LyraPanel";
 
 export function PlaylistDetailRoute() {
@@ -19,6 +20,8 @@ export function PlaylistDetailRoute() {
   });
   const { data: constellation } = useQuery({ queryKey: ["constellation"], queryFn: getConstellation });
   const replaceQueue = useQueueStore((state) => state.replaceQueue);
+  const setCurrentTrack = useQueueStore((state) => state.setCurrentTrack);
+  const setTrack = usePlayerStore((state) => state.setTrack);
 
   if (!detail) {
     return null;
@@ -62,7 +65,11 @@ export function PlaylistDetailRoute() {
       <section className="playlist-detail-grid">
         <div className="playlist-detail-main">
           <PlaylistNarrative beats={detail.storyBeats} />
-          <TrackTable tracks={detail.tracks} onPlayTrack={(track) => void audioEngine.playTrack(track)} />
+          <TrackTable tracks={detail.tracks} onPlayTrack={(track) => {
+            setCurrentTrack(track.trackId);
+            setTrack(track, detail.summary.title, track.reason);
+            void audioEngine.playTrack(track);
+          }} />
         </div>
         <aside className="playlist-detail-side">
           <LyraPanel className="playlist-sidecar">

@@ -5,14 +5,16 @@ import { OracleRecommendationDeck } from "@/features/oracle/OracleRecommendation
 import { audioEngine } from "@/services/audio/audioEngine";
 import { getConstellation, getOracleRecommendations } from "@/services/lyraGateway/queries";
 import { useOracleStore } from "@/stores/oracleStore";
+import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
 
 export function OracleRoute() {
   const mode = useOracleStore((state) => state.mode);
   const replaceQueue = useQueueStore((state) => state.replaceQueue);
+  const seedTrackId = usePlayerStore((state) => state.track?.trackId);
   const { data: recommendations = [] } = useQuery({
     queryKey: ["oracle", mode],
-    queryFn: () => getOracleRecommendations(mode),
+    queryFn: () => getOracleRecommendations(mode, seedTrackId),
   });
   const { data: constellation } = useQuery({ queryKey: ["constellation"], queryFn: getConstellation });
 

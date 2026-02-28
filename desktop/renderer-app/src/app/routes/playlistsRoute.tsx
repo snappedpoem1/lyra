@@ -3,14 +3,15 @@ import { getPlaylists } from "@/services/lyraGateway/queries";
 import { PlaylistGrid } from "@/features/playlists/PlaylistGrid";
 
 export function PlaylistsRoute() {
-  const { data: playlists = [] } = useQuery({ queryKey: ["playlists"], queryFn: getPlaylists });
+  const { data: playlists = [], error } = useQuery({ queryKey: ["playlists"], queryFn: getPlaylists });
 
   return (
     <div className="route-stack">
       <section className="lyra-panel page-intro">
-        <span className="hero-kicker">Playlists</span>
-        <h1>Your saved vibes and curated sets</h1>
+        <span className="hero-kicker">Saved Threads</span>
+        <h1>Reusable listening sequences from the live library</h1>
       </section>
+      {error && <section className="lyra-panel">Backend unavailable. Playlists are not live right now.</section>}
       <PlaylistGrid playlists={playlists} />
     </div>
   );

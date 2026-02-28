@@ -15,6 +15,7 @@ export function SearchRoute() {
   return (
     <div className="route-stack">
       <SearchHero />
+      {!data && <section className="lyra-panel">Search is waiting on the backend.</section>}
       {data && <SearchResultStack results={data} onPlayTrack={(track) => void audioEngine.playTrack(track)} />}
     </div>
   );

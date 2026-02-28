@@ -1,8 +1,16 @@
+import { resolveApiUrl } from "@/services/lyraGateway/client";
+import { useSettingsStore } from "@/stores/settingsStore";
+
 export async function reportPlayback(trackId: string, completionRate: number, skipped = false): Promise<void> {
   try {
-    await fetch("/api/playback/record", {
+    const headers: HeadersInit = { "Content-Type": "application/json" };
+    const token = useSettingsStore.getState().apiToken;
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    await fetch(resolveApiUrl("/api/playback/record"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         track_id: trackId,
         context: "lyra-renderer",

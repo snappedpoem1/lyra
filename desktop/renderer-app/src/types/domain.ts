@@ -4,6 +4,7 @@ export type PlaylistKind = "vibe" | "oracle_queue" | "ritual" | "manual";
 export type PlaybackStatus = "idle" | "loading" | "playing" | "paused" | "ended" | "error";
 export type RightRailTab = "now-playing" | "queue" | "details";
 export type OracleMode = "flow" | "chaos" | "discovery" | "constellation";
+export type ConnectionState = "LIVE" | "DEGRADED" | "FIXTURE";
 
 export interface ScoreChip {
   key: DimensionKey;
@@ -106,6 +107,7 @@ export interface TrackDossier {
   remixes?: VersionCluster | null;
   provenanceNotes: string[];
   acquisitionNotes: string[];
+  fact?: string;
 }
 
 export interface SearchResultGroup {
@@ -153,6 +155,8 @@ export interface BootStatus {
   version: string;
   message: string;
   phase?: string;
+  state?: ConnectionState;
+  diagnostics?: Record<string, unknown>;
 }
 
 export interface AgentResponse {

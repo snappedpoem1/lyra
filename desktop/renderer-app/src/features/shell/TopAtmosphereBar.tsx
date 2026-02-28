@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ConnectivityBadge } from "@/features/system/ConnectivityBadge";
 import { getBootStatus } from "@/services/lyraGateway/queries";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 const PHASE_LABELS: Record<string, string> = {
   boot: "Initializing",
@@ -14,6 +16,7 @@ const PHASE_LABELS: Record<string, string> = {
 export function TopAtmosphereBar() {
   const [bootMessage, setBootMessage] = useState<string | null>(null);
   const [bootReady, setBootReady] = useState(false);
+  const apiBaseUrl = useSettingsStore((state) => state.apiBaseUrl);
 
   // IPC boot status from Electron main process
   useEffect(() => {
@@ -43,10 +46,12 @@ export function TopAtmosphereBar() {
         <button onClick={() => window.lyraWindow?.close?.()}>x</button>
       </div>
       <div>
-        <div className="atmosphere-title">Lyra</div>
-        <div className="atmosphere-copy">{statusText}</div>
+        <div className="atmosphere-title">LYRA DESKTOP</div>
+        <div className="atmosphere-copy">Transport: {statusText}</div>
       </div>
-      <div className="atmosphere-meta">v{window.lyraWindow?.appVersion ?? "dev"}</div>
+      <div className="atmosphere-meta">
+        <ConnectivityBadge /> {apiBaseUrl} v{window.lyraWindow?.appVersion ?? "dev"}
+      </div>
     </header>
   );
 }

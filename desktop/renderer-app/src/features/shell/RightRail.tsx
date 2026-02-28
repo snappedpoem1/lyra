@@ -29,10 +29,10 @@ export function RightRail() {
     <aside className="right-rail">
       <div className="lyra-panel rail-importance">
         <div className="section-heading">
-          <h2>{player.track?.title ?? "Ready"}</h2>
+          <h2>{player.track?.title ?? "Transport Ready"}</h2>
           <LyraPill>{player.status}</LyraPill>
         </div>
-        <p>{player.track?.artist ?? "Player status and track details"}</p>
+        <p>{player.track?.artist ?? "Playback telemetry and track details"}</p>
         <div className="rail-importance-grid">
           <div>
             <span className="insight-kicker">Queue</span>
@@ -55,9 +55,9 @@ export function RightRail() {
         )}
       </div>
       <LyraTabs>
-        <button className={`tab-button ${tab === "now-playing" ? "is-active" : ""}`} onClick={() => setTab("now-playing")}>Now Playing</button>
-        <button className={`tab-button ${tab === "queue" ? "is-active" : ""}`} onClick={() => setTab("queue")}>Queue</button>
-        <button className={`tab-button ${tab === "details" ? "is-active" : ""}`} onClick={() => setTab("details")}>Details</button>
+        <button className={`tab-button ${tab === "now-playing" ? "is-active" : ""}`} onClick={() => setTab("now-playing")}>Deck</button>
+        <button className={`tab-button ${tab === "queue" ? "is-active" : ""}`} onClick={() => setTab("queue")}>Playlist</button>
+        <button className={`tab-button ${tab === "details" ? "is-active" : ""}`} onClick={() => setTab("details")}>Info</button>
       </LyraTabs>
       <div className="rail-stack">
         {tab === "now-playing" && <NowPlayingAltar />}
@@ -71,6 +71,10 @@ export function RightRail() {
             <p>{data?.track.artist ?? "Click a track to inspect it."}</p>
             <div className="chip-row">
               {data?.track.scoreChips.slice(0, 4).map((chip) => <span key={chip.key} className="lyra-pill">{chip.label}</span>)}
+            </div>
+            <div className="inspector-block">
+              <span className="insight-kicker">Path</span>
+              <p>{data?.filepath ?? "No file path loaded."}</p>
             </div>
             <div className="rail-details-grid">
               <div>
@@ -89,6 +93,10 @@ export function RightRail() {
                 <span className="insight-kicker">Lineage</span>
                 <p>{data?.lineage?.[0] ? `${data.lineage[0].source} -> ${data.lineage[0].target}` : "No lineage data"}</p>
               </div>
+            </div>
+            <div className="inspector-block">
+              <span className="insight-kicker">Samples</span>
+              <p>{data?.samples?.[0] ? `${data.samples[0].artist} - ${data.samples[0].title}` : "No sample provenance detected."}</p>
             </div>
           </div>
         )}

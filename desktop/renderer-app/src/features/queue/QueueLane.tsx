@@ -11,12 +11,12 @@ export function QueueLane() {
   return (
     <LyraPanel className="queue-lane">
       <div className="section-heading">
-        <h2>Queue</h2>
+        <h2>Playlist Queue</h2>
         <span>{queue.items.length} tracks</span>
       </div>
       <div className="queue-headline">
         <div>
-          <span className="insight-kicker">Now playing</span>
+          <span className="insight-kicker">Current row</span>
           <strong>{current?.title ?? "Queue empty"}</strong>
           <p>{current?.reason ?? "Play a track or load a playlist to start."}</p>
         </div>

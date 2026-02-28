@@ -6,8 +6,8 @@ export function SearchHero() {
 
   return (
     <section className="search-hero lyra-panel">
-      <span className="hero-kicker">Search</span>
-      <h1>Find tracks by sound, mood, or description</h1>
+      <span className="hero-kicker">Library Search</span>
+      <h1>Search by sound, mood, artist, or thread language</h1>
       <input
         className="hero-input"
         value={query}

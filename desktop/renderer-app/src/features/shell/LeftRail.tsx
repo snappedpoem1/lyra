@@ -2,12 +2,12 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Icon } from "@/ui/Icon";
 
 const nav = [
-  { to: "/", label: "Home", icon: "spark" as const },
+  { to: "/", label: "Now Playing", icon: "spark" as const },
+  { to: "/library", label: "Media Library", icon: "details" as const },
   { to: "/playlists", label: "Playlists", icon: "vinyl" as const },
+  { to: "/queue", label: "Playlist Queue", icon: "queue" as const },
   { to: "/search", label: "Search", icon: "search" as const },
-  { to: "/oracle", label: "Oracle", icon: "spark" as const },
-  { to: "/queue", label: "Queue", icon: "queue" as const },
-  { to: "/library", label: "Library", icon: "details" as const },
+  { to: "/oracle", label: "Auto-DJ", icon: "spark" as const },
 ];
 
 export function LeftRail() {
@@ -15,8 +15,8 @@ export function LeftRail() {
   return (
     <aside className="left-rail lyra-panel">
       <div className="window-drag">
-        <div className="brand-mark">Lyra</div>
-        <p className="brand-copy">music intelligence</p>
+        <div className="brand-mark">LYRA PLAYER</div>
+        <p className="brand-copy">library / playlist / transport</p>
       </div>
       <nav className="left-nav">
         {nav.map((item) => (
@@ -27,8 +27,8 @@ export function LeftRail() {
         ))}
       </nav>
       <div className="rail-footnote">
-        <span>Local-first</span>
-        <span>AI-scored</span>
+        <span>LIVE LIBRARY</span>
+        <span>DESKTOP MODE</span>
       </div>
     </aside>
   );

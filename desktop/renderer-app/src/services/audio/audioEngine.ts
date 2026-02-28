@@ -1,4 +1,5 @@
 import { audioAnalyzer } from "@/services/audio/audioAnalyzer";
+import { resolveApiUrl } from "@/services/lyraGateway/client";
 import { usePlayerStore } from "@/stores/playerStore";
 import type { TrackListItem } from "@/types/domain";
 
@@ -31,7 +32,7 @@ class AudioEngine {
       this.emit();
     });
     this.audio.addEventListener("error", () => {
-      usePlayerStore.getState().setStatus("error");
+      usePlayerStore.getState().setError("Stream URL missing or backend unavailable.");
       this.emit();
     });
   }
@@ -48,11 +49,16 @@ class AudioEngine {
   async playTrack(track: TrackListItem): Promise<void> {
     const state = usePlayerStore.getState();
     state.setTrack(track, state.sourceLabel, track.reason);
-    this.audio.src = track.streamUrl;
+    this.audio.src = track.streamUrl.startsWith("http") ? track.streamUrl : resolveApiUrl(track.streamUrl);
     this.audio.volume = state.volume;
     this.audio.muted = state.muted;
     await audioAnalyzer.resume();
-    await this.audio.play();
+    try {
+      await this.audio.play();
+    } catch {
+      usePlayerStore.getState().setError("Playback could not start. Stream URL may be missing.");
+      this.emit();
+    }
   }
 
   async play(): Promise<void> {

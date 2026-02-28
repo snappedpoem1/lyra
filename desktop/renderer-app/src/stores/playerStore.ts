@@ -3,8 +3,10 @@ import type { NowPlayingState, TrackListItem, VisualizerFrame } from "@/types/do
 
 interface PlayerStore extends NowPlayingState {
   frame: VisualizerFrame;
+  errorMessage?: string;
   setTrack: (track: TrackListItem | null, sourceLabel?: string, explanation?: string) => void;
   setStatus: (status: NowPlayingState["status"]) => void;
+  setError: (message: string) => void;
   setTime: (currentTimeSec: number, durationSec: number) => void;
   setVolume: (volume: number) => void;
   setMuted: (muted: boolean) => void;
@@ -33,17 +35,20 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
     movement: 0.2,
     isPlaying: false,
   },
+  errorMessage: undefined,
   setTrack: (track, sourceLabel, explanation) =>
     set({
       track,
       sourceLabel,
       explanation,
+      errorMessage: undefined,
       currentTimeSec: 0,
       durationSec: track?.durationSec ?? 0,
       progress: 0,
       status: track ? "loading" : "idle",
     }),
   setStatus: (status) => set({ status }),
+  setError: (errorMessage) => set({ status: "error", errorMessage }),
   setTime: (currentTimeSec, durationSec) =>
     set({
       currentTimeSec,

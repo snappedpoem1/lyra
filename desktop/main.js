@@ -163,10 +163,13 @@ async function ensureDockerServices() {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3: LM Studio
+// Phase 3: LLM provider probe
 // ---------------------------------------------------------------------------
 
-const LM_STUDIO_PROBE = "http://localhost:1234/v1/models";
+const LLM_PROVIDER = (process.env.LYRA_LLM_PROVIDER || "local").trim().toLowerCase();
+const LLM_BASE_URL = (process.env.LYRA_LLM_BASE_URL || "http://localhost:1234/v1").replace(/\/+$/, "");
+const LLM_MODELS_PROBE = `${LLM_BASE_URL}/models`;
+const LM_STUDIO_PROBE = LLM_MODELS_PROBE;
 
 function findLMStudio() {
   const localAppData = process.env.LOCALAPPDATA || "";
@@ -212,6 +215,25 @@ async function ensureLMStudio() {
 
   sendBootStatus("llm", "LM Studio did not respond — continuing without it");
   return false;
+}
+
+async function ensureLLMProvider() {
+  if (LLM_PROVIDER === "disabled" || LLM_PROVIDER === "none") {
+    sendBootStatus("llm", "LLM disabled by configuration");
+    return false;
+  }
+
+  if (LLM_PROVIDER !== "local" && LLM_PROVIDER !== "openai_compatible" && LLM_PROVIDER !== "openai") {
+    sendBootStatus("llm", `Provider ${LLM_PROVIDER} configured; skipping local bootstrap`);
+    return false;
+  }
+
+  if (await httpReady(LLM_MODELS_PROBE)) {
+    sendBootStatus("llm", `LLM endpoint ready (${LLM_PROVIDER})`);
+    return true;
+  }
+
+  return ensureLMStudio();
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +312,7 @@ async function bootstrapBackend() {
   }
 
   // Phase 3: LM Studio (both dev and packaged — it's a separate app)
-  await ensureLMStudio();
+  await ensureLLMProvider();
 
   // Phase 4-5: Flask API
   createPyProc();

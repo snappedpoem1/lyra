@@ -6,6 +6,7 @@ interface QueueStore {
   replaceQueue: (queue: QueueState) => void;
   appendTracks: (tracks: TrackListItem[]) => void;
   setCurrentIndex: (index: number) => void;
+  setCurrentTrack: (trackId: string) => void;
   moveItem: (from: number, to: number) => void;
 }
 
@@ -30,6 +31,13 @@ export const useQueueStore = create<QueueStore>((set) => ({
       queue: {
         ...state.queue,
         currentIndex: Math.max(0, Math.min(index, Math.max(0, state.queue.items.length - 1))),
+      },
+    })),
+  setCurrentTrack: (trackId) =>
+    set((state) => ({
+      queue: {
+        ...state.queue,
+        currentIndex: Math.max(0, state.queue.items.findIndex((item) => item.trackId === trackId)),
       },
     })),
   moveItem: (from, to) =>

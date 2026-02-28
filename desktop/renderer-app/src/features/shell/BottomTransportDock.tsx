@@ -62,6 +62,7 @@ export function BottomTransportDock() {
         <div>
           <div className="dock-title">{current?.title ?? "Nothing playing"}</div>
           <div className="dock-subtitle">{current?.artist ?? "Select a track or start a playlist"}</div>
+          {player.errorMessage && <div className="dock-fact-drop">{player.errorMessage}</div>}
           {factDrop && factDropTrackId === current?.trackId && (
             <div className="dock-fact-drop">{factDrop}</div>
           )}

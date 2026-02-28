@@ -12,6 +12,7 @@ import time
 from typing import List
 
 from dotenv import load_dotenv
+from oracle.llm_config import diagnose_llm_config, load_llm_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = PROJECT_ROOT / "lyra_registry.db"
@@ -134,69 +135,20 @@ def _check_slskd() -> CheckResult:
     return CheckResult("slskd (T2)", "WARNING", f"HTTP {status} from {url}")
 
 
-def _check_lmstudio() -> CheckResult:
-    base = os.getenv("LYRA_LLM_BASE_URL", "http://localhost:1234/v1")
-    model = os.getenv("LYRA_LLM_MODEL", "")
-    url = base.rstrip("/") + "/models"
-    status, err = _http_get(url, timeout=3)
-    if status == 0:
-        return CheckResult("LM Studio (LLM)", "WARNING", "Offline - LLM classification disabled")
-    if status != 200:
-        return CheckResult("LM Studio (LLM)", "WARNING", f"HTTP {status} from {url}")
-
-    lms_path = shutil.which("lms")
-    if not lms_path:
-        return CheckResult(
-            "LM Studio (LLM)",
-            "WARNING",
-            "Live - API reachable (lms CLI missing, loaded-model check unavailable)",
-        )
-
-    try:
-        ps = subprocess.run(
-            [lms_path, "ps"],
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
-        out = (ps.stdout or "").strip()
-        merged = f"{ps.stdout or ''}\\n{ps.stderr or ''}"
-    except Exception as exc:
-        return CheckResult("LM Studio (LLM)", "WARNING", f"Live - unable to verify loaded model: {exc}")
-
-    if "No models are currently loaded" in merged:
-        expected = model or "LYRA_LLM_MODEL"
-        return CheckResult(
-            "LM Studio (LLM)",
-            "WARNING",
-            f"Live - no model loaded (expected: {expected}; run: lms load {expected})",
-        )
-
-    loaded_ids: list[str] = []
-    for raw_line in out.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("IDENTIFIER"):
-            continue
-        loaded_ids.append(line.split()[0])
-
-    if not loaded_ids and ps.returncode != 0:
-        detail = (merged.strip() or "unknown lms ps failure")[:180]
-        return CheckResult("LM Studio (LLM)", "WARNING", f"Live - lms ps failed: {detail}")
-    if not loaded_ids:
-        return CheckResult("LM Studio (LLM)", "WARNING", "Live - loaded-model state is unknown")
-
-    if model:
-        target = model.lower()
-        if any(mid.lower() == target for mid in loaded_ids):
-            return CheckResult("LM Studio (LLM)", "PASS", f"Live - loaded model: {model}")
-        preview = ", ".join(loaded_ids[:3])
-        return CheckResult(
-            "LM Studio (LLM)",
-            "WARNING",
-            f"Live - configured model not loaded ({model}); loaded: {preview}",
-        )
-
-    return CheckResult("LM Studio (LLM)", "PASS", f"Live - loaded model(s): {', '.join(loaded_ids[:3])}")
+def _check_llm() -> CheckResult:
+    config = load_llm_config()
+    diagnostics = diagnose_llm_config(config)
+    provider_name = f"LLM ({config.provider_type})"
+    if diagnostics.get("ok"):
+        selected = diagnostics.get("selected_model") or config.model or config.fallback_model or "none"
+        suffix = " via fallback" if diagnostics.get("fallback_used") else ""
+        return CheckResult(provider_name, "PASS", f"Ready: {selected}{suffix}")
+    status = "FAIL" if diagnostics.get("error_type") in {"provider_invalid", "model_missing"} else "WARNING"
+    detail = diagnostics.get("error", "LLM unavailable")
+    actions = diagnostics.get("actions") or []
+    if actions:
+        detail = f"{detail} | {actions[0]}"
+    return CheckResult(provider_name, status, detail)
 
 def _check_realdebrid() -> CheckResult:
     key = os.getenv("REAL_DEBRID_KEY") or os.getenv("REALDEBRID_API_KEY", "")
@@ -284,7 +236,7 @@ def run_doctor() -> List[CheckResult]:
         # Discovery
         _check_lidarr(),
         # LLM
-        _check_lmstudio(),
+        _check_llm(),
     ]
     return checks
 

@@ -7,6 +7,7 @@ import { RightRail } from "@/features/shell/RightRail";
 import { SemanticSearchOverlay } from "@/features/shell/SemanticSearchOverlay";
 import { TopAtmosphereBar } from "@/features/shell/TopAtmosphereBar";
 import { TrackDossierDrawer } from "@/features/tracks/TrackDossierDrawer";
+import { DeveloperHud } from "@/features/dev/DeveloperHud";
 import { useUiStore } from "@/stores/uiStore";
 
 export function AppShell({ children }: PropsWithChildren) {
@@ -46,6 +47,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <CommandPalette />
       <SemanticSearchOverlay />
       <TrackDossierDrawer />
+      <DeveloperHud />
     </>
   );
 }

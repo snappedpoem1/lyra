@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getFactDrop, getTrackDossier } from "@/services/lyraGateway/queries";
+import { getTrackDossier } from "@/services/lyraGateway/queries";
 import { useUiStore } from "@/stores/uiStore";
 import { LyraPanel } from "@/ui/LyraPanel";
 import { LyraPill } from "@/ui/LyraPill";
@@ -10,11 +10,6 @@ export function TrackDossierDrawer() {
   const { data } = useQuery({
     queryKey: ["dossier", trackId],
     queryFn: () => getTrackDossier(trackId ?? ""),
-    enabled: Boolean(trackId),
-  });
-  const { data: factData } = useQuery({
-    queryKey: ["fact-drop", trackId],
-    queryFn: () => getFactDrop(trackId ?? ""),
     enabled: Boolean(trackId),
   });
 
@@ -34,10 +29,10 @@ export function TrackDossierDrawer() {
             <LyraPill key={chip.key}>{chip.label} {chip.value != null ? Math.round(chip.value * 100) : "?"}</LyraPill>
           ))}
         </div>
-        {factData?.fact && (
+        {data.fact && (
           <div className="dossier-fact-drop">
             <span className="insight-kicker">Lyra intel</span>
-            <p>{factData.fact}</p>
+            <p>{data.fact}</p>
           </div>
         )}
         <div className="dossier-grid">
