@@ -35,11 +35,11 @@ Owner (Chris) is a novice programmer with professional ambitions. Write code he 
 - Taste learning from playback signals
 - Pipeline verified end-to-end: scan → index → score (737 tracks, 736 embedded+scored)
 
-### Current numbers (as of Feb 19, 2026):
-- **tracks**: 737 | **embeddings**: 736 | **track_scores**: 736
-- **acquisition_queue**: ~15,041 pending
-- **playback_history**: 2 (Layer 5 just started)
-- Layers 1-4 healthy; LM Studio offline (non-blocking)
+### Current numbers (as of Feb 27, 2026):
+- **tracks**: 2,472 | **embeddings**: 2,472 | **track_scores**: 2,472
+- **acquisition_queue**: 0 pending (23,192 total processed)
+- **playback_history**: 0
+- Layers 1-4 healthy; LM Studio [OK]; all Docker services [OK]
 
 ### Root-level script sprawl:
 Scripts at project root that should be in `scripts/` or `_archive/`:
@@ -246,8 +246,8 @@ oracle search --query "dark ambient" --n 10
 oracle score --all               # Score ALL tracks
 oracle pipeline --library "A:\..." # Scan + index + score
 oracle acquire waterfall --artist X --title Y
-oracle drain --limit N [--max-tier 4] [--workers 3]  # Drain acquisition queue
-                                 # --max-tier: 1=Qobuz, 2=Slskd, 3=RD, 4=SpotDL
+oracle drain --limit N [--max-tier 4] [--workers 3]  # Drain queue + auto-ingest
+                                 # --no-ingest to skip embed/score after download
 oracle guard test --artist X --title Y
 oracle guard import --downloads downloads
 oracle watch [--once]            # Ingest watcher: staging/ → library
@@ -283,13 +283,18 @@ oracle catalog acquire --artist X    # Full discography acquisition
 
 ## WHAT DONE LOOKS LIKE
 
-- [x] track_scores count matches tracks count (736/737)
+- [x] track_scores count matches tracks count (2,472/2,472)
 - [x] `oracle search` returns sensible, differentiated results
 - [x] `oracle acquire waterfall` completes end-to-end (4-tier: Qobuz→Slskd→RD→SpotDL)
 - [x] Qobuz acquirer downloads hi-fi FLAC with full metadata
 - [x] No duplicate get_connection() — config.py delegates to db/schema.py
 - [x] Single .env keys (no duplicates) — template consolidated
 - [x] No hardcoded paths — curator/organizer/download_processor use config.LIBRARY_BASE
+- [x] `oracle drain` auto-ingests (embed+score) — no manual `watch --once` needed
+- [x] `oracle hunt` routes directly through SmartAcquisition (pipeline.py decoupled from CLI)
+- [x] `oracle batch run` removed (superseded by `oracle drain`)
+- [x] `generate_target_path` moved to curator.py — organizer import removed
+- [x] `fast_batch.py` uses YTDLPAcquirer — downloader.py dependency removed
 - [ ] `oracle serve` → browser plays audio
 - [ ] Playback events flowing via foobar2000 + BeefWeb
 - [ ] Root dir has <10 non-config files

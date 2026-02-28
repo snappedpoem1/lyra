@@ -101,11 +101,6 @@ def main() -> None:
     acquire_waterfall.add_argument("--album", help="Album name (helps T1 search)")
     acquire_waterfall.add_argument("--max-tier", type=int, default=4, help="Stop after tier N (1-4)")
 
-    batch_parser = subparsers.add_parser("batch", help="Process acquisition queue")
-    batch_sub = batch_parser.add_subparsers(dest="batch_command")
-    batch_run = batch_sub.add_parser("run", help="Run acquisition queue")
-    batch_run.add_argument("--limit", type=int, default=0, help="Limit pending queue items")
-
     enrich_parser = subparsers.add_parser("enrich", help="Enrich track metadata")
     enrich_parser.add_argument("--track-id", required=True, help="Track ID to enrich")
     enrich_parser.add_argument("--providers", default="musicbrainz,acoustid,discogs", help="Comma list")
@@ -296,6 +291,7 @@ def main() -> None:
     drain_parser.add_argument("--max-tier", type=int, default=4, help="Max acquisition tier (1=Qobuz, 2=Slskd, 3=RD, 4=SpotDL)")
     drain_parser.add_argument("--workers", type=int, default=0, help="Parallel download workers (0=auto)")
     drain_parser.add_argument("--max-retries", type=int, default=3, help="Mark failed after N attempts")
+    drain_parser.add_argument("--no-ingest", action="store_true", help="Skip auto-ingest after download (run 'oracle watch --once' manually)")
 
     perf_parser = subparsers.add_parser("perf", help="Performance profile and runtime pause controls")
     perf_sub = perf_parser.add_subparsers(dest="perf_command")
@@ -580,16 +576,30 @@ def main() -> None:
         if get_write_mode() != "apply_allowed":
             print("WRITE BLOCKED: LYRA_WRITE_MODE must be apply_allowed to hunt.")
             return
-        from oracle.pipeline import run_pipeline
+        from oracle.acquirers.smart_pipeline import SmartAcquisition, AcquisitionRequest
+        import logging as _logging
+        _logging.basicConfig(level=_logging.INFO, format="%(message)s")
         query = " ".join(args.query).strip()
-        result = run_pipeline(query)
-        state = (result or {}).get("state", "unknown")
-        payload = (result or {}).get("result", {})
-        print(f"Pipeline state: {state}")
-        if payload.get("filepath"):
-            print(f"Placed at: {payload['filepath']}")
-        if payload.get("rejection_reason"):
-            print(f"Rejected: {payload['rejection_reason']}")
+        if " - " in query:
+            _artist, _title = query.split(" - ", 1)
+        else:
+            _artist, _title = "Unknown Artist", query
+        _hunt_pipeline = SmartAcquisition(library_path=LIBRARY_BASE, require_validation=True)
+        try:
+            _hunt_result = _hunt_pipeline.acquire(AcquisitionRequest(
+                artist=_artist.strip(), title=_title.strip(), source="hunt"
+            ))
+            if _hunt_result.success:
+                print(f"Acquired: {_hunt_result.filepath}")
+                if getattr(_hunt_result, "quality", None):
+                    print(f"  Quality: {_hunt_result.quality}")
+                if getattr(_hunt_result, "tier_used", None):
+                    print(f"  Tier: {_hunt_result.tier_used}")
+            else:
+                print(f"Failed: {_hunt_result.rejection_reason}")
+        finally:
+            if hasattr(_hunt_pipeline, "close"):
+                _hunt_pipeline.close()
         return
 
     if args.command == "acquire" and args.acquire_command == "youtube":
@@ -669,12 +679,6 @@ def main() -> None:
         if result.error:
             print(f"  Error: {result.error}")
         print(f"  Elapsed: {result.elapsed:.1f}s")
-        return
-
-    if args.command == "batch" and args.batch_command == "run":
-        from oracle.acquisition import process_queue
-        results = process_queue(limit=args.limit)
-        print(results)
         return
 
     if args.command == "enrich":
@@ -1373,7 +1377,15 @@ def main() -> None:
         print(f"\nDone. {downloaded_count} downloaded, {failed_count} failed.")
         if retried_count or hard_failed_count:
             print(f"Retries queued: {retried_count} | Hard failed: {hard_failed_count}")
-        if downloaded_count:
+        if downloaded_count and not getattr(args, "no_ingest", False):
+            print("\n-- Ingesting downloads (embed + score)... --")
+            try:
+                from oracle.ingest_watcher import run_watcher
+                run_watcher(once=True)
+            except Exception as _exc:
+                print(f"[WARN] Auto-ingest failed: {_exc}")
+                print("       Run 'oracle watch --once' to retry.")
+        elif downloaded_count:
             print("Run 'oracle watch --once' to ingest and mark queue items completed.")
         return
 

@@ -26,11 +26,8 @@ print(c.fetchone()[0])
         break
     fi
 
-    log "Draining batch of $BATCH..."
+    log "Draining batch of $BATCH (auto-ingest enabled)..."
     py -3.12 -m oracle.cli drain --limit $BATCH --workers $WORKERS --max-tier $MAX_TIER >> "$LOGFILE" 2>&1
-
-    log "Ingesting staged files..."
-    py -3.12 -m oracle.cli watch --once >> "$LOGFILE" 2>&1
 
     log "Batch complete. Sleeping 5s before next batch..."
     sleep 5
