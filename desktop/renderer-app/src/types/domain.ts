@@ -87,6 +87,23 @@ export interface QueueState {
   items: TrackListItem[];
 }
 
+export interface LibraryArtistDetail {
+  artist: string;
+  trackCount: number;
+  albumCount: number;
+  years: string[];
+  albums: Array<{ name: string; count: number }>;
+  tracks: TrackListItem[];
+}
+
+export interface LibraryAlbumDetail {
+  artist: string;
+  album: string;
+  trackCount: number;
+  years: string[];
+  tracks: TrackListItem[];
+}
+
 export interface VersionCluster {
   canonicalLabel: string;
   primary?: TrackListItem;

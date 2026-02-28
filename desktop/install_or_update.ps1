@@ -130,3 +130,7 @@ else {
 }
 
 Write-Step "done"
+Write-Step "next steps:"
+Write-Step "  1. powershell -ExecutionPolicy Bypass -File ..\\scripts\\check_llm_config.ps1"
+Write-Step "  2. powershell -ExecutionPolicy Bypass -File ..\\scripts\\smoke_desktop.ps1 -AllowLlmFailure"
+Write-Step "  3. launch Lyra and confirm Library, Queue, and playback are live"

@@ -48,6 +48,11 @@ Write-Host "Library artists OK: $($artists.count)"
 
 $libraryTracks = Invoke-LyraJson -Method Get -Path "/api/library/tracks?limit=5"
 Write-Host "Library tracks OK: $($libraryTracks.count)"
+$artistDetailName = if ($libraryTracks.count -gt 0) { $libraryTracks.tracks[0].artist } elseif ($artists.count -gt 0) { $artists.artists[0].name } else { $null }
+if ($artistDetailName) {
+  $artistDetail = Invoke-LyraJson -Method Get -Path "/api/library/artists/$([uri]::EscapeDataString($artistDetailName))"
+  Write-Host "Artist detail OK: $($artistDetail.artist) / $($artistDetail.track_count)"
+}
 
 $probeTrackId = $null
 
@@ -71,6 +76,11 @@ if ($probeTrackId) {
 
   $albums = Invoke-LyraJson -Method Get -Path "/api/library/albums?artist=$([uri]::EscapeDataString($dossier.track.artist))&limit=5"
   Write-Host "Library albums OK: $($albums.count)"
+  if ($albums.count -gt 0) {
+    $albumName = $albums.albums[0].name
+    $albumDetail = Invoke-LyraJson -Method Get -Path "/api/library/albums/$([uri]::EscapeDataString($albumName))?artist=$([uri]::EscapeDataString($dossier.track.artist))"
+    Write-Host "Album detail OK: $($albumDetail.album) / $($albumDetail.track_count)"
+  }
 
   $flow = Invoke-LyraJson -Method Post -Path "/api/radio/flow" -Body @{ track_id = $probeTrackId; count = 4 }
   Write-Host "Flow OK: $($flow.count)"

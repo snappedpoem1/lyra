@@ -341,6 +341,39 @@ def _library_filter_state(query: str = "", artist: str = "", album: str = "") ->
     return where, params
 
 
+def _fetch_library_tracks(query: str = "", artist: str = "", album: str = "", limit: int = 200, offset: int = 0) -> list[dict]:
+    conn = get_connection(timeout=10.0)
+    cursor = conn.cursor()
+    where, params = _library_filter_state(query=query, artist=artist, album=album)
+    cursor.execute(
+        f"""
+        SELECT track_id, artist, title, album, year, version_type, confidence, duration, filepath
+        FROM tracks
+        {where}
+        ORDER BY artist COLLATE NOCASE ASC, album COLLATE NOCASE ASC, title COLLATE NOCASE ASC
+        LIMIT ? OFFSET ?
+        """,
+        (*params, limit, offset),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        {
+            'track_id': row[0],
+            'artist': row[1],
+            'title': row[2],
+            'album': row[3],
+            'year': row[4],
+            'version_type': row[5],
+            'confidence': row[6],
+            'duration': row[7],
+            'filepath': row[8],
+            'file_exists': bool(row[8] and Path(row[8]).exists()),
+        }
+        for row in rows
+    ]
+
+
 # ============================================================================
 # HEALTH & STATUS
 # ============================================================================
@@ -855,33 +888,8 @@ def api_tracks():
             params,
         ).fetchall()
 
-        cursor.execute(
-            f"""
-            SELECT track_id, artist, title, album, year, version_type, confidence, duration, filepath
-            FROM tracks
-            {where}
-            ORDER BY artist COLLATE NOCASE ASC, album COLLATE NOCASE ASC, title COLLATE NOCASE ASC
-            LIMIT ? OFFSET ?
-            """,
-            (*params, limit, offset)
-        )
-        rows = cursor.fetchall()
         conn.close()
-        
-        tracks = []
-        for row in rows:
-            tracks.append({
-                'track_id': row[0],
-                'artist': row[1],
-                'title': row[2],
-                'album': row[3],
-                'year': row[4],
-                'version_type': row[5],
-                'confidence': row[6],
-                'duration': row[7],
-                'filepath': row[8],
-                'file_exists': bool(row[8] and Path(row[8]).exists()),
-            })
+        tracks = _fetch_library_tracks(query=query, artist=artist, album=album, limit=limit, offset=offset)
         
         return jsonify({
             'tracks': tracks,
@@ -963,6 +971,56 @@ def api_library_albums():
             'count': len(rows),
             'query': query,
             'artist': artist or None,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@app.route('/api/library/artists/<path:artist_name>', methods=['GET'])
+def api_library_artist_detail(artist_name: str):
+    """Get a single artist detail view for the library browser."""
+    try:
+        artist = artist_name.strip()
+        if not artist:
+            return jsonify({'error': 'artist is required'}), 400
+        tracks = _fetch_library_tracks(artist=artist, limit=500, offset=0)
+        if not tracks:
+            return jsonify({'error': 'Artist not found'}), 404
+        albums_map: dict[str, int] = {}
+        years = sorted({str(track.get('year') or '').strip() for track in tracks if str(track.get('year') or '').strip()})
+        for track in tracks:
+            album_name = track.get('album') or 'Singles / Unknown Album'
+            albums_map[album_name] = albums_map.get(album_name, 0) + 1
+        return jsonify({
+            'artist': artist,
+            'track_count': len(tracks),
+            'album_count': len(albums_map),
+            'years': years,
+            'albums': [{'name': name, 'count': count} for name, count in sorted(albums_map.items(), key=lambda item: item[0].lower())],
+            'tracks': tracks[:120],
+        })
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
+@app.route('/api/library/albums/<path:album_name>', methods=['GET'])
+def api_library_album_detail(album_name: str):
+    """Get a single album detail view for the library browser."""
+    try:
+        album = album_name.strip()
+        artist = (request.args.get('artist') or '').strip()
+        if not album:
+            return jsonify({'error': 'album is required'}), 400
+        tracks = _fetch_library_tracks(artist=artist, album=album, limit=500, offset=0)
+        if not tracks:
+            return jsonify({'error': 'Album not found'}), 404
+        years = sorted({str(track.get('year') or '').strip() for track in tracks if str(track.get('year') or '').strip()})
+        return jsonify({
+            'artist': artist or tracks[0].get('artist') or 'Unknown Artist',
+            'album': album,
+            'track_count': len(tracks),
+            'years': years,
+            'tracks': tracks[:120],
         })
     except Exception as e:
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500

@@ -124,6 +124,23 @@ export const libraryAlbumsSchema = z.object({
   artist: z.string().nullable().optional(),
 });
 
+export const libraryArtistDetailSchema = z.object({
+  artist: z.string(),
+  track_count: z.number(),
+  album_count: z.number(),
+  years: z.array(z.string()),
+  albums: z.array(z.object({ name: z.string(), count: z.number() })),
+  tracks: z.array(z.record(z.any())),
+});
+
+export const libraryAlbumDetailSchema = z.object({
+  artist: z.string(),
+  album: z.string(),
+  track_count: z.number(),
+  years: z.array(z.string()),
+  tracks: z.array(z.record(z.any())),
+});
+
 export const agentSuggestionSchema = z.object({
   suggestion: z.string(),
   action: z.string(),

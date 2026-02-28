@@ -1,4 +1,4 @@
-import type { TrackListItem } from "@/types/domain";
+import type { LibraryAlbumDetail, LibraryArtistDetail, TrackListItem } from "@/types/domain";
 import { useUiStore } from "@/stores/uiStore";
 import { LyraButton } from "@/ui/LyraButton";
 import { LyraPanel } from "@/ui/LyraPanel";
@@ -14,6 +14,10 @@ export function LibraryOmensPanel({
   onSelectArtist,
   onSelectAlbum,
   onClearFilters,
+  artistDetail,
+  albumDetail,
+  onPlayFocusedSlice,
+  onQueueFocusedSlice,
   onQueryChange,
   onPlayTrack,
   onQueueTrack,
@@ -35,6 +39,10 @@ export function LibraryOmensPanel({
   onSelectArtist: (value: string | null) => void;
   onSelectAlbum: (value: string | null) => void;
   onClearFilters: () => void;
+  artistDetail?: LibraryArtistDetail;
+  albumDetail?: LibraryAlbumDetail;
+  onPlayFocusedSlice: () => void;
+  onQueueFocusedSlice: () => void;
   onQueryChange: (value: string) => void;
   onPlayTrack: (track: TrackListItem) => void;
   onQueueTrack: (track: TrackListItem) => void;
@@ -47,6 +55,19 @@ export function LibraryOmensPanel({
   hasNextPage: boolean;
 }) {
   const openDossier = useUiStore((state) => state.openDossier);
+  const headline = albumDetail
+    ? {
+        title: albumDetail.album,
+        subtitle: `${albumDetail.artist} | ${albumDetail.trackCount} tracks`,
+        meta: albumDetail.years.join(", ") || "Album slice",
+      }
+    : artistDetail
+      ? {
+          title: artistDetail.artist,
+          subtitle: `${artistDetail.trackCount} tracks across ${artistDetail.albumCount} albums`,
+          meta: artistDetail.years.join(", ") || "Artist slice",
+        }
+      : null;
 
   return (
     <LyraPanel className="library-panel">
@@ -122,6 +143,20 @@ export function LibraryOmensPanel({
           </div>
         </div>
         <div className="library-browser-main">
+          {headline && (
+            <div className="library-focus-card">
+              <div>
+                <span className="insight-kicker">{albumDetail ? "Album" : "Artist"}</span>
+                <h3>{headline.title}</h3>
+                <p>{headline.subtitle}</p>
+                <p>{headline.meta}</p>
+              </div>
+              <div className="hero-actions">
+                <LyraButton onClick={onPlayFocusedSlice}>Play slice</LyraButton>
+                <LyraButton onClick={onQueueFocusedSlice}>Queue slice</LyraButton>
+              </div>
+            </div>
+          )}
           <div className="library-header-row">
             <span>Track</span>
             <span>Context</span>

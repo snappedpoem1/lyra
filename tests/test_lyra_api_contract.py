@@ -143,6 +143,39 @@ def test_library_navigation_endpoints(client, monkeypatch):
     assert albums.get_json()["albums"][1]["name"] == "Singles / Unknown Album"
 
 
+def test_library_artist_detail_endpoint(client, monkeypatch):
+    monkeypatch.setattr(
+        lyra_api,
+        "_fetch_library_tracks",
+        lambda query="", artist="", album="", limit=200, offset=0: [
+            {"track_id": "track-1", "artist": artist or "Artist A", "title": "Song 1", "album": "Album A", "year": "2020"},
+            {"track_id": "track-2", "artist": artist or "Artist A", "title": "Song 2", "album": "", "year": "2021"},
+        ],
+    )
+    response = client.get("/api/library/artists/Artist%20A")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["artist"] == "Artist A"
+    assert payload["album_count"] == 2
+    assert payload["albums"][1]["name"] == "Singles / Unknown Album"
+
+
+def test_library_album_detail_endpoint(client, monkeypatch):
+    monkeypatch.setattr(
+        lyra_api,
+        "_fetch_library_tracks",
+        lambda query="", artist="", album="", limit=200, offset=0: [
+            {"track_id": "track-1", "artist": artist or "Artist A", "title": "Song 1", "album": album or "Album A", "year": "2020"},
+        ],
+    )
+    response = client.get("/api/library/albums/Album%20A?artist=Artist%20A")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["artist"] == "Artist A"
+    assert payload["album"] == "Album A"
+    assert payload["track_count"] == 1
+
+
 import pytest
 
 

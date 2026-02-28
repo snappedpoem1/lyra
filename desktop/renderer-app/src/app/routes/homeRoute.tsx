@@ -68,6 +68,9 @@ export function HomeRoute() {
               <div>
                 <strong>{currentTrack?.title ?? "No active track"}</strong>
                 <p>{currentTrack ? `${currentTrack.artist} | ${currentTrack.album ?? "Single"}` : "Start from library, thread, or Auto-DJ."}</p>
+                {player.currentTimeSec > 0 && player.durationSec > 0 && (
+                  <p>Resume from {Math.round(player.currentTimeSec)}s of {Math.round(player.durationSec)}s</p>
+                )}
               </div>
               <span>{player.status}</span>
             </button>

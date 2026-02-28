@@ -8,7 +8,7 @@ interface SearchStore {
 }
 
 export const useSearchStore = create<SearchStore>((set) => ({
-  query: "cathedral bass with analog ache and haunted warmth",
+  query: "",
   rewrittenQuery: "",
   setQuery: (query) => set({ query }),
   setRewrittenQuery: (rewrittenQuery) => set({ rewrittenQuery }),

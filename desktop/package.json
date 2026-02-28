@@ -9,6 +9,8 @@
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "npm --prefix renderer-app run dev",
     "dev:electron": "wait-on tcp:5173 && cross-env LYRA_RENDERER_URL=http://127.0.0.1:5173 electron .",
+    "llm:check": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\check_llm_config.ps1",
+    "llm:fix": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\fix_lmstudio.ps1",
     "build": "npm run build:renderer && electron-builder",
     "build:renderer": "npm --prefix renderer-app run build",
     "dist": "npm run build",

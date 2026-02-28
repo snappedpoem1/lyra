@@ -1,4 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { ConnectivityBadge } from "@/features/system/ConnectivityBadge";
+import { usePlayerStore } from "@/stores/playerStore";
 import { Icon } from "@/ui/Icon";
 
 const nav = [
@@ -12,6 +14,8 @@ const nav = [
 
 export function LeftRail() {
   const location = useRouterState({ select: (state) => state.location.pathname });
+  const track = usePlayerStore((state) => state.track);
+  const status = usePlayerStore((state) => state.status);
   return (
     <aside className="left-rail lyra-panel">
       <div className="window-drag">
@@ -27,8 +31,9 @@ export function LeftRail() {
         ))}
       </nav>
       <div className="rail-footnote">
-        <span>LIVE LIBRARY</span>
-        <span>DESKTOP MODE</span>
+        <span><ConnectivityBadge /></span>
+        <span>{track ? `${track.artist} | ${track.title}` : "No track loaded"}</span>
+        <span>{status.toUpperCase()}</span>
       </div>
     </aside>
   );

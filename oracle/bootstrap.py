@@ -50,6 +50,7 @@ def _common_lmstudio_paths() -> list[Path]:
             local / "Programs" / "LM Studio" / "LM Studio.exe",
             local / "LM-Studio" / "LM Studio.exe",
             program_files / "LM Studio" / "LM Studio.exe",
+            program_files / "AMD" / "AI_Bundle" / "LMStudio" / "LM Studio" / "LM Studio.exe",
         ]
     )
     return candidates
@@ -75,6 +76,10 @@ def _common_lms_cli_paths(exe_path: Path | None) -> list[Path]:
     which_lms = shutil.which("lms")
     if which_lms:
         candidates.append(Path(which_lms))
+
+    user_profile = Path(os.environ.get("USERPROFILE", ""))
+    if str(user_profile):
+        candidates.append(user_profile / ".lmstudio" / "bin" / "lms.exe")
 
     # CLI bundled with the selected LM Studio install.
     if exe_path:
@@ -117,6 +122,26 @@ def _run_lms(
         return proc.returncode == 0, out
     except Exception as exc:
         return False, str(exc)
+
+
+def _spawn_lms_server(cli_path: Path, host: str, port: int) -> tuple[bool, str]:
+    args = [str(cli_path), "server", "start", "--port", str(port), "--bind", host]
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+    try:
+        subprocess.Popen(
+            args,
+            cwd=str(cli_path.parent),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            creationflags=creationflags,
+            close_fds=os.name != "nt",
+        )
+        return True, "spawned detached lms server start"
+    except Exception as exc:
+        return False, f"detached launch failed: {exc}"
 
 
 _TASK_NAME = "LyraOracleLMSBoot"
@@ -252,22 +277,17 @@ def ensure_lmstudio(timeout_seconds: int = 30) -> dict:
             }
         return {"ready": True, "started": False, "probe_url": probe_url}
 
-    # Preferred path: `lms server start` wakes the daemon automatically.
+    # Preferred path: detached `lms server start`, then readiness poll.
     if lms_cli:
         host, port = _llm_host_port(base_url)
         notes: list[str] = []
         total_budget = max(10, int(timeout_seconds))
-        # lms server start handles daemon wakeup internally — generous timeout
-        # because the first invocation may need to wake the LM Studio service.
-        start_timeout = max(20, min(45, total_budget))
         phase_timeout = max(10, min(20, total_budget // 3))
 
-        ok, out = _run_lms(
-            lms_cli,
-            ["server", "start", "--port", str(port), "--bind", host],
-            timeout=start_timeout,
-            interactive=True,
-        )
+        status_ok, status_out = _run_lms(lms_cli, ["server", "status"], timeout=6)
+        notes.append(f"server_status_ok={status_ok} detail={status_out[:220]}")
+
+        ok, out = _spawn_lms_server(lms_cli, host, port)
         notes.append(f"server_start_ok={ok} detail={out[:220]}")
 
         if ok:
@@ -286,8 +306,7 @@ def ensure_lmstudio(timeout_seconds: int = 30) -> dict:
                     notes.append(f"model_load_deferred=model_server_not_ready model={model}")
 
             # Brief poll in case server needs a moment after start.
-            remaining = max(3, total_budget - start_timeout)
-            deadline = time.time() + remaining
+            deadline = time.time() + total_budget
             while time.time() < deadline:
                 if _http_ready(probe_url):
                     payload = {

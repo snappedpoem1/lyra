@@ -8,6 +8,7 @@ type PlaybackListener = () => void;
 class AudioEngine {
   private audio = new Audio();
   private listeners = new Set<PlaybackListener>();
+  private pendingSeekSec = 0;
 
   constructor() {
     this.audio.preload = "auto";
@@ -28,6 +29,10 @@ class AudioEngine {
       this.emit();
     });
     this.audio.addEventListener("loadedmetadata", () => {
+      if (this.pendingSeekSec > 0) {
+        this.audio.currentTime = Math.max(0, Math.min(this.pendingSeekSec, this.audio.duration || this.pendingSeekSec));
+        this.pendingSeekSec = 0;
+      }
       usePlayerStore.getState().setTime(this.audio.currentTime, this.audio.duration || 0);
       this.emit();
     });
@@ -59,6 +64,15 @@ class AudioEngine {
       usePlayerStore.getState().setError("Playback could not start. Stream URL may be missing.");
       this.emit();
     }
+  }
+
+  loadTrack(track: TrackListItem, startTimeSec = 0): void {
+    const state = usePlayerStore.getState();
+    this.pendingSeekSec = Math.max(0, startTimeSec);
+    this.audio.src = track.streamUrl.startsWith("http") ? track.streamUrl : resolveApiUrl(track.streamUrl);
+    this.audio.volume = state.volume;
+    this.audio.muted = state.muted;
+    this.audio.load();
   }
 
   async play(): Promise<void> {

@@ -1,12 +1,14 @@
 import { constellationEdges, constellationNodes, dossier, oracleRecommendations, playlistDetails, playlistSummaries, searchResults } from "@/mocks/fixtures/data";
 import { fixtureModeEnabled } from "@/mocks/fixtures/mode";
-import { agentSuggestionSchema, dossierSchema, healthSchema, libraryAlbumsSchema, libraryArtistsSchema, libraryTracksSchema, playlistDetailSchema, queueSchema, radioResultsSchema, searchSchema, vibesSchema } from "@/config/schemas";
+import { agentSuggestionSchema, dossierSchema, healthSchema, libraryAlbumDetailSchema, libraryAlbumsSchema, libraryArtistDetailSchema, libraryArtistsSchema, libraryTracksSchema, playlistDetailSchema, queueSchema, radioResultsSchema, searchSchema, vibesSchema } from "@/config/schemas";
 import type {
   AgentFactDrop,
   AgentSuggestion,
   BootStatus,
   ConstellationEdge,
   ConstellationNode,
+  LibraryAlbumDetail,
+  LibraryArtistDetail,
   OracleMode,
   OracleRecommendation,
   PlaylistDetail,
@@ -197,6 +199,37 @@ export async function getLibraryAlbums(query = "", artist?: string | null, limit
   }
   const payload = await requestJson(`/api/library/albums?${params.toString()}`, libraryAlbumsSchema);
   return payload.albums;
+}
+
+export async function getLibraryArtistDetail(artist: string): Promise<LibraryArtistDetail> {
+  const payload = await requestJson(`/api/library/artists/${encodeURIComponent(artist)}`, libraryArtistDetailSchema);
+  return {
+    artist: payload.artist,
+    trackCount: payload.track_count,
+    albumCount: payload.album_count,
+    years: payload.years,
+    albums: payload.albums,
+    tracks: payload.tracks.map((row) => mapTrack(row)),
+  };
+}
+
+export async function getLibraryAlbumDetail(album: string, artist?: string | null): Promise<LibraryAlbumDetail> {
+  const params = new URLSearchParams();
+  if (artist?.trim()) {
+    params.set("artist", artist.trim());
+  }
+  const query = params.toString();
+  const payload = await requestJson(
+    `/api/library/albums/${encodeURIComponent(album)}${query ? `?${query}` : ""}`,
+    libraryAlbumDetailSchema,
+  );
+  return {
+    artist: payload.artist,
+    album: payload.album,
+    trackCount: payload.track_count,
+    years: payload.years,
+    tracks: payload.tracks.map((row) => mapTrack(row)),
+  };
 }
 
 export async function getConstellation(): Promise<{ nodes: ConstellationNode[]; edges: ConstellationEdge[] }> {

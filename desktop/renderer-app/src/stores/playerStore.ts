@@ -1,6 +1,68 @@
 import { create } from "zustand";
 import type { NowPlayingState, TrackListItem, VisualizerFrame } from "@/types/domain";
 
+const STORAGE_KEY = "lyra-player";
+
+type PlayerSnapshot = Pick<
+  NowPlayingState,
+  "track" | "currentTimeSec" | "durationSec" | "progress" | "volume" | "muted" | "sourceLabel" | "explanation" | "visualizerMode"
+> & {
+  status?: NowPlayingState["status"];
+};
+
+function loadInitialPlayer(): PlayerSnapshot {
+  if (typeof window === "undefined") {
+    return {
+      track: null,
+      currentTimeSec: 0,
+      durationSec: 0,
+      progress: 0,
+      volume: 0.82,
+      muted: false,
+      sourceLabel: undefined,
+      explanation: undefined,
+      visualizerMode: "bloom",
+      status: "idle",
+    };
+  }
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) as Partial<PlayerSnapshot> : {};
+    return {
+      track: (parsed.track as TrackListItem | null) ?? null,
+      currentTimeSec: Number(parsed.currentTimeSec ?? 0),
+      durationSec: Number(parsed.durationSec ?? 0),
+      progress: Number(parsed.progress ?? 0),
+      volume: Number(parsed.volume ?? 0.82),
+      muted: Boolean(parsed.muted),
+      sourceLabel: parsed.sourceLabel,
+      explanation: parsed.explanation,
+      visualizerMode: parsed.visualizerMode ?? "bloom",
+      status: parsed.status ?? "idle",
+    };
+  } catch {
+    return {
+      track: null,
+      currentTimeSec: 0,
+      durationSec: 0,
+      progress: 0,
+      volume: 0.82,
+      muted: false,
+      sourceLabel: undefined,
+      explanation: undefined,
+      visualizerMode: "bloom",
+      status: "idle",
+    };
+  }
+}
+
+function persistPlayer(snapshot: PlayerSnapshot) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+}
+
 interface PlayerStore extends NowPlayingState {
   frame: VisualizerFrame;
   errorMessage?: string;
@@ -14,19 +76,21 @@ interface PlayerStore extends NowPlayingState {
   setFrame: (frame: VisualizerFrame) => void;
 }
 
+const initial = loadInitialPlayer();
+
 export const usePlayerStore = create<PlayerStore>((set) => ({
-  track: null,
-  status: "idle",
-  currentTimeSec: 0,
-  durationSec: 0,
-  progress: 0,
-  volume: 0.82,
-  muted: false,
+  track: initial.track,
+  status: initial.status ?? "idle",
+  currentTimeSec: initial.currentTimeSec,
+  durationSec: initial.durationSec,
+  progress: initial.progress,
+  volume: initial.volume,
+  muted: initial.muted,
   repeatMode: "off",
   shuffle: false,
-  sourceLabel: undefined,
-  explanation: undefined,
-  visualizerMode: "bloom",
+  sourceLabel: initial.sourceLabel,
+  explanation: initial.explanation,
+  visualizerMode: initial.visualizerMode,
   frame: {
     waveform: new Array(64).fill(0),
     spectrum: new Array(48).fill(0),
@@ -37,26 +101,62 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
   },
   errorMessage: undefined,
   setTrack: (track, sourceLabel, explanation) =>
-    set({
-      track,
-      sourceLabel,
-      explanation,
-      errorMessage: undefined,
-      currentTimeSec: 0,
-      durationSec: track?.durationSec ?? 0,
-      progress: 0,
-      status: track ? "loading" : "idle",
+    set((state) => {
+      const status: NowPlayingState["status"] = track ? "loading" : "idle";
+      const next = {
+        ...state,
+        track,
+        sourceLabel,
+        explanation,
+        errorMessage: undefined,
+        currentTimeSec: 0,
+        durationSec: track?.durationSec ?? 0,
+        progress: 0,
+        status,
+      };
+      persistPlayer(next);
+      return next;
     }),
-  setStatus: (status) => set({ status }),
-  setError: (errorMessage) => set({ status: "error", errorMessage }),
+  setStatus: (status) =>
+    set((state) => {
+      const next = { ...state, status };
+      persistPlayer(next);
+      return next;
+    }),
+  setError: (errorMessage) =>
+    set((state) => {
+      const next = { ...state, status: "error" as const, errorMessage };
+      persistPlayer(next);
+      return next;
+    }),
   setTime: (currentTimeSec, durationSec) =>
-    set({
-      currentTimeSec,
-      durationSec,
-      progress: durationSec > 0 ? currentTimeSec / durationSec : 0,
+    set((state) => {
+      const next = {
+        ...state,
+        currentTimeSec,
+        durationSec,
+        progress: durationSec > 0 ? currentTimeSec / durationSec : 0,
+      };
+      persistPlayer(next);
+      return next;
     }),
-  setVolume: (volume) => set({ volume }),
-  setMuted: (muted) => set({ muted }),
-  setVisualizerMode: (visualizerMode) => set({ visualizerMode }),
+  setVolume: (volume) =>
+    set((state) => {
+      const next = { ...state, volume };
+      persistPlayer(next);
+      return next;
+    }),
+  setMuted: (muted) =>
+    set((state) => {
+      const next = { ...state, muted };
+      persistPlayer(next);
+      return next;
+    }),
+  setVisualizerMode: (visualizerMode) =>
+    set((state) => {
+      const next = { ...state, visualizerMode };
+      persistPlayer(next);
+      return next;
+    }),
   setFrame: (frame) => set({ frame }),
 }));

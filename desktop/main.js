@@ -15,6 +15,42 @@ const PROJECT_ROOT = path.resolve(__dirname, "..");
 const API_PORT = 5000;
 const API_HEALTH_URL = `http://127.0.0.1:${API_PORT}/api/health`;
 
+function loadProjectEnv() {
+  const envPath = path.join(PROJECT_ROOT, ".env");
+  try {
+    if (!fs.existsSync(envPath)) {
+      return;
+    }
+    const raw = fs.readFileSync(envPath, "utf8");
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) {
+        continue;
+      }
+      const separator = trimmed.indexOf("=");
+      if (separator === -1) {
+        continue;
+      }
+      const key = trimmed.slice(0, separator).trim();
+      if (!key || Object.prototype.hasOwnProperty.call(process.env, key)) {
+        continue;
+      }
+      let value = trimmed.slice(separator + 1).trim();
+      if (
+        (value.startsWith("\"") && value.endsWith("\"")) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      process.env[key] = value;
+    }
+  } catch (error) {
+    console.log("[lyra] failed to load .env:", error.message);
+  }
+}
+
+loadProjectEnv();
+
 // ---------------------------------------------------------------------------
 // Utility: HTTP probe (no dependencies)
 // ---------------------------------------------------------------------------
@@ -35,6 +71,15 @@ function httpReady(url, timeoutMs = 3000) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isLocalLlmBaseUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return ["127.0.0.1", "localhost"].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
 }
 
 function sendBootStatus(phase, message, ready = false) {
@@ -171,6 +216,16 @@ const LLM_BASE_URL = (process.env.LYRA_LLM_BASE_URL || "http://localhost:1234/v1
 const LLM_MODELS_PROBE = `${LLM_BASE_URL}/models`;
 const LM_STUDIO_PROBE = LLM_MODELS_PROBE;
 
+function llmHostPort(baseUrl) {
+  try {
+    const parsed = new URL(baseUrl);
+    const host = parsed.hostname === "localhost" ? "127.0.0.1" : parsed.hostname;
+    return { host, port: String(parsed.port || "1234") };
+  } catch {
+    return { host: "127.0.0.1", port: "1234" };
+  }
+}
+
 function findLMStudio() {
   const localAppData = process.env.LOCALAPPDATA || "";
   const programFiles = process.env.ProgramFiles || "C:\\Program Files";
@@ -185,6 +240,42 @@ function findLMStudio() {
   }) || null;
 }
 
+function findLmsCli(lmStudioExe) {
+  const userProfile = process.env.USERPROFILE || "";
+  const localAppData = process.env.LOCALAPPDATA || "";
+  const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+  const pathCandidates = [];
+  if (process.env.LYRA_LMS_CLI_EXE) pathCandidates.push(process.env.LYRA_LMS_CLI_EXE);
+  if (process.env.LMS_CLI_EXE) pathCandidates.push(process.env.LMS_CLI_EXE);
+  if (lmStudioExe) {
+    pathCandidates.push(path.join(path.dirname(lmStudioExe), "resources", "app", ".webpack", "lms.exe"));
+  }
+  pathCandidates.push(
+    path.join(userProfile, ".lmstudio", "bin", "lms.exe"),
+    path.join(localAppData, "Programs", "LM Studio", "resources", "app", ".webpack", "lms.exe"),
+    path.join(localAppData, "LM-Studio", "resources", "app", ".webpack", "lms.exe"),
+    path.join(programFiles, "LM Studio", "resources", "app", ".webpack", "lms.exe")
+  );
+  return pathCandidates.find((candidate) => {
+    try { return candidate && fs.existsSync(candidate); } catch { return false; }
+  }) || null;
+}
+
+function spawnDetached(cmd, args, cwd) {
+  try {
+    const child = spawn(cmd, args, {
+      cwd,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function ensureLMStudio() {
   if (await httpReady(LM_STUDIO_PROBE)) {
     sendBootStatus("llm", "LM Studio running");
@@ -192,6 +283,22 @@ async function ensureLMStudio() {
   }
 
   const exe = findLMStudio();
+  const cli = findLmsCli(exe);
+  const { host, port } = llmHostPort(LLM_BASE_URL);
+
+  if (cli) {
+    sendBootStatus("llm", "Starting LM Studio server...");
+    if (spawnDetached(cli, ["server", "start", "--port", port, "--bind", host], path.dirname(cli))) {
+      for (let i = 0; i < 40; i++) {
+        await sleep(1500);
+        if (await httpReady(LM_STUDIO_PROBE)) {
+          sendBootStatus("llm", "LM Studio server ready");
+          return true;
+        }
+      }
+    }
+  }
+
   if (!exe) {
     sendBootStatus("llm", "LM Studio not found — skipping");
     return false;
@@ -226,6 +333,11 @@ async function ensureLLMProvider() {
   if (LLM_PROVIDER !== "local" && LLM_PROVIDER !== "openai_compatible" && LLM_PROVIDER !== "openai") {
     sendBootStatus("llm", `Provider ${LLM_PROVIDER} configured; skipping local bootstrap`);
     return false;
+  }
+
+  if (!isLocalLlmBaseUrl(LLM_BASE_URL)) {
+    sendBootStatus("llm", `Remote LLM endpoint configured (${LLM_BASE_URL})`);
+    return httpReady(LLM_MODELS_PROBE);
   }
 
   if (await httpReady(LLM_MODELS_PROBE)) {

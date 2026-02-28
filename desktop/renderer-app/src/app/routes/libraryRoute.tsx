@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LibraryOmensPanel } from "@/features/library/LibraryOmensPanel";
 import { audioEngine } from "@/services/audio/audioEngine";
-import { getLibraryAlbums, getLibraryArtists, getLibraryTracks } from "@/services/lyraGateway/queries";
+import { getLibraryAlbumDetail, getLibraryAlbums, getLibraryArtistDetail, getLibraryArtists, getLibraryTracks } from "@/services/lyraGateway/queries";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
 
@@ -30,6 +30,16 @@ export function LibraryRoute() {
   const { data: albumOptions = [] } = useQuery({
     queryKey: ["library-albums", query, selectedArtist],
     queryFn: () => getLibraryAlbums(query, selectedArtist),
+  });
+  const { data: artistDetail } = useQuery({
+    queryKey: ["library-artist-detail", selectedArtist],
+    queryFn: () => getLibraryArtistDetail(selectedArtist ?? ""),
+    enabled: Boolean(selectedArtist),
+  });
+  const { data: albumDetail } = useQuery({
+    queryKey: ["library-album-detail", selectedArtist, selectedAlbum],
+    queryFn: () => getLibraryAlbumDetail(selectedAlbum ?? "", selectedArtist),
+    enabled: Boolean(selectedAlbum),
   });
 
   useEffect(() => {
@@ -86,6 +96,37 @@ export function LibraryRoute() {
     setCurrentTrack(track.trackId);
   };
 
+  const focusedTracks = albumDetail?.tracks ?? artistDetail?.tracks ?? filteredTracks;
+  const playFocusedSlice = async () => {
+    if (!focusedTracks.length) {
+      return;
+    }
+    replaceQueue({
+      queueId: selectedAlbum ? `album-${selectedAlbum}` : selectedArtist ? `artist-${selectedArtist}` : `library-page-${offset}`,
+      origin: selectedAlbum ?? selectedArtist ?? "library",
+      reorderable: true,
+      currentIndex: 0,
+      items: focusedTracks,
+    });
+    setCurrentTrack(focusedTracks[0].trackId);
+    setTrack(focusedTracks[0], selectedAlbum ?? selectedArtist ?? "Library", focusedTracks[0].reason);
+    await audioEngine.playTrack(focusedTracks[0]);
+  };
+
+  const queueFocusedSlice = () => {
+    if (!focusedTracks.length) {
+      return;
+    }
+    replaceQueue({
+      queueId: selectedAlbum ? `album-${selectedAlbum}` : selectedArtist ? `artist-${selectedArtist}` : `library-page-${offset}`,
+      origin: selectedAlbum ?? selectedArtist ?? "library",
+      reorderable: true,
+      currentIndex: 0,
+      items: focusedTracks,
+    });
+    setCurrentTrack(focusedTracks[0].trackId);
+  };
+
   useEffect(() => {
     if (selectedArtist && !artistOptions.some((item) => item.name === selectedArtist)) {
       setSelectedArtist(null);
@@ -121,6 +162,10 @@ export function LibraryRoute() {
           setSelectedArtist(null);
           setSelectedAlbum(null);
         }}
+        artistDetail={artistDetail}
+        albumDetail={albumDetail}
+        onPlayFocusedSlice={() => void playFocusedSlice()}
+        onQueueFocusedSlice={queueFocusedSlice}
         onQueryChange={setDraftQuery}
         onPlayTrack={(track) => void playTrack(track)}
         onQueueTrack={queueTrack}
