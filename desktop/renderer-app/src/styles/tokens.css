@@ -1,0 +1,18 @@
+:root {
+  --bg: #080808;
+  --bg-elevated: rgba(16, 14, 12, 0.88);
+  --bg-soft: rgba(27, 22, 18, 0.76);
+  --panel-border: rgba(248, 205, 148, 0.14);
+  --text: #f3e5d0;
+  --text-soft: #c7b49d;
+  --text-dim: #8f7a63;
+  --accent: #efab5a;
+  --accent-bright: #ffd08a;
+  --warning: #b84d34;
+  --shadow: rgba(0, 0, 0, 0.45);
+  --radius-lg: 24px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --font-ui: Bahnschrift, "Franklin Gothic Medium", "Trebuchet MS", sans-serif;
+  --font-display: Cambria, "Times New Roman", serif;
+}
