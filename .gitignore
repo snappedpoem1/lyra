@@ -78,3 +78,6 @@ Desktop.ini
 # ── Prowlarr runtime config ──────────────────────────────────────────
 Lyra_Oracle_System/config/prowlarr/
 Lyra_Oracle_System/config/prowlarr.template/.gitkeep
+.env.template
+scripts/.spotify_cache
+.env.template
