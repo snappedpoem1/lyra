@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { audioAnalyzer } from "@/services/audio/audioAnalyzer";
 import { audioEngine } from "@/services/audio/audioEngine";
 import { reportPlayback } from "@/services/audio/playbackReporter";
+import { getFactDrop } from "@/services/lyraGateway/queries";
+import { useAgentStore } from "@/stores/agentStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
 import { LyraButton } from "@/ui/LyraButton";
@@ -11,6 +13,20 @@ export function BottomTransportDock() {
   const player = usePlayerStore();
   const queue = useQueueStore((state) => state.queue);
   const setCurrentIndex = useQueueStore((state) => state.setCurrentIndex);
+  const factDrop = useAgentStore((state) => state.lastFactDrop);
+  const factDropTrackId = useAgentStore((state) => state.factDropTrackId);
+  const setFactDrop = useAgentStore((state) => state.setFactDrop);
+  const lastFetchedTrackId = useRef<string | null>(null);
+
+  useEffect(() => {
+    const trackId = player.track?.trackId ?? null;
+    if (trackId && trackId !== lastFetchedTrackId.current) {
+      lastFetchedTrackId.current = trackId;
+      void getFactDrop(trackId).then((result) => {
+        setFactDrop(trackId, result.fact);
+      });
+    }
+  }, [player.track?.trackId, setFactDrop]);
 
   useEffect(() => {
     audioAnalyzer.attach(audioEngine.element);
@@ -44,8 +60,11 @@ export function BottomTransportDock() {
       <div className="dock-track">
         <div className="track-art">{current ? current.artist[0] : "L"}</div>
         <div>
-          <div className="dock-title">{current?.title ?? "Silence waiting for a better cue"}</div>
-          <div className="dock-subtitle">{current?.artist ?? "Queue a ritual to wake Lyra."}</div>
+          <div className="dock-title">{current?.title ?? "Nothing playing"}</div>
+          <div className="dock-subtitle">{current?.artist ?? "Select a track or start a playlist"}</div>
+          {factDrop && factDropTrackId === current?.trackId && (
+            <div className="dock-fact-drop">{factDrop}</div>
+          )}
         </div>
       </div>
       <div className="dock-controls">

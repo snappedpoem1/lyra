@@ -34,7 +34,7 @@ export const tracks: TrackListItem[] = [
     confidence: 0.92,
     streamUrl: "/api/stream/lyra-001",
     scoreChips: buildChips(1),
-    reason: "Foggy percussion and warm ache hold the room without collapsing it.",
+    reason: "High warmth and space scores match your current listening profile.",
     provenance: "Local FLAC, verified",
     structureHint: { bpm: 134, hasDrop: false },
   },
@@ -48,7 +48,7 @@ export const tracks: TrackListItem[] = [
     confidence: 0.88,
     streamUrl: "/api/stream/lyra-002",
     scoreChips: buildChips(2),
-    reason: "Low-end pressure with enough negative space to feel dangerous.",
+    reason: "Strong tension and density scores. Similar to recently played tracks.",
     provenance: "Local ALAC, curated",
     structureHint: { bpm: 98, hasDrop: true },
   },
@@ -61,8 +61,8 @@ export const tracks: TrackListItem[] = [
     durationSec: 241,
     streamUrl: "/api/stream/lyra-003",
     scoreChips: buildChips(3),
-    reason: "Cracked intimacy and smoked-out warmth keep the ritual human.",
-    provenance: "Local FLAC, library altar",
+    reason: "High rawness and nostalgia. Bridges trip-hop and ambient.",
+    provenance: "Local FLAC",
     structureHint: { bpm: 84, hasDrop: false },
   },
   {
@@ -74,7 +74,7 @@ export const tracks: TrackListItem[] = [
     durationSec: 423,
     streamUrl: "/api/stream/lyra-004",
     scoreChips: buildChips(4),
-    reason: "Expansive space and memory-loaded overtones make this a bridge track.",
+    reason: "Peak space and complexity scores. Low play count despite high match.",
     provenance: "Local WAV, hand-tagged",
     structureHint: { bpm: 72, hasDrop: false },
   },
@@ -84,18 +84,18 @@ export const bootStatus: BootStatus = {
   ready: true,
   service: "lyra-oracle",
   version: "1.0",
-  message: "Wake state aligned. Library altar responding.",
+  message: "Connected",
 };
 
 export const playlistSummaries: PlaylistSummary[] = [
   {
     id: "after-midnight-ritual",
     kind: "vibe",
-    title: "After Midnight Ritual",
-    subtitle: "Low light, nerve glow, sacred bass weight",
-    narrative: "A slow-burn arc for when the room is dark enough to hear your taste thinking.",
+    title: "After Midnight",
+    subtitle: "Low energy, high warmth, spacious",
+    narrative: "Late-night listening with warm analog textures and deep sub-bass.",
     trackCount: 24,
-    freshnessLabel: "Refreshed tonight",
+    freshnessLabel: "Updated today",
     coverMosaic: ["B", "M", "P", "N"],
     emotionalSignature: [
       { key: "energy", value: 0.54 },
@@ -108,11 +108,11 @@ export const playlistSummaries: PlaylistSummary[] = [
   {
     id: "cathedral-bass-memory",
     kind: "vibe",
-    title: "Cathedral Bass Memory",
-    subtitle: "Vast rooms, remembered pressure, elegant ruin",
-    narrative: "Tracks that bloom like old neon through rain and sub-bass.",
+    title: "Cathedral Bass",
+    subtitle: "Vast, heavy, textured",
+    narrative: "Deep bass with reverb-heavy atmospherics and slow builds.",
     trackCount: 17,
-    freshnessLabel: "Still glowing",
+    freshnessLabel: "Recent",
     coverMosaic: ["C", "B", "M", "R"],
     emotionalSignature: [
       { key: "energy", value: 0.44 },
@@ -128,20 +128,20 @@ export const oracleRecommendations: OracleRecommendation[] = [
   {
     id: "oracle-flow-1",
     mode: "flow",
-    title: "Hold the room, then bruise it",
-    rationale: "Lyra traced warmth, space, and moderate tension to extend the ritual without flattening it.",
-    confidenceLabel: "High confidence",
-    seedLabel: "After Midnight Ritual",
+    title: "Continue current mood",
+    rationale: "Matched on warmth, space, and moderate tension from your recent plays.",
+    confidenceLabel: "92% match",
+    seedLabel: "After Midnight",
     previewTracks: [tracks[1], tracks[2], tracks[3]],
     actions: ["play-now", "replace-queue", "append-queue", "open-constellation"],
   },
   {
     id: "oracle-discovery-1",
     mode: "discovery",
-    title: "Ghost pressure from the edge of your taste map",
-    rationale: "Underplayed library cuts align with your late-night bias for low-light bass and analog ache.",
-    confidenceLabel: "Knife-edge match",
-    seedLabel: "Recent listening memory",
+    title: "Underplayed gems in your library",
+    rationale: "High-scoring tracks you haven't listened to recently.",
+    confidenceLabel: "86% match",
+    seedLabel: "Taste profile",
     previewTracks: [tracks[3], tracks[0]],
     actions: ["play-now", "append-queue", "save-playlist", "open-constellation"],
   },
@@ -159,10 +159,10 @@ export const playlistDetails: Record<string, PlaylistDetail> = {
     ],
     tracks,
     storyBeats: [
-      "Open with distance and static, not impact.",
-      "Let percussion arrive like a threat remembered late.",
-      "Peak in controlled bloom, not festival release.",
-      "Land on warmth, not resolution.",
+      "Open with ambient textures, low energy.",
+      "Gradually introduce rhythm and build tension.",
+      "Peak energy mid-playlist, then ease down.",
+      "Close with warmth and resolution.",
     ],
     oraclePivots: oracleRecommendations,
     relatedPlaylists: [playlistSummaries[1]],
@@ -177,9 +177,9 @@ export const playlistDetails: Record<string, PlaylistDetail> = {
     ],
     tracks: [...tracks].reverse(),
     storyBeats: [
-      "Begin with space you can step into.",
-      "Pull the low end under the listener like a floor opening.",
-      "End with a holy kind of residue.",
+      "Start spacious and open.",
+      "Build low-end presence gradually.",
+      "Resolve with sustained warmth.",
     ],
     oraclePivots: [oracleRecommendations[1]],
     relatedPlaylists: [playlistSummaries[0]],
@@ -187,7 +187,7 @@ export const playlistDetails: Record<string, PlaylistDetail> = {
 };
 
 export const versionCluster: VersionCluster = {
-  canonicalLabel: "Untrue / shadow variants",
+  canonicalLabel: "Untrue / variants",
   primary: tracks[0],
   alternates: [tracks[2]],
   remixes: [tracks[1]],
@@ -196,8 +196,8 @@ export const versionCluster: VersionCluster = {
 };
 
 export const searchResults: SearchResultGroup = {
-  query: "cathedral bass with analog ache and haunted warmth",
-  rewrittenQuery: "moody bass-heavy nocturnal trip hop with warm analog texture vast space and haunted melancholy",
+  query: "deep bass with warm analog texture",
+  rewrittenQuery: "bass-heavy nocturnal trip-hop with warm analog texture and spatial atmospherics",
   tracks,
   playlists: playlistSummaries,
   versions: [versionCluster],
@@ -217,31 +217,31 @@ export const dossier: TrackDossier = {
   },
   lineage: [
     { source: "Burial", target: "Massive Attack", type: "lineage", weight: 0.66 },
-    { source: "Untrue (Oracle Cut)", target: "After Midnight Ritual", type: "oracle", weight: 0.84 },
+    { source: "Untrue (Oracle Cut)", target: "After Midnight", type: "playlist", weight: 0.84 },
   ],
   samples: [{ artist: "Unknown Choir", title: "Cathedral Fragment", year: 1997, confidence: 0.51 }],
   remixes: versionCluster,
   provenanceNotes: [
-    "Local file, verified in active library.",
-    "Emotional profile suggests high warmth and nostalgia without collapsing into sentimentality.",
+    "Local FLAC file in active library.",
+    "Scores: high warmth (0.80), high nostalgia (0.68).",
   ],
   acquisitionNotes: [
     "Passed guard validation.",
-    "Metadata reconciled with local library profile.",
+    "Metadata reconciled via MusicBrainz.",
   ],
 };
 
 export const constellationNodes: ConstellationNode[] = [
-  { id: "playlist-1", label: "After Midnight Ritual", kind: "playlist", weight: 1, accent: "#f0a44b", playlistId: "after-midnight-ritual" },
+  { id: "playlist-1", label: "After Midnight", kind: "playlist", weight: 1, accent: "#f0a44b", playlistId: "after-midnight-ritual" },
   { id: "track-1", label: tracks[0].title, kind: "track", weight: 0.82, accent: "#ffd38a", trackId: tracks[0].trackId },
   { id: "track-2", label: tracks[1].title, kind: "track", weight: 0.78, accent: "#d78e4d", trackId: tracks[1].trackId },
-  { id: "mood-1", label: "Haunted Warmth", kind: "mood", weight: 0.62, accent: "#f3c68b" },
-  { id: "pivot-1", label: "Discovery Vein", kind: "pivot", weight: 0.7, accent: "#f5b05f" },
+  { id: "mood-1", label: "Warm + Spacious", kind: "mood", weight: 0.62, accent: "#f3c68b" },
+  { id: "pivot-1", label: "Discovery", kind: "pivot", weight: 0.7, accent: "#f5b05f" },
 ];
 
 export const constellationEdges: ConstellationEdge[] = [
-  { id: "e1", source: "playlist-1", target: "track-1", relationship: "oracle", strength: 0.92, reason: "Core anchor of the ritual arc" },
-  { id: "e2", source: "track-1", target: "track-2", relationship: "similarity", strength: 0.64, reason: "Shared bass pressure and nocturnal warmth" },
+  { id: "e1", source: "playlist-1", target: "track-1", relationship: "oracle", strength: 0.92, reason: "Core track in this playlist" },
+  { id: "e2", source: "track-1", target: "track-2", relationship: "similarity", strength: 0.64, reason: "Similar bass weight and space scores" },
   { id: "e3", source: "track-1", target: "mood-1", relationship: "mood", strength: 0.74, reason: "High warmth, tension, and nostalgia" },
-  { id: "e4", source: "mood-1", target: "pivot-1", relationship: "oracle", strength: 0.59, reason: "Lyra sees an adjacent underplayed thread" },
+  { id: "e4", source: "mood-1", target: "pivot-1", relationship: "oracle", strength: 0.59, reason: "Underplayed tracks matching this profile" },
 ];

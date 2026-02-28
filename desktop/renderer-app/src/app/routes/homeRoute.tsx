@@ -22,42 +22,41 @@ export function HomeRoute() {
     <div className="route-stack">
       <section className="sanctuary-grid">
         <section className="sanctuary-hero lyra-panel">
-          <span className="hero-kicker">Sanctuary</span>
-          <h1>Enter through mood, memory, and local possession.</h1>
+          <span className="hero-kicker">Home</span>
+          <h1>Your library, scored and ready.</h1>
           <p>
-            Lyra should feel like a listening room already in progress, with a living center canvas rather than a
-            poster headline.
+            Pick up where you left off, explore what the oracle found, or search by sound.
           </p>
           <div className="chip-row">
-            <LyraPill>playlist-first</LyraPill>
-            <LyraPill>oracle-driven</LyraPill>
-            <LyraPill>local files sacred</LyraPill>
+            <LyraPill>2,472 tracks</LyraPill>
+            <LyraPill>10-D scored</LyraPill>
+            <LyraPill>local FLAC</LyraPill>
           </div>
           <div className="hero-actions">
-            <LyraButton onClick={() => navigate({ to: "/playlists" })}>Open rituals</LyraButton>
-            <LyraButton onClick={() => navigate({ to: "/search" })}>Search the room</LyraButton>
+            <LyraButton onClick={() => navigate({ to: "/playlists" })}>Playlists</LyraButton>
+            <LyraButton onClick={() => navigate({ to: "/search" })}>Search</LyraButton>
           </div>
         </section>
         <section className="lyra-panel sanctuary-status">
           <div className="section-heading">
-            <h2>Current pull</h2>
-            <span>Ritual continuity</span>
+            <h2>Quick resume</h2>
+            <span>Continue listening</span>
           </div>
           <div className="sanctuary-status-grid">
             <div>
-              <span className="insight-kicker">Resume thread</span>
-              <strong>{leadPlaylist?.title ?? "After Midnight Ritual"}</strong>
-              <p>{leadPlaylist?.subtitle ?? "Low light, nerve glow, sacred bass weight"}</p>
+              <span className="insight-kicker">Last playlist</span>
+              <strong>{leadPlaylist?.title ?? "No recent playlist"}</strong>
+              <p>{leadPlaylist?.subtitle ?? "Save a vibe to see it here"}</p>
             </div>
             <div>
-              <span className="insight-kicker">Neglected gem</span>
-              <strong>{recommendations[1]?.previewTracks[0]?.title ?? "Ash Bloom"}</strong>
-              <p>{recommendations[1]?.rationale ?? "Underplayed library gravity with room to bloom."}</p>
+              <span className="insight-kicker">Underplayed</span>
+              <strong>{recommendations[1]?.previewTracks[0]?.title ?? "Nothing yet"}</strong>
+              <p>{recommendations[1]?.rationale ?? "Tracks scored high but rarely played."}</p>
             </div>
             <div>
-              <span className="insight-kicker">Nearby pivot</span>
-              <strong>{secondaryPlaylist?.title ?? "Cathedral Bass Memory"}</strong>
-              <p>{secondaryPlaylist?.narrative ?? "Vast rooms, pressure, elegant ruin."}</p>
+              <span className="insight-kicker">Related</span>
+              <strong>{secondaryPlaylist?.title ?? "No related playlists"}</strong>
+              <p>{secondaryPlaylist?.narrative ?? "Build more vibes to surface connections."}</p>
             </div>
           </div>
         </section>
@@ -66,15 +65,15 @@ export function HomeRoute() {
       <section className="sanctuary-lanes">
         <section className="lyra-panel lane-primary">
           <div className="section-heading">
-            <h2>Ritual shelves</h2>
-            <span>playlists as storytelling machines</span>
+            <h2>Playlists</h2>
+            <span>Saved vibes and curated sets</span>
           </div>
           <PlaylistGrid playlists={playlists} />
         </section>
         <section className="lyra-panel lane-secondary">
           <div className="section-heading">
-            <h2>Oracle pressure</h2>
-            <span>specific, explainable, actionable</span>
+            <h2>For you</h2>
+            <span>Based on your taste profile</span>
           </div>
           <div className="sanctuary-mini-cards">
             {recommendations.map((item) => (
@@ -84,7 +83,7 @@ export function HomeRoute() {
                 onClick={() =>
                   replaceQueue({
                     queueId: item.id,
-                    origin: "sanctuary-oracle",
+                    origin: "home",
                     reorderable: true,
                     currentIndex: 0,
                     items: item.previewTracks,
@@ -106,7 +105,7 @@ export function HomeRoute() {
         onReplaceQueue={(tracks) =>
           replaceQueue({
             queueId: "home-oracle",
-            origin: "sanctuary",
+            origin: "home",
             reorderable: true,
             currentIndex: 0,
             items: tracks,

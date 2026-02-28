@@ -45,13 +45,13 @@ export function PlaylistDetailRoute() {
         <EmotionalArcStrip arc={detail.arc} />
         <LyraPanel className="playlist-focus-panel">
           <div className="section-heading">
-            <h2>Live curation pressure</h2>
-            <span>why this sequence matters</span>
+            <h2>Sequence notes</h2>
+            <span>Why this order</span>
           </div>
           <div className="playlist-focus-list">
             {detail.storyBeats.map((beat) => (
               <div key={beat} className="playlist-focus-row">
-                <span className="insight-kicker">Arc note</span>
+                <span className="insight-kicker">Note</span>
                 <strong>{beat}</strong>
               </div>
             ))}
@@ -67,8 +67,8 @@ export function PlaylistDetailRoute() {
         <aside className="playlist-detail-side">
           <LyraPanel className="playlist-sidecar">
             <div className="section-heading">
-              <h2>Oracle pivots</h2>
-              <span>{detail.oraclePivots.length} threads</span>
+              <h2>Recommendations</h2>
+              <span>{detail.oraclePivots.length} suggestions</span>
             </div>
             {detail.oraclePivots.map((pivot) => (
               <div key={pivot.id} className="playlist-focus-row">
@@ -80,8 +80,8 @@ export function PlaylistDetailRoute() {
           </LyraPanel>
           <LyraPanel className="playlist-sidecar">
             <div className="section-heading">
-              <h2>Related rituals</h2>
-              <span>{detail.relatedPlaylists.length} nearby</span>
+              <h2>Related playlists</h2>
+              <span>{detail.relatedPlaylists.length} similar</span>
             </div>
             {detail.relatedPlaylists.map((playlist) => (
               <button

@@ -8,8 +8,8 @@ export function PlaylistsRoute() {
   return (
     <div className="route-stack">
       <section className="lyra-panel page-intro">
-        <span className="hero-kicker">Playlists first</span>
-        <h1>Curated arcs, not folders with delusions.</h1>
+        <span className="hero-kicker">Playlists</span>
+        <h1>Your saved vibes and curated sets</h1>
       </section>
       <PlaylistGrid playlists={playlists} />
     </div>

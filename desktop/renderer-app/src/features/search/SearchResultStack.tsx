@@ -15,10 +15,10 @@ export function SearchResultStack({
     <LyraPanel className="search-stack">
       <div className="section-heading">
         <h2>Results</h2>
-        <span>{results.tracks.length} tracks surfaced</span>
+        <span>{results.tracks.length} tracks found</span>
       </div>
       <p className="rewrite-copy">
-        {results.rewrittenQuery ? `Lyra heard: ${results.rewrittenQuery}` : "Direct semantic hit."}
+        {results.rewrittenQuery ? `Interpreted as: ${results.rewrittenQuery}` : "Direct match."}
       </p>
       {results.tracks.map((track) => (
         <div key={track.trackId} className="track-row">

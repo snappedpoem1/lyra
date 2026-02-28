@@ -6,13 +6,13 @@ export function SearchHero() {
 
   return (
     <section className="search-hero lyra-panel">
-      <span className="hero-kicker">Search as revelation</span>
-      <h1>Excavate the library psyche</h1>
+      <span className="hero-kicker">Search</span>
+      <h1>Find tracks by sound, mood, or description</h1>
       <input
         className="hero-input"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="haunted warmth with cathedral bass and analog grain"
+        placeholder="dark ambient with deep bass and analog warmth"
       />
     </section>
   );

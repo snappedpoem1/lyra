@@ -11,18 +11,18 @@ export function QueueLane() {
   return (
     <LyraPanel className="queue-lane">
       <div className="section-heading">
-        <h2>Queue runway</h2>
+        <h2>Queue</h2>
         <span>{queue.items.length} tracks</span>
       </div>
       <div className="queue-headline">
         <div>
-          <span className="insight-kicker">Current vector</span>
-          <strong>{current?.title ?? "No queue in motion"}</strong>
-          <p>{current?.reason ?? "Oracle and playlist actions will stack here as a deliberate listening runway."}</p>
+          <span className="insight-kicker">Now playing</span>
+          <strong>{current?.title ?? "Queue empty"}</strong>
+          <p>{current?.reason ?? "Play a track or load a playlist to start."}</p>
         </div>
         <div className="queue-headline-meta">
           <span>{queue.origin}</span>
-          <span>{queue.algorithm ?? "manual tension"}</span>
+          <span>{queue.algorithm ?? "manual"}</span>
         </div>
       </div>
       {nextUp.length > 0 && (

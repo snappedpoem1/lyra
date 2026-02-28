@@ -20,7 +20,7 @@ export function OracleRoute() {
     <div className="route-stack">
       <section className="lyra-panel page-intro">
         <span className="hero-kicker">Oracle</span>
-        <h1>Recommendations should feel intimate, specific, and earned.</h1>
+        <h1>Intelligent recommendations from your library.</h1>
         <OracleModeSwitch />
       </section>
       <OracleRecommendationDeck

@@ -15,10 +15,10 @@ export function TopAtmosphereBar() {
         <button onClick={() => window.lyraWindow?.close?.()}>x</button>
       </div>
       <div>
-        <div className="atmosphere-title">Lyra Oracle</div>
-        <div className="atmosphere-copy">{data?.message ?? "Waking the altar..."}</div>
+        <div className="atmosphere-title">Lyra</div>
+        <div className="atmosphere-copy">{data?.ready ? "Connected" : "Connecting..."}</div>
       </div>
-      <div className="atmosphere-meta">Electron {window.lyraWindow?.appVersion ?? "dev"}</div>
+      <div className="atmosphere-meta">v{window.lyraWindow?.appVersion ?? "dev"}</div>
     </header>
   );
 }

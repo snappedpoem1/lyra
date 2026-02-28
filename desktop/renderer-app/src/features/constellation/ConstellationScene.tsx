@@ -62,8 +62,8 @@ export function ConstellationScene({
   return (
     <LyraPanel className="constellation-panel">
       <div className="section-heading">
-        <h2>Constellation</h2>
-        <span>taste rendered as gravity, not inventory</span>
+        <h2>Taste map</h2>
+        <span>Connections between tracks, artists, and moods</span>
       </div>
       <svg viewBox="0 0 640 420" className="constellation-svg">
         <defs>
@@ -124,15 +124,15 @@ export function ConstellationScene({
       </svg>
       <div className="constellation-focus">
         <div>
-          <span className="insight-kicker">Focused gravity</span>
-          <strong>{focusNode?.label ?? "No node selected"}</strong>
-          <p>{relatedEdges[0]?.reason ?? "Choose a star to reveal the reason Lyra thinks it belongs near the center."}</p>
+          <span className="insight-kicker">Selected</span>
+          <strong>{focusNode?.label ?? "Click a node to inspect"}</strong>
+          <p>{relatedEdges[0]?.reason ?? "Select a node to see how it connects to the rest of your library."}</p>
         </div>
         <div className="constellation-legend">
           {relatedEdges.slice(0, 3).map((edge) => (
             <div key={edge.id} className="constellation-legend-row">
               <span>{edge.relationship}</span>
-              <strong>{edge.reason ?? "linked by taste gravity"}</strong>
+              <strong>{edge.reason ?? "Related by similarity"}</strong>
             </div>
           ))}
         </div>

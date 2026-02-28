@@ -153,3 +153,23 @@ export interface BootStatus {
   version: string;
   message: string;
 }
+
+export interface AgentResponse {
+  action: string;
+  thought: string;
+  intent: Record<string, unknown>;
+  next: Record<string, unknown> | string;
+  response?: string;
+  observation?: unknown;
+  llm?: { ok: boolean; model?: string; error?: string };
+}
+
+export interface AgentFactDrop {
+  track_id: string;
+  fact: string | null;
+}
+
+export interface AgentSuggestion {
+  suggestion: string;
+  action: string;
+}

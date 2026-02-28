@@ -4,13 +4,13 @@ export function LibraryOmensPanel() {
   return (
     <LyraPanel className="library-panel">
       <div className="section-heading">
-        <h2>Library omens</h2>
-        <span>owned, inspectable, alive</span>
+        <h2>Library insights</h2>
+        <span>All local, all scored</span>
       </div>
       <div className="story-beats">
-        <li>Underplayed warmth cluster found in late-night files.</li>
-        <li>Several verified local cuts fit your current ritual arc.</li>
-        <li>Metadata confidence is high enough to trust pivots tonight.</li>
+        <li>High-scoring tracks with low play counts detected.</li>
+        <li>Tracks matching your current listening pattern available.</li>
+        <li>Metadata quality verified across the active library.</li>
       </div>
     </LyraPanel>
   );

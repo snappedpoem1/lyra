@@ -17,7 +17,7 @@ export function SemanticSearchOverlay() {
   return (
     <div className="overlay-shell" onClick={() => toggle(false)}>
       <LyraPanel className="search-overlay" onClick={(event) => event.stopPropagation()}>
-        <div className="overlay-label">Search as psychic excavation</div>
+        <div className="overlay-label">Semantic search</div>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -30,7 +30,7 @@ export function SemanticSearchOverlay() {
             className="hero-input"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="warm analog ache under cathedral bass"
+            placeholder="Describe the sound you're looking for..."
           />
         </form>
       </LyraPanel>

@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Icon } from "@/ui/Icon";
 
 const nav = [
-  { to: "/", label: "Sanctuary", icon: "spark" as const },
+  { to: "/", label: "Home", icon: "spark" as const },
   { to: "/playlists", label: "Playlists", icon: "vinyl" as const },
   { to: "/search", label: "Search", icon: "search" as const },
   { to: "/oracle", label: "Oracle", icon: "spark" as const },
@@ -16,7 +16,7 @@ export function LeftRail() {
     <aside className="left-rail lyra-panel">
       <div className="window-drag">
         <div className="brand-mark">Lyra</div>
-        <p className="brand-copy">playlist oracle for local devotion</p>
+        <p className="brand-copy">music intelligence</p>
       </div>
       <nav className="left-nav">
         {nav.map((item) => (
@@ -27,8 +27,8 @@ export function LeftRail() {
         ))}
       </nav>
       <div className="rail-footnote">
-        <span>Late-night bias retained</span>
-        <span>Local files sacred</span>
+        <span>Local-first</span>
+        <span>AI-scored</span>
       </div>
     </aside>
   );

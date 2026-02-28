@@ -1,30 +1,31 @@
-# ── Python ──────────────────────────────────────────────────────────
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
 *.egg
 
-# ── Virtual Environment ──────────────────────────────────────────────
+# Virtual Environment
 .venv/
 .venv*/
 venv/
 ENV/
 
-# ── IDE ──────────────────────────────────────────────────────────────
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# ── Secrets & Environment ────────────────────────────────────────────
+# Secrets & Environment
 .env
 .env.*
+!.env.template
 *.pem
 *.key
 
-# ── Databases (runtime) ──────────────────────────────────────────────
+# Databases (runtime)
 *.db
 *.db-shm
 *.db-wal
@@ -32,12 +33,12 @@ ENV/
 *.sqlite
 *.sqlite3
 
-# ── Build Artifacts ──────────────────────────────────────────────────
+# Build Artifacts
 dist/
 build/
 node_modules/
 
-# ── Lyra Runtime Data (large / machine-generated) ────────────────────
+# Lyra Runtime Data (large / machine-generated)
 lyra_registry.db
 lyra_registry.db-journal
 lyra_registry.db-wal
@@ -48,14 +49,14 @@ staging/
 logs/
 journal.jsonl
 Reports/
-playlists/
+/playlists/
 data/
 Backups/
 
-# ── Beets ────────────────────────────────────────────────────────────
+# Beets
 .beets/beets_library.db
 
-# ── Archives ─────────────────────────────────────────────────────────
+# Archives
 _archive/
 _backups/
 *.rar
@@ -64,20 +65,19 @@ _backups/
 *.bak
 *.tmp
 
-# ── OS ───────────────────────────────────────────────────────────────
+# OS
 Thumbs.db
 Desktop.ini
 .DS_Store
 
-# ── Claude tool state ────────────────────────────────────────────────
+# Claude tool state
 .claude/worktrees/
 .claude/**
 !.claude/CLAUDE.md
 !.claude/settings.json
 
-# ── Prowlarr runtime config ──────────────────────────────────────────
+# Prowlarr runtime config
 Lyra_Oracle_System/config/prowlarr/
 Lyra_Oracle_System/config/prowlarr.template/.gitkeep
-.env.template
+/.spotify_cache
 scripts/.spotify_cache
-.env.template

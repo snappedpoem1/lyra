@@ -1791,6 +1791,25 @@ def api_agent_fact_drop():
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
+@app.route('/api/agent/suggest', methods=['GET'])
+def api_agent_suggest():
+    """Get proactive next-action suggestion from Lyra agent."""
+    try:
+        if not agent_engine:
+            return jsonify({'error': 'Agent engine not available'}), 503
+
+        context = {}
+        track_id = (request.args.get('track_id') or '').strip()
+        if track_id:
+            context['current_track'] = track_id
+
+        result = agent_engine.suggest_next_action(context)
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
 # ============================================================================
 # SAFETY & OPERATIONS
 # ============================================================================

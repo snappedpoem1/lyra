@@ -742,6 +742,136 @@ input {
   }
 }
 
+/* ── Agent thread (CommandPalette) ── */
+
+.agent-thread {
+  max-height: 320px;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(255, 205, 148, 0.08);
+  border-bottom: 1px solid rgba(255, 205, 148, 0.08);
+  margin: 10px 0;
+}
+
+.agent-message {
+  display: grid;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 210, 162, 0.06);
+}
+
+.agent-message--user {
+  background: rgba(255, 204, 148, 0.06);
+}
+
+.agent-message--lyra {
+  background: rgba(132, 88, 50, 0.1);
+  border-color: rgba(255, 210, 162, 0.12);
+}
+
+.agent-role {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.agent-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.agent-text--loading {
+  color: var(--accent);
+  animation: agent-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes agent-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.agent-thought {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.agent-action-tag {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  color: var(--accent-bright);
+  background: rgba(255, 201, 127, 0.1);
+  border: 1px solid rgba(255, 201, 127, 0.2);
+}
+
+/* ── Fact drop (BottomTransportDock) ── */
+
+.dock-fact-drop {
+  font-size: 0.78rem;
+  color: var(--accent);
+  margin-top: 2px;
+  max-width: 340px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Agent suggestion (RightRail) ── */
+
+.agent-suggestion-card {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(132, 88, 50, 0.08);
+  border: 1px solid rgba(255, 210, 162, 0.1);
+}
+
+.agent-suggestion-card p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+/* ── Dossier enhancements ── */
+
+.dossier-score-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.dossier-fact-drop {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(132, 88, 50, 0.08);
+  border: 1px solid rgba(255, 210, 162, 0.1);
+  margin-bottom: 12px;
+}
+
+.dossier-fact-drop p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.dossier-grid {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.text-dim {
+  color: var(--text-dim);
+}
+
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: 1fr;

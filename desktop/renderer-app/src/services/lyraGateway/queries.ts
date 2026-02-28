@@ -1,5 +1,8 @@
 import { bootStatus, constellationEdges, constellationNodes, dossier, oracleRecommendations, playlistDetails, playlistSummaries, searchResults } from "@/mocks/fixtures/data";
 import type {
+  AgentFactDrop,
+  AgentResponse,
+  AgentSuggestion,
   BootStatus,
   ConstellationEdge,
   ConstellationNode,
@@ -124,4 +127,30 @@ export async function getTrackDossier(trackId: string): Promise<TrackDossier> {
 
 export async function getConstellation(): Promise<{ nodes: ConstellationNode[]; edges: ConstellationEdge[] }> {
   return { nodes: constellationNodes, edges: constellationEdges };
+}
+
+export async function queryAgent(text: string, context?: Record<string, unknown>, execute = false): Promise<AgentResponse> {
+  return withFallback(
+    () =>
+      requestJson<AgentResponse>("/api/agent/query", {
+        method: "POST",
+        body: JSON.stringify({ text, context, execute }),
+      }, 15_000),
+    { action: "", thought: "The trail went cold, Boss.", intent: {}, next: "", response: "Agent unavailable." },
+  );
+}
+
+export async function getFactDrop(trackId: string): Promise<AgentFactDrop> {
+  return withFallback(
+    () => requestJson<AgentFactDrop>(`/api/agent/fact-drop?track_id=${encodeURIComponent(trackId)}`),
+    { track_id: trackId, fact: null },
+  );
+}
+
+export async function getAgentSuggestion(trackId?: string): Promise<AgentSuggestion> {
+  const qs = trackId ? `?track_id=${encodeURIComponent(trackId)}` : "";
+  return withFallback(
+    () => requestJson<AgentSuggestion>(`/api/agent/suggest${qs}`),
+    { suggestion: "Feeling adventurous? Try chaos mode.", action: "chaos_mode" },
+  );
 }

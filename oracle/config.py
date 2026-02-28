@@ -200,10 +200,21 @@ def load_config(env_path: Optional[Path] = None) -> OracleConfig:
         # Respect process env as source-of-truth when explicitly provided.
         load_dotenv(env_file, override=False)
     elif not env_file.exists():
-        # Copy template if .env doesn't exist
-        template = PROJECT_ROOT / ".env.template"
-        if template.exists():
-            shutil.copy2(template, env_file)
+        # Copy a sanitized example if available; never auto-materialize from
+        # local-only templates that may contain machine-specific secrets.
+        example_template = PROJECT_ROOT / ".env.example"
+        legacy_template = PROJECT_ROOT / ".env.template"
+
+        # Prefer the new .env.example when present, but fall back to the
+        # legacy .env.template for backward compatibility.
+        source_template = None
+        if example_template.exists():
+            source_template = example_template
+        elif legacy_template.exists():
+            source_template = legacy_template
+
+        if source_template is not None:
+            shutil.copy2(source_template, env_file)
             if load_dotenv:
                 load_dotenv(env_file, override=False)
 

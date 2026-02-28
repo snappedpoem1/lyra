@@ -2,9 +2,9 @@ export function SettingsRoute() {
   return (
     <div className="route-stack">
       <section className="lyra-panel page-intro">
-        <span className="hero-kicker">Settings / Ops</span>
-        <h1>Secondary surfaces stay out of the listening center.</h1>
-        <p>Backend operations remain available later without swallowing the product.</p>
+        <span className="hero-kicker">Settings</span>
+        <h1>Configuration and system operations</h1>
+        <p>Backend services, acquisition settings, and system diagnostics.</p>
       </section>
     </div>
   );

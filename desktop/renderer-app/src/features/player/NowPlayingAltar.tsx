@@ -20,8 +20,8 @@ export function NowPlayingAltar() {
           <LyraPill>{player.status}</LyraPill>
         </div>
         <div className="altar-status-line">
-          <span>{player.sourceLabel ?? "Queue not yet possessed"}</span>
-          <span>{track?.provenance ?? "Local stream unresolved"}</span>
+          <span>{player.sourceLabel ?? "No source"}</span>
+          <span>{track?.provenance ?? "Local file"}</span>
         </div>
       </div>
       <LyraVisualizer />
@@ -29,9 +29,9 @@ export function NowPlayingAltar() {
         <div className="altar-trackline">
           <div className="altar-art">{track ? track.artist[0] : "L"}</div>
           <div>
-            <div className="altar-title">{track?.title ?? "No active invocation"}</div>
-            <div className="altar-subtitle">{track?.artist ?? "Queue a playlist or oracle thread."}</div>
-            <div className="altar-subtitle">{track?.album ?? "The room is waiting for a better object."}</div>
+            <div className="altar-title">{track?.title ?? "No track selected"}</div>
+            <div className="altar-subtitle">{track?.artist ?? "Play something to get started"}</div>
+            <div className="altar-subtitle">{track?.album ?? ""}</div>
           </div>
         </div>
         <div className="altar-meters">
@@ -47,12 +47,12 @@ export function NowPlayingAltar() {
       </div>
       <div className="altar-insight-grid">
         <div className="altar-insight-panel">
-          <span className="insight-kicker">Why now</span>
-          <p className="altar-copy">{player.explanation ?? track?.reason ?? "Lyra waits for a track worthy of the room."}</p>
+          <span className="insight-kicker">Why this track</span>
+          <p className="altar-copy">{player.explanation ?? track?.reason ?? "No recommendation context available."}</p>
         </div>
         <div className="altar-insight-panel">
-          <span className="insight-kicker">Collector signal</span>
-          <p className="altar-copy">{track?.provenance ?? "The local file story appears once a track is active."}</p>
+          <span className="insight-kicker">Source</span>
+          <p className="altar-copy">{track?.provenance ?? "Select a track to see its provenance."}</p>
         </div>
       </div>
       <div className="chip-row">

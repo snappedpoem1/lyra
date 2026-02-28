@@ -54,7 +54,7 @@ oracle serve
 py -3.12 -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-copy .env.template .env
+copy .env.example .env
 oracle db migrate
 oracle import spotify --data-dir data/
 oracle drain --limit 100 --workers 3 --max-tier 5
@@ -199,7 +199,7 @@ tests/                 test suite
 data/                  Spotify exports and playlists
 logs/                  runtime logs
 staging/               ingest staging area
-.env.template          copy to .env and fill in your values
+.env.example           copy to .env and fill in your values
 boot_oracle.bat        start services and optional local LLM
 oracle.bat             CLI launcher
 ```
