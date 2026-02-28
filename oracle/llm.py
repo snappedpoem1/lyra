@@ -11,7 +11,7 @@ from typing import Any, Dict, Generator, List, Optional
 import requests
 
 from oracle.config import get_llm_settings
-from oracle.llm_config import OPENAI_COMPATIBLE_PROVIDERS, diagnose_llm_config, load_llm_config
+from oracle.llm_config import OPENAI_COMPATIBLE_PROVIDERS, diagnose_llm_config, load_llm_config, resolve_llm_config
 
 logger = logging.getLogger(__name__)
 _STATUS_CACHE: Dict[str, Any] = {}
@@ -61,7 +61,7 @@ class LLMClient:
 
     @classmethod
     def from_env(cls) -> "LLMClient":
-        config = load_llm_config()
+        config = resolve_llm_config(load_llm_config(resolve_endpoint=False))
         return cls(
             provider=config.provider_type,
             base_url=config.base_url,

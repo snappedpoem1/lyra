@@ -54,7 +54,7 @@ function Get-LyraLlmConfig {
 
   $baseUrl = "$env:LYRA_LLM_BASE_URL".Trim()
   if (-not $baseUrl) {
-    $baseUrl = "http://localhost:1234/v1"
+    $baseUrl = "http://127.0.0.1:1234/v1"
   }
 
   $timeout = if ("$env:LYRA_LLM_TIMEOUT_SECONDS".Trim() -match '^\d+$') {

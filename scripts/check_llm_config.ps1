@@ -58,7 +58,7 @@ function Get-LyraLlmConfig {
   $baseUrl = "$env:LYRA_LLM_BASE_URL".Trim()
   if (-not $baseUrl) {
     if ($provider -in @("local", "openai_compatible")) {
-      $baseUrl = "http://localhost:1234/v1"
+      $baseUrl = "http://127.0.0.1:1234/v1"
     }
     elseif ($provider -eq "openai") {
       $baseUrl = "https://api.openai.com/v1"
@@ -86,12 +86,60 @@ function Get-LyraLlmConfig {
 
 function Test-IsLocalBase {
   param([string]$BaseUrl)
-  return $BaseUrl -match '^https?://(localhost|127\.0\.0\.1)(:\d+)?(/|$)'
+  return $BaseUrl -match '^https?://((localhost|127\.0\.0\.1)|((10|192\.168|172\.(1[6-9]|2[0-9]|3[0-1]))\.\d+\.\d+))(:\d+)?(/|$)'
 }
 
 function Get-ModelsProbeUrl {
   param([string]$BaseUrl)
   return "$($BaseUrl.TrimEnd('/'))/models"
+}
+
+function Get-LlmCandidateBases {
+  param([string]$BaseUrl)
+
+  $uri = [System.Uri]$BaseUrl
+  $port = if ($uri.Port -gt 0) { $uri.Port } else { 1234 }
+  $path = $uri.AbsolutePath.TrimEnd("/")
+  if (-not $path) {
+    $path = "/v1"
+  } elseif (-not $path.EndsWith("/v1")) {
+    $path = "$path/v1"
+  }
+
+  $hosts = New-Object System.Collections.Generic.List[string]
+  $seen = New-Object System.Collections.Generic.HashSet[string]
+
+  foreach ($item in @($uri.Host, "127.0.0.1", "localhost")) {
+    if ($item -and $seen.Add($item)) {
+      $hosts.Add($item)
+    }
+  }
+
+  foreach ($extra in ($env:LYRA_LLM_DISCOVERY_HOSTS -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+    if ($seen.Add($extra)) {
+      $hosts.Add($extra)
+    }
+  }
+
+  try {
+    Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+      Where-Object { $_.IPAddress -and $_.IPAddress -notmatch '^169\.254\.' } |
+      ForEach-Object {
+        if ($seen.Add($_.IPAddress)) {
+          $hosts.Add($_.IPAddress)
+        }
+      }
+  } catch {
+  }
+
+  $candidates = New-Object System.Collections.Generic.List[object]
+  foreach ($candidateHost in $hosts) {
+    $candidates.Add([pscustomobject]@{
+      base_url = "$($uri.Scheme)://$candidateHost`:$port$path"
+      source = if ($candidateHost -eq $uri.Host) { "configured" } else { "autodetect:$candidateHost" }
+    })
+  }
+  return $candidates
 }
 
 function Test-LlmModels {
@@ -132,6 +180,33 @@ function Test-LlmModels {
       error = $_.Exception.Message
       status = $statusCode
     }
+  }
+}
+
+function Resolve-LlmBaseUrl {
+  param($Config)
+
+  foreach ($candidate in Get-LlmCandidateBases -BaseUrl $Config.base_url) {
+    $probeConfig = [pscustomobject]@{
+      base_url = $candidate.base_url
+      api_key = $Config.api_key
+    }
+    $probe = Test-LlmModels -Config $probeConfig -ProbeTimeoutSec 2
+    if ($probe.ok) {
+      return [pscustomobject]@{
+        base_url = $candidate.base_url
+        source = $candidate.source
+        models = $probe.models
+        probe_url = $probe.probe_url
+      }
+    }
+  }
+
+  return [pscustomobject]@{
+    base_url = $Config.base_url
+    source = "configured"
+    models = @()
+    probe_url = (Get-ModelsProbeUrl -BaseUrl $Config.base_url)
   }
 }
 
@@ -238,12 +313,32 @@ Write-Host "Lyra LLM configuration check"
 Write-Host "Repo: $repoRoot"
 
 $config = Get-LyraLlmConfig
+$resolvedBase = $null
+$configDisplayBase = $config.base_url
+$configDisplaySource = "configured"
+$configForProbe = $config
+
+if ($config.provider_type -eq "local") {
+  $resolvedBase = Resolve-LlmBaseUrl -Config $config
+  $configForProbe = [pscustomobject]@{
+    raw_provider = $config.raw_provider
+    provider_type = $config.provider_type
+    base_url = $resolvedBase.base_url
+    model = $config.model
+    fallback_model = $config.fallback_model
+    timeout_seconds = $config.timeout_seconds
+    api_key = $config.api_key
+  }
+  $configDisplayBase = $resolvedBase.base_url
+  $configDisplaySource = $resolvedBase.source
+}
+
 $diagnostic = [ordered]@{
   ok = $false
   config = [ordered]@{
     provider_type = $config.provider_type
     raw_provider = $config.raw_provider
-    base_url = $config.base_url
+    base_url = $configDisplayBase
     model = $config.model
     fallback_model = $config.fallback_model
     timeout_seconds = $config.timeout_seconds
@@ -252,6 +347,7 @@ $diagnostic = [ordered]@{
     supports_model_listing = $config.provider_type -in @("local", "openai_compatible", "openai")
     supports_chat_completions = $config.provider_type -in @("local", "openai_compatible", "openai")
     supports_anthropic_messages = $config.provider_type -eq "anthropic"
+    base_url_source = $configDisplaySource
   }
   error_type = ""
   error = ""
@@ -283,11 +379,14 @@ elseif ($config.provider_type -eq "anthropic") {
   }
 }
 else {
-  $probe = Test-LlmModels -Config $config -ProbeTimeoutSec 3
+  $probe = Test-LlmModels -Config $configForProbe -ProbeTimeoutSec 3
+  if ($resolvedBase -and $resolvedBase.source -like "autodetect:*") {
+    $diagnostic.models = @($resolvedBase.models)
+  }
   if (-not $probe.ok -and $BootstrapLocal -and $config.provider_type -in @("local", "openai_compatible") -and (Test-IsLocalBase -BaseUrl $config.base_url)) {
-    $bootstrap = Start-LmStudioServer -Config $config
+    $bootstrap = Start-LmStudioServer -Config $configForProbe
     $diagnostic.bootstrap = $bootstrap
-    $probe = Test-LlmModels -Config $config -ProbeTimeoutSec 3
+    $probe = Test-LlmModels -Config $configForProbe -ProbeTimeoutSec 3
   }
 
   if (-not $probe.ok) {

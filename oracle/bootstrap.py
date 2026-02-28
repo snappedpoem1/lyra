@@ -27,7 +27,7 @@ def _http_ready(url: str, timeout: float = 3.0) -> bool:
 
 
 def _llm_probe_url(base_url: str) -> str:
-    base = (base_url or "http://localhost:1234/v1").rstrip("/")
+    base = (base_url or "http://127.0.0.1:1234/v1").rstrip("/")
     if base.endswith("/v1"):
         return f"{base}/models"
     return f"{base}/v1/models"
@@ -255,7 +255,7 @@ def _ensure_model_loaded(lms_cli: Path | None, model: str, timeout_seconds: int)
 
 def ensure_lmstudio(timeout_seconds: int = 30) -> dict:
     settings = get_llm_settings()
-    base_url = settings.get("base_url", "http://localhost:1234/v1")
+    base_url = settings.get("base_url", "http://127.0.0.1:1234/v1")
     probe_url = _llm_probe_url(base_url)
 
     exe_path = _find_lmstudio_exe()

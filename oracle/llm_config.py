@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, replace
+import ipaddress
 import json
 import os
-from typing import Any, Dict, List, Optional, Tuple
+import socket
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+from urllib.parse import urlparse
 
 import requests
 from dotenv import load_dotenv
@@ -42,6 +45,7 @@ class LyraLlmConfig:
     supports_chat_completions: bool
     supports_anthropic_messages: bool
     raw_provider: str
+    base_url_source: str = "configured"
 
     def masked_summary(self) -> Dict[str, Any]:
         return {
@@ -56,6 +60,7 @@ class LyraLlmConfig:
             "supports_model_listing": self.supports_model_listing,
             "supports_chat_completions": self.supports_chat_completions,
             "supports_anthropic_messages": self.supports_anthropic_messages,
+            "base_url_source": self.base_url_source,
         }
 
 
@@ -71,7 +76,88 @@ def normalize_provider(value: str) -> str:
     return normalized or "invalid"
 
 
-def load_llm_config() -> LyraLlmConfig:
+def _normalize_openai_base_url(base_url: str, *, default_host: str = "127.0.0.1", default_port: int = 1234) -> str:
+    raw = (base_url or "").strip()
+    if not raw:
+        return f"http://{default_host}:{default_port}/v1"
+    parsed = urlparse(raw if "://" in raw else f"http://{raw}")
+    scheme = parsed.scheme or "http"
+    host = parsed.hostname or default_host
+    port = parsed.port or default_port
+    path = parsed.path.rstrip("/")
+    if not path:
+        path = "/v1"
+    elif not path.endswith("/v1"):
+        path = f"{path}/v1"
+    return f"{scheme}://{host}:{port}{path}"
+
+
+def _probe_models(base_url: str, api_key: str, timeout_seconds: int) -> Tuple[bool, List[str], str]:
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    models_url = f"{base_url.rstrip('/')}/models"
+    try:
+        response = requests.get(models_url, headers=headers, timeout=max(1, min(timeout_seconds, 2)))
+        if response.status_code != 200:
+            return False, [], f"HTTP {response.status_code} from {models_url}"
+        payload = response.json()
+        models = [item.get("id") for item in payload.get("data", []) if item.get("id")]
+        return True, models, ""
+    except Exception as exc:
+        return False, [], str(exc)
+
+
+def _iter_local_hosts() -> Iterable[str]:
+    seen: set[str] = set()
+    configured = [item.strip() for item in os.environ.get("LYRA_LLM_DISCOVERY_HOSTS", "").split(",") if item.strip()]
+    for host in [*configured, "127.0.0.1", "localhost"]:
+        if host not in seen:
+            seen.add(host)
+            yield host
+
+    names = [socket.gethostname(), socket.getfqdn()]
+    for name in names:
+        if not name:
+            continue
+        try:
+            infos = socket.getaddrinfo(name, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
+        except OSError:
+            continue
+        for info in infos:
+            host = info[4][0]
+            try:
+                ip = ipaddress.ip_address(host)
+            except ValueError:
+                continue
+            if ip.is_loopback or ip.is_private:
+                normalized = str(ip)
+                if normalized not in seen:
+                    seen.add(normalized)
+                    yield normalized
+
+
+def resolve_local_base_url(base_url: str, api_key: str = "", timeout_seconds: int = 30) -> Tuple[str, str]:
+    normalized = _normalize_openai_base_url(base_url)
+    parsed = urlparse(normalized)
+    scheme = parsed.scheme or "http"
+    port = parsed.port or 1234
+    path = parsed.path.rstrip("/") or "/v1"
+
+    candidates: list[tuple[str, str]] = [(normalized, "configured")]
+    for host in _iter_local_hosts():
+        candidate = f"{scheme}://{host}:{port}{path}"
+        if candidate != normalized:
+            candidates.append((candidate, f"autodetect:{host}"))
+
+    for candidate, source in candidates:
+        ok, _, _ = _probe_models(candidate, api_key, timeout_seconds)
+        if ok:
+            return candidate, source
+    return normalized, "configured"
+
+
+def load_llm_config(resolve_endpoint: bool = False) -> LyraLlmConfig:
     raw_provider = os.environ.get("LYRA_LLM_PROVIDER", "local").strip() or "local"
     provider_type = normalize_provider(raw_provider)
     timeout_seconds = _parse_timeout(os.environ.get("LYRA_LLM_TIMEOUT_SECONDS", "30"))
@@ -82,7 +168,7 @@ def load_llm_config() -> LyraLlmConfig:
     api_key_env_var = "LYRA_LLM_API_KEY"
 
     if provider_type in {"local", "openai_compatible"} and not base_url:
-        base_url = "http://localhost:1234/v1"
+        base_url = "http://127.0.0.1:1234/v1"
     elif provider_type == "openai" and not base_url:
         base_url = "https://api.openai.com/v1"
         api_key_env_var = "LYRA_LLM_API_KEY"
@@ -94,9 +180,20 @@ def load_llm_config() -> LyraLlmConfig:
     supports_chat_completions = provider_type in OPENAI_COMPATIBLE_PROVIDERS
     supports_anthropic_messages = provider_type == "anthropic"
 
+    base_url_source = "configured"
+    normalized_base_url = base_url.rstrip("/")
+    if provider_type == "local":
+        normalized_base_url = _normalize_openai_base_url(normalized_base_url)
+        if resolve_endpoint:
+            normalized_base_url, base_url_source = resolve_local_base_url(
+                normalized_base_url,
+                api_key=api_key,
+                timeout_seconds=timeout_seconds,
+            )
+
     return LyraLlmConfig(
         provider_type=provider_type,
-        base_url=base_url.rstrip("/"),
+        base_url=normalized_base_url,
         model=model,
         api_key=api_key,
         api_key_env_var=api_key_env_var,
@@ -106,11 +203,24 @@ def load_llm_config() -> LyraLlmConfig:
         supports_chat_completions=supports_chat_completions,
         supports_anthropic_messages=supports_anthropic_messages,
         raw_provider=raw_provider,
+        base_url_source=base_url_source,
     )
 
 
+def resolve_llm_config(config: Optional[LyraLlmConfig] = None) -> LyraLlmConfig:
+    current = config or load_llm_config(resolve_endpoint=False)
+    if current.provider_type != "local":
+        return current
+    resolved_base_url, source = resolve_local_base_url(
+        current.base_url,
+        api_key=current.api_key,
+        timeout_seconds=current.timeout_seconds,
+    )
+    return replace(current, base_url=resolved_base_url, base_url_source=source)
+
+
 def diagnose_llm_config(config: Optional[LyraLlmConfig] = None) -> Dict[str, Any]:
-    config = config or load_llm_config()
+    config = resolve_llm_config(config or load_llm_config(resolve_endpoint=False))
     diagnostics: Dict[str, Any] = {
         "ok": False,
         "config": config.masked_summary(),

@@ -99,7 +99,7 @@ SERVICE_URLS: dict[str, str] = {
     "Real-Debrid": "http://localhost:6500",
     "Slskd":       "http://localhost:5030/api/v0/application",
     "Qobuz":       "http://localhost:7700/health",
-    "LM Studio":   "http://localhost:1234/v1/models",
+    "LM Studio":   "http://127.0.0.1:1234/v1/models",
 }
 
 

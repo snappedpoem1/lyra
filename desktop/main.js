@@ -212,7 +212,7 @@ async function ensureDockerServices() {
 // ---------------------------------------------------------------------------
 
 const LLM_PROVIDER = (process.env.LYRA_LLM_PROVIDER || "local").trim().toLowerCase();
-const LLM_BASE_URL = (process.env.LYRA_LLM_BASE_URL || "http://localhost:1234/v1").replace(/\/+$/, "");
+const LLM_BASE_URL = (process.env.LYRA_LLM_BASE_URL || "http://127.0.0.1:1234/v1").replace(/\/+$/, "");
 const LLM_MODELS_PROBE = `${LLM_BASE_URL}/models`;
 const LM_STUDIO_PROBE = LLM_MODELS_PROBE;
 
@@ -224,6 +224,71 @@ function llmHostPort(baseUrl) {
   } catch {
     return { host: "127.0.0.1", port: "1234" };
   }
+}
+
+function llmBasePath(baseUrl) {
+  try {
+    const parsed = new URL(baseUrl);
+    const path = (parsed.pathname || "").replace(/\/+$/, "");
+    return path.endsWith("/v1") ? path : `${path || ""}/v1`;
+  } catch {
+    return "/v1";
+  }
+}
+
+function localLlmHosts() {
+  const hosts = [];
+  const seen = new Set();
+  const configured = (process.env.LYRA_LLM_DISCOVERY_HOSTS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  for (const host of [...configured, "127.0.0.1", "localhost"]) {
+    if (!seen.has(host)) {
+      seen.add(host);
+      hosts.push(host);
+    }
+  }
+
+  const interfaces = os.networkInterfaces();
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries || []) {
+      if (!entry || entry.family !== "IPv4" || entry.internal) continue;
+      if (!seen.has(entry.address)) {
+        seen.add(entry.address);
+        hosts.push(entry.address);
+      }
+    }
+  }
+  return hosts;
+}
+
+function llmCandidateBases(baseUrl) {
+  const candidates = [];
+  const seen = new Set();
+  const { host, port } = llmHostPort(baseUrl);
+  const pathName = llmBasePath(baseUrl);
+  const addCandidate = (candidate, source) => {
+    if (seen.has(candidate)) return;
+    seen.add(candidate);
+    candidates.push({ baseUrl: candidate, source });
+  };
+
+  addCandidate(baseUrl.replace(/\/+$/, ""), "configured");
+  for (const candidateHost of localLlmHosts()) {
+    addCandidate(`http://${candidateHost}:${port}${pathName}`, `autodetect:${candidateHost}`);
+  }
+  return candidates;
+}
+
+async function resolveLlmBaseUrl(baseUrl) {
+  const candidates = llmCandidateBases(baseUrl);
+  for (const candidate of candidates) {
+    if (await httpReady(`${candidate.baseUrl.replace(/\/+$/, "")}/models`, 1500)) {
+      return candidate;
+    }
+  }
+  return { baseUrl, source: "configured" };
 }
 
 function findLMStudio() {
@@ -335,12 +400,18 @@ async function ensureLLMProvider() {
     return false;
   }
 
-  if (!isLocalLlmBaseUrl(LLM_BASE_URL)) {
-    sendBootStatus("llm", `Remote LLM endpoint configured (${LLM_BASE_URL})`);
-    return httpReady(LLM_MODELS_PROBE);
+  const resolved = await resolveLlmBaseUrl(LLM_BASE_URL);
+  if (resolved.baseUrl !== LLM_BASE_URL) {
+    process.env.LYRA_LLM_BASE_URL = resolved.baseUrl;
+    sendBootStatus("llm", `Resolved local LLM endpoint (${resolved.source})`);
   }
 
-  if (await httpReady(LLM_MODELS_PROBE)) {
+  if (!isLocalLlmBaseUrl(resolved.baseUrl)) {
+    sendBootStatus("llm", `Remote LLM endpoint configured (${resolved.baseUrl})`);
+    return httpReady(`${resolved.baseUrl}/models`);
+  }
+
+  if (await httpReady(`${resolved.baseUrl}/models`)) {
     sendBootStatus("llm", `LLM endpoint ready (${LLM_PROVIDER})`);
     return true;
   }

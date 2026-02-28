@@ -60,7 +60,7 @@ Fill in the values you actually use in `.env`.
 LYRA_API_TOKEN=
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,null
 LYRA_LLM_PROVIDER=local
-LYRA_LLM_BASE_URL=http://localhost:1234/v1
+LYRA_LLM_BASE_URL=http://127.0.0.1:1234/v1
 LYRA_LLM_MODEL=qwen2.5-14b-instruct
 LYRA_LLM_FALLBACK_MODEL=
 LYRA_LLM_API_KEY=

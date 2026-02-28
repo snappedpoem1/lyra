@@ -16,7 +16,7 @@ try:
 except ImportError:
     load_dotenv = None
 
-from oracle.llm_config import load_llm_config
+from oracle.llm_config import load_llm_config, resolve_llm_config
 
 
 # â”€â”€ Resolve project root (wherever start.py lives) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -62,7 +62,7 @@ def guard_bypass_reason() -> str:
 
 def get_llm_settings() -> dict:
     """Return LLM settings from environment."""
-    config = load_llm_config()
+    config = resolve_llm_config(load_llm_config(resolve_endpoint=False))
     settings = config.masked_summary()
     settings["provider"] = config.provider_type
     settings["api_key"] = config.api_key

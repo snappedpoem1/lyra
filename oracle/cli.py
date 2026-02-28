@@ -395,7 +395,7 @@ def main() -> None:
             ("Prowlarr",     "http", "http://localhost:9696/health", None),
             ("rdtclient",    "http", "http://localhost:6500", None),
             ("slskd",        "http", "http://localhost:5030/api/v0/application", None),
-            ("LM Studio",    "http", "http://localhost:1234/v1/models", None),
+            ("LM Studio",    "http", "http://127.0.0.1:1234/v1/models", None),
         ]
         import subprocess
         import urllib.request
