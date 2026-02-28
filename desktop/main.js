@@ -1,6 +1,9 @@
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const path = require("path");
-const { spawn } = require("child_process");
+const { spawn, execFile } = require("child_process");
+const http = require("http");
+const fs = require("fs");
+const os = require("os");
 
 let mainWindow = null;
 let apiProcess = null;
@@ -8,6 +11,212 @@ let apiProcess = null;
 const PY_DIST_FOLDER = "extra";
 const PY_EXE = "oracle-engine.exe";
 const DEV_SERVER_URL = process.env.LYRA_RENDERER_URL;
+const PROJECT_ROOT = path.resolve(__dirname, "..");
+const API_PORT = 5000;
+const API_HEALTH_URL = `http://127.0.0.1:${API_PORT}/api/health`;
+
+// ---------------------------------------------------------------------------
+// Utility: HTTP probe (no dependencies)
+// ---------------------------------------------------------------------------
+
+function httpReady(url, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    const req = http.get(url, { timeout: timeoutMs }, (res) => {
+      res.resume();
+      resolve(res.statusCode >= 200 && res.statusCode < 500);
+    });
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function sendBootStatus(phase, message, ready = false) {
+  console.log(`[lyra-boot] ${phase}: ${message}`);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("boot-status", { phase, message, ready });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1: Docker daemon
+// ---------------------------------------------------------------------------
+
+function runCommand(cmd, args, timeoutMs = 10000) {
+  return new Promise((resolve) => {
+    try {
+      const proc = execFile(cmd, args, { timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
+        resolve({ ok: !err, stdout: stdout || "", stderr: stderr || "" });
+      });
+    } catch {
+      resolve({ ok: false, stdout: "", stderr: "spawn failed" });
+    }
+  });
+}
+
+async function dockerDaemonReady() {
+  const result = await runCommand("docker", ["info"], 8000);
+  return result.ok;
+}
+
+function findDockerDesktop() {
+  const candidates = [
+    path.join(process.env.ProgramFiles || "C:\\Program Files", "Docker", "Docker", "Docker Desktop.exe"),
+    path.join(process.env.LOCALAPPDATA || "", "Docker Desktop", "Docker Desktop.exe"),
+    path.join(process.env.ProgramW6432 || "C:\\Program Files", "Docker", "Docker", "Docker Desktop.exe"),
+  ];
+  return candidates.find((p) => {
+    try { return fs.existsSync(p); } catch { return false; }
+  }) || null;
+}
+
+async function ensureDocker() {
+  if (await dockerDaemonReady()) {
+    sendBootStatus("docker", "Docker running");
+    return true;
+  }
+
+  const exe = findDockerDesktop();
+  if (!exe) {
+    sendBootStatus("docker", "Docker Desktop not found — skipping");
+    return false;
+  }
+
+  sendBootStatus("docker", "Starting Docker Desktop...");
+  try {
+    spawn(exe, [], { detached: true, stdio: "ignore", cwd: path.dirname(exe) }).unref();
+  } catch (err) {
+    sendBootStatus("docker", `Failed to launch Docker: ${err.message}`);
+    return false;
+  }
+
+  for (let i = 0; i < 90; i++) {
+    await sleep(1000);
+    if (await dockerDaemonReady()) {
+      sendBootStatus("docker", "Docker ready");
+      return true;
+    }
+  }
+
+  sendBootStatus("docker", "Docker did not start in time");
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Docker Compose services
+// ---------------------------------------------------------------------------
+
+async function ensureDockerServices() {
+  const services = ["prowlarr", "rdtclient", "slskd", "qobuz"];
+  const healthUrls = {
+    prowlarr: "http://localhost:9696/health",
+    rdtclient: "http://localhost:6500",
+    slskd: "http://localhost:5030/api/v0/application",
+    qobuz: "http://localhost:7700/health",
+  };
+
+  // Check if all already running
+  const checks = await Promise.all(services.map((s) => httpReady(healthUrls[s])));
+  if (checks.every(Boolean)) {
+    sendBootStatus("services", "All services running");
+    return true;
+  }
+
+  sendBootStatus("services", "Starting Docker services...");
+
+  // Find docker-compose.yml
+  const composeFile = app.isPackaged
+    ? path.join(PROJECT_ROOT, "docker-compose.yml")
+    : path.join(__dirname, "..", "docker-compose.yml");
+
+  if (!fs.existsSync(composeFile)) {
+    sendBootStatus("services", "docker-compose.yml not found — skipping");
+    return false;
+  }
+
+  const result = await runCommand(
+    "docker",
+    ["compose", "-f", composeFile, "up", "-d", ...services],
+    60000
+  );
+
+  if (result.ok) {
+    sendBootStatus("services", "Services started");
+    return true;
+  }
+
+  // Maybe they're already running under a different compose project
+  const recheck = await Promise.all(services.map((s) => httpReady(healthUrls[s])));
+  if (recheck.every(Boolean)) {
+    sendBootStatus("services", "Services already running");
+    return true;
+  }
+
+  sendBootStatus("services", "Some services failed to start");
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: LM Studio
+// ---------------------------------------------------------------------------
+
+const LM_STUDIO_PROBE = "http://localhost:1234/v1/models";
+
+function findLMStudio() {
+  const localAppData = process.env.LOCALAPPDATA || "";
+  const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+  const candidates = [
+    path.join(localAppData, "Programs", "LM Studio", "LM Studio.exe"),
+    path.join(localAppData, "LM-Studio", "LM Studio.exe"),
+    path.join(programFiles, "LM Studio", "LM Studio.exe"),
+    path.join(programFiles, "AMD", "AI_Bundle", "LMStudio", "LM Studio", "LM Studio.exe"),
+  ];
+  return candidates.find((p) => {
+    try { return fs.existsSync(p); } catch { return false; }
+  }) || null;
+}
+
+async function ensureLMStudio() {
+  if (await httpReady(LM_STUDIO_PROBE)) {
+    sendBootStatus("llm", "LM Studio running");
+    return true;
+  }
+
+  const exe = findLMStudio();
+  if (!exe) {
+    sendBootStatus("llm", "LM Studio not found — skipping");
+    return false;
+  }
+
+  sendBootStatus("llm", "Starting LM Studio...");
+  try {
+    spawn(exe, [], { detached: true, stdio: "ignore", cwd: path.dirname(exe) }).unref();
+  } catch (err) {
+    sendBootStatus("llm", `Failed to launch LM Studio: ${err.message}`);
+    return false;
+  }
+
+  for (let i = 0; i < 40; i++) {
+    await sleep(1500);
+    if (await httpReady(LM_STUDIO_PROBE)) {
+      sendBootStatus("llm", "LM Studio ready");
+      return true;
+    }
+  }
+
+  sendBootStatus("llm", "LM Studio did not respond — continuing without it");
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Flask API (oracle-engine.exe)
+// ---------------------------------------------------------------------------
 
 const getApiPath = () =>
   app.isPackaged
@@ -19,26 +228,82 @@ function createPyProc() {
   console.log("[lyra] backend executable:", script);
 
   if (!app.isPackaged) {
-    console.log("[lyra] dev mode active, expecting backend to run separately");
+    console.log("[lyra] dev mode — expecting backend to run separately (oracle serve)");
+    sendBootStatus("api", "Dev mode — run oracle serve separately");
     return;
   }
 
+  if (!fs.existsSync(script)) {
+    sendBootStatus("api", "oracle-engine.exe not found — run oracle serve manually");
+    return;
+  }
+
+  sendBootStatus("api", "Starting API server...");
   try {
-    apiProcess = spawn(script);
+    apiProcess = spawn(script, [], { windowsHide: true });
     if (apiProcess) {
       apiProcess.stdout.on("data", (data) => console.log("[lyra-api]", String(data).trim()));
       apiProcess.stderr.on("data", (data) => console.log("[lyra-api:error]", String(data).trim()));
+      apiProcess.on("exit", (code) => {
+        console.log(`[lyra-api] exited with code ${code}`);
+        apiProcess = null;
+      });
     }
   } catch (error) {
     console.log("[lyra] failed to start python backend:", error);
+    sendBootStatus("api", `Backend failed: ${error.message}`);
   }
+}
+
+async function waitForApi(timeoutSec = 30) {
+  for (let i = 0; i < timeoutSec * 2; i++) {
+    if (await httpReady(API_HEALTH_URL)) {
+      sendBootStatus("api", "API ready");
+      return true;
+    }
+    await sleep(500);
+  }
+  sendBootStatus("api", "API did not respond — some features may be unavailable");
+  return false;
 }
 
 function exitPyProc() {
   if (apiProcess) {
     apiProcess.kill();
+    apiProcess = null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Full bootstrap sequence
+// ---------------------------------------------------------------------------
+
+async function bootstrapBackend() {
+  sendBootStatus("boot", "Initializing...");
+
+  // Phase 1-2: Docker (only in packaged mode — dev users manage their own)
+  if (app.isPackaged) {
+    const dockerOk = await ensureDocker();
+    if (dockerOk) {
+      await ensureDockerServices();
+    }
+  }
+
+  // Phase 3: LM Studio (both dev and packaged — it's a separate app)
+  await ensureLMStudio();
+
+  // Phase 4-5: Flask API
+  createPyProc();
+  if (app.isPackaged) {
+    await waitForApi(30);
+  }
+
+  sendBootStatus("ready", "Connected", true);
+}
+
+// ---------------------------------------------------------------------------
+// Window
+// ---------------------------------------------------------------------------
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -71,22 +336,22 @@ async function createWindow() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// App lifecycle
+// ---------------------------------------------------------------------------
+
 app.whenReady().then(async () => {
-  createPyProc();
   await createWindow();
 
   ipcMain.on("window-minimize", () => mainWindow?.minimize());
   ipcMain.on("window-maximize", () => {
-    if (!mainWindow) {
-      return;
-    }
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize();
-    } else {
-      mainWindow.maximize();
-    }
+    if (!mainWindow) return;
+    mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
   });
   ipcMain.on("window-close", () => app.quit());
+
+  // Run bootstrap after window is visible so user sees progress
+  bootstrapBackend();
 });
 
 app.on("will-quit", exitPyProc);

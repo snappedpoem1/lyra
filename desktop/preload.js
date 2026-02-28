@@ -6,4 +6,11 @@ contextBridge.exposeInMainWorld("lyraWindow", {
   close: () => ipcRenderer.send("window-close"),
   platform: process.platform,
   appVersion: process.versions.electron,
+
+  // Boot status: main process sends phase updates during startup
+  onBootStatus: (callback) => {
+    const handler = (_event, status) => callback(status);
+    ipcRenderer.on("boot-status", handler);
+    return () => ipcRenderer.removeListener("boot-status", handler);
+  },
 });

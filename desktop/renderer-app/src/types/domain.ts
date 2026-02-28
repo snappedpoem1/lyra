@@ -152,6 +152,7 @@ export interface BootStatus {
   service: string;
   version: string;
   message: string;
+  phase?: string;
 }
 
 export interface AgentResponse {

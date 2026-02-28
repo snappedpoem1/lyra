@@ -8,6 +8,7 @@ declare global {
       close?: () => void;
       platform?: string;
       appVersion?: string;
+      onBootStatus?: (callback: (status: { phase: string; message: string; ready: boolean }) => void) => () => void;
     };
   }
 }
