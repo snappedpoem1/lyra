@@ -16,7 +16,6 @@ from dotenv import load_dotenv
 
 from oracle.chroma_store import LyraChromaStore
 from oracle.db.schema import get_connection, get_write_mode
-from oracle.embedders.clap_embedder import CLAPEmbedder
 from oracle.perf import auto_workers
 from oracle.runtime_state import wait_if_paused, get_profile
 
@@ -26,6 +25,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # Use music-specific CLAP model (fallback handled in embedder)
 MODEL_NAME = "laion/larger_clap_music"
 MODEL_KEY = "clap_htsat_unfused"
+
+
+def _build_embedder():
+    try:
+        from oracle.embedders.clap_embedder import CLAPEmbedder
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Audio embedding dependencies are unavailable. Run Lyra from the repo .venv "
+            "or install torch/transformers into this Python environment."
+        ) from exc
+
+    return CLAPEmbedder(model_name=MODEL_NAME, cache_dir=os.getenv("HF_HOME"), use_fallback=False)
 
 
 def index_library(
@@ -159,8 +170,18 @@ def _index_rows(
     workers: int,
     embed_batch: int,
 ) -> Dict[str, int]:
-    embedder = CLAPEmbedder(model_name=MODEL_NAME, cache_dir=os.getenv("HF_HOME"), use_fallback=False)
-    store = LyraChromaStore(persist_dir="./chroma_storage")
+    try:
+        embedder = _build_embedder()
+        store = LyraChromaStore(persist_dir="./chroma_storage")
+    except Exception as exc:
+        logger.warning("Indexing dependencies unavailable: %s", exc)
+        return {
+            "indexed": 0,
+            "failed": 0,
+            "scored": 0,
+            "dependency_unavailable": True,
+            "error": str(exc),
+        }
 
     batch_ids: List[str] = []
     batch_embeddings: List[List[float]] = []

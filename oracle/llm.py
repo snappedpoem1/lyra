@@ -9,8 +9,6 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Generator, List, Optional
 
 import requests
-
-from oracle.config import get_llm_settings
 from oracle.llm_config import OPENAI_COMPATIBLE_PROVIDERS, diagnose_llm_config, load_llm_config, resolve_llm_config
 
 logger = logging.getLogger(__name__)
@@ -397,13 +395,25 @@ def get_llm_status(force_refresh: bool = False) -> Dict[str, Any]:
     if not force_refresh and _STATUS_CACHE and (now - _STATUS_CACHE_TS) < _STATUS_CACHE_TTL_SECONDS:
         return dict(_STATUS_CACHE)
 
-    client = LLMClient.from_env()
-    settings = get_llm_settings()
-    status = client.check_available(probe=False)
-    payload = status.as_dict()
-    payload["status"] = "ok" if status.ok else "unavailable"
-    payload["fallback_model"] = settings.get("fallback_model", "")
-    payload["supports_model_listing"] = settings.get("supports_model_listing", False)
+    config = load_llm_config(resolve_endpoint=False)
+    diagnostics = diagnose_llm_config(config, resolve_endpoint=False)
+    payload = {
+        "ok": bool(diagnostics.get("ok")),
+        "provider": config.provider_type,
+        "model": diagnostics.get("selected_model") or config.model or config.fallback_model,
+        "base_url": config.base_url,
+        "status": "ok" if diagnostics.get("ok") else "unavailable",
+    }
+    if diagnostics.get("error"):
+        payload["error"] = diagnostics["error"]
+    if diagnostics.get("error_type"):
+        payload["error_type"] = diagnostics["error_type"]
+    if diagnostics.get("actions"):
+        payload["actions"] = list(diagnostics["actions"])
+    if diagnostics.get("fallback_used"):
+        payload["fallback_used"] = True
+    payload["fallback_model"] = config.fallback_model
+    payload["supports_model_listing"] = config.supports_model_listing
     _STATUS_CACHE = dict(payload)
     _STATUS_CACHE_TS = now
     return payload

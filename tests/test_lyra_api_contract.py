@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import lyra_api
 
 
@@ -12,6 +14,25 @@ def test_health_contract(client):
     assert "db" in payload
     assert "library" in payload
     assert "feature_flags" in payload
+
+
+def test_doctor_contract(client, monkeypatch):
+    monkeypatch.setattr(
+        lyra_api,
+        "run_doctor",
+        lambda: [
+            SimpleNamespace(name="Python", status="PASS", details="3.12.0"),
+            SimpleNamespace(name="ChromaDB", status="FAIL", details="Missing"),
+        ],
+    )
+
+    response = client.get("/api/doctor")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload == [
+        {"name": "Python", "status": "PASS", "details": "3.12.0"},
+        {"name": "ChromaDB", "status": "FAIL", "details": "Missing"},
+    ]
 
 
 def test_playlist_detail_contract(client, monkeypatch):

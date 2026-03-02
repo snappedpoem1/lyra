@@ -30,6 +30,8 @@ PROVIDER_ALIASES = {
 }
 
 OPENAI_COMPATIBLE_PROVIDERS = {"openai", "openai_compatible", "local"}
+MAX_LOCAL_DISCOVERY_CANDIDATES = 4
+MAX_MODEL_PROBE_TIMEOUT_SECONDS = 2
 
 
 @dataclass(frozen=True)
@@ -83,6 +85,8 @@ def _normalize_openai_base_url(base_url: str, *, default_host: str = "127.0.0.1"
     parsed = urlparse(raw if "://" in raw else f"http://{raw}")
     scheme = parsed.scheme or "http"
     host = parsed.hostname or default_host
+    if host == "localhost":
+        host = "127.0.0.1"
     port = parsed.port or default_port
     path = parsed.path.rstrip("/")
     if not path:
@@ -98,7 +102,11 @@ def _probe_models(base_url: str, api_key: str, timeout_seconds: int) -> Tuple[bo
         headers["Authorization"] = f"Bearer {api_key}"
     models_url = f"{base_url.rstrip('/')}/models"
     try:
-        response = requests.get(models_url, headers=headers, timeout=max(1, min(timeout_seconds, 2)))
+        response = requests.get(
+            models_url,
+            headers=headers,
+            timeout=max(1, min(timeout_seconds, MAX_MODEL_PROBE_TIMEOUT_SECONDS)),
+        )
         if response.status_code != 200:
             return False, [], f"HTTP {response.status_code} from {models_url}"
         payload = response.json()
@@ -150,7 +158,7 @@ def resolve_local_base_url(base_url: str, api_key: str = "", timeout_seconds: in
         if candidate != normalized:
             candidates.append((candidate, f"autodetect:{host}"))
 
-    for candidate, source in candidates:
+    for candidate, source in candidates[:MAX_LOCAL_DISCOVERY_CANDIDATES]:
         ok, _, _ = _probe_models(candidate, api_key, timeout_seconds)
         if ok:
             return candidate, source
@@ -219,8 +227,14 @@ def resolve_llm_config(config: Optional[LyraLlmConfig] = None) -> LyraLlmConfig:
     return replace(current, base_url=resolved_base_url, base_url_source=source)
 
 
-def diagnose_llm_config(config: Optional[LyraLlmConfig] = None) -> Dict[str, Any]:
-    config = resolve_llm_config(config or load_llm_config(resolve_endpoint=False))
+def diagnose_llm_config(
+    config: Optional[LyraLlmConfig] = None,
+    *,
+    resolve_endpoint: bool = True,
+) -> Dict[str, Any]:
+    config = config or load_llm_config(resolve_endpoint=False)
+    if resolve_endpoint:
+        config = resolve_llm_config(config)
     diagnostics: Dict[str, Any] = {
         "ok": False,
         "config": config.masked_summary(),
@@ -273,7 +287,11 @@ def diagnose_llm_config(config: Optional[LyraLlmConfig] = None) -> Dict[str, Any
         if config.api_key:
             headers["Authorization"] = f"Bearer {config.api_key}"
         try:
-            response = requests.get(models_url, headers=headers, timeout=config.timeout_seconds)
+            response = requests.get(
+                models_url,
+                headers=headers,
+                timeout=max(1, min(config.timeout_seconds, MAX_MODEL_PROBE_TIMEOUT_SECONDS)),
+            )
             if response.status_code != 200:
                 diagnostics["error_type"] = "endpoint_probe_failed"
                 diagnostics["error"] = f"Model probe failed with HTTP {response.status_code} from {models_url}."

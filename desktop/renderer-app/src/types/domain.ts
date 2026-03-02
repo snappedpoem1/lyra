@@ -12,17 +12,25 @@ export interface ScoreChip {
   label: string;
 }
 
+export interface TrackReason {
+  type: string;
+  text: string;
+  score: number;
+}
+
 export interface TrackListItem {
   trackId: string;
   artist: string;
   title: string;
+  path: string;
   album?: string;
   year?: string;
   durationSec?: number;
   versionType?: string;
   confidence?: number;
   artUrl?: string | null;
-  streamUrl: string;
+  streamUrl?: string;
+  reasons: TrackReason[];
   scoreChips: ScoreChip[];
   reason?: string;
   provenance?: string;
@@ -136,6 +144,47 @@ export interface SearchResultGroup {
   oraclePivots: OracleRecommendation[];
 }
 
+export interface PlaylistRunSummary {
+  uuid: string;
+  prompt?: string;
+  createdAt?: string;
+  tracks: TrackListItem[];
+}
+
+export interface VibeGenerateMeta {
+  prompt: string;
+  generated?: {
+    query?: string;
+    name?: string;
+    n?: number;
+    [key: string]: unknown;
+  };
+  savedAs?: string | null;
+}
+
+export interface VibeGenerateResult {
+  meta: VibeGenerateMeta;
+  run: PlaylistRunSummary;
+}
+
+export interface VibeCreateResult {
+  prompt: string;
+  name: string;
+  generated?: {
+    query?: string;
+    name?: string;
+    n?: number;
+    [key: string]: unknown;
+  };
+  save: {
+    status?: string;
+    name?: string;
+    query?: string;
+    track_count?: number;
+    [key: string]: unknown;
+  };
+}
+
 export interface ConstellationNode {
   id: string;
   label: string;
@@ -174,6 +223,20 @@ export interface BootStatus {
   phase?: string;
   state?: ConnectionState;
   diagnostics?: Record<string, unknown>;
+}
+
+export interface DoctorCheck {
+  name: string;
+  status: "PASS" | "WARNING" | "FAIL";
+  details: string;
+}
+
+export interface DoctorReport {
+  status: string;
+  overall: "PASS" | "WARNING" | "FAIL";
+  count: number;
+  summary: Record<string, number>;
+  checks: DoctorCheck[];
 }
 
 export interface AgentResponse {

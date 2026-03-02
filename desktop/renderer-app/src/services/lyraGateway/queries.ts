@@ -1,12 +1,13 @@
-import { constellationEdges, constellationNodes, dossier, oracleRecommendations, playlistDetails, playlistSummaries, searchResults } from "@/mocks/fixtures/data";
-import { fixtureModeEnabled } from "@/mocks/fixtures/mode";
-import { agentSuggestionSchema, dossierSchema, healthSchema, libraryAlbumDetailSchema, libraryAlbumsSchema, libraryArtistDetailSchema, libraryArtistsSchema, libraryTracksSchema, playlistDetailSchema, queueSchema, radioResultsSchema, searchSchema, vibesSchema } from "@/config/schemas";
+import { constellationEdges, constellationNodes, doctorChecks, dossier, oracleRecommendations, playlistDetails, playlistSummaries, searchResults } from "@/mocks/fixtures/data";
+import { fixtureModeEnabled } from "@/mocks/fixtures/mode";import { z } from "zod";import { agentSuggestionSchema, doctorSchema, dossierSchema, healthSchema, libraryAlbumDetailSchema, libraryAlbumsSchema, libraryArtistDetailSchema, libraryArtistsSchema, libraryTracksSchema, playlistDetailSchema, queueSchema, radioResultsSchema, vibeCreateSchema, vibeGenerateSchema, vibesSchema } from "@/config/schemas";
 import type {
   AgentFactDrop,
   AgentSuggestion,
   BootStatus,
   ConstellationEdge,
   ConstellationNode,
+  DoctorCheck,
+  DoctorReport,
   LibraryAlbumDetail,
   LibraryArtistDetail,
   OracleMode,
@@ -17,9 +18,11 @@ import type {
   SearchResultGroup,
   TrackDossier,
   TrackListItem,
+  VibeCreateResult,
+  VibeGenerateResult,
 } from "@/types/domain";
 import { requestJson } from "./client";
-import { mapBootStatus, mapDossier, mapOracleRecommendations, mapPlaylistDetail, mapPlaylists, mapRadioQueue, mapSearch, mapTrack } from "./mappers";
+import { mapBootStatus, mapDoctorReport, mapDossier, mapGeneratedVibe, mapOracleRecommendations, mapPlaylistDetail, mapPlaylists, mapRadioQueue, mapTrack } from "./mappers";
 import { useConnectivityStore } from "@/stores/connectivityStore";
 
 function useFixtureFallback<T>(error: unknown, fallback: T): T {
@@ -34,6 +37,18 @@ export async function getBootStatus(): Promise<BootStatus> {
   } catch (error) {
     if (fixtureModeEnabled()) {
       return useFixtureFallback(error, { ready: false, service: "lyra-oracle", version: "fixture", message: "Fixture mode", state: "FIXTURE" });
+    }
+    throw error;
+  }
+}
+
+export async function getDoctorReport(): Promise<DoctorReport> {
+  try {
+    const payload = await requestJson("/api/doctor", doctorSchema, undefined, 10000, 0);
+    return mapDoctorReport(payload as DoctorCheck[]);
+  } catch (error) {
+    if (fixtureModeEnabled()) {
+      return useFixtureFallback(error, mapDoctorReport(doctorChecks));
     }
     throw error;
   }
@@ -66,14 +81,76 @@ export async function getPlaylistDetail(id: string): Promise<PlaylistDetail> {
 export async function getSearchResults(query: string): Promise<SearchResultGroup> {
   try {
     const playlists = await getPlaylists();
-    const payload = await requestJson("/api/search", searchSchema, {
-      method: "POST",
-      body: JSON.stringify({ query, n: 12, rewrite_with_llm: true }),
-    });
-    return mapSearch(payload, playlists);
+    const payload = await generateVibe(query);
+    return {
+      query: payload.meta.prompt || query,
+      rewrittenQuery: typeof payload.meta.generated?.query === "string" ? payload.meta.generated.query : undefined,
+      tracks: payload.run.tracks,
+      playlists,
+      versions: [],
+      oraclePivots: [],
+    };
   } catch (error) {
     if (fixtureModeEnabled()) {
       return useFixtureFallback(error, { ...searchResults, query });
+    }
+    throw error;
+  }
+}
+
+export async function generateVibe(prompt: string, save = false): Promise<VibeGenerateResult> {
+  try {
+    const payload = await requestJson("/api/vibes/generate", vibeGenerateSchema, {
+      method: "POST",
+      body: JSON.stringify({ prompt, save, n: 20 }),
+    });
+    return mapGeneratedVibe(payload as Record<string, unknown>);
+  } catch (error) {
+    if (fixtureModeEnabled()) {
+      return useFixtureFallback(error, {
+        meta: {
+          prompt,
+          generated: {
+            query: prompt,
+            n: 20,
+          },
+          savedAs: save ? "Fixture Vibe" : null,
+        },
+        run: {
+          uuid: "fixture-run",
+          prompt,
+          createdAt: new Date().toISOString(),
+          tracks: searchResults.tracks,
+        },
+      });
+    }
+    throw error;
+  }
+}
+
+export async function createVibe(prompt: string, name: string): Promise<VibeCreateResult> {
+  try {
+    return await requestJson("/api/vibes/create", vibeCreateSchema, {
+      method: "POST",
+      body: JSON.stringify({ prompt, name, n: 20 }),
+    });
+  } catch (error) {
+    if (fixtureModeEnabled()) {
+      return useFixtureFallback(error, {
+        prompt,
+        name,
+        generated: {
+          query: prompt,
+          name,
+          n: 20,
+        },
+        save: {
+          status: "success",
+          name,
+          query: prompt,
+          track_count: searchResults.tracks.length,
+        },
+      });
     }
     throw error;
   }
@@ -211,6 +288,30 @@ export async function getLibraryArtistDetail(artist: string): Promise<LibraryArt
     albums: payload.albums,
     tracks: payload.tracks.map((row) => mapTrack(row)),
   };
+}
+
+/** Pull biographer enrichment for an artist (bio, genres, origin). Never throws. */
+export async function getLibraryArtistBio(
+  artist: string,
+): Promise<{ bio?: string; genres?: string[]; origin?: string; formedYear?: string; followers?: number }> {
+  try {
+    const data = await requestJson(
+      `/api/enrichment/biographer/${encodeURIComponent(artist)}`,
+      z.record(z.any()),
+      undefined,
+      6000,
+      0,
+    );
+    return {
+      bio: typeof data?.bio === "string" && data.bio.trim() ? data.bio : undefined,
+      genres: Array.isArray(data?.genres) ? (data.genres as string[]) : [],
+      origin: typeof data?.origin === "string" ? data.origin : undefined,
+      formedYear: typeof data?.formed_year === "string" ? data.formed_year : undefined,
+      followers: typeof data?.spotify_followers === "number" ? data.spotify_followers : undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 export async function getLibraryAlbumDetail(album: string, artist?: string | null): Promise<LibraryAlbumDetail> {

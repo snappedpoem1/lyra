@@ -5,6 +5,20 @@ import type { TrackListItem } from "@/types/domain";
 
 type PlaybackListener = () => void;
 
+function resolveTrackExplanation(track: TrackListItem): string | undefined {
+  return track.reasons[0]?.text ?? track.reason;
+}
+
+function resolveTrackSource(track: TrackListItem): string {
+  if (track.path) {
+    return `lyra-media://track?path=${encodeURIComponent(track.path)}`;
+  }
+  if (track.streamUrl) {
+    return track.streamUrl.startsWith("http") ? track.streamUrl : resolveApiUrl(track.streamUrl);
+  }
+  return "";
+}
+
 class AudioEngine {
   private audio = new Audio();
   private listeners = new Set<PlaybackListener>();
@@ -53,23 +67,35 @@ class AudioEngine {
 
   async playTrack(track: TrackListItem): Promise<void> {
     const state = usePlayerStore.getState();
-    state.setTrack(track, state.sourceLabel, track.reason);
-    this.audio.src = track.streamUrl.startsWith("http") ? track.streamUrl : resolveApiUrl(track.streamUrl);
+    const source = resolveTrackSource(track);
+    state.setTrack(track, state.sourceLabel, resolveTrackExplanation(track));
+    if (!source) {
+      usePlayerStore.getState().setError("Track path or stream URL missing.");
+      this.emit();
+      return;
+    }
+    this.audio.src = source;
     this.audio.volume = state.volume;
     this.audio.muted = state.muted;
     await audioAnalyzer.resume();
     try {
       await this.audio.play();
     } catch {
-      usePlayerStore.getState().setError("Playback could not start. Stream URL may be missing.");
+      usePlayerStore.getState().setError("Playback could not start. Local path or stream may be unavailable.");
       this.emit();
     }
   }
 
   loadTrack(track: TrackListItem, startTimeSec = 0): void {
     const state = usePlayerStore.getState();
+    const source = resolveTrackSource(track);
     this.pendingSeekSec = Math.max(0, startTimeSec);
-    this.audio.src = track.streamUrl.startsWith("http") ? track.streamUrl : resolveApiUrl(track.streamUrl);
+    if (!source) {
+      usePlayerStore.getState().setError("Track path or stream URL missing.");
+      this.emit();
+      return;
+    }
+    this.audio.src = source;
     this.audio.volume = state.volume;
     this.audio.muted = state.muted;
     this.audio.load();

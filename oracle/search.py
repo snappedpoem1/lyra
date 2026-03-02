@@ -7,7 +7,9 @@ Includes:
 
 from __future__ import annotations
 
+from functools import lru_cache
 import random
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
@@ -23,7 +25,8 @@ from oracle.db.schema import get_connection
 # CLAPEmbedder is heavy (librosa) so import inside search when needed
 from oracle.vibe_descriptors import describe_scores
 
-MODEL_NAME = "laion/clap-htsat-unfused"
+# Keep query-time embedding aligned with the indexer / default CLAP model.
+MODEL_NAME = "laion/larger_clap_music"
 REMIX_HINT_TOKENS = (
     "remix",
     "edit",
@@ -36,16 +39,25 @@ REMIX_HINT_TOKENS = (
 )
 
 
-def search(query_text: str, n: int = 10) -> List[Dict[str, str]]:
+@lru_cache(maxsize=1)
+def _get_clap_embedder():
+    from oracle.embedders.clap_embedder import CLAPEmbedder
+
+    return CLAPEmbedder(model_name=MODEL_NAME)
+
+
+@lru_cache(maxsize=1)
+def _get_chroma_store():
+    return LyraChromaStore(persist_dir="./chroma_storage")
+
+
+def search(query_text: str, n: int = 10) -> List[Dict[str, Any]]:
     if LyraChromaStore is None:
         return fallback_text_search(query_text, n=n, reason="chromadb unavailable")
 
     try:
-        # import here to avoid librosa dependency during tests that never need it
-        from oracle.embedders.clap_embedder import CLAPEmbedder
-
-        embedder = CLAPEmbedder(model_name=MODEL_NAME)
-        store = LyraChromaStore(persist_dir="./chroma_storage")
+        embedder = _get_clap_embedder()
+        store = _get_chroma_store()
 
         vector = embedder.embed_text(query_text)
         if vector is None:
@@ -60,8 +72,16 @@ def search(query_text: str, n: int = 10) -> List[Dict[str, str]]:
         conn = get_connection(timeout=10.0)
         cursor = conn.cursor()
 
-        output: List[Dict[str, str]] = []
+        distances = results.get("distances", [[]])[0]
+        output: List[Dict[str, Any]] = []
         for idx, track_id in enumerate(ids, 1):
+            score = 0.0
+            if idx - 1 < len(distances):
+                try:
+                    # Chroma returns cosine distance where lower is better.
+                    score = max(0.0, 1.0 - float(distances[idx - 1]))
+                except (TypeError, ValueError):
+                    score = 0.0
             cursor.execute(
                 "SELECT artist, title, album, year, filepath FROM tracks WHERE track_id = ?",
                 (track_id,)
@@ -77,10 +97,11 @@ def search(query_text: str, n: int = 10) -> List[Dict[str, str]]:
                         "album": row[2] or "",
                         "year": row[3] or "",
                         "path": row[4] or "",
+                        "score": score,
                     }
                 )
             else:
-                output.append({"rank": str(idx), "track_id": track_id, "path": track_id})
+                output.append({"rank": str(idx), "track_id": track_id, "path": track_id, "score": score})
 
         conn.close()
         return output
@@ -88,29 +109,80 @@ def search(query_text: str, n: int = 10) -> List[Dict[str, str]]:
         return fallback_text_search(query_text, n=n, reason=str(exc))
 
 
-def fallback_text_search(query_text: str, n: int = 10, reason: str = "") -> List[Dict[str, str]]:
+def _tokenize_query(query_text: str) -> List[str]:
+    return [token for token in re.findall(r"[A-Za-z0-9]+", str(query_text or "").lower()) if token]
+
+
+def fallback_text_search(query_text: str, n: int = 10, reason: str = "") -> List[Dict[str, Any]]:
     """Fallback metadata search when semantic search is unavailable."""
-    terms = [term.strip() for term in str(query_text or "").split() if term.strip()]
+    limit = max(1, int(n or 10))
+    query_text = str(query_text or "").strip()
+    query_lower = query_text.lower()
+    terms = _tokenize_query(query_text)[:8]
     conn = get_connection(timeout=10.0)
     cursor = conn.cursor()
-    where_parts = ["status = 'active'"]
-    params: List[Any] = []
-    for term in terms[:6]:
-        like = f"%{term}%"
-        where_parts.append("(artist LIKE ? OR title LIKE ? OR album LIKE ?)")
-        params.extend([like, like, like])
-    sql = f"""
-        SELECT track_id, artist, title, album, year, filepath
-        FROM tracks
-        WHERE {' AND '.join(where_parts)}
-        ORDER BY artist COLLATE NOCASE ASC, album COLLATE NOCASE ASC, title COLLATE NOCASE ASC
-        LIMIT ?
-    """
-    cursor.execute(sql, (*params, max(1, int(n or 10))))
-    rows = cursor.fetchall()
+    rows: List[tuple[Any, ...]] = []
+
+    if terms:
+        where_parts = ["status = 'active'"]
+        params: List[Any] = []
+        token_clauses = []
+        for term in terms:
+            like = f"%{term}%"
+            token_clauses.append("(lower(artist) LIKE ? OR lower(title) LIKE ? OR lower(album) LIKE ?)")
+            params.extend([like, like, like])
+        where_parts.append("(" + " OR ".join(token_clauses) + ")")
+        sql = f"""
+            SELECT track_id, artist, title, album, year, filepath
+            FROM tracks
+            WHERE {' AND '.join(where_parts)}
+            ORDER BY artist COLLATE NOCASE ASC, album COLLATE NOCASE ASC, title COLLATE NOCASE ASC
+            LIMIT ?
+        """
+        cursor.execute(sql, (*params, max(limit * 25, 100)))
+        rows = cursor.fetchall()
+
+    fallback_mode = "metadata"
+    if not rows:
+        cursor.execute(
+            """
+            SELECT track_id, artist, title, album, year, filepath
+            FROM tracks
+            WHERE status = 'active'
+            ORDER BY updated_at DESC, created_at DESC, rowid DESC
+            LIMIT ?
+            """,
+            (max(limit * 5, 50),),
+        )
+        rows = cursor.fetchall()
+        fallback_mode = "library"
+
     conn.close()
-    output: List[Dict[str, str]] = []
-    for idx, row in enumerate(rows, 1):
+
+    scored_rows: List[tuple[float, tuple[Any, ...]]] = []
+    for row in rows:
+        artist = str(row[1] or "")
+        title = str(row[2] or "")
+        album = str(row[3] or "")
+        text_blob = f"{artist} {title} {album}".lower()
+        token_hits = sum(1 for term in terms if term in text_blob)
+        exact_phrase_bonus = 1 if query_lower and query_lower in text_blob else 0
+        score = 0.0
+        if terms:
+            score = (token_hits / len(terms)) + exact_phrase_bonus
+        scored_rows.append((score, row))
+
+    scored_rows.sort(
+        key=lambda item: (
+            -item[0],
+            str(item[1][1] or "").lower(),
+            str(item[1][3] or "").lower(),
+            str(item[1][2] or "").lower(),
+        )
+    )
+
+    output: List[Dict[str, Any]] = []
+    for idx, (score, row) in enumerate(scored_rows[:limit], 1):
         output.append(
             {
                 "rank": str(idx),
@@ -120,7 +192,9 @@ def fallback_text_search(query_text: str, n: int = 10, reason: str = "") -> List
                 "album": row[3] or "",
                 "year": row[4] or "",
                 "path": row[5] or "",
+                "score": round(float(score), 4),
                 "fallback_reason": reason or "metadata fallback",
+                "fallback_mode": fallback_mode,
             }
         )
     return output

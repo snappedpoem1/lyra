@@ -6,14 +6,135 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
 import os
+import sqlite3
 import time
+import uuid
+from datetime import datetime, timezone
 
 from oracle.config import VIBES_FOLDER
-from oracle.db.schema import get_connection, get_write_mode
+from oracle.db.schema import DB_PATH, get_connection, get_write_mode
 from oracle.search import search
+from oracle.types import PlaylistRun, PlaylistTrack, TrackReason
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VIBES_DIR = VIBES_FOLDER
+
+
+def _reason_to_dict(reason: TrackReason) -> Dict[str, Any]:
+    if hasattr(reason, "model_dump"):
+        return reason.model_dump()
+    return reason.dict()
+
+
+def save_playlist_run(
+    run: PlaylistRun,
+    *,
+    params: Optional[Dict[str, Any]] = None,
+    vibe_name: Optional[str] = None,
+) -> int:
+    """Persist a playlist run and its tracks."""
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.execute("PRAGMA foreign_keys=ON")
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            INSERT INTO playlist_runs (uuid, prompt, params, created_at, is_saved_vibe, vibe_name)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run.uuid,
+                run.prompt,
+                json.dumps(params or {}),
+                run.created_at.isoformat(),
+                1 if vibe_name else 0,
+                vibe_name,
+            ),
+        )
+        run_id = int(cursor.lastrowid)
+
+        track_values = []
+        for track in run.tracks:
+            reasons_json = json.dumps([_reason_to_dict(reason) for reason in track.reasons])
+            track_values.append(
+                (
+                    run_id,
+                    track.path,
+                    track.rank,
+                    track.global_score,
+                    reasons_json,
+                )
+            )
+
+        if track_values:
+            cursor.executemany(
+                """
+                INSERT INTO playlist_tracks (run_id, track_path, rank, score, reasons)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                track_values,
+            )
+
+        conn.commit()
+        return run_id
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def generate_vibe(prompt: str, n: int = 20, vibe_name: Optional[str] = None) -> PlaylistRun:
+    """Generate a playlist run from semantic search and persist it when writes are enabled."""
+    results = search(prompt, n=n)
+
+    playlist_tracks: List[PlaylistTrack] = []
+    for index, result in enumerate(results, start=1):
+        raw_score = result.get("score", 0.0)
+        try:
+            score = float(raw_score)
+        except (TypeError, ValueError):
+            score = 0.0
+
+        playlist_tracks.append(
+            PlaylistTrack(
+                path=result.get("path") or result.get("filepath") or "",
+                artist=result.get("artist") or "Unknown",
+                title=result.get("title") or "Unknown",
+                rank=index,
+                global_score=score,
+                reasons=[
+                    TrackReason(
+                        type="semantic_search",
+                        score=score,
+                        text="Matched vibe prompt",
+                    )
+                ],
+            )
+        )
+
+    run = PlaylistRun(
+        uuid=str(uuid.uuid4()),
+        prompt=prompt,
+        created_at=datetime.now(timezone.utc),
+        tracks=playlist_tracks,
+    )
+
+    # Enrich playlist with structured reasons (F-007) — silent on failure
+    try:
+        from oracle.explain import ReasonBuilder
+        rb = ReasonBuilder()
+        rb.enrich_playlist(run.tracks, query=prompt, include_mood_bridge=True)
+    except Exception as _exc:
+        logger.debug("ReasonBuilder enrichment skipped: %s", _exc)
+
+    if get_write_mode() == "apply_allowed":
+        save_playlist_run(run, params={"query": prompt, "n": n}, vibe_name=vibe_name)
+    else:
+        print("Warning: LYRA_WRITE_MODE is not apply_allowed; PlaylistRun not saved to DB.")
+
+    return run
 
 
 def save_vibe(name: str, query: str, n: int = 200) -> Dict[str, Any]:
@@ -36,23 +157,21 @@ def save_vibe(name: str, query: str, n: int = 200) -> Dict[str, Any]:
     if not safe_name:
         return {'error': 'Vibe name cannot be empty'}
     
-    # Run semantic search
     try:
-        results = search(query, n=n)
+        run = generate_vibe(prompt=query, n=n, vibe_name=safe_name)
     except Exception as e:
-        return {'error': f'Search failed: {e}'}
-    
-    if not results:
+        return {'error': f'Generate vibe failed: {e}'}
+
+    if not run.tracks:
         return {'error': 'No tracks found for query'}
-    
-    # Store in database
+
     conn = get_connection(timeout=10.0)
     cursor = conn.cursor()
     
     # Save profile
     query_json = json.dumps({'query': query, 'n': n})
     created_at = time.time()
-    track_count = len(results)
+    track_count = len(run.tracks)
     
     cursor.execute(
         """
@@ -66,16 +185,21 @@ def save_vibe(name: str, query: str, n: int = 200) -> Dict[str, Any]:
     cursor.execute("DELETE FROM vibe_tracks WHERE vibe_name = ?", (safe_name,))
     
     # Save tracks with position
-    for idx, result in enumerate(results, start=1):
-        track_id = result.get('track_id')
-        if track_id:
-            cursor.execute(
-                """
-                INSERT INTO vibe_tracks (vibe_name, track_id, position)
-                VALUES (?, ?, ?)
-                """,
-                (safe_name, track_id, idx)
-            )
+    track_values = []
+    for track in run.tracks:
+        cursor.execute("SELECT track_id FROM tracks WHERE filepath = ?", (track.path,))
+        row = cursor.fetchone()
+        if row:
+            track_values.append((safe_name, row[0], track.rank))
+
+    if track_values:
+        cursor.executemany(
+            """
+            INSERT INTO vibe_tracks (vibe_name, track_id, position)
+            VALUES (?, ?, ?)
+            """,
+            track_values,
+        )
     
     conn.commit()
     conn.close()
@@ -85,7 +209,8 @@ def save_vibe(name: str, query: str, n: int = 200) -> Dict[str, Any]:
         'name': safe_name,
         'query': query,
         'track_count': track_count,
-        'created_at': created_at
+        'created_at': created_at,
+        'run_uuid': run.uuid,
     }
 
 

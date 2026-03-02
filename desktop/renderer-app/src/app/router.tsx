@@ -8,6 +8,8 @@ import { OracleRoute } from "@/app/routes/oracleRoute";
 import { QueueRoute } from "@/app/routes/queueRoute";
 import { LibraryRoute } from "@/app/routes/libraryRoute";
 import { SettingsRoute } from "@/app/routes/settingsRoute";
+import { VibesRoute } from "@/app/routes/vibesRoute";
+import { ArtistRoute } from "@/app/routes/artistRoute";
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -47,6 +49,12 @@ const oracleRoute = createRoute({
   component: OracleRoute,
 });
 
+const vibesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/vibes",
+  component: VibesRoute,
+});
+
 const queueRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/queue",
@@ -65,15 +73,23 @@ const settingsRoute = createRoute({
   component: SettingsRoute,
 });
 
+const artistRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/artist/$name",
+  component: ArtistRoute,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   playlistsRoute,
   playlistDetailRoute,
   searchRoute,
   oracleRoute,
+  vibesRoute,
   queueRoute,
   libraryRoute,
   settingsRoute,
+  artistRoute,
 ]);
 
 export const router = createRouter({ routeTree });

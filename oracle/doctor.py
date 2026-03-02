@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
@@ -76,10 +77,31 @@ def _check_db() -> CheckResult:
 def _check_chroma_storage() -> CheckResult:
     if not CHROMA_PATH.exists():
         return CheckResult("ChromaDB (local)", "FAIL", f"Missing: {CHROMA_PATH}")
-    files = [p for p in CHROMA_PATH.rglob("*") if p.is_file()]
-    if not files:
-        return CheckResult("ChromaDB (local)", "WARNING", "chroma_storage is empty")
-    return CheckResult("ChromaDB (local)", "PASS", f"{len(files)} files in chroma_storage")
+    file_count = sum(1 for path in CHROMA_PATH.rglob("*") if path.is_file())
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+        count = int(cursor.execute("SELECT COUNT(*) FROM embeddings").fetchone()[0] or 0)
+        conn.close()
+        if count <= 0:
+            return CheckResult(
+                "ChromaDB (local)",
+                "WARNING",
+                f"No embeddings indexed yet ({file_count} files on disk)",
+            )
+        return CheckResult(
+            "ChromaDB (local)",
+            "PASS",
+            f"{count} embeddings indexed ({file_count} files on disk)",
+        )
+    except Exception as exc:
+        if file_count == 0:
+            return CheckResult("ChromaDB (local)", "WARNING", "chroma_storage is empty")
+        return CheckResult(
+            "ChromaDB (local)",
+            "WARNING",
+            f"Storage present but collection check failed: {exc} ({file_count} files on disk)",
+        )
 
 
 def _check_env() -> CheckResult:

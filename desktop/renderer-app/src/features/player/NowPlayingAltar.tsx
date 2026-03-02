@@ -48,7 +48,7 @@ export function NowPlayingAltar() {
       <div className="altar-insight-grid">
         <div className="altar-insight-panel">
           <span className="insight-kicker">Why this track</span>
-          <p className="altar-copy">{player.errorMessage ?? player.explanation ?? track?.reason ?? "No recommendation context available."}</p>
+          <p className="altar-copy">{player.errorMessage ?? player.explanation ?? track?.reasons[0]?.text ?? track?.reason ?? "No recommendation context available."}</p>
         </div>
         <div className="altar-insight-panel">
           <span className="insight-kicker">File</span>

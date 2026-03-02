@@ -21,7 +21,7 @@ export function QueueLane() {
       return;
     }
     setCurrentIndex(index);
-    setTrack(track, "Queue", track.reason);
+    setTrack(track, "Queue", track.reasons[0]?.text ?? track.reason);
     await audioEngine.playTrack(track);
   };
 
@@ -35,7 +35,7 @@ export function QueueLane() {
         <div>
           <span className="insight-kicker">Current row</span>
           <strong>{current?.title ?? "Queue empty"}</strong>
-          <p>{current?.reason ?? "Play a track or load a playlist to start."}</p>
+          <p>{current?.reasons[0]?.text ?? current?.reason ?? "Play a track or load a playlist to start."}</p>
         </div>
         <div className="queue-headline-meta">
           <span>{queue.origin}</span>
@@ -66,7 +66,7 @@ export function QueueLane() {
               <span className="queue-index">{String(index + 1).padStart(2, "0")}</span>
               <span className="queue-artist">{track.artist}</span>
               <strong className="queue-title">{track.title}</strong>
-              <span className="queue-reason">{track.reason}</span>
+              <span className="queue-reason">{track.reasons[0]?.text ?? track.reason}</span>
             </button>
             <div className="queue-row-actions">
               <LyraButton onClick={() => openDossier(track.trackId)}>Info</LyraButton>

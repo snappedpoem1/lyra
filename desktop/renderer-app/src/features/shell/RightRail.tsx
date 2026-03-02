@@ -80,7 +80,7 @@ export function RightRail() {
               </div>
               <div className="inspector-block">
                 <span className="insight-kicker">Why</span>
-                <p>{data?.track.reason ?? "No thread rationale available."}</p>
+                <p>{data?.track.reasons[0]?.text ?? data?.track.reason ?? "No thread rationale available."}</p>
               </div>
               <div className="inspector-block">
                 <span className="insight-kicker">Structure</span>

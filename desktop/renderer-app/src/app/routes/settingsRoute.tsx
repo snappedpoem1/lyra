@@ -1,4 +1,5 @@
 import { BackendStatusPanel } from "@/features/system/BackendStatusPanel";
+import { DoctorPanel } from "@/features/system/DoctorPanel";
 import { useSettingsStore } from "@/stores/settingsStore";
 
 export function SettingsRoute() {
@@ -43,6 +44,7 @@ export function SettingsRoute() {
         </label>
       </section>
       <BackendStatusPanel />
+      <DoctorPanel />
     </div>
   );
 }

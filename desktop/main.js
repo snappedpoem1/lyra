@@ -1,9 +1,22 @@
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, protocol, shell } = require("electron");
 const path = require("path");
 const { spawn, execFile } = require("child_process");
 const http = require("http");
 const fs = require("fs");
 const os = require("os");
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "lyra-media",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 let mainWindow = null;
 let apiProcess = null;
@@ -479,6 +492,23 @@ function exitPyProc() {
   }
 }
 
+function registerMediaProtocol() {
+  protocol.registerFileProtocol("lyra-media", (request, callback) => {
+    try {
+      const url = new URL(request.url);
+      const filePath = url.searchParams.get("path");
+      if (!filePath || !path.isAbsolute(filePath)) {
+        callback({ error: -6 });
+        return;
+      }
+      callback({ path: path.normalize(filePath) });
+    } catch (error) {
+      console.log("[lyra] media protocol error:", error.message);
+      callback({ error: -324 });
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Full bootstrap sequence
 // ---------------------------------------------------------------------------
@@ -523,6 +553,7 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: true,
       preload: path.join(__dirname, "preload.js"),
     },
   });
@@ -547,6 +578,7 @@ async function createWindow() {
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(async () => {
+  registerMediaProtocol();
   await createWindow();
 
   ipcMain.on("window-minimize", () => mainWindow?.minimize());

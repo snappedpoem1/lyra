@@ -4,29 +4,82 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+import subprocess
+import sys
 import time
 from typing import Dict, List
 import json
 import traceback
 import sqlite3
 
-from flask import Flask, request, jsonify, send_from_directory, Response, g
-from flask_cors import CORS
 from dotenv import load_dotenv
 
-load_dotenv(override=False)
-
 PROJECT_ROOT = Path(__file__).resolve().parent
+
+
+def _running_as_script() -> bool:
+    try:
+        return Path(sys.argv[0]).resolve() == Path(__file__).resolve()
+    except Exception:
+        return False
+
+
+def _maybe_reexec_in_project_venv() -> None:
+    if not _running_as_script():
+        return
+    if os.getenv("LYRA_SKIP_VENV_REEXEC", "").strip().lower() in {"1", "true", "yes"}:
+        return
+    if os.getenv("LYRA_VENV_REEXEC", "").strip() == "1":
+        return
+
+    candidates = [
+        PROJECT_ROOT / ".venv" / "Scripts" / "python.exe",
+        PROJECT_ROOT / ".venv" / "bin" / "python",
+    ]
+    venv_python = next((candidate for candidate in candidates if candidate.exists()), None)
+    if not venv_python:
+        return
+
+    try:
+        current_python = Path(sys.executable).resolve()
+    except Exception:
+        current_python = Path(sys.executable)
+
+    try:
+        if current_python.samefile(venv_python):
+            return
+    except Exception:
+        if str(current_python).lower() == str(venv_python).lower():
+            return
+
+    env = os.environ.copy()
+    env["LYRA_VENV_REEXEC"] = "1"
+    print(f"[runtime] switching to project virtualenv: {venv_python}", flush=True)
+    completed = subprocess.run(
+        [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]],
+        env=env,
+        cwd=str(PROJECT_ROOT),
+    )
+    raise SystemExit(completed.returncode)
+
+
+_maybe_reexec_in_project_venv()
+load_dotenv(override=False)
 hf_home = str(PROJECT_ROOT / "hf_cache")
 os.environ.setdefault("HF_HOME", hf_home)
 os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(Path(hf_home) / "hub"))
 
+from flask import Flask, request, jsonify, send_from_directory, Response, g
+from flask_cors import CORS
+
 from oracle.db.schema import get_connection, get_write_mode
 from oracle.config import LIBRARY_BASE
+from oracle.doctor import run_doctor
 from oracle.search import search
 from oracle.scanner import scan_library
 from oracle.indexer import index_library
-from oracle.vibes import save_vibe, list_vibes, build_vibe, materialize_vibe, refresh_vibes, delete_vibe
+from oracle.vibes import generate_vibe, save_vibe, list_vibes, build_vibe, materialize_vibe, refresh_vibes, delete_vibe
+from oracle.types import PlaylistRun
 from oracle.curator import generate_plan, apply_plan
 from oracle.classifier import classify_library
 from oracle.acquirers.ytdlp import YTDLPAcquirer
@@ -137,6 +190,15 @@ def _json_safe(value):
     if isinstance(value, (list, tuple, set)):
         return [_json_safe(v) for v in value]
     return value
+
+
+def _playlist_run_to_dict(run: PlaylistRun) -> dict:
+    """Convert PlaylistRun Pydantic model to a Flask-json-safe dict."""
+    if hasattr(run, "model_dump"):
+        payload = run.model_dump()
+    else:
+        payload = run.dict()
+    return _json_safe(payload)
 
 
 def _fallback_vibe_narrative(tracks: List[Dict[str, str]], arc_type: str) -> str:
@@ -408,6 +470,23 @@ def _build_health_payload() -> dict:
         'cors': {'allowed_origins': CORS_ALLOWED_ORIGINS},
         'llm': get_llm_status()
     }
+
+
+@app.route('/api/doctor', methods=['GET'])
+def api_doctor():
+    """Run doctor diagnostics and return structured results."""
+    try:
+        checks = run_doctor()
+        return jsonify([
+            {
+                'name': check.name,
+                'status': check.status,
+                'details': check.details,
+            }
+            for check in checks
+        ])
+    except Exception as e:
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
 @app.route('/api/status', methods=['GET'])
@@ -776,6 +855,8 @@ def api_index():
         force_reindex = data.get('force_reindex', False)
         
         results = index_library(library_path, limit=limit, force_reindex=force_reindex)
+        if isinstance(results, dict) and results.get('dependency_unavailable'):
+            return jsonify(results), 503
         return jsonify(results)
     
     except Exception as e:
@@ -1053,6 +1134,39 @@ def api_playlist_detail(playlist_id: str):
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
+@app.route('/api/playlists/<int:run_id>/explain', methods=['GET'])
+def api_playlist_explain(run_id: int):
+    """
+    Return structured reasons for every track in a playlist run (F-007).
+
+    Response::
+
+        {
+            "run_id": int,
+            "track_count": int,
+            "tracks": [
+                {
+                    "rank": int,
+                    "track_path": str,
+                    "score": float,
+                    "artist": str, "title": str, "album": str,
+                    "reasons": [{"type": str, "score": float, "text": str}, ...],
+                    "reasons_summary": str
+                }, ...
+            ]
+        }
+    """
+    try:
+        from oracle.explain import ReasonBuilder
+        rb = ReasonBuilder()
+        result = rb.explain_run(run_id)
+        if result['track_count'] == 0:
+            return jsonify({'error': f'No tracks found for run_id {run_id}'}), 404
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
 @app.route('/api/vibes/save', methods=['POST'])
 def api_vibes_save():
     """Create a new vibe."""
@@ -1090,24 +1204,29 @@ def api_vibes_generate():
             return jsonify({'error': error}), 400
 
         generated = _generate_vibe_from_prompt(prompt, n)
-        response = {
-            'prompt': prompt,
-            'generated': generated,
-        }
-
+        candidate_name = generated.get('name', '').strip() or "Generated Vibe"
         if save_generated:
-            candidate_name = generated.get('name', '').strip() or "Generated Vibe"
-            valid_name, name_error = validate_name(candidate_name, "Vibe name")
+            valid_name, _name_error = validate_name(candidate_name, "Vibe name")
             if not valid_name:
                 candidate_name = " ".join(prompt.split()[:4]).strip() or "Generated Vibe"
                 candidate_name = candidate_name.replace("/", " ").replace("\\", " ").replace(":", " ")
                 candidate_name = candidate_name[:80]
 
-            save_result = save_vibe(candidate_name, generated['query'], n=generated['n'])
-            if 'error' in save_result:
-                response['save'] = save_result
-                return jsonify(response), 400
-            response['save'] = save_result
+        run = generate_vibe(
+            generated['query'],
+            n=generated['n'],
+            vibe_name=candidate_name if save_generated else None,
+        )
+
+        response = {
+            'meta': {
+                'prompt': prompt,
+                'generated': generated,
+                'save_requested': save_generated,
+                'vibe_name': candidate_name if save_generated else None,
+            },
+            'run': _playlist_run_to_dict(run),
+        }
 
         return jsonify(response)
     except Exception as e:
@@ -2448,8 +2567,560 @@ def api_track_dossier(track_id: str):
 
 
 # ============================================================================
+# SPRINT 1: BIOGRAPHER, CONSTELLATION, ARTIST SHRINE
+# ============================================================================
+
+
+@app.route('/api/enrich/biographer', methods=['POST'])
+def api_enrich_biographer():
+    """Enrich a single artist with biographical context.
+
+    Request body::
+
+        { "artist_name": "Radiohead", "mbid": "optional-mbid", "force": false }
+
+    Returns full biography dict from Biographer module.
+    """
+    data = request.get_json(silent=True) or {}
+    artist_name = str(data.get("artist_name") or "").strip()
+    if not artist_name:
+        return jsonify({"error": "artist_name is required"}), 400
+
+    mbid = str(data.get("mbid") or "").strip() or None
+    force = bool(data.get("force", False))
+
+    try:
+        from oracle.enrichers.biographer import Biographer
+        bio = Biographer()
+        result = bio.enrich_artist(artist_name, mbid=mbid, force=force)
+        if not result:
+            return jsonify({"error": "no data found", "artist_name": artist_name}), 404
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/enrichment/biographer/<path:artist>', methods=['GET'])
+def api_get_biographer_cached(artist: str):
+    """Return cached biography for an artist, or trigger a fresh fetch.
+
+    Query params:
+        force=1  — bypass cache and re-fetch
+    """
+    artist_name = artist.strip()
+    force = request.args.get("force", "0").strip() in {"1", "true", "yes"}
+
+    try:
+        from oracle.enrichers.biographer import Biographer
+        bio = Biographer()
+        result = bio.enrich_artist(artist_name, force=force)
+        if not result:
+            return jsonify({"error": "not found", "artist_name": artist_name}), 404
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/enrich/biographer/batch', methods=['POST'])
+def api_enrich_biographer_batch():
+    """Enrich all library artists with biographical context.
+
+    Request body (optional)::
+
+        { "limit": 50, "force": false }
+
+    Returns processing stats dict.
+    """
+    data = request.get_json(silent=True) or {}
+    limit = int(data.get("limit", 0))
+    force = bool(data.get("force", False))
+
+    try:
+        from oracle.enrichers.biographer import Biographer
+        bio = Biographer()
+        stats = bio.enrich_all_library_artists(limit=limit, force=force)
+        return jsonify({"ok": True, "stats": stats})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/artist/shrine/<path:artist>', methods=['GET'])
+def api_artist_shrine(artist: str):
+    """Get comprehensive artist profile for Artist Shrine view.
+
+    Combines: biography, images, library stats, and relationship data.
+    """
+    artist_name = artist.strip()
+    if not artist_name:
+        return jsonify({"error": "artist required"}), 400
+
+    try:
+        conn = get_connection()
+        c = conn.cursor()
+
+        # Library stats
+        c.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT album) FROM tracks WHERE artist = ? AND status = 'active'",
+            (artist_name,),
+        )
+        row = c.fetchone()
+        track_count = row[0] if row else 0
+        album_count = row[1] if row else 0
+
+        c.execute(
+            "SELECT DISTINCT album, year FROM tracks WHERE artist = ? AND status = 'active' ORDER BY year",
+            (artist_name,),
+        )
+        albums = [{"album": r[0], "year": r[1]} for r in c.fetchall() if r[0]]
+
+        # Connections
+        c.execute(
+            "SELECT target, type, weight FROM connections WHERE source = ? ORDER BY weight DESC LIMIT 20",
+            (artist_name,),
+        )
+        connections = [{"target": r[0], "type": r[1], "weight": r[2]} for r in c.fetchall()]
+
+        # Credits (producers etc.)
+        c.execute(
+            "SELECT role, artist_name, COUNT(*) as cnt FROM track_credits tc "
+            "JOIN tracks t ON tc.track_id = t.track_id "
+            "WHERE t.artist = ? GROUP BY role, tc.artist_name ORDER BY cnt DESC LIMIT 20",
+            (artist_name,),
+        )
+        credits_rows = [{"role": r[0], "name": r[1], "count": r[2]} for r in c.fetchall()]
+
+        conn.close()
+
+        # Biography (lazy fetch + cached)
+        bio_data = {}
+        try:
+            from oracle.enrichers.biographer import Biographer
+            bio = Biographer()
+            bio_data = bio.enrich_artist(artist_name) or {}
+        except Exception:
+            pass
+
+        return jsonify({
+            "artist": artist_name,
+            "library_stats": {
+                "track_count": track_count,
+                "album_count": album_count,
+                "albums": albums,
+            },
+            "bio": bio_data.get("bio") or "",
+            "bio_source": bio_data.get("bio_source") or "none",
+            "images": bio_data.get("images") or {},
+            "wiki_thumbnail": bio_data.get("wiki_thumbnail") or "",
+            "formation_year": bio_data.get("formation_year"),
+            "origin": bio_data.get("origin") or "",
+            "members": bio_data.get("members") or [],
+            "scene": bio_data.get("scene") or "",
+            "genres": bio_data.get("genres") or [],
+            "era": bio_data.get("era") or "",
+            "artist_mbid": bio_data.get("artist_mbid") or "",
+            "lastfm_listeners": bio_data.get("lastfm_listeners"),
+            "lastfm_url": bio_data.get("lastfm_url") or "",
+            "wiki_url": bio_data.get("wiki_url") or "",
+            "social_links": bio_data.get("social_links") or {},
+            "related_artists": connections,
+            "credits": credits_rows,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/constellation', methods=['GET'])
+def api_constellation():
+    """Get artist connection graph for Constellation visualization.
+
+    Query params:
+        genre  — filter by genre tag (partial match)
+        era    — filter by artist era substring
+        type   — filter by connection type (e.g., 'member-of', 'collaborated-with')
+        limit  — max nodes to return (default 200)
+    """
+    genre_filter = (request.args.get("genre") or "").strip().lower()
+    era_filter = (request.args.get("era") or "").strip().lower()
+    type_filter = (request.args.get("type") or "").strip().lower()
+    limit = int(request.args.get("limit") or 200)
+
+    try:
+        conn = get_connection()
+        c = conn.cursor()
+
+        # Build edges from connections table
+        params = []
+        where_clauses = []
+        if type_filter:
+            where_clauses.append("lower(type) LIKE ?")
+            params.append(f"%{type_filter}%")
+
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+        c.execute(
+            f"SELECT source, target, type, weight FROM connections {where_sql} "
+            f"ORDER BY weight DESC LIMIT ?",
+            params + [limit * 2],
+        )
+        raw_edges = c.fetchall()
+
+        if not raw_edges:
+            conn.close()
+            return jsonify({"nodes": [], "edges": [], "total_edges": 0})
+
+        # Build node set from edges
+        node_set = set()
+        for src, tgt, *_ in raw_edges:
+            node_set.add(src)
+            node_set.add(tgt)
+
+        # Fetch in-library artists for styling
+        c.execute("SELECT DISTINCT artist FROM tracks WHERE status = 'active'")
+        in_library = {row[0] for row in c.fetchall()}
+
+        # Fetch biographer data for nodes (cached only — no fetching here)
+        nodes = []
+        for artist in sorted(node_set)[:limit]:
+            # Quick genre/era from enrich_cache
+            c.execute(
+                "SELECT payload_json FROM enrich_cache WHERE provider = 'biographer' AND lookup_key = "
+                "(SELECT hex(substr(hashblob, 1, 20)) FROM (SELECT sha1(?) as hashblob))",
+                (artist.strip().lower(),),
+            )
+            # Simple approach: just tag in-library status
+            nodes.append({
+                "id": artist,
+                "label": artist,
+                "inLibrary": artist in in_library,
+            })
+
+        edges = [
+            {"source": r[0], "target": r[1], "type": r[2] or "related", "weight": r[3] or 0.5}
+            for r in raw_edges
+        ]
+
+        conn.close()
+        return jsonify({
+            "nodes": nodes,
+            "edges": edges,
+            "total_edges": len(edges),
+            "total_nodes": len(nodes),
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/constellation/filters', methods=['GET'])
+def api_constellation_filters():
+    """Return available filter options for Constellation view."""
+    try:
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("SELECT DISTINCT type FROM connections WHERE type IS NOT NULL ORDER BY type")
+        connection_types = [r[0] for r in c.fetchall()]
+        conn.close()
+        return jsonify({
+            "connection_types": connection_types or [
+                "member-of", "collaborated-with", "influenced", "samples", "toured-with"
+            ],
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/graph/build', methods=['POST'])
+def api_graph_build():
+    """Trigger relationship graph build.
+
+    Request body::
+
+        { "full": false, "depth": 1 }
+
+    full=false (default) runs incremental build (new artists only).
+    full=true runs full rebuild (all artists — slow).
+    """
+    data = request.get_json(silent=True) or {}
+    full = bool(data.get("full", False))
+    depth = int(data.get("depth", 1))
+
+    try:
+        from oracle.graph_builder import GraphBuilder
+        gb = GraphBuilder()
+        if full:
+            count = gb.build_full_graph(depth=depth)
+            mode = "full"
+        else:
+            count = gb.build_incremental(depth=depth)
+            mode = "incremental"
+
+        stats = gb.get_stats()
+        return jsonify({"ok": True, "mode": mode, "new_edges": count, "stats": stats})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/graph/stats', methods=['GET'])
+def api_graph_stats():
+    """Return graph builder statistics."""
+    try:
+        from oracle.graph_builder import GraphBuilder
+        gb = GraphBuilder()
+        return jsonify(gb.get_stats())
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ============================================================================
+# SPRINT 2 -- DEEP CUT PROTOCOL (F-004)
+# ============================================================================
+
+
+@app.route('/api/deep-cut/hunt', methods=['POST'])
+def api_deep_cut_hunt():
+    """
+    Hunt for acclaimed-but-obscure tracks in the local library.
+
+    Request body (JSON)::
+
+        {
+            "genre": "shoegaze",          // optional genre filter
+            "artist": "Slowdive",         // optional artist filter
+            "min_obscurity": 0.6,         // 0.0–2.0, default 0.6
+            "max_obscurity": 10.0,        // upper cap, default 10.0
+            "min_acclaim": 0.0,           // 0.0–1.0, default 0.0
+            "limit": 20                   // max results, default 20
+        }
+
+    Response::
+
+        {
+            "count": int,
+            "results": [
+                {
+                    "track_id", "artist", "title", "album", "genre",
+                    "obscurity_score", "acclaim_score", "popularity_percentile",
+                    "lastfm_listeners", "discogs_rating", "tags"
+                }, ...
+            ]
+        }
+    """
+    try:
+        from oracle.deepcut import DeepCut
+        body = request.get_json(silent=True) or {}
+        dc = DeepCut()
+        results = dc.hunt_by_obscurity(
+            genre=body.get("genre"),
+            artist=body.get("artist"),
+            min_obscurity=float(body.get("min_obscurity", 0.6)),
+            max_obscurity=float(body.get("max_obscurity", 10.0)),
+            min_acclaim=float(body.get("min_acclaim", 0.0)),
+            limit=int(body.get("limit", 20)),
+        )
+        return jsonify({"count": len(results), "results": results})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/deep-cut/stats', methods=['GET'])
+def api_deep_cut_stats():
+    """Return deep cut potential statistics for the library."""
+    try:
+        from oracle.deepcut import DeepCut
+        dc = DeepCut()
+        return jsonify(dc.get_stats())
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/deep-cut/taste', methods=['POST'])
+def api_deep_cut_taste():
+    """
+    Hunt for deep cuts that align with a provided taste profile.
+
+    Request body::
+
+        {
+            "taste_profile": {
+                "energy": 0.7, "valence": 0.6, "tension": 0.3,
+                "density": 0.4, "warmth": 0.8, "movement": 0.5,
+                "space": 0.6, "rawness": 0.4, "complexity": 0.5,
+                "nostalgia": 0.7
+            },
+            "limit": 20
+        }
+
+    Returns tracks sorted by a blended rank (obscurity * 0.6 + taste_alignment * 0.4).
+    """
+    try:
+        from oracle.deepcut import DeepCut
+        body = request.get_json(silent=True) or {}
+        taste = body.get("taste_profile", {})
+        if not taste:
+            return jsonify({"error": "taste_profile is required"}), 400
+        dc = DeepCut()
+        results = dc.hunt_with_taste_context(
+            taste_profile=taste,
+            limit=int(body.get("limit", 20)),
+        )
+        return jsonify({"count": len(results), "results": results})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ============================================================================
+# SPRINT 2 -- PLAYLUST 4-ACT ARC GENERATOR (F-008)
+# ============================================================================
+
+
+@app.route('/api/playlust/generate', methods=['POST'])
+def api_playlust_generate():
+    """
+    Generate a 4-act Playlust emotional arc playlist (F-008 — FLAGSHIP).
+
+    Request body::
+
+        {
+            "mood": "volcanic shoegaze fever dream",
+            "duration_minutes": 60,
+            "name": "Late Night Ritual",
+            "use_deepcut": true,
+            "taste_profile": {
+                "energy": 0.7, "valence": 0.5, ...
+            }
+        }
+
+    Response::
+
+        {
+            "run_uuid": str,
+            "track_count": int,
+            "narrative": str,
+            "acts": [
+                {
+                    "act": str, "label": str,
+                    "tracks": [{"rank", "artist", "title", "score", "reasons"}, ...]
+                }, ...
+            ],
+            "tracks": [{"rank", "artist", "title", "score", "reasons"}, ...]
+        }
+    """
+    try:
+        from oracle.playlust import Playlust
+        body = request.get_json(silent=True) or {}
+
+        pl = Playlust()
+        run = pl.generate(
+            mood=body.get("mood"),
+            duration_minutes=int(body.get("duration_minutes", 60)),
+            name=body.get("name"),
+            taste_context=body.get("taste_profile"),
+            use_deepcut=bool(body.get("use_deepcut", True)),
+        )
+
+        # Serialise run
+        tracks = [
+            {
+                "rank": t.rank,
+                "path": t.path,
+                "artist": t.artist,
+                "title": t.title,
+                "score": t.global_score,
+                "reasons": [r.dict() for r in t.reasons],
+            }
+            for t in run.tracks
+        ]
+
+        # Group into acts for the response
+        acts_map: dict = {}
+        for t in tracks:
+            act_reason = next((r for r in t["reasons"] if r["type"].startswith("act:")), None)
+            act_key = act_reason["type"].replace("act:", "") if act_reason else "unknown"
+            acts_map.setdefault(act_key, []).append(t)
+
+        act_order = ["aggressive", "seductive", "breakdown", "sublime"]
+        acts_out = [
+            {"act": a, "tracks": acts_map.get(a, [])}
+            for a in act_order
+        ]
+
+        return jsonify({
+            "run_uuid": run.uuid,
+            "track_count": len(tracks),
+            "narrative": run.prompt,
+            "acts": acts_out,
+            "tracks": tracks,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/playlust/acts', methods=['GET'])
+def api_playlust_acts():
+    """Return the four act definitions and their target dimensional profiles."""
+    try:
+        from oracle.playlust import Playlust
+        pl = Playlust()
+        return jsonify({"acts": pl.get_act_definitions()})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ============================================================================
+# SPRINT 2 -- PLAYFAUX BEEFWEB BRIDGE STATUS (F-013)
+# ============================================================================
+
+
+@app.route('/api/listen/status', methods=['GET'])
+def api_listen_status():
+    """
+    Check BeefWeb connectivity and return current playback state.
+
+    Response::
+
+        {
+            "connected": bool,
+            "now_playing": {
+                "artist": str, "title": str, "album": str,
+                "position": float, "duration": float, "state": str
+            } | null
+        }
+    """
+    try:
+        from oracle.integrations.beefweb_bridge import BeefWebBridge
+        import os as _os
+        host = _os.getenv("BEEFWEB_HOST", "localhost")
+        port = int(_os.getenv("BEEFWEB_PORT", "8880"))
+        bridge = BeefWebBridge(host=host, port=port)
+        connected = bridge.check_connection()
+        now_playing = bridge.get_current_track() if connected else None
+        return jsonify({
+            "connected": connected,
+            "now_playing": now_playing,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/listen/now-playing', methods=['GET'])
+def api_listen_now_playing():
+    """Return only the currently playing track info (lightweight poll endpoint)."""
+    try:
+        from oracle.integrations.beefweb_bridge import BeefWebBridge
+        import os as _os
+        host = _os.getenv("BEEFWEB_HOST", "localhost")
+        port = int(_os.getenv("BEEFWEB_PORT", "8880"))
+        bridge = BeefWebBridge(host=host, port=port)
+        track = bridge.get_current_track()
+        if not track or track.get("state") == "stopped":
+            return jsonify({"state": "stopped", "track": None})
+        return jsonify({"state": track["state"], "track": track})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ============================================================================
 # ROOT ROUTE
 # ============================================================================
+
 
 @app.route('/')
 def index():

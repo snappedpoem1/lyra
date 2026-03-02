@@ -6,17 +6,25 @@ export const scoreChipSchema = z.object({
   label: z.string(),
 });
 
+export const trackReasonSchema = z.object({
+  type: z.string(),
+  text: z.string(),
+  score: z.number(),
+});
+
 export const trackSchema = z.object({
   trackId: z.string(),
   artist: z.string(),
   title: z.string(),
+  path: z.string(),
   album: z.string().optional(),
   year: z.string().optional(),
   durationSec: z.number().optional(),
   versionType: z.string().optional(),
   confidence: z.number().optional(),
   artUrl: z.string().nullable().optional(),
-  streamUrl: z.string(),
+  streamUrl: z.string().optional(),
+  reasons: z.array(trackReasonSchema),
   scoreChips: z.array(scoreChipSchema),
   reason: z.string().optional(),
   provenance: z.string().optional(),
@@ -55,6 +63,14 @@ export const healthSchema = z.object({
   llm: z.record(z.any()),
 });
 
+export const doctorCheckSchema = z.object({
+  name: z.string(),
+  status: z.enum(["PASS", "WARNING", "FAIL"]),
+  details: z.string(),
+});
+
+export const doctorSchema = z.array(doctorCheckSchema);
+
 export const vibesSchema = z.object({
   vibes: z.array(z.record(z.any())),
   count: z.number(),
@@ -86,6 +102,38 @@ export const searchSchema = z.object({
   query: z.string(),
   rewrite: z.record(z.any()).optional(),
 });
+
+export const vibeTrackSchema = z.object({
+  path: z.string(),
+  artist: z.string(),
+  title: z.string(),
+  rank: z.number().optional(),
+  global_score: z.number().optional(),
+  reasons: z.array(trackReasonSchema),
+}).passthrough();
+
+export const playlistRunSchema = z.object({
+  uuid: z.string(),
+  prompt: z.string().optional(),
+  created_at: z.string().optional(),
+  tracks: z.array(vibeTrackSchema),
+}).passthrough();
+
+export const vibeGenerateSchema = z.object({
+  meta: z.object({
+    prompt: z.string(),
+    generated: z.record(z.any()).optional(),
+    saved_as: z.string().nullable().optional(),
+  }).passthrough(),
+  run: playlistRunSchema,
+});
+
+export const vibeCreateSchema = z.object({
+  prompt: z.string(),
+  name: z.string(),
+  generated: z.record(z.any()).optional(),
+  save: z.record(z.any()),
+}).passthrough();
 
 export const radioResultsSchema = z.object({
   results: z.array(z.record(z.any())),

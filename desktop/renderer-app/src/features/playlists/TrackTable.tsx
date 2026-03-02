@@ -18,7 +18,7 @@ export function TrackTable({ tracks, onPlayTrack }: { tracks: TrackListItem[]; o
               <strong>{track.title}</strong>
               <span>{track.artist} · {track.album}</span>
             </div>
-            <div className="track-reason">{track.reason}</div>
+            <div className="track-reason">{track.reasons[0]?.text ?? track.reason}</div>
             <div className="track-actions">
               <LyraButton onClick={() => onPlayTrack(track)}>Play</LyraButton>
               <LyraButton onClick={() => openDossier(track.trackId)}>Inspect</LyraButton>

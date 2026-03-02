@@ -1,23 +1,57 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { SearchHero } from "@/features/search/SearchHero";
 import { SearchResultStack } from "@/features/search/SearchResultStack";
 import { audioEngine } from "@/services/audio/audioEngine";
-import { getSearchResults } from "@/services/lyraGateway/queries";
+import { createVibe, generateVibe } from "@/services/lyraGateway/queries";
 import { useQueueStore } from "@/stores/queueStore";
 import { useSearchStore } from "@/stores/searchStore";
 import { LyraButton } from "@/ui/LyraButton";
 
 export function SearchRoute() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const query = useSearchStore((state) => state.query);
   const setQuery = useSearchStore((state) => state.setQuery);
   const [draftQuery, setDraftQuery] = useState(query);
   const replaceQueue = useQueueStore((state) => state.replaceQueue);
   const { data, isFetching, isError, error } = useQuery({
     queryKey: ["search", query],
-    queryFn: () => getSearchResults(query),
+    queryFn: () => generateVibe(query),
     enabled: query.trim().length > 0,
   });
+  const saveMutation = useMutation({
+    mutationFn: ({ prompt, name }: { prompt: string; name: string }) => createVibe(prompt, name),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["playlists"] });
+      void navigate({ to: "/vibes" });
+    },
+  });
+
+  const results = data ? {
+    query: data.meta.prompt || query,
+    rewrittenQuery: typeof data.meta.generated?.query === "string" ? data.meta.generated.query : undefined,
+    tracks: data.run.tracks,
+    playlists: [],
+    versions: [],
+    oraclePivots: [],
+  } : null;
+
+  const handleSaveVibe = () => {
+    if (!data) {
+      return;
+    }
+    const defaultName =
+      (typeof data.meta.generated?.name === "string" && data.meta.generated.name.trim()) ||
+      (data.meta.prompt || query).split(/\s+/).slice(0, 4).join(" ").trim() ||
+      "Generated Vibe";
+    const vibeName = window.prompt("Name this vibe", defaultName)?.trim();
+    if (!vibeName) {
+      return;
+    }
+    saveMutation.mutate({ prompt: data.meta.prompt || query, name: vibeName });
+  };
 
   return (
     <div className="route-stack">
@@ -35,10 +69,20 @@ export function SearchRoute() {
           <LyraButton onClick={() => setQuery(draftQuery.trim())} disabled={!draftQuery.trim()}>Retry search</LyraButton>
         </section>
       )}
+      {saveMutation.isError && (
+        <section className="lyra-panel empty-state-panel">
+          <h2>Save failed</h2>
+          <p>{saveMutation.error instanceof Error ? saveMutation.error.message : "The vibe could not be saved."}</p>
+        </section>
+      )}
       {query.trim() && !data && !isError && <section className="lyra-panel empty-state-panel">Searching the backend...</section>}
-      {data && (
+      {results && (
         <SearchResultStack
-          results={data}
+          results={results}
+          onSaveVibe={handleSaveVibe}
+          savePending={saveMutation.isPending}
+          saveDisabled={!results.tracks.length}
+          saveLabel={saveMutation.isSuccess ? "Saved" : "Save to Library"}
           onPlayTrack={(track) => {
             replaceQueue({
               queueId: `search-${track.trackId}`,

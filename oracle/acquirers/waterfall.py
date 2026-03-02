@@ -257,6 +257,12 @@ def _try_tier3_slskd(artist: str, title: str) -> AcquisitionResult:
         )
 
 
+# Backward-compatible alias for older tests/callers written before Slskd was
+# moved from tier 2 to tier 3 in the waterfall ordering.
+def _try_tier2_slskd(artist: str, title: str) -> AcquisitionResult:
+    return _try_tier3_slskd(artist, title)
+
+
 def _try_tier4_realdebrid(artist: str, title: str, album: Optional[str] = None) -> AcquisitionResult:
     """Tier 4: Prowlarr -> Real-Debrid (cached torrents, FLAC quality)."""
     start = time.perf_counter()
@@ -467,6 +473,12 @@ def _try_tier5_spotdl(artist: str, title: str, spotify_uri: Optional[str] = None
             error=str(e),
             elapsed=time.perf_counter() - start,
         )
+
+
+# Backward-compatible alias for older tests/callers written before SpotDL was
+# moved from tier 4 to tier 5 in the waterfall ordering.
+def _try_tier4_spotdl(artist: str, title: str, spotify_uri: Optional[str] = None) -> AcquisitionResult:
+    return _try_tier5_spotdl(artist, title, spotify_uri)
 
 
 # --- Guard ------------------------------------------------------------------

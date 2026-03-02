@@ -1,23 +1,48 @@
 import { DIMENSIONS } from "@/types/dimensions";
 import type {
   BootStatus,
+  DoctorCheck,
+  DoctorReport,
   OracleRecommendation,
   PlaylistDetail,
   PlaylistSummary,
   QueueState,
   SearchResultGroup,
+  TrackReason,
   TrackDossier,
   TrackListItem,
+  VibeGenerateResult,
 } from "@/types/domain";
 
 function monogram(input: string): string {
   return input.trim().charAt(0).toUpperCase() || "L";
 }
 
+function mapTrackReasons(row: Record<string, unknown>): TrackReason[] {
+  if (!Array.isArray(row.reasons)) {
+    return [];
+  }
+  return row.reasons.flatMap((reason): TrackReason[] => {
+    if (!reason || typeof reason !== "object") {
+      return [];
+    }
+    return [{
+      type: String(reason.type ?? "unknown"),
+      text: String(reason.text ?? ""),
+      score: typeof reason.score === "number" ? reason.score : Number(reason.score ?? 0),
+    }];
+  });
+}
+
 export function mapTrack(row: Record<string, unknown>): TrackListItem {
-  const trackId = String(row.track_id ?? row.trackId ?? crypto.randomUUID());
+  const path = row.path ? String(row.path) : row.filepath ? String(row.filepath) : "";
+  const trackSeed = row.track_id ?? row.trackId ?? (path || crypto.randomUUID());
+  const trackId = String(trackSeed);
   const artist = String(row.artist ?? "Unknown Artist");
   const title = String(row.title ?? "Untitled");
+  const reasons = mapTrackReasons(row);
+  const fallbackReason = row.file_exists === false ? "File is indexed but missing on disk." : `${artist} belongs in this listening thread.`;
+  const primaryReason = reasons[0]?.text ?? (row.reason ? String(row.reason) : fallbackReason);
   const scoreChips = DIMENSIONS.slice(0, 4).map((key, index) => ({
     key,
     value: typeof row[key] === "number" ? (row[key] as number) : Number((((index + trackId.length) * 0.11) % 1).toFixed(2)),
@@ -27,16 +52,18 @@ export function mapTrack(row: Record<string, unknown>): TrackListItem {
     trackId,
     artist,
     title,
+    path,
     album: row.album ? String(row.album) : undefined,
     year: row.year ? String(row.year) : undefined,
     versionType: row.version_type ? String(row.version_type) : row.versionType ? String(row.versionType) : undefined,
     confidence: typeof row.confidence === "number" ? row.confidence : undefined,
     durationSec: typeof row.duration === "number" ? row.duration : typeof row.durationSec === "number" ? row.durationSec : undefined,
     artUrl: null,
-    streamUrl: `/api/stream/${trackId}`,
+    streamUrl: row.streamUrl ? String(row.streamUrl) : row.track_id != null || row.trackId != null ? `/api/stream/${trackId}` : undefined,
+    reasons,
     scoreChips,
-    reason: row.reason ? String(row.reason) : row.file_exists === false ? "File is indexed but missing on disk." : `${artist} belongs in this listening thread.`,
-    provenance: row.filepath ? String(row.filepath) : row.provenance ? String(row.provenance) : "Local library object",
+    reason: primaryReason,
+    provenance: row.provenance ? String(row.provenance) : path || "Local library object",
     structureHint: {
       bpm: typeof row.bpm === "number" ? row.bpm : undefined,
       hasDrop: Boolean(row.has_drop ?? false),
@@ -114,6 +141,27 @@ export function mapBootStatus(payload: Record<string, unknown>): BootStatus {
   };
 }
 
+export function mapDoctorReport(checks: DoctorCheck[]): DoctorReport {
+  const summary = checks.reduce<Record<string, number>>((counts, check) => {
+    counts[check.status] = (counts[check.status] ?? 0) + 1;
+    return counts;
+  }, { PASS: 0, WARNING: 0, FAIL: 0 });
+
+  const overall: DoctorReport["overall"] = summary.FAIL > 0
+    ? "FAIL"
+    : summary.WARNING > 0
+      ? "WARNING"
+      : "PASS";
+
+  return {
+    status: overall.toLowerCase(),
+    overall,
+    count: checks.length,
+    summary,
+    checks,
+  };
+}
+
 export function mapOracleRecommendations(mode: string, payload: { results: Array<Record<string, unknown>> }): OracleRecommendation[] {
   const previewTracks = payload.results.map((row) => mapTrack(row));
   return [{
@@ -136,6 +184,26 @@ export function mapSearch(payload: Record<string, unknown>, playlists: PlaylistS
     playlists,
     versions: [],
     oraclePivots: [],
+  };
+}
+
+export function mapGeneratedVibe(payload: Record<string, unknown>): VibeGenerateResult {
+  const meta = payload.meta && typeof payload.meta === "object" ? payload.meta as Record<string, unknown> : {};
+  const generated = meta.generated && typeof meta.generated === "object" ? meta.generated as Record<string, unknown> : undefined;
+  const run = payload.run && typeof payload.run === "object" ? payload.run as Record<string, unknown> : {};
+
+  return {
+    meta: {
+      prompt: String(meta.prompt ?? ""),
+      generated,
+      savedAs: meta.saved_as == null ? null : String(meta.saved_as),
+    },
+    run: {
+      uuid: String(run.uuid ?? crypto.randomUUID()),
+      prompt: run.prompt ? String(run.prompt) : undefined,
+      createdAt: run.created_at ? String(run.created_at) : undefined,
+      tracks: Array.isArray(run.tracks) ? run.tracks.map((row) => mapTrack(row as Record<string, unknown>)) : [],
+    },
   };
 }
 
