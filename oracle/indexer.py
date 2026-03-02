@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 import logging
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional
 import time
@@ -298,9 +299,65 @@ def _index_rows(
         stats["scored"] = scored
         logger.info(f"Scored {scored}/{len(indexed_ids)} tracks")
 
+    # Auto-enrich new artists with biographer data (background — never blocks indexing)
+    if indexed_ids:
+        _auto_enrich_new_artists(indexed_ids, conn=conn)
+
     stats["workers"] = workers
     stats["embed_batch"] = EMBED_BATCH
     return stats
+
+
+def _auto_enrich_new_artists(track_ids: List[str], conn) -> None:
+    """Fetch artist names for indexed tracks and enrich any not yet in cache.
+
+    Runs in a daemon thread so it never delays the indexing response.
+    Safe to call with an already-committed connection — opens its own read.
+    """
+    try:
+        c = conn.cursor()
+        placeholders = ",".join("?" * len(track_ids))
+        c.execute(
+            f"SELECT DISTINCT artist FROM tracks "
+            f"WHERE track_id IN ({placeholders}) AND artist IS NOT NULL AND artist != ''",
+            track_ids,
+        )
+        artists = [row[0] for row in c.fetchall()]
+    except Exception as exc:
+        logger.debug("auto_enrich: could not fetch artist names: %s", exc)
+        return
+
+    if not artists:
+        return
+
+    logger.info("[INDEX] Scheduling biographer enrichment for %d artist(s)", len(artists))
+
+    def _run():
+        try:
+            from oracle.enrichers.biographer import Biographer
+            stats = Biographer().enrich_new_artists(artists)
+            logger.info(
+                "[INDEX] Biographer: %d new, %d already cached, %d failed",
+                stats["processed"], stats["already_cached"], stats["failed"],
+            )
+        except Exception as exc:
+            logger.debug("[INDEX] Biographer background enrichment error: %s", exc)
+
+    t = threading.Thread(target=_run, name="biographer-auto-enrich", daemon=True)
+    t.start()
+
+    # Also trigger incremental graph build (only processes artists not yet in connections)
+    def _graph_run():
+        try:
+            from oracle.graph_builder import GraphBuilder
+            added = GraphBuilder().build_incremental()
+            if added:
+                logger.info("[INDEX] Graph build: %d new connection edges added", added)
+        except Exception as exc:
+            logger.debug("[INDEX] Graph build background error: %s", exc)
+
+    gt = threading.Thread(target=_graph_run, name="graph-auto-build", daemon=True)
+    gt.start()
 
 
 def _record_embeddings(cursor, track_ids: List[str]) -> None:

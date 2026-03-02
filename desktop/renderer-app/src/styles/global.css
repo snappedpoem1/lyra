@@ -1942,3 +1942,204 @@ body,
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================================
+   TASTE PROFILE CARD
+   ========================================================= */
+
+.taste-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.taste-card--loading {
+  opacity: 0.6;
+}
+
+.taste-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.taste-card__cold-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid rgba(255, 178, 72, 0.22);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+}
+
+.taste-card__signals {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+
+.taste-card__hint {
+  font-size: 12px;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.taste-card__seed-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.taste-card__seed-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Dimension bars */
+.taste-card__dims {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.taste-dim-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 40px;
+  align-items: center;
+  gap: 8px;
+}
+
+.taste-dim-label {
+  font-size: 11px;
+  color: var(--text-soft);
+  text-align: right;
+}
+
+.taste-dim-track {
+  position: relative;
+  height: 6px;
+  background: var(--bg-soft);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.taste-dim-centre {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: rgba(150, 170, 210, 0.2);
+}
+
+.taste-dim-bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  min-width: 2px;
+  transition: width 0.4s ease, left 0.4s ease;
+}
+
+.taste-dim-val {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+/* Era chart */
+.taste-era {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.taste-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.taste-era__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 48px;
+}
+
+.taste-era__col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+}
+
+.taste-era__bar {
+  width: 100%;
+  background: var(--accent-glow);
+  border-top: 2px solid var(--accent);
+  border-radius: 2px 2px 0 0;
+  transition: height 0.4s ease;
+  min-height: 4px;
+}
+
+.taste-era__label {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Top artists */
+.taste-artists {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.taste-artists__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.taste-artist-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-soft);
+  background: var(--bg-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-pill);
+  padding: 3px 9px;
+}
+
+.taste-artist-count {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+/* Genres */
+.taste-genres {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.taste-genres__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}

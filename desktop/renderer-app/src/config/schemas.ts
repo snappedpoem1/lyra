@@ -203,3 +203,37 @@ export const dossierSchema = z.object({
   provenance_notes: z.array(z.string()),
   acquisition_notes: z.array(z.string()),
 });
+
+export const constellationSchema = z.object({
+  nodes: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      inLibrary: z.boolean().optional(),
+    }),
+  ),
+  edges: z.array(
+    z.object({
+      source: z.string(),
+      target: z.string(),
+      type: z.string().optional(),
+      weight: z.number().optional(),
+    }),
+  ),
+  total_nodes: z.number().optional(),
+  total_edges: z.number().optional(),
+});
+
+export const tasteProfileSchema = z.object({
+  dimensions: z.record(z.number()),
+  genre_affinity: z.array(z.object({ genre: z.string(), score: z.number() })).optional(),
+  era_distribution: z.record(z.number()).optional(),
+  total_signals: z.number().optional(),
+  library_stats: z
+    .object({
+      total_tracks: z.number(),
+      scored_tracks: z.number(),
+      top_artists: z.array(z.object({ artist: z.string(), count: z.number() })).optional(),
+    })
+    .optional(),
+});

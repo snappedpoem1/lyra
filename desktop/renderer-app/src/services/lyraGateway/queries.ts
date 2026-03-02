@@ -1,5 +1,25 @@
 import { constellationEdges, constellationNodes, doctorChecks, dossier, oracleRecommendations, playlistDetails, playlistSummaries, searchResults } from "@/mocks/fixtures/data";
-import { fixtureModeEnabled } from "@/mocks/fixtures/mode";import { z } from "zod";import { agentSuggestionSchema, doctorSchema, dossierSchema, healthSchema, libraryAlbumDetailSchema, libraryAlbumsSchema, libraryArtistDetailSchema, libraryArtistsSchema, libraryTracksSchema, playlistDetailSchema, queueSchema, radioResultsSchema, vibeCreateSchema, vibeGenerateSchema, vibesSchema } from "@/config/schemas";
+import { fixtureModeEnabled } from "@/mocks/fixtures/mode";
+import { z } from "zod";
+import {
+  agentSuggestionSchema,
+  constellationSchema,
+  doctorSchema,
+  dossierSchema,
+  healthSchema,
+  libraryAlbumDetailSchema,
+  libraryAlbumsSchema,
+  libraryArtistDetailSchema,
+  libraryArtistsSchema,
+  libraryTracksSchema,
+  playlistDetailSchema,
+  queueSchema,
+  radioResultsSchema,
+  tasteProfileSchema,
+  vibeCreateSchema,
+  vibeGenerateSchema,
+  vibesSchema,
+} from "@/config/schemas";
 import type {
   AgentFactDrop,
   AgentSuggestion,
@@ -333,8 +353,82 @@ export async function getLibraryAlbumDetail(album: string, artist?: string | nul
   };
 }
 
-export async function getConstellation(): Promise<{ nodes: ConstellationNode[]; edges: ConstellationEdge[] }> {
-  return { nodes: constellationNodes, edges: constellationEdges };
+function _mapConstellationRelationship(
+  type?: string,
+): ConstellationEdge["relationship"] {
+  if (!type) return "oracle";
+  const t = type.toLowerCase();
+  if (t.includes("member") || t.includes("lineage") || t.includes("influence")) return "lineage";
+  if (t.includes("collab") || t.includes("similar") || t.includes("feature")) return "similarity";
+  if (t.includes("version") || t.includes("remix") || t.includes("cover")) return "version";
+  if (t.includes("mood")) return "mood";
+  return "oracle";
+}
+
+export async function getConstellation(
+  filters: { genre?: string; era?: string; type?: string; limit?: number } = {},
+): Promise<{ nodes: ConstellationNode[]; edges: ConstellationEdge[] }> {
+  try {
+    const params = new URLSearchParams();
+    if (filters.genre) params.set("genre", filters.genre);
+    if (filters.era) params.set("era", filters.era);
+    if (filters.type) params.set("type", filters.type);
+    if (filters.limit) params.set("limit", String(filters.limit));
+    const qs = params.toString();
+    const payload = await requestJson(
+      `/api/constellation${qs ? `?${qs}` : ""}`,
+      constellationSchema,
+      undefined,
+      10000,
+      0,
+    );
+    const nodes: ConstellationNode[] = payload.nodes.map((n) => ({
+      id: n.id,
+      label: n.label,
+      kind: "artist" as const,
+      weight: n.inLibrary ? 1.5 : 0.8,
+      accent: n.inLibrary ? "#d4a03a" : undefined,
+    }));
+    const edges: ConstellationEdge[] = payload.edges.map((e) => ({
+      id: `${e.source}-${e.target}`,
+      source: e.source,
+      target: e.target,
+      relationship: _mapConstellationRelationship(e.type),
+      strength: e.weight ?? 0.5,
+      reason: e.type,
+    }));
+    return { nodes, edges };
+  } catch {
+    // Fixture fallback — no error logged, constellation just shows mock data
+    return { nodes: constellationNodes, edges: constellationEdges };
+  }
+}
+
+export interface TasteProfile {
+  dimensions: Record<string, number>;
+  genreAffinity: Array<{ genre: string; score: number }>;
+  eraDistribution: Record<string, number>;
+  totalSignals: number;
+  libraryStats: {
+    totalTracks: number;
+    scoredTracks: number;
+    topArtists: Array<{ artist: string; count: number }>;
+  };
+}
+
+export async function getTasteProfile(): Promise<TasteProfile> {
+  const payload = await requestJson("/api/taste/profile", tasteProfileSchema, undefined, 8000, 0);
+  return {
+    dimensions: payload.dimensions,
+    genreAffinity: payload.genre_affinity ?? [],
+    eraDistribution: payload.era_distribution ?? {},
+    totalSignals: payload.total_signals ?? 0,
+    libraryStats: {
+      totalTracks: payload.library_stats?.total_tracks ?? 0,
+      scoredTracks: payload.library_stats?.scored_tracks ?? 0,
+      topArtists: payload.library_stats?.top_artists ?? [],
+    },
+  };
 }
 
 export async function getFactDrop(trackId: string): Promise<AgentFactDrop> {

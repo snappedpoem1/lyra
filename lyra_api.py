@@ -2267,6 +2267,58 @@ def api_playback_record():
 
 
 # ============================================================================
+# TASTE PROFILE
+# ============================================================================
+
+@app.route('/api/taste/profile', methods=['GET'])
+def api_taste_profile():
+    """Return the user's current taste profile with library context.
+
+    Always returns a meaningful response — if no playback has been recorded
+    yet, dimensions are derived from library averages (cold-start mode).
+
+    Response includes:
+        dimensions        — all 10 dimensional values (-1..1)
+        confidence        — per-dimension confidence (0..1)
+        source            — 'learned' | 'library' | 'default'
+        genre_affinity    — top genres
+        era_distribution  — decade → track count
+        top_artists       — top 10 library artists
+        total_signals     — playback events recorded
+        library_stats     — track/scored counts
+        is_cold_start     — True when mostly derived from library, not playback
+    """
+    try:
+        from oracle.taste import get_taste_profile
+        return jsonify(get_taste_profile())
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/taste/seed', methods=['POST'])
+def api_taste_seed():
+    """Seed taste profile from library averages (cold-start bootstrap).
+
+    Safe to call repeatedly — only overwrites dimensions that haven't been
+    meaningfully updated by real playback (confidence < 0.3).
+
+    Request body (optional)::
+
+        { "overwrite": false }
+
+    Set ``overwrite=true`` to reset all dimensions to library averages.
+    """
+    try:
+        from oracle.taste import seed_taste_from_library
+        data = request.get_json(silent=True) or {}
+        overwrite = bool(data.get('overwrite', False))
+        result = seed_taste_from_library(overwrite_existing=overwrite)
+        return jsonify({'ok': True, 'result': result})
+    except Exception as exc:
+        return jsonify({'error': str(exc)}), 500
+
+
+# ============================================================================
 # AGENT (LYRA)
 # ============================================================================
 
@@ -2644,6 +2696,47 @@ def api_enrich_biographer_batch():
         return jsonify({"error": str(exc)}), 500
 
 
+@app.route('/api/enrich/biographer/stale', methods=['POST'])
+def api_enrich_biographer_stale():
+    """Re-enrich only artists whose cache entry is missing or past the TTL.
+
+    Use this instead of /batch for routine refreshes — it never re-fetches
+    artists that were enriched recently, so it's cheap when most data is fresh.
+
+    Request body (optional)::
+
+        { "limit": 0, "ttl_days": 30 }
+
+    ``ttl_days`` overrides the default 30-day window.  Set to 0 to re-enrich
+    everything that is missing (never refetches fresh entries).
+
+    Returns::
+
+        {
+          "ok": true,
+          "stats": {
+            "processed": 12,
+            "skipped": 340,   // already fresh
+            "failed": 0,
+            "total_library": 352,
+            "total_stale": 12
+          }
+        }
+    """
+    data = request.get_json(silent=True) or {}
+    limit = int(data.get("limit", 0))
+    ttl_days = data.get("ttl_days")
+    ttl_seconds = int(float(ttl_days) * 86400) if ttl_days is not None else None
+
+    try:
+        from oracle.enrichers.biographer import Biographer
+        bio = Biographer()
+        stats = bio.enrich_stale_artists(limit=limit, ttl_seconds=ttl_seconds)
+        return jsonify({"ok": True, "stats": stats})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route('/api/artist/shrine/<path:artist>', methods=['GET'])
 def api_artist_shrine(artist: str):
     """Get comprehensive artist profile for Artist Shrine view.
@@ -2777,21 +2870,55 @@ def api_constellation():
         c.execute("SELECT DISTINCT artist FROM tracks WHERE status = 'active'")
         in_library = {row[0] for row in c.fetchall()}
 
-        # Fetch biographer data for nodes (cached only — no fetching here)
-        nodes = []
-        for artist in sorted(node_set)[:limit]:
-            # Quick genre/era from enrich_cache
+        # Batch-fetch biographer cache for all nodes in one query.
+        # Compute lookup keys in Python (sha1 is not available in SQLite).
+        from oracle.enrichers.cache import make_lookup_key
+        import json as _json
+        node_list = sorted(node_set)[:limit]
+        key_to_artist = {make_lookup_key("biographer", a.strip()): a for a in node_list}
+        bio_by_artist: dict = {}
+        if key_to_artist:
+            placeholders = ",".join("?" * len(key_to_artist))
             c.execute(
-                "SELECT payload_json FROM enrich_cache WHERE provider = 'biographer' AND lookup_key = "
-                "(SELECT hex(substr(hashblob, 1, 20)) FROM (SELECT sha1(?) as hashblob))",
-                (artist.strip().lower(),),
+                f"SELECT lookup_key, payload_json FROM enrich_cache "
+                f"WHERE provider = 'biographer' AND lookup_key IN ({placeholders})",
+                list(key_to_artist.keys()),
             )
-            # Simple approach: just tag in-library status
-            nodes.append({
+            for lk, pj in c.fetchall():
+                artist_name = key_to_artist.get(lk)
+                if artist_name and pj:
+                    try:
+                        bio_by_artist[artist_name] = _json.loads(pj)
+                    except Exception:
+                        pass
+
+        nodes = []
+        for artist in node_list:
+            bio = bio_by_artist.get(artist, {})
+            node: dict = {
                 "id": artist,
                 "label": artist,
                 "inLibrary": artist in in_library,
-            })
+            }
+            if bio.get("genres"):
+                node["genres"] = bio["genres"][:3]
+            if bio.get("era"):
+                node["era"] = bio["era"]
+            if bio.get("origin"):
+                node["origin"] = bio["origin"]
+            if bio.get("lastfm_listeners"):
+                node["listeners"] = bio["lastfm_listeners"]
+            nodes.append(node)
+
+            # Apply genre / era filters (post-fetch, since data lives in JSON)
+            if genre_filter and not any(
+                genre_filter in g.lower() for g in (bio.get("genres") or [])
+            ):
+                nodes.pop()
+                continue
+            if era_filter and era_filter not in (bio.get("era") or "").lower():
+                nodes.pop()
+                continue
 
         edges = [
             {"source": r[0], "target": r[1], "type": r[2] or "related", "weight": r[3] or 0.5}
@@ -3137,6 +3264,82 @@ def index():
 # MAIN
 # ============================================================================
 
+def _schedule_startup_jobs() -> None:
+    """Kick off lightweight background jobs when the server boots.
+
+    Checks for empty/sparse tables and fills them without blocking startup:
+      - Taste profile: seed from library scores if never had real playback
+      - Artist graph: run incremental build if connections table is empty
+      - Biographer: enrich up to 50 new/stale artists if cache is empty
+    """
+    import threading
+
+    def _run():
+        import time as _time
+        _time.sleep(3)  # let Flask settle before hitting SQLite
+        try:
+            from oracle.db.schema import get_connection as _gc
+            _conn = _gc()
+            _c = _conn.cursor()
+
+            # 1. Taste seed
+            _c.execute("SELECT COUNT(*) FROM playback_history")
+            playback_count = _c.fetchone()[0] or 0
+            _c.execute("SELECT COUNT(*) FROM track_scores WHERE energy IS NOT NULL")
+            scored_count = _c.fetchone()[0] or 0
+            _c.execute("SELECT MAX(confidence) FROM taste_profile")
+            max_conf = _c.fetchone()[0] or 0
+
+            if scored_count > 0 and (playback_count == 0 or float(max_conf) < 0.5):
+                _conn.close()
+                try:
+                    from oracle.taste import seed_taste_from_library
+                    res = seed_taste_from_library()
+                    print(f"[startup] Taste seeded from library: {len(res.get('seeded', []))} dimensions")
+                except Exception as _e:
+                    print(f"[startup] Taste seed error: {_e}")
+            else:
+                _conn.close()
+
+            # 2. Artist graph (incremental)
+            _conn2 = _gc()
+            _c2 = _conn2.cursor()
+            _c2.execute("SELECT COUNT(*) FROM connections")
+            conn_count = _c2.fetchone()[0] or 0
+            _conn2.close()
+
+            if conn_count == 0:
+                print("[startup] connections=0 — scheduling incremental graph build...")
+                try:
+                    from oracle.graph_builder import GraphBuilder
+                    added = GraphBuilder().build_incremental()
+                    print(f"[startup] Graph build complete: {added} edges added")
+                except Exception as _e:
+                    print(f"[startup] Graph build error: {_e}")
+
+            # 3. Biographer (first 50 stale artists)
+            _conn3 = _gc()
+            _c3 = _conn3.cursor()
+            _c3.execute("SELECT COUNT(*) FROM enrich_cache WHERE provider='biographer'")
+            bio_count = _c3.fetchone()[0] or 0
+            _conn3.close()
+
+            if bio_count < 10:
+                print(f"[startup] biographer_cache={bio_count} — enriching first 50 artists...")
+                try:
+                    from oracle.enrichers.biographer import Biographer
+                    stats = Biographer().enrich_stale_artists(limit=50)
+                    print(f"[startup] Biographer: {stats['processed']} enriched, {stats['failed']} failed")
+                except Exception as _e:
+                    print(f"[startup] Biographer error: {_e}")
+
+        except Exception as _outer:
+            print(f"[startup] auto-init error: {_outer}")
+
+    t = threading.Thread(target=_run, name="lyra-startup-init", daemon=True)
+    t.start()
+
+
 def main():
     """Start Flask server."""
     if os.getenv("LYRA_BOOTSTRAP", "1").strip().lower() not in {"0", "false", "no"}:
@@ -3161,6 +3364,9 @@ def main():
     print(f"Write Mode: {get_write_mode()}")
     print(f"\nStarting server at http://localhost:5000")
     print("="*60 + "\n")
+
+    # --- Background auto-init: seed sparse data on first run ---
+    _schedule_startup_jobs()
     
     debug_value = os.getenv("LYRA_DEBUG", "").strip().lower()
     if not debug_value:

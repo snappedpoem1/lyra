@@ -553,6 +553,168 @@ class Biographer:
         lookup_key = make_lookup_key("biographer", artist_name.strip())
         return get_cached_payload(self.PROVIDER, lookup_key, max_age_seconds=_CACHE_TTL)
 
+    def enrich_stale_artists(
+        self,
+        limit: int = 0,
+        ttl_seconds: Optional[int] = None,
+        progress_callback=None,
+    ) -> Dict[str, Any]:
+        """Enrich only artists whose cache entry is missing or older than TTL.
+
+        This is the preferred "refresh" path — it never re-fetches fresh data,
+        so a full library refresh is cheap when most artists are up to date.
+
+        Args:
+            limit: Max artists to enrich this run (0 = no limit).
+            ttl_seconds: Override the default TTL (default: ``_CACHE_TTL``).
+            progress_callback: Optional callable(current, total, artist_name).
+
+        Returns:
+            Dict with keys: processed, skipped, failed, total, errors.
+        """
+        from oracle.db.schema import get_connection
+
+        effective_ttl = ttl_seconds if ttl_seconds is not None else _CACHE_TTL
+        cutoff = time.time() - effective_ttl
+
+        conn = get_connection()
+        try:
+            c = conn.cursor()
+            # Collect all unique library artists
+            c.execute(
+                "SELECT DISTINCT artist FROM tracks "
+                "WHERE artist IS NOT NULL AND artist != '' ORDER BY artist"
+            )
+            all_artists = [row[0] for row in c.fetchall()]
+
+            # Batch-check which ones need enrichment (missing or stale)
+            keys_to_artist = {
+                make_lookup_key("biographer", a.strip()): a for a in all_artists
+            }
+            if keys_to_artist:
+                placeholders = ",".join("?" * len(keys_to_artist))
+                c.execute(
+                    f"SELECT lookup_key, fetched_at FROM enrich_cache "
+                    f"WHERE provider = 'biographer' AND lookup_key IN ({placeholders})",
+                    list(keys_to_artist.keys()),
+                )
+                fresh_keys = {
+                    row[0]
+                    for row in c.fetchall()
+                    if row[1] is not None and float(row[1]) > cutoff
+                }
+            else:
+                fresh_keys = set()
+        finally:
+            conn.close()
+
+        stale_artists = [
+            a for k, a in keys_to_artist.items() if k not in fresh_keys
+        ]
+        if limit > 0:
+            stale_artists = stale_artists[:limit]
+
+        total_stale = len(stale_artists)
+        processed = skipped = failed = 0
+        errors: List[str] = []
+
+        logger.info(
+            "Biographer stale refresh: %d/%d artists need enrichment",
+            total_stale, len(all_artists),
+        )
+
+        for i, artist_name in enumerate(stale_artists):
+            if progress_callback:
+                progress_callback(i + 1, total_stale, artist_name)
+            try:
+                result = self.enrich_artist(artist_name, force=False)
+                if result:
+                    processed += 1
+                else:
+                    failed += 1
+                    errors.append(f"{artist_name}: empty result")
+            except Exception as exc:
+                failed += 1
+                errors.append(f"{artist_name}: {exc}")
+                logger.warning("Biographer stale-refresh failed for '%s': %s", artist_name, exc)
+            time.sleep(0.5)
+
+        return {
+            "processed": processed,
+            "skipped": len(all_artists) - total_stale,
+            "failed": failed,
+            "total_library": len(all_artists),
+            "total_stale": total_stale,
+            "errors": errors[:20],
+        }
+
+    def enrich_new_artists(self, artist_names: List[str]) -> Dict[str, Any]:
+        """Enrich artists that have no cache entry at all (new to the library).
+
+        Intended to be called after indexing new tracks. Never refetches existing
+        entries regardless of age — use ``enrich_stale_artists`` for TTL-based
+        refresh.
+
+        Args:
+            artist_names: List of artist name strings (raw, any casing).
+
+        Returns:
+            Dict with keys: processed, already_cached, failed, total, errors.
+        """
+        from oracle.db.schema import get_connection
+
+        unique = list(dict.fromkeys(a.strip() for a in artist_names if a and a.strip()))
+        if not unique:
+            return {"processed": 0, "already_cached": 0, "failed": 0, "total": 0, "errors": []}
+
+        keys_to_artist = {make_lookup_key("biographer", a): a for a in unique}
+
+        conn = get_connection()
+        try:
+            c = conn.cursor()
+            placeholders = ",".join("?" * len(keys_to_artist))
+            c.execute(
+                f"SELECT lookup_key FROM enrich_cache "
+                f"WHERE provider = 'biographer' AND lookup_key IN ({placeholders})",
+                list(keys_to_artist.keys()),
+            )
+            existing_keys = {row[0] for row in c.fetchall()}
+        finally:
+            conn.close()
+
+        new_artists = [a for k, a in keys_to_artist.items() if k not in existing_keys]
+
+        processed = already_cached = failed = 0
+        already_cached = len(unique) - len(new_artists)
+        errors: List[str] = []
+
+        logger.info(
+            "Biographer: enriching %d new artists (%d already cached)",
+            len(new_artists), already_cached,
+        )
+
+        for artist_name in new_artists:
+            try:
+                result = self.enrich_artist(artist_name, force=False)
+                if result:
+                    processed += 1
+                else:
+                    failed += 1
+                    errors.append(f"{artist_name}: empty result")
+            except Exception as exc:
+                failed += 1
+                errors.append(f"{artist_name}: {exc}")
+                logger.warning("Biographer new-artist enrich failed '%s': %s", artist_name, exc)
+            time.sleep(0.5)
+
+        return {
+            "processed": processed,
+            "already_cached": already_cached,
+            "failed": failed,
+            "total": len(unique),
+            "errors": errors[:20],
+        }
+
 
 # ---------------------------------------------------------------------------
 # Helper utilities
