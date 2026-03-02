@@ -237,3 +237,33 @@ export const tasteProfileSchema = z.object({
     })
     .optional(),
 });
+
+export const artistShrineSchema = z.object({
+  artist: z.string(),
+  bio: z.string().optional(),
+  bio_source: z.string().optional(),
+  images: z.record(z.string()).optional(),
+  wiki_thumbnail: z.string().optional(),
+  formation_year: z.union([z.string(), z.number()]).nullable().optional(),
+  origin: z.string().optional(),
+  members: z.array(z.string()).optional(),
+  scene: z.string().optional(),
+  genres: z.array(z.string()).optional(),
+  era: z.string().optional(),
+  artist_mbid: z.string().optional(),
+  lastfm_listeners: z.number().nullable().optional(),
+  lastfm_url: z.string().optional(),
+  wiki_url: z.string().optional(),
+  social_links: z.record(z.string()).optional(),
+  related_artists: z.array(
+    z.object({ target: z.string(), type: z.string(), weight: z.number() }),
+  ).optional(),
+  credits: z.array(
+    z.object({ role: z.string(), name: z.string(), count: z.number() }),
+  ).optional(),
+  library_stats: z.object({
+    track_count: z.number(),
+    album_count: z.number(),
+    albums: z.array(z.object({ album: z.string().nullable(), year: z.union([z.string(), z.number()]).nullable() })),
+  }).optional(),
+});

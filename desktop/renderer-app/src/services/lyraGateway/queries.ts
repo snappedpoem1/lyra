@@ -3,6 +3,7 @@ import { fixtureModeEnabled } from "@/mocks/fixtures/mode";
 import { z } from "zod";
 import {
   agentSuggestionSchema,
+  artistShrineSchema,
   constellationSchema,
   doctorSchema,
   dossierSchema,
@@ -332,6 +333,68 @@ export async function getLibraryArtistBio(
   } catch {
     return {};
   }
+}
+
+export interface ArtistShrine {
+  artist: string;
+  bio: string;
+  bioSource: string;
+  images: Record<string, string>;
+  wikiThumbnail: string;
+  formationYear: string | number | null;
+  origin: string;
+  members: string[];
+  scene: string;
+  genres: string[];
+  era: string;
+  artistMbid: string;
+  lastfmListeners: number | null;
+  lastfmUrl: string;
+  wikiUrl: string;
+  socialLinks: Record<string, string>;
+  relatedArtists: Array<{ target: string; type: string; weight: number }>;
+  credits: Array<{ role: string; name: string; count: number }>;
+  libraryStats: {
+    trackCount: number;
+    albumCount: number;
+    albums: Array<{ album: string | null; year: string | number | null }>;
+  };
+}
+
+/** Full artist shrine — combines bio, library stats, connections, credits. */
+export async function getArtistShrine(artist: string): Promise<ArtistShrine> {
+  const payload = await requestJson(
+    `/api/artist/shrine/${encodeURIComponent(artist)}`,
+    artistShrineSchema,
+    undefined,
+    10000,
+    0,
+  );
+  return {
+    artist: payload.artist,
+    bio: payload.bio ?? "",
+    bioSource: payload.bio_source ?? "none",
+    images: payload.images ?? {},
+    wikiThumbnail: payload.wiki_thumbnail ?? "",
+    formationYear: payload.formation_year ?? null,
+    origin: payload.origin ?? "",
+    members: payload.members ?? [],
+    scene: payload.scene ?? "",
+    genres: payload.genres ?? [],
+    era: payload.era ?? "",
+    artistMbid: payload.artist_mbid ?? "",
+    lastfmListeners: payload.lastfm_listeners ?? null,
+    lastfmUrl: payload.lastfm_url ?? "",
+    wikiUrl: payload.wiki_url ?? "",
+    socialLinks: payload.social_links ?? {},
+    relatedArtists: payload.related_artists ?? [],
+    credits: payload.credits ?? [],
+    libraryStats: {
+      trackCount: payload.library_stats?.track_count ?? 0,
+      albumCount: payload.library_stats?.album_count ?? 0,
+      albums: payload.library_stats?.albums ?? [],
+    },
+  };
 }
 
 export async function getLibraryAlbumDetail(album: string, artist?: string | null): Promise<LibraryAlbumDetail> {

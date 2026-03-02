@@ -2822,6 +2822,98 @@ def api_artist_shrine(artist: str):
         return jsonify({"error": str(exc)}), 500
 
 
+# ─── Credits (F-003) ──────────────────────────────────────────────────────────
+
+@app.route('/api/credits/<path:track_id>', methods=['GET'])
+def api_credits_for_track(track_id: str):
+    """Return all credits stored for a track.
+
+    Returns list of {id, artist_name, artist_id, role, credited_as,
+    connection_type} grouped by role.
+    """
+    try:
+        from oracle.enrichers.credit_mapper import CreditMapper
+        cm = CreditMapper()
+        credits = cm.get_credits_for_track(track_id)
+        return jsonify({"track_id": track_id, "credits": credits, "count": len(credits)})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/credits/map', methods=['POST'])
+def api_credits_map():
+    """Map and persist credits for a single track.
+
+    Body (JSON): {track_id, recording_mbid?, artist?, title?, album?}
+    One of recording_mbid or (artist + title) is required.
+    """
+    body = request.get_json(force=True, silent=True) or {}
+    track_id = (body.get("track_id") or "").strip()
+    recording_mbid = (body.get("recording_mbid") or "").strip() or None
+    artist = (body.get("artist") or "").strip() or None
+    title = (body.get("title") or "").strip() or None
+    album = (body.get("album") or "").strip() or None
+
+    if not track_id:
+        return jsonify({"error": "track_id required"}), 400
+    if not recording_mbid and not (artist and title):
+        return jsonify({"error": "recording_mbid or artist+title required"}), 400
+
+    try:
+        from oracle.enrichers.credit_mapper import map_credits_for_track
+        credits = map_credits_for_track(
+            track_id,
+            recording_mbid=recording_mbid,
+            artist=artist,
+            title=title,
+            album=album,
+        )
+        return jsonify({"track_id": track_id, "credits": credits, "count": len(credits)})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route('/api/credits/map-batch', methods=['POST'])
+def api_credits_map_batch():
+    """Batch-map credits for all tracks with a musicbrainz_id stored.
+
+    Body (JSON): {limit?, only_missing?}
+    Default: limit=200, only_missing=true.
+    Runs in a background thread — returns 202 Accepted immediately.
+    """
+    import threading
+    body = request.get_json(force=True, silent=True) or {}
+    limit = int(body.get("limit") or 200)
+    only_missing = bool(body.get("only_missing", True))
+
+    def _run() -> None:
+        try:
+            from oracle.enrichers.credit_mapper import CreditMapper
+            result = CreditMapper().map_batch(limit=limit, only_missing=only_missing)
+            logger.info("credits map-batch complete: %s", result)
+        except Exception as exc:
+            logger.error("credits map-batch error: %s", exc)
+
+    t = threading.Thread(target=_run, daemon=True, name="credits-map-batch")
+    t.start()
+    return jsonify({"status": "started", "limit": limit, "only_missing": only_missing}), 202
+
+
+@app.route('/api/credits/summary', methods=['GET'])
+def api_credits_summary():
+    """Library-wide credit statistics.
+
+    Returns total_credits, top_producers, top_composers, top_featured,
+    roles_breakdown.
+    """
+    try:
+        from oracle.enrichers.credit_mapper import CreditMapper
+        summary = CreditMapper().get_credits_summary()
+        return jsonify(summary)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route('/api/constellation', methods=['GET'])
 def api_constellation():
     """Get artist connection graph for Constellation visualization.

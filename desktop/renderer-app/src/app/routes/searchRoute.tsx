@@ -3,15 +3,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { SearchHero } from "@/features/search/SearchHero";
 import { SearchResultStack } from "@/features/search/SearchResultStack";
+import { DimensionalSearchPanel } from "@/features/search/DimensionalSearchPanel";
 import { audioEngine } from "@/services/audio/audioEngine";
 import { createVibe, generateVibe } from "@/services/lyraGateway/queries";
 import { useQueueStore } from "@/stores/queueStore";
 import { useSearchStore } from "@/stores/searchStore";
 import { LyraButton } from "@/ui/LyraButton";
 
+type SearchMode = "text" | "dimensional";
+
 export function SearchRoute() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchMode, setSearchMode] = useState<SearchMode>("text");
   const query = useSearchStore((state) => state.query);
   const setQuery = useSearchStore((state) => state.setQuery);
   const [draftQuery, setDraftQuery] = useState(query);
@@ -53,8 +57,51 @@ export function SearchRoute() {
     saveMutation.mutate({ prompt: data.meta.prompt || query, name: vibeName });
   };
 
+  const handleDimTrackSelect = (track: { track_id: string; artist: string; title: string; album?: string | null; filepath?: string; path?: string }) => {
+    const item = {
+      trackId: track.track_id,
+      artist: track.artist,
+      title: track.title,
+      album: track.album ?? undefined,
+      filepath: track.filepath ?? track.path ?? "",
+      duration: undefined,
+    };
+    replaceQueue({
+      queueId: `dim-${track.track_id}`,
+      origin: "dimensional-search",
+      reorderable: true,
+      currentIndex: 0,
+      items: [item],
+    });
+    void audioEngine.playTrack(item);
+  };
+
   return (
     <div className="route-stack">
+      {/* Mode toggle */}
+      <div className="search-mode-toggle">
+        <button
+          className={`search-mode-btn${searchMode === "text" ? " active" : ""}`}
+          onClick={() => setSearchMode("text")}
+        >
+          Text Search
+        </button>
+        <button
+          className={`search-mode-btn${searchMode === "dimensional" ? " active" : ""}`}
+          onClick={() => setSearchMode("dimensional")}
+        >
+          Dimensional
+        </button>
+      </div>
+
+      {/* Dimensional mode */}
+      {searchMode === "dimensional" && (
+        <DimensionalSearchPanel onTrackSelect={handleDimTrackSelect} />
+      )}
+
+      {/* Text mode */}
+      {searchMode === "text" && (
+        <>
       <SearchHero
         query={draftQuery}
         onQueryChange={setDraftQuery}
@@ -95,6 +142,6 @@ export function SearchRoute() {
           }}
         />
       )}
-    </div>
-  );
+        </>
+      )}
 }

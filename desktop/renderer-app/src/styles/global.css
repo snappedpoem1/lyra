@@ -2143,3 +2143,44 @@ body,
   flex-wrap: wrap;
   gap: 5px;
 }
+
+/* ── Search Mode Toggle ────────────────────────────────────── */
+.search-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-soft);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  width: fit-content;
+}
+
+.search-mode-btn {
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-md) - 3px);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 5px 16px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.search-mode-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.search-mode-btn.active {
+  background: var(--accent);
+  color: #111;
+  font-weight: 700;
+}
+
+/* ── Dimensional Search Panel layout tweaks ────────────────── */
+.dimensional-search-panel {
+  width: 100%;
+}
+
