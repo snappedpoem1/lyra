@@ -1,44 +1,48 @@
 :root {
-  /* Depth layers */
-  --bg: #0c1018;
-  --bg-elevated: rgba(20, 26, 36, 0.98);
-  --bg-soft: rgba(36, 44, 58, 0.80);
-  --bg-glass: rgba(14, 18, 26, 0.70);
+  /* Surfaces */
+  --bg:          #0c0f13;
+  --bg-elevated: rgba(30, 34, 40, 0.98);
+  --bg-soft:     rgba(42, 47, 54, 0.85);
+  --bg-glass:    rgba(18, 22, 28, 0.72);
 
-  /* Structure */
-  --panel-border: rgba(150, 170, 210, 0.13);
-  --border-subtle: rgba(150, 170, 210, 0.06);
+  /* Borders */
+  --panel-border:  rgba(160, 170, 185, 0.16);
+  --border-subtle: rgba(160, 170, 185, 0.09);
+  --border-soft:   rgba(160, 170, 185, 0.22);
 
-  /* Text — three tiers */
-  --text: #edf3ff;
-  --text-soft: #8a9bb8;
-  --text-dim: #52627a;
+  /* Text */
+  --text:      #e8edf4;
+  --text-soft: #7e8ea4;
+  --text-dim:  #4a5568;
 
-  /* Brand accent (lime) */
-  --accent: #87d642;
-  --accent-bright: #b0ef54;
-  --accent-glow: rgba(135, 214, 66, 0.14);
+  /* Accent: lime green */
+  --accent:        #8cd94a;
+  --accent-bright: #c8ff82;
+  --accent-glow:   rgba(140, 217, 74, 0.12);
+  --accent-subtle: rgba(140, 217, 74, 0.06);
 
-  /* Warm amber for meters/progress */
-  --amber: rgba(255, 178, 72, 0.92);
-  --amber-dim: rgba(255, 180, 85, 0.10);
+  /* Amber (warm state accents) */
+  --amber:     rgba(255, 178, 72, 0.92);
+  --amber-dim: rgba(255, 178, 72, 0.10);
 
   /* State */
-  --warning: #e07a50;
+  --warning: #d98a30;
+  --error:   #d95151;
 
   /* Shadows */
-  --shadow: rgba(0, 0, 0, 0.65);
-  --shadow-sm: rgba(0, 0, 0, 0.28);
+  --shadow:    rgba(0, 0, 0, 0.72);
+  --shadow-sm: rgba(0, 0, 0, 0.35);
 
   /* Geometry */
-  --radius-lg: 14px;
-  --radius-md: 9px;
-  --radius-sm: 5px;
-  --radius-xs: 3px;
+  --radius-xl:   12px;
+  --radius-lg:    8px;
+  --radius-md:    6px;
+  --radius-sm:    4px;
+  --radius-xs:    3px;
   --radius-pill: 999px;
 
-  /* Fonts — Segoe UI Variable is crisp on Windows at all sizes */
-  --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  /* Typography */
+  --font-ui:      "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+  --font-mono:    "Cascadia Code", "Consolas", ui-monospace, monospace;
 }
