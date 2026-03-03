@@ -36,7 +36,7 @@ except ImportError:
     librosa = None
     logging.warning("librosa not installed. Architect features disabled.")
 
-from oracle.config import get_connection
+from oracle.db.schema import get_connection
 
 logger = logging.getLogger(__name__)
 

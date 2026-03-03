@@ -20,7 +20,7 @@ Owner (Chris) is a novice programmer with professional ambitions. Write code he 
 - Full CLI with 30+ commands (argparse-based, `oracle/cli.py`)
 - CLAP embeddings generating with music-specific model (`laion/larger_clap_music`) via DirectML (AMD GPU)
 - ChromaDB vector storage in `chroma_storage/`
-- **4-tier acquisition waterfall: Qobuz → Slskd (Soulseek) → Real-Debrid → SpotDL**
+- **5-tier acquisition waterfall: Qobuz → Streamrip → Slskd (Soulseek) → Real-Debrid → SpotDL**
 - Qobuz hi-fi acquisition: FLAC up to 24-bit/96kHz with full metadata + cover art
 - Qobuz Docker microservice (`docker/qobuz/`) + direct `qobuz-dl` backend
 - Acquisition guard with pre-flight/post-flight validation (duplicate detection working)
@@ -76,7 +76,7 @@ Layer 0: Infrastructure — .env, Python 3.12, .venv, A: drive, Docker (for Prow
 Layer 1: Data — lyra_registry.db schema, tracks populated, spotify data imported
 Layer 2: Embeddings — CLAP on DirectML (AMD GPU), ChromaDB populated, search returns results
 Layer 3: Scores — track_scores populated for ALL tracks (736/737 ✓)
-Layer 4: Acquisition — Qobuz → Slskd → RD → SpotDL waterfall, guard validates everything
+Layer 4: Acquisition — Qobuz → Streamrip → Slskd → RD → SpotDL waterfall, guard validates everything
 Layer 5: Playback — foobar2000 + BeefWeb bridge, playback events → taste learning
 Layer 6: Intelligence — Radio, Playlust arcs, taste profiles, discovery
 ```
@@ -100,7 +100,7 @@ C:\MusicOracle\
 │   │   ├── qobuz.py                 # Tier 1: Qobuz hi-fi (qobuz-dl backend)
 │   │   ├── realdebrid.py            # Tier 3: Direct RD API
 │   │   ├── prowlarr_rd.py           # Prowlarr search (used by RD tier)
-│   │   ├── waterfall.py             # Unified T1→T2→T3→T4 cascade
+│   │   ├── waterfall.py             # Unified T1→T2→T3→T4→T5 cascade
 │   │   ├── smart_pipeline.py        # Smart acquisition with validation
 │   │   ├── spotdl.py                # Tier 4: YouTube fallback
 │   │   ├── validator.py             # Post-acquisition validation
@@ -169,13 +169,14 @@ nostalgia:  modern/futuristic ←→ retro/vintage/throwback
 
 NOTE: Previous docs said "darkness" and "transcendence" — those DON'T EXIST in anchors.py. The actual dimensions are **valence** and **density**. Always match the code.
 
-## ACQUISITION WATERFALL (ACTUAL — 4 TIERS)
+## ACQUISITION WATERFALL (ACTUAL — 5 TIERS)
 
 ```
 Tier 1: Qobuz (qobuz-dl)        — FLAC up to 24-bit/96kHz, full metadata + cover art
-Tier 2: Slskd (Soulseek)        — FLAC from P2P, ~10-30s/track, ~90% hit rate
-Tier 3: Real-Debrid + Prowlarr  — FLAC albums, direct HTTPS download
-Tier 4: SpotDL                   — YouTube Music fallback (~256kbps)
+Tier 2: Streamrip               — alternative hi-fi ripper fallback (if configured)
+Tier 3: Slskd (Soulseek)        — FLAC from P2P, ~10-30s/track, ~90% hit rate
+Tier 4: Real-Debrid + Prowlarr  — FLAC albums, direct HTTPS download
+Tier 5: SpotDL                   — YouTube Music fallback (~256kbps)
 ```
 
 ### Qobuz Details:
@@ -285,7 +286,7 @@ oracle catalog acquire --artist X    # Full discography acquisition
 
 - [x] track_scores count matches tracks count (2,472/2,472)
 - [x] `oracle search` returns sensible, differentiated results
-- [x] `oracle acquire waterfall` completes end-to-end (4-tier: Qobuz→Slskd→RD→SpotDL)
+- [x] `oracle acquire waterfall` completes end-to-end (5-tier: Qobuz→Streamrip→Slskd→RD→SpotDL)
 - [x] Qobuz acquirer downloads hi-fi FLAC with full metadata
 - [x] No duplicate get_connection() — config.py delegates to db/schema.py
 - [x] Single .env keys (no duplicates) — template consolidated

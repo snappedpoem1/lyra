@@ -41,6 +41,7 @@ LIBRARY_BASE = _env_path("LIBRARY_BASE", _env_path("LIBRARY_DIR", PROJECT_ROOT /
 DOWNLOADS_FOLDER = _env_path("DOWNLOADS_FOLDER", _env_path("DOWNLOAD_DIR", PROJECT_ROOT / "downloads"))
 STAGING_FOLDER = _env_path("STAGING_FOLDER", _env_path("STAGING_DIR", PROJECT_ROOT / "staging"))
 QUARANTINE_PATH = _env_path("QUARANTINE_PATH", LIBRARY_BASE.parent / "_Quarantine")
+REJECTED_FOLDER = _env_path("REJECTED_FOLDER", LIBRARY_BASE.parent / "_Rejected")
 VIBES_FOLDER = _env_path("VIBES_FOLDER", PROJECT_ROOT / "Vibes")
 REPORTS_FOLDER = _env_path("REPORTS_FOLDER", PROJECT_ROOT / "Reports")
 PLAYLISTS_FOLDER = _env_path("PLAYLISTS_FOLDER", PROJECT_ROOT / "playlists")

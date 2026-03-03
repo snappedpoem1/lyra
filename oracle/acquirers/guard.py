@@ -17,10 +17,14 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
+import time
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+from oracle.config import REJECTED_FOLDER
 
 logger = logging.getLogger(__name__)
 
@@ -667,6 +671,65 @@ def guard_file(filepath: Path) -> GuardResult:
 # =============================================================================
 # BATCH OPERATIONS
 # =============================================================================
+
+
+# Sub-folder mapping by rejection_category
+_REJECTED_SUBFOLDERS: Dict[str, str] = {
+    "junk":      "Junk",
+    "label":     "Junk",
+    "duplicate": "Duplicates",
+    "quality":   "Uncertain",
+    "invalid":   "Uncertain",
+}
+
+
+def move_rejected_file(filepath: Path, result: "GuardResult") -> Optional[Path]:
+    """Move a rejected file to the appropriate REJECTED_FOLDER sub-directory.
+
+    Routes by ``result.rejection_category`` according to the mapping::
+
+        junk / label  → REJECTED_FOLDER / Junk /
+        duplicate     → REJECTED_FOLDER / Duplicates /
+        quality /
+        invalid / *   → REJECTED_FOLDER / Uncertain /
+
+    Files with \"remix\" or \"tribute\" in the title override to Remixes/.
+
+    Args:
+        filepath: Source file to move.
+        result:   GuardResult from guard_acquisition / guard_file.
+
+    Returns:
+        Destination :class:`pathlib.Path` on success, ``None`` on failure.
+    """
+    if not filepath.exists():
+        logger.warning("move_rejected_file: source not found: %s", filepath)
+        return None
+
+    cat = (result.rejection_category or "").lower()
+    title = (result.title or filepath.stem).lower()
+
+    import re as _re
+    if _re.search(r"\b(remix|rmx|tribute|karaoke)\b", title):
+        sub = "Remixes"
+    else:
+        sub = _REJECTED_SUBFOLDERS.get(cat, "Uncertain")
+
+    dest_dir = REJECTED_FOLDER / sub
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    dest = dest_dir / filepath.name
+    if dest.exists():
+        dest = dest_dir / f"{filepath.stem}_{int(time.time())}{filepath.suffix}"
+
+    try:
+        shutil.move(str(filepath), str(dest))
+        logger.info("REJECTED [%s]: %s → %s", sub, filepath.name, dest)
+        return dest
+    except Exception as exc:
+        logger.error("Failed to move rejected file %s: %s", filepath, exc)
+        return None
+
 
 def guard_downloads_folder(
     downloads_path: Path,

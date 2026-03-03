@@ -24,7 +24,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import xml.etree.ElementTree as ET
 
-from oracle.config import get_connection, DOWNLOADS_FOLDER
+from oracle.config import DOWNLOADS_FOLDER
+from oracle.db.schema import get_connection
 
 logger = logging.getLogger(__name__)
 

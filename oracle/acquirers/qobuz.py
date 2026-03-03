@@ -25,10 +25,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
+from oracle.config import STAGING_FOLDER
+from oracle.name_cleaner import clean_artist, clean_title as _clean_title
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-STAGING_DIR = (PROJECT_ROOT / "staging").resolve()
+STAGING_DIR = STAGING_FOLDER
 
 QOBUZ_USERNAME = os.getenv("QOBUZ_USERNAME", "")
 QOBUZ_PASSWORD = os.getenv("QOBUZ_PASSWORD", "")
@@ -287,8 +290,11 @@ class QobuzAcquirer:
 
                 # 4. Rename to clean Artist - Title format and move to staging
                 ext = downloaded.suffix
-                clean_a = re.sub(r'[<>:"/\\|?*]', '_', matched_artist)
-                clean_t = re.sub(r'[<>:"/\\|?*]', '_', matched_title)
+                clean_a, _ = clean_artist(matched_artist)
+                clean_t, _ = _clean_title(matched_title)
+                # Sanitise for filesystem (spaces kept — staging is intermediate)
+                clean_a = re.sub(r'[<>:"/\\|?*]', '_', clean_a)
+                clean_t = re.sub(r'[<>:"/\\|?*]', '_', clean_t)
                 filename = f"{clean_a} - {clean_t}{ext}"
 
                 target = self.staging_dir / filename

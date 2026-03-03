@@ -20,7 +20,7 @@ import ast
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-from oracle.config import get_connection
+from oracle.db.schema import get_connection
 from oracle.llm import LLMClient
 from oracle.scout import scout
 from oracle.lore import lore

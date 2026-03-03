@@ -44,6 +44,12 @@ colorama
 tenacity
 tqdm
 
+# Code quality (linting + formatting — replaces flake8/black/isort)
+ruff
+
+# Structured logging (replaces print() debugging)
+loguru
+
 # Web API server (for future dashboard)
 flask
 flask-cors

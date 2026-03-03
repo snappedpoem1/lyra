@@ -15,8 +15,8 @@ from typing import Dict, List, Set, Tuple
 
 import mutagen
 
-from oracle.acquirers.guard import guard_file, GuardResult
-from oracle.config import LIBRARY_BASE
+from oracle.acquirers.guard import guard_file, move_rejected_file, GuardResult
+from oracle.config import LIBRARY_BASE, REJECTED_FOLDER
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +107,7 @@ def process_downloads(
     """
     downloads_folder = Path(downloads_folder)
     library_folder = Path(library_folder)
-    quarantine_folder = downloads_folder.parent / "quarantine"
-    
+
     if not downloads_folder.exists():
         return {"error": f"Downloads folder not found: {downloads_folder}"}
     
@@ -146,17 +145,9 @@ def process_downloads(
                         logger.error(f"Failed to delete {filepath}: {e}")
                         action_taken = "delete_failed"
                 else:
-                    # Move to quarantine
-                    try:
-                        quarantine_folder.mkdir(parents=True, exist_ok=True)
-                        dest = quarantine_folder / filepath.name
-                        if dest.exists():
-                            dest = quarantine_folder / f"{filepath.stem}_{int(time.time())}{filepath.suffix}"
-                        shutil.move(str(filepath), str(dest))
-                        action_taken = "quarantined"
-                    except Exception as e:
-                        logger.error(f"Failed to quarantine {filepath}: {e}")
-                        action_taken = "quarantine_failed"
+                    # Route to REJECTED_FOLDER sub-directory via guard helper
+                    dest = move_rejected_file(filepath, guard_result)
+                    action_taken = "rejected" if dest else "reject_failed"
             
             logger.info(f"âŒ REJECTED: {filepath.name[:50]} â†’ {guard_result.rejection_reason[:40]} ({action_taken})")
             
@@ -173,14 +164,15 @@ def process_downloads(
             
             if not dry_run:
                 try:
-                    quarantine_folder.mkdir(parents=True, exist_ok=True)
-                    dest = quarantine_folder / filepath.name
+                    uncertain = REJECTED_FOLDER / "Uncertain"
+                    uncertain.mkdir(parents=True, exist_ok=True)
+                    dest = uncertain / filepath.name
                     shutil.move(str(filepath), str(dest))
-                    action_taken = "quarantined"
+                    action_taken = "moved_uncertain"
                 except Exception as e:
-                    logger.error(f"Failed to quarantine {filepath}: {e}")
-            
-            logger.warning(f"âš ï¸ LOW CONFIDENCE ({guard_result.confidence:.0%}): {filepath.name[:50]} ({action_taken})")
+                    logger.error(f"Failed to move low-confidence file {filepath}: {e}")
+
+            logger.warning(f"⚠️ LOW CONFIDENCE ({guard_result.confidence:.0%}): {filepath.name[:50]} ({action_taken})")
             
         else:
             # ALLOWED - import to library

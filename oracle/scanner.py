@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 from oracle.config import LIBRARY_BASE, QUARANTINE_PATH as CONFIG_QUARANTINE_PATH
 from oracle.db.schema import get_connection, get_content_hash_fast, get_track_id, get_write_mode
+from oracle.name_cleaner import clean_artist
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 QUARANTINE_PATH = CONFIG_QUARANTINE_PATH
@@ -128,6 +129,10 @@ def extract_metadata(file_path: Path) -> Dict[str, str]:
 
     if "title" in meta:
         meta["title"] = _deep_clean_title(meta["title"])
+
+    # Strip feat. / ft. from artist tag — store only the primary artist
+    if "artist" in meta:
+        meta["artist"], _ = clean_artist(meta["artist"])
 
     return meta
 

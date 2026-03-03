@@ -19,7 +19,8 @@ import numpy as np
 from typing import Optional, List, Dict
 import uuid
 
-from oracle.config import get_connection, CHROMA_COLLECTION
+from oracle.config import CHROMA_COLLECTION
+from oracle.db.schema import get_connection
 
 logger = logging.getLogger(__name__)
 

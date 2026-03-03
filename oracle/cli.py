@@ -856,19 +856,19 @@ def main() -> None:
         return
 
     if args.command == "downloads" and args.downloads_command == "organize":
-        print("NOTE: 'oracle downloads organize' is deprecated. Use 'oracle import' instead.")
-        print("Redirecting to beets import...")
         import logging as _logging
         _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
-        from oracle.integrations.beets_import import beets_import_and_ingest
-        from oracle.config import DOWNLOADS_FOLDER
-        result = beets_import_and_ingest(
-            Path(DOWNLOADS_FOLDER),
-            dry_run=args.dry_run,
+        from oracle.download_processor import organize
+        dry = getattr(args, "dry_run", False)
+        result = organize(
+            library_path=Path(args.library),
+            dry_run=dry,
         )
-        print(f"Beets import: {result.get('imported', 0)} imported, "
-              f"{result.get('quarantined', 0)} quarantined, "
-              f"{result.get('errors', 0)} errors")
+        moved  = result.get("moved", 0)
+        skpped = result.get("skipped", 0)
+        errors = result.get("errors", 0)
+        status = "(dry run)" if dry else ""
+        print(f"Organize {status}: {moved} moved, {skpped} skipped, {errors} errors")
         return
 
     if args.command == "vibe" and args.vibe_command == "save":

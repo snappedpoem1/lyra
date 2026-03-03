@@ -1,0 +1,21 @@
+# Music Oracle — Full Dependencies (includes AI/ML stack)
+# Use this for a complete installation with embedding, scoring, and semantic search.
+#
+# Install: pip install -r requirements-full.txt
+#    or:   uv pip install -r requirements-full.txt
+#
+# For a lean install without AI features, use requirements.txt instead.
+
+# Everything in the base requirements
+-r requirements.txt
+
+# Sonic DNA / embeddings + semantic search (pinned for stability)
+chromadb==1.5.0
+transformers==5.2.0
+torch==2.10.0
+torchvision==0.25.0
+torchaudio==2.10.0
+librosa==0.11.0
+soundfile==0.13.1
+sentence-transformers==5.2.3
+numpy>=2.0

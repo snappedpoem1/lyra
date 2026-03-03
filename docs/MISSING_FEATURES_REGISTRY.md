@@ -98,7 +98,7 @@ POST /api/enrich/biographer
 
 ---
 
-### 2. GRAPH AUTO-BUILDER ❌ NOT BUILT
+### 2. GRAPH AUTO-BUILDER ✅ BUILT
 **ID:** F-002 | **Priority:** P1 | **Complexity:** Low | **Effort:** 8-10 hrs
 
 **Purpose:** Stop building relationships on-demand. Proactively populate the entire artist graph.
@@ -106,8 +106,8 @@ POST /api/enrich/biographer
 **Current state:**
 - ✅ `lore.py` has `get_artist_relationships()` function
 - ✅ `connections` table exists and is queryable
-- ❌ Graph only populated when `/api/lore/trace` is called (reactive)
-- ❌ New artists added to library don't automatically get relationships
+- ✅ `oracle/graph_builder.py` exists — `GraphBuilder` class with `build_full_graph()`, `build_incremental()`, `get_stats()`
+- ⚠️ Incremental triggering on new library additions may not be wired to acquisition pipeline
 
 **What it should do:**
 ```python
@@ -347,10 +347,10 @@ class Rivals:
 
 ## III. PLAYLIST & CURATION
 
-### 7. PLAYLIST EXPLAINABILITY SCHEMA ❌ NOT BUILT
+### 7. PLAYLIST EXPLAINABILITY SCHEMA ✅ BUILT
 **ID:** F-007 | **Priority:** P1 | **Complexity:** Medium | **Effort:** 8-12 hrs
 
-**Gap:** SPEC-001 documents `playlist_runs` + `playlist_tracks` tables with structured **Reasons**, but not implemented.
+**Gap:** `oracle/explain.py` is fully implemented — `ReasonBuilder` class with `enrich_playlist()`, `build_reasons()`, `explain_run()`, dimensional + taste + deepcut + connection reason builders. Wire up to API routes if not already.
 
 **Schema:**
 ```sql
@@ -395,7 +395,7 @@ GET /api/playlist/explain/<track_id>?run_id=<uuid>
 
 ---
 
-### 8. PLAYLUST (Automated Emotional Journeys) ❌ NOT BUILT
+### 8. PLAYLUST (Automated Emotional Journeys) ✅ BUILT
 **ID:** F-008 | **Priority:** P1 | **Complexity:** High | **Effort:** 24-32 hrs
 
 **Discovery:** HALFCOCKED.EXE is the manual proof-of-concept.

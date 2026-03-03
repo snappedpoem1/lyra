@@ -6,7 +6,7 @@
 services:
 
   prowlarr:
-    image: linuxserver/prowlarr:latest
+    image: lscr.io/linuxserver/prowlarr:1.30.2.4917-ls130
     container_name: lyra_prowlarr
     environment:
       - PUID=1000
@@ -25,7 +25,7 @@ services:
       start_period: 30s
 
   rdtclient:
-    image: rogerfar/rdtclient:latest
+    image: rogerfar/rdtclient:2.0.86
     container_name: lyra_rdtclient
     environment:
       - PUID=1000
@@ -33,7 +33,7 @@ services:
       - TZ=America/New_York
     volumes:
       - ./data/transport:/data/db
-      - ./downloads:/data/downloads
+      - A:/Staging:/data/downloads
     ports:
       - "6500:6500"
     restart: unless-stopped
@@ -57,7 +57,7 @@ services:
       - STAGING_DIR=/app/staging
       - TZ=America/New_York
     volumes:
-      - ./staging:/app/staging
+      - A:/Staging:/app/staging
     ports:
       - "7700:7700"
     restart: unless-stopped
@@ -69,7 +69,7 @@ services:
       start_period: 15s
 
   lidarr:
-    image: linuxserver/lidarr:latest
+    image: lscr.io/linuxserver/lidarr:2.8.2.4493-ls8
     container_name: lyra_lidarr
     environment:
       - PUID=1000
@@ -77,7 +77,7 @@ services:
       - TZ=America/New_York
     volumes:
       - ./data/lidarr:/config
-      - ./downloads:/downloads
+      - A:/Staging:/downloads
     ports:
       - "8686:8686"
     restart: unless-stopped
@@ -94,8 +94,8 @@ services:
     ports:
       - "7701:7701"
     volumes:
-      - ./staging:/app/staging:ro
-      - "A:/music/Active Music:/app/library:ro"
+      - A:/Staging:/app/staging:ro
+      - ${LIBRARY_BASE}:/app/library:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:7701/health', timeout=3).raise_for_status()"]
@@ -105,7 +105,7 @@ services:
       start_period: 15s
 
   slskd:
-    image: slskd/slskd:latest
+    image: slskd/slskd:0.21.3
     container_name: lyra_slskd
     environment:
       - SLSKD_REMOTE_CONFIGURATION=true
@@ -113,7 +113,7 @@ services:
     volumes:
       - ./data/node/slskd.yml:/app/slskd.yml
       - ./data/node/data:/app/data
-      - ./downloads:/app/downloads
+      - A:/Staging:/app/downloads
     ports:
       - "5030:5030"
       - "50300:50300"

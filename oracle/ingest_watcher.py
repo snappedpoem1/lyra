@@ -1,10 +1,10 @@
-"""Ingest Watcher -- polls downloads/ and staging/ dirs and auto-ingests
-completed files via beets.
+"""Ingest Watcher -- polls staging/ and downloads/ dirs and auto-ingests
+completed files through the native Oracle pipeline.
 
 Runs as a background daemon.  When new audio files appear and are stable
 (size unchanged for 10 s), the watcher runs:
 
-    guard check -> beets import (auto-tag + move) -> scan -> index -> score
+    guard check → move to library (name_cleaner) → scan → index → score
 
 Usage:
     python -m oracle.ingest_watcher          # run as daemon
@@ -254,20 +254,108 @@ def _requeue_stale_downloaded_rows(max_age_minutes: int = 45) -> int:
             conn.close()
 
 
+def _native_ingest(files: List[Path]) -> Dict[str, int]:
+    """Native 5-stage ingest pipeline (no beets required).
+
+    Stages:
+        1. Guard check  — reject junk/karaoke, route to A:\\Rejected\\
+        2. Organise     — move to LIBRARY_BASE using name_cleaner.target_path
+        3. Scan         — extract tags → DB (tracks table)
+        4. Index        — CLAP embed → ChromaDB + embeddings table
+        5. Score        — 10-dimension scores → track_scores table
+
+    Args:
+        files: Stable audio files to process.
+
+    Returns:
+        Dict with keys ``imported``, ``rejected``, ``errors``.
+    """
+    import shutil as _shutil
+
+    from oracle.acquirers.guard import guard_file, move_rejected_file
+    from oracle.config import LIBRARY_BASE
+    from oracle.indexer import index_track_ids
+    from oracle.name_cleaner import target_path as _target_path
+    from oracle.scanner import AUDIO_EXTS, extract_metadata, scan_paths
+
+    summary = {"imported": 0, "rejected": 0, "errors": 0}
+    accepted_paths: List[Path] = []
+
+    # --- Stage 1 & 2: guard + move ---
+    for src in files:
+        try:
+            result = guard_file(src)
+            if not result.allowed:
+                move_rejected_file(src, result)
+                summary["rejected"] += 1
+                logger.info("[INGEST] REJECT %s — %s", src.name, result.rejection_reason)
+                continue
+
+            meta  = extract_metadata(src)
+            artist    = meta.get("artist", "") or "Unknown Artist"
+            title     = meta.get("title", "") or src.stem
+            album     = meta.get("album", "") or "Unknown Album"
+            tn_raw    = meta.get("track_number")
+            track_num = int(tn_raw) if tn_raw and str(tn_raw).isdigit() else None
+
+            dest = _target_path(
+                LIBRARY_BASE,
+                artist,
+                album,
+                track_num,
+                title,
+                src.suffix.lstrip("."),
+            )
+
+            if dest.exists():
+                logger.info("[INGEST] SKIP (exists): %s", dest.name)
+                summary["imported"] += 1  # already there counts
+                continue
+
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            _shutil.move(str(src), str(dest))
+            logger.info("[INGEST] MOVED: %s → …/%s/%s", src.name, dest.parent.name, dest.name)
+            accepted_paths.append(dest)
+
+        except Exception as exc:
+            logger.error("[INGEST] ERROR processing %s: %s", src, exc)
+            summary["errors"] += 1
+
+    if not accepted_paths:
+        return summary
+
+    # --- Stage 3: scan (adds rows to tracks table) ---
+    try:
+        scan_result = scan_paths(accepted_paths)
+        track_ids: List[str] = list(scan_result.get("track_ids", []))
+        logger.info("[INGEST] Scan: %d track(s) added to DB", len(track_ids))
+    except Exception as exc:
+        logger.error("[INGEST] Scan stage failed: %s", exc)
+        summary["errors"] += len(accepted_paths)
+        return summary
+
+    # --- Stages 4 & 5: index (embed + auto-score) ---
+    if track_ids:
+        try:
+            idx_result = index_track_ids(track_ids)
+            indexed = idx_result.get("indexed", 0)
+            scored  = idx_result.get("scored", 0)
+            logger.info("[INGEST] Indexed: %d embedded, %d scored", indexed, scored)
+            summary["imported"] += indexed
+        except Exception as exc:
+            logger.error("[INGEST] Index stage failed: %s", exc)
+            summary["errors"] += len(track_ids)
+
+    return summary
+
+
 def _sweep(watch_dirs: List[Path],
            prev_sizes: Dict[str, int],
            ingested: Set[str]) -> int:
-    """One sweep -- collect stable directories with audio, import via beets.
-
-    Stable files are detected, then beets handles guard + move + tag.
-    Post-import scan+index happens inside ``beets_import_and_ingest``.
-    """
-    from oracle.integrations.beets_import import beets_import_and_ingest
-
+    """One sweep -- collect stable audio files and ingest via native pipeline."""
     total_imported = 0
 
     for watch_dir in watch_dirs:
-        # Find files that are stable (size unchanged since last check)
         ready_files: List[Path] = []
         for path in sorted(watch_dir.rglob("*")):
             if not path.is_file():
@@ -286,37 +374,28 @@ def _sweep(watch_dirs: List[Path],
             continue
 
         logger.info(
-            "[INGEST] %d stable file(s) in %s -- importing via beets",
+            "[INGEST] %d stable file(s) in %s — ingesting natively",
             len(ready_files), watch_dir,
         )
 
-        # Flat files in staging come from Qobuz/acquirers with good tags;
-        # use --singletons --noautotag to avoid MusicBrainz match failures.
-        has_subdirs = any(p.is_dir() for p in watch_dir.iterdir()
-                         if not p.name.startswith("_"))
-        kwargs: Dict[str, bool] = {}
-        if not has_subdirs:
-            kwargs["singleton"] = True
-            kwargs["no_autotag"] = True
-
         try:
-            result = beets_import_and_ingest(watch_dir, **kwargs)
-            imported = result.get("imported", 0)
-            quarantined = result.get("quarantined", 0)
-            errors = result.get("errors", 0)
+            result = _native_ingest(ready_files)
+            imported   = result.get("imported", 0)
+            rejected   = result.get("rejected", 0)
+            errors     = result.get("errors", 0)
             logger.info(
-                "[INGEST] Beets: %d imported, %d quarantined, %d errors",
-                imported, quarantined, errors,
+                "[INGEST] Native: %d imported, %d rejected, %d errors",
+                imported, rejected, errors,
             )
             total_imported += imported
             completed = _reconcile_downloaded_queue_rows()
             if completed:
-                logger.info("[INGEST] Queue reconcile: %d downloaded item(s) marked completed", completed)
+                logger.info("[INGEST] Queue: %d item(s) marked completed", completed)
             requeued = _requeue_stale_downloaded_rows(max_age_minutes=45)
             if requeued:
-                logger.info("[INGEST] Queue reconcile: %d stale downloaded item(s) re-queued", requeued)
+                logger.info("[INGEST] Queue: %d stale item(s) re-queued", requeued)
         except Exception as exc:
-            logger.error("[INGEST] Beets import failed: %s", exc)
+            logger.error("[INGEST] Ingest sweep failed: %s", exc)
 
     return total_imported
 
@@ -348,11 +427,18 @@ def run_watcher(once: bool = False) -> None:
 
 def _run_watcher_locked(once: bool = False) -> None:
     """Internal watcher body -- called after lock is acquired."""
+    from oracle.config import STAGING_FOLDER
     downloads_dir = _get_downloads_dir()
-    staging_dir = PROJECT_ROOT / "staging"
+    staging_dir   = Path(STAGING_FOLDER)
     staging_dir.mkdir(parents=True, exist_ok=True)
 
-    watch_dirs = [d for d in [downloads_dir, staging_dir] if d.exists()]
+    # De-duplicate in case DOWNLOADS_FOLDER == STAGING_FOLDER (they're the same now)
+    seen: set = set()
+    watch_dirs = []
+    for d in [downloads_dir, staging_dir]:
+        if d.exists() and str(d) not in seen:
+            watch_dirs.append(d)
+            seen.add(str(d))
 
     logger.info("[WATCHER] Watching: %s", ", ".join(str(d) for d in watch_dirs))
     logger.info("[WATCHER] Library dir: %s", _get_library_dir())

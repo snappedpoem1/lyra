@@ -17,7 +17,7 @@ import logging
 import json
 from typing import Optional, List, Dict
 
-from oracle.config import get_connection
+from oracle.db.schema import get_connection
 
 logger = logging.getLogger(__name__)
 

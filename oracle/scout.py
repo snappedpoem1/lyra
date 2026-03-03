@@ -18,7 +18,7 @@ import logging
 import requests
 from typing import Optional, List, Dict
 
-from oracle.config import get_connection
+from oracle.db.schema import get_connection
 from oracle.enrichers.cache import make_lookup_key, get_or_set_payload
 
 logger = logging.getLogger(__name__)
