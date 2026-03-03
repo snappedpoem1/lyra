@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import subprocess
 import traceback
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request, send_from_directory
+from flask import Blueprint, Response, jsonify, request, send_from_directory, stream_with_context
 
 from oracle.api.helpers import (
     _fetch_library_tracks,
@@ -316,9 +317,71 @@ def api_library_album_detail(album_name: str):
 # Routes — streaming and dossier
 # ---------------------------------------------------------------------------
 
+# Formats browsers can play natively without transcoding.
+_BROWSER_NATIVE = {".mp3", ".m4a", ".aac", ".ogg", ".opus"}
+
+# ffmpeg default bitrate for AAC transcoding.
+_TRANSCODE_BITRATE = "256k"
+
+
+def _stream_transcoded(filepath: Path, bitrate: str = _TRANSCODE_BITRATE) -> Response:
+    """Transcode filepath to frag-mp4/AAC via ffmpeg and stream the output.
+
+    Uses ``frag_keyframe+empty_moov+skip_sidx`` so the browser can start
+    playing before the file is fully written (no seekable container needed).
+    Responds 503 if ffmpeg is not on PATH.
+    """
+    import shutil
+
+    if not shutil.which("ffmpeg"):
+        return jsonify({"error": "ffmpeg not found — cannot transcode FLAC"}), 503
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(filepath),
+        "-c:a", "aac",
+        "-b:a", bitrate,
+        "-map_metadata", "0",
+        "-movflags", "frag_keyframe+empty_moov+skip_sidx",
+        "-f", "mp4",
+        "pipe:1",
+    ]
+
+    def _generate():
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        try:
+            while True:
+                chunk = proc.stdout.read(65536)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+    return Response(
+        stream_with_context(_generate()),
+        mimetype="audio/mp4",
+        headers={
+            "Content-Disposition": f'inline; filename="{filepath.stem}.m4a"',
+            "X-Transcoded-From": "flac",
+            "Cache-Control": "no-cache",
+            "Accept-Ranges": "none",
+        },
+    )
+
+
 @bp.route("/api/stream/<track_id>", methods=["GET"])
 def api_stream_track(track_id: str):
-    """Stream audio file with Range support."""
+    """Stream audio file for browser playback.
+
+    FLAC/WAV/WMA files are transcoded on-the-fly to fragmented mp4/AAC (256 kbps)
+    so browsers can play them without plugins.  Pass ``?raw=1`` to skip
+    transcoding and receive the original file (useful for foobar2000 or VLC).
+    """
     try:
         conn = get_connection(timeout=5.0)
         cursor = conn.cursor()
@@ -334,12 +397,19 @@ def api_stream_track(track_id: str):
         if not filepath.exists():
             return jsonify({"error": "File not found on disk"}), 404
 
+        ext = filepath.suffix.lower()
+        raw = request.args.get("raw", "").lower() in {"1", "true"}
+
+        # Transcode non-browser-native files (FLAC, WAV, WMA, etc.) unless ?raw=1.
+        if not raw and ext not in _BROWSER_NATIVE:
+            return _stream_transcoded(filepath)
+
         MIME_MAP = {
             ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac",
             ".flac": "audio/flac", ".ogg": "audio/ogg", ".opus": "audio/opus",
             ".wav": "audio/wav", ".wma": "audio/x-ms-wma",
         }
-        mime = MIME_MAP.get(filepath.suffix.lower(), "audio/mpeg")
+        mime = MIME_MAP.get(ext, "audio/mpeg")
         return send_from_directory(
             str(filepath.parent),
             filepath.name,

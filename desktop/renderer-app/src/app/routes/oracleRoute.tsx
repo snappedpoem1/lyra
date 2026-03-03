@@ -54,28 +54,3 @@ export function OracleRoute() {
     </div>
   );
 }
-
-  return (
-    <div className="route-stack">
-      <section className="lyra-panel page-intro">
-        <span className="hero-kicker">Oracle</span>
-        <h1>Intelligent recommendations from your library.</h1>
-        <OracleModeSwitch />
-      </section>
-      <OracleRecommendationDeck
-        recommendations={recommendations}
-        onPlayTrack={(track) => void audioEngine.playTrack(track)}
-        onReplaceQueue={(tracks) =>
-          replaceQueue({
-            queueId: `oracle-${mode}`,
-            origin: mode,
-            reorderable: true,
-            currentIndex: 0,
-            items: tracks,
-          })
-        }
-      />
-      {constellation && <ConstellationScene nodes={constellation.nodes} edges={constellation.edges} onSelectNode={() => undefined} />}
-    </div>
-  );
-}

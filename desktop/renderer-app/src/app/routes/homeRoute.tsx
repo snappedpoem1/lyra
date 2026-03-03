@@ -16,7 +16,7 @@ export function HomeRoute() {
   const { data: playlists = [] } = useQuery({ queryKey: ["playlists"], queryFn: getPlaylists });
   const { data: recommendations = [] } = useQuery({ queryKey: ["oracle", "home"], queryFn: () => getOracleRecommendations("flow") });
   const { data: library } = useQuery({ queryKey: ["home-library"], queryFn: () => getLibraryTracks(10, 0, "") });
-  const { data: constellation } = useQuery({ queryKey: ["constellation"], queryFn: getConstellation });
+  const { data: constellation } = useQuery({ queryKey: ["constellation"], queryFn: () => getConstellation() });
   const player = usePlayerStore();
   const queue = useQueueStore((state) => state.queue);
   const setCurrentIndex = useQueueStore((state) => state.setCurrentIndex);

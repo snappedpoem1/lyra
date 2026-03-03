@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { TrackListItem } from "@/types/domain";
 import { useNavigate } from "@tanstack/react-router";
 import { SearchHero } from "@/features/search/SearchHero";
 import { SearchResultStack } from "@/features/search/SearchResultStack";
@@ -58,13 +59,14 @@ export function SearchRoute() {
   };
 
   const handleDimTrackSelect = (track: { track_id: string; artist: string; title: string; album?: string | null; filepath?: string; path?: string }) => {
-    const item = {
+    const item: TrackListItem = {
       trackId: track.track_id,
       artist: track.artist,
       title: track.title,
       album: track.album ?? undefined,
-      filepath: track.filepath ?? track.path ?? "",
-      duration: undefined,
+      path: track.filepath ?? track.path ?? "",
+      reasons: [],
+      scoreChips: [],
     };
     replaceQueue({
       queueId: `dim-${track.track_id}`,
@@ -144,4 +146,6 @@ export function SearchRoute() {
       )}
         </>
       )}
+    </div>
+  );
 }

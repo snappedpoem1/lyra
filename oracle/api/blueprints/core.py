@@ -203,10 +203,98 @@ def api_cache_stats():
 
 @bp.route("/")
 def index():
-    """API root."""
+    """Serve the built React UI if it exists, otherwise return API info."""
+    import os
+    from pathlib import Path as _Path
+    dist_index = _Path(__file__).resolve().parents[3] / "desktop" / "renderer-app" / "dist" / "index.html"
+    if dist_index.exists():
+        from flask import send_from_directory as _sfd
+        return _sfd(str(dist_index.parent), "index.html")
     return jsonify({
         "service": "lyra-oracle",
         "status": "ok",
         "version": VERSION,
-        "message": "UI removed; use API endpoints under /api/*",
+        "hint": "Build the UI: cd desktop/renderer-app && npm install && npm run build",
+        "player_test": "/player",
     })
+
+
+@bp.route("/player")
+def player_test():
+    """Minimal in-browser audio player — picks a random track from the library."""
+    try:
+        conn = get_connection(timeout=5.0)
+        c = conn.cursor()
+        c.execute(
+            "SELECT track_id, artist, title, album FROM tracks WHERE status='active' ORDER BY RANDOM() LIMIT 20"
+        )
+        rows = c.fetchall()
+        conn.close()
+    except Exception:
+        rows = []
+
+    track_options = ""
+    for tid, artist, title, album in rows:
+        label = f"{artist or '?'} — {title or '?'}"
+        if album:
+            label += f" [{album}]"
+        track_options += f'<option value="{tid}">{label}</option>\n'
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lyra Oracle — Player Test</title>
+<style>
+  body {{ background:#111; color:#eee; font-family:system-ui,sans-serif; max-width:600px; margin:40px auto; padding:16px; }}
+  h1 {{ color:#a78bfa; }}
+  select,audio {{ width:100%; margin:8px 0; }}
+  audio {{ background:#222; border-radius:8px; }}
+  .meta {{ color:#888; font-size:.85rem; margin:4px 0; }}
+  a {{ color:#a78bfa; }}
+</style>
+</head>
+<body>
+<h1>Lyra Oracle — Audio Test</h1>
+<p class="meta">FLAC → frag-mp4/AAC (256k) · on-the-fly ffmpeg transcode · <a href="/api/health">API health</a></p>
+<select id="sel" onchange="play()">
+  <option value="">— Pick a track —</option>
+  {track_options}
+</select>
+<audio id="player" controls preload="none">Your browser does not support audio.</audio>
+<p id="info" class="meta"></p>
+<script>
+function play() {{
+  var sel = document.getElementById('sel');
+  var tid = sel.value;
+  if (!tid) return;
+  var url = '/api/stream/' + tid;
+  var p = document.getElementById('player');
+  p.src = url;
+  p.load();
+  p.play().catch(function(e){{ document.getElementById('info').textContent = 'Autoplay blocked — press ▶'; }});
+  document.getElementById('info').textContent = 'Streaming: /api/stream/' + tid;
+}}
+</script>
+</body>
+</html>"""
+    from flask import make_response
+    resp = make_response(html)
+    resp.headers["Content-Type"] = "text/html"
+    return resp
+
+
+@bp.route("/<path:path>")
+def react_static(path: str):
+    """Serve React build static assets and handle SPA client-side routes."""
+    from pathlib import Path as _Path
+    from flask import send_from_directory as _sfd
+    dist_dir = _Path(__file__).resolve().parents[3] / "desktop" / "renderer-app" / "dist"
+    if not dist_dir.exists():
+        return jsonify({"error": "UI not built"}), 404
+    # Serve the exact file if it exists (JS, CSS, images, fonts, etc.)
+    candidate = dist_dir / path
+    if candidate.exists() and candidate.is_file():
+        return _sfd(str(dist_dir), path)
+    # SPA fallback: re-serve index.html for all client-side routes
+    return _sfd(str(dist_dir), "index.html")

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 import { getTasteProfile } from "@/services/lyraGateway/queries";
 import { requestJson } from "@/services/lyraGateway/client";
 import { LyraPanel } from "@/ui/LyraPanel";
@@ -42,7 +43,7 @@ export function TasteProfileCard() {
 
   const seed = useMutation({
     mutationFn: () =>
-      requestJson("/api/taste/seed", undefined, { method: "POST", body: JSON.stringify({}) }),
+      requestJson("/api/taste/seed", z.unknown(), { method: "POST", body: JSON.stringify({}) }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["taste-profile"] }),
   });
 
@@ -59,16 +60,16 @@ export function TasteProfileCard() {
 
   const {
     dimensions,
-    source,
-    genre_affinity,
-    era_distribution,
-    top_artists,
-    total_signals,
-    library_stats,
-    is_cold_start,
+    genreAffinity: genre_affinity = [],
+    eraDistribution: era_distribution = {},
+    totalSignals: total_signals = 0,
+    libraryStats: library_stats,
   } = data;
+  const top_artists = library_stats.topArtists;
+  const is_cold_start = total_signals === 0;
+  const source: Record<string, string> = {};
 
-  const totalEraTracks = Object.values(era_distribution).reduce((a, b) => a + b, 0) || 1;
+  const totalEraTracks = Object.values(era_distribution).reduce<number>((a, b) => a + b, 0) || 1;
   const sortedDims = Object.keys(DIM_LABELS).sort(
     (a, b) => Math.abs(dimensions[b] ?? 0) - Math.abs(dimensions[a] ?? 0),
   );
@@ -89,7 +90,7 @@ export function TasteProfileCard() {
 
       {is_cold_start && total_signals === 0 && (
         <p className="taste-card__hint">
-          No plays recorded yet. Profile is inferred from your {library_stats.scored_tracks.toLocaleString()} scored tracks.{" "}
+          No plays recorded yet. Profile is inferred from your {library_stats.scoredTracks.toLocaleString()} scored tracks.{" "}
           <button
             className="taste-card__seed-btn"
             onClick={() => seed.mutate()}

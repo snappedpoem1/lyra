@@ -18,7 +18,7 @@ export function PlaylistDetailRoute() {
     queryKey: ["playlist-detail", playlistId],
     queryFn: () => getPlaylistDetail(playlistId ?? "after-midnight-ritual"),
   });
-  const { data: constellation } = useQuery({ queryKey: ["constellation"], queryFn: getConstellation });
+  const { data: constellation } = useQuery({ queryKey: ["constellation"], queryFn: () => getConstellation() });
   const replaceQueue = useQueueStore((state) => state.replaceQueue);
   const setCurrentTrack = useQueueStore((state) => state.setCurrentTrack);
   const setTrack = usePlayerStore((state) => state.setTrack);
