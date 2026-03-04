@@ -16,7 +16,7 @@ export function HomeRoute() {
   const { data: playlists = [] } = useQuery({ queryKey: ["playlists"], queryFn: getPlaylists });
   const { data: recommendations = [] } = useQuery({ queryKey: ["oracle", "home"], queryFn: () => getOracleRecommendations("flow") });
   const { data: library } = useQuery({ queryKey: ["home-library"], queryFn: () => getLibraryTracks(10, 0, "") });
-  const { data: constellation } = useQuery({ queryKey: ["constellation"], queryFn: () => getConstellation() });
+  const { data: constellation, error: constellationError } = useQuery({ queryKey: ["constellation"], queryFn: () => getConstellation() });
   const player = usePlayerStore();
   const queue = useQueueStore((state) => state.queue);
   const setCurrentIndex = useQueueStore((state) => state.setCurrentIndex);
@@ -242,13 +242,18 @@ export function HomeRoute() {
         }
       />
 
-      {constellation && (
+      {constellationError ? (
+        <section className="lyra-panel empty-state-panel">
+          <h2>Constellation unavailable</h2>
+          <p>{constellationError instanceof Error ? constellationError.message : "The constellation backend did not respond."}</p>
+        </section>
+      ) : constellation ? (
         <ConstellationScene
           nodes={constellation.nodes}
           edges={constellation.edges}
           onSelectNode={() => navigate({ to: "/oracle" })}
         />
-      )}
+      ) : null}
     </div>
   );
 }

@@ -30,8 +30,7 @@
     ]
   },
   "env": {
-    "PYTHONPATH": "C:\\MusicOracle",
-    "MUSIC_ROOT": "A:\\music",
-    "ORACLE_HOME": "C:\\MusicOracle"
+    "PYTHONPATH": ".",
+    "ORACLE_HOME": "."
   }
 }

@@ -6,7 +6,7 @@ import { SearchHero } from "@/features/search/SearchHero";
 import { SearchResultStack } from "@/features/search/SearchResultStack";
 import { DimensionalSearchPanel } from "@/features/search/DimensionalSearchPanel";
 import { audioEngine } from "@/services/audio/audioEngine";
-import { createVibe, generateVibe } from "@/services/lyraGateway/queries";
+import { createVibe, getSearchResults } from "@/services/lyraGateway/queries";
 import { useQueueStore } from "@/stores/queueStore";
 import { useSearchStore } from "@/stores/searchStore";
 import { LyraButton } from "@/ui/LyraButton";
@@ -23,7 +23,7 @@ export function SearchRoute() {
   const replaceQueue = useQueueStore((state) => state.replaceQueue);
   const { data, isFetching, isError, error } = useQuery({
     queryKey: ["search", query],
-    queryFn: () => generateVibe(query),
+    queryFn: () => getSearchResults(query),
     enabled: query.trim().length > 0,
   });
   const saveMutation = useMutation({
@@ -34,28 +34,18 @@ export function SearchRoute() {
     },
   });
 
-  const results = data ? {
-    query: data.meta.prompt || query,
-    rewrittenQuery: typeof data.meta.generated?.query === "string" ? data.meta.generated.query : undefined,
-    tracks: data.run.tracks,
-    playlists: [],
-    versions: [],
-    oraclePivots: [],
-  } : null;
+  const results = data ?? null;
 
   const handleSaveVibe = () => {
-    if (!data) {
+    if (!data || !query.trim()) {
       return;
     }
-    const defaultName =
-      (typeof data.meta.generated?.name === "string" && data.meta.generated.name.trim()) ||
-      (data.meta.prompt || query).split(/\s+/).slice(0, 4).join(" ").trim() ||
-      "Generated Vibe";
+    const defaultName = query.split(/\s+/).slice(0, 4).join(" ").trim() || "Generated Vibe";
     const vibeName = window.prompt("Name this vibe", defaultName)?.trim();
     if (!vibeName) {
       return;
     }
-    saveMutation.mutate({ prompt: data.meta.prompt || query, name: vibeName });
+    saveMutation.mutate({ prompt: query, name: vibeName });
   };
 
   const handleDimTrackSelect = (track: { track_id: string; artist: string; title: string; album?: string | null; filepath?: string; path?: string }) => {

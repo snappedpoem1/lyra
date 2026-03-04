@@ -1,0 +1,49 @@
+# Beets configuration template for Lyra Oracle
+#
+# Copy this file to `.beets/config.yaml` and adjust the paths for your machine.
+
+directory: "<library root>"
+library: ".beets/beets_library.db"
+
+import:
+  move: yes
+  write: yes
+  autotag: yes
+  quiet: yes
+  duplicate_action: skip
+  from_scratch: no
+  detail: no
+  log: "logs/beets_import.log"
+
+paths:
+  default: "$albumartist/$album%aunique{}/%if{$disc,$disc-}$track $title"
+  singleton: "$artist/Singles/$title"
+  comp: "Compilations/$album%aunique{}/%if{$disc,$disc-}$track $title"
+  albumtype:soundtrack: "Soundtracks/$album%aunique{}/%if{$disc,$disc-}$track $title"
+
+match:
+  strong_rec_thresh: 0.10
+  medium_rec_thresh: 0.25
+  max_rec:
+    missing_tracks: medium
+    unmatched_tracks: medium
+
+plugins: []
+
+replace:
+  '[\\]': _
+  '[/]': _
+  '[<]': _
+  '[>]': _
+  '[:]': _
+  '["]': _
+  '[?]': _
+  '[*]': _
+  '[|]': _
+  '[\x00-\x1f]': _
+  '\.$': _
+  '\s+$': ''
+  '^\s+': ''
+
+ui:
+  color: no

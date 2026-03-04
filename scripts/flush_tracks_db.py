@@ -193,7 +193,7 @@ def main() -> None:
     _delete_chroma(chroma_path, dry_run=False)
 
     logger.info("\nFlush complete.  Next steps:")
-    logger.info("  oracle pipeline --library A:\\Music")
+    logger.info("  oracle pipeline --library /path/to/library")
     logger.info("  oracle status")
 
 

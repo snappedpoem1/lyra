@@ -16,6 +16,7 @@ import {
   playlistDetailSchema,
   queueSchema,
   radioResultsSchema,
+  searchSchema,
   tasteProfileSchema,
   vibeCreateSchema,
   vibeGenerateSchema,
@@ -23,6 +24,7 @@ import {
 } from "@/config/schemas";
 import type {
   AgentFactDrop,
+  AgentResponse,
   AgentSuggestion,
   BootStatus,
   ConstellationEdge,
@@ -43,7 +45,7 @@ import type {
   VibeGenerateResult,
 } from "@/types/domain";
 import { requestJson } from "./client";
-import { mapBootStatus, mapDoctorReport, mapDossier, mapGeneratedVibe, mapOracleRecommendations, mapPlaylistDetail, mapPlaylists, mapRadioQueue, mapTrack } from "./mappers";
+import { mapBootStatus, mapDoctorReport, mapDossier, mapGeneratedVibe, mapOracleRecommendations, mapPlaylistDetail, mapPlaylists, mapRadioQueue, mapSearch, mapTrack } from "./mappers";
 import { useConnectivityStore } from "@/stores/connectivityStore";
 
 function useFixtureFallback<T>(error: unknown, fallback: T): T {
@@ -101,16 +103,13 @@ export async function getPlaylistDetail(id: string): Promise<PlaylistDetail> {
 
 export async function getSearchResults(query: string): Promise<SearchResultGroup> {
   try {
-    const playlists = await getPlaylists();
-    const payload = await generateVibe(query);
-    return {
-      query: payload.meta.prompt || query,
-      rewrittenQuery: typeof payload.meta.generated?.query === "string" ? payload.meta.generated.query : undefined,
-      tracks: payload.run.tracks,
-      playlists,
-      versions: [],
-      oraclePivots: [],
-    };
+    const playlistsPromise = getPlaylists().catch(() => []);
+    const payload = await requestJson("/api/search", searchSchema, {
+      method: "POST",
+      body: JSON.stringify({ query, n: 20, natural_language: true }),
+    });
+    const playlists = await playlistsPromise;
+    return mapSearch(payload, playlists);
   } catch (error) {
     if (fixtureModeEnabled()) {
       return useFixtureFallback(error, { ...searchResults, query });
@@ -461,9 +460,11 @@ export async function getConstellation(
       reason: e.type,
     }));
     return { nodes, edges };
-  } catch {
-    // Fixture fallback — no error logged, constellation just shows mock data
-    return { nodes: constellationNodes, edges: constellationEdges };
+  } catch (error) {
+    if (fixtureModeEnabled()) {
+      return useFixtureFallback(error, { nodes: constellationNodes, edges: constellationEdges });
+    }
+    throw error;
   }
 }
 
@@ -507,12 +508,46 @@ export async function getAgentSuggestion(_trackId?: string): Promise<AgentSugges
   }
 }
 
-export async function queryAgent(_text: string): Promise<{ action: string; thought: string; intent: Record<string, unknown>; next: string; response: string }> {
-  return {
-    action: "noop",
-    thought: "Agent path is available through the backend, but the desktop command palette is currently read-only.",
-    intent: {},
-    next: "",
-    response: "Agent execution is not wired in this rescue pass.",
-  };
+export async function queryAgent(text: string): Promise<AgentResponse> {
+  try {
+    const payload = await requestJson(
+      "/api/agent/query",
+      z.object({
+        action: z.string().optional(),
+        thought: z.string().optional(),
+        intent: z.record(z.any()).optional(),
+        next: z.union([z.string(), z.record(z.any())]).optional(),
+        response: z.string().optional(),
+      }).passthrough(),
+      {
+        method: "POST",
+        body: JSON.stringify({ text, execute: false }),
+      },
+      10000,
+      0,
+    );
+    return {
+      action: typeof payload.action === "string" ? payload.action : "agent.query",
+      thought: typeof payload.thought === "string" ? payload.thought : "Tracing intent...",
+      intent: payload.intent && typeof payload.intent === "object" ? payload.intent as Record<string, unknown> : {},
+      next: typeof payload.next === "string" ? payload.next : payload.next ?? "",
+      response:
+        typeof payload.response === "string" && payload.response.trim()
+          ? payload.response
+          : typeof payload.thought === "string"
+            ? payload.thought
+            : "Agent response received.",
+    };
+  } catch (error) {
+    if (fixtureModeEnabled()) {
+      return useFixtureFallback(error, {
+        action: "noop",
+        thought: "Fixture mode active.",
+        intent: {},
+        next: "",
+        response: "Agent execution is unavailable in fixture mode.",
+      });
+    }
+    throw error;
+  }
 }

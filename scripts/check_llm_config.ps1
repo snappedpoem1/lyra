@@ -214,7 +214,6 @@ function Find-LmsCli {
   $candidates = @(
     "$env:LYRA_LMS_CLI_EXE".Trim(),
     "$env:LMS_CLI_EXE".Trim(),
-    "C:\Users\Admin\.lmstudio\bin\lms.exe",
     (Join-Path $env:USERPROFILE ".lmstudio\bin\lms.exe"),
     (Join-Path $env:LOCALAPPDATA "Programs\LM Studio\resources\app\.webpack\lms.exe"),
     (Join-Path $env:LOCALAPPDATA "LM-Studio\resources\app\.webpack\lms.exe"),

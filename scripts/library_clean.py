@@ -1,28 +1,28 @@
-"""scripts/library_clean.py — Picard-duplicate + junk sweep for A:\\Music.
+"""scripts/library_clean.py - Picard-duplicate and junk sweep for a library root.
 
 Two-pass sweep:
-  Pass 1 (dedup): Find Picard numbered duplicates ``*(N).flac`` → keep the
+  Pass 1 (dedup): Find Picard numbered duplicates ``*(N).flac`` -> keep the
                   canonical (un-numbered) copy, move numbered copies to
-                  ``A:\\Rejected\\Duplicates\``.
+                  ``<rejected>/Duplicates/``.
   Pass 2 (junk):  Run ``guard_file()`` on every remaining audio file.
-                  - rejection_category "junk"     → A:\\Rejected\\Junk\\
-                  - rejection_category "label"     → A:\\Rejected\\Junk\\
-                  - rejection_category "invalid"   → A:\\Rejected\\Uncertain\\
-                  - "remix" / "tribute" in title   → A:\\Rejected\\Remixes\\
-                  - guard.allowed == False (other) → A:\\Rejected\\Uncertain\\
+                  - rejection_category "junk"     -> ``<rejected>/Junk/``
+                  - rejection_category "label"    -> ``<rejected>/Junk/``
+                  - rejection_category "invalid"  -> ``<rejected>/Uncertain/``
+                  - "remix" / "tribute" in title  -> ``<rejected>/Remixes/``
+                  - guard.allowed == False (other)-> ``<rejected>/Uncertain/``
 
 Usage
 -----
-  # Dry run (default) — lists moves but does nothing:
+  # Dry run (default) - lists moves but does nothing:
   python scripts/library_clean.py
 
   # Execute moves:
   python scripts/library_clean.py --apply
 
   # Scan a non-default library root:
-  python scripts/library_clean.py --library "A:\\Music" --apply
+  python scripts/library_clean.py --library "/path/to/library" --apply
 
-Moves are appended to A:\\Rejected\\_clean_log.jsonl regardless of --apply.
+Moves are appended to ``<rejected>/_clean_log.jsonl`` regardless of --apply.
 """
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 AUDIO_EXTENSIONS = {".flac", ".mp3", ".m4a", ".ogg", ".opus", ".wav", ".aiff", ".wv"}
 
-# Picard appends ``(1)``, ``(2)`` … before the extension
+# Picard appends ``(1)``, ``(2)`` â€¦ before the extension
 _PICARD_DUP = re.compile(r"^(.+)\s*\((\d+)\)$")
 
 # Remix / tribute signal in title
@@ -89,12 +89,12 @@ def _safe_move(src: Path, dest: Path, dry_run: bool) -> bool:
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
         if dest.exists():
-            # Avoid clobber — add a suffix
+            # Avoid clobber â€” add a suffix
             dest = dest.with_name(dest.stem + "_dup" + dest.suffix)
         shutil.move(str(src), str(dest))
         return True
     except Exception as exc:
-        logger.error("  MOVE FAILED %s → %s : %s", src, dest, exc)
+        logger.error("  MOVE FAILED %s â†’ %s : %s", src, dest, exc)
         return False
 
 
@@ -104,7 +104,7 @@ def _rejected(base: Path, sub: str, rel: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Pass 1 — Picard duplicates
+# Pass 1 â€” Picard duplicates
 # ---------------------------------------------------------------------------
 
 def pass1_dedup(
@@ -135,17 +135,17 @@ def pass1_dedup(
         dest = _rejected(rejected_root, "Duplicates", rel)
 
         if canonical.exists():
-            reason = f"Picard duplicate — canonical exists: {canonical.name}"
+            reason = f"Picard duplicate â€” canonical exists: {canonical.name}"
         else:
-            reason = f"Picard duplicate — canonical NOT found (keeping anyway)"
-            logger.warning("  No canonical for %s — moving to Uncertain", dup_file.name)
+            reason = f"Picard duplicate â€” canonical NOT found (keeping anyway)"
+            logger.warning("  No canonical for %s â€” moving to Uncertain", dup_file.name)
             dest = _rejected(rejected_root, "Uncertain", rel)
 
         entry = _log_entry("dedup", dup_file, dest, reason, dry_run)
         log.append(entry)
 
         verb = "Would move" if dry_run else "Moving"
-        logger.info("  %s: %s → …%s%s", verb, dup_file.name, dest.parent.name, "/" + dest.name)
+        logger.info("  %s: %s â†’ â€¦%s%s", verb, dup_file.name, dest.parent.name, "/" + dest.name)
 
         if not dry_run:
             ok = _safe_move(dup_file, dest, dry_run=False)
@@ -161,7 +161,7 @@ def pass1_dedup(
 
 
 # ---------------------------------------------------------------------------
-# Pass 2 — guard sweep on remaining files
+# Pass 2 â€” guard sweep on remaining files
 # ---------------------------------------------------------------------------
 
 def pass2_guard(
@@ -185,7 +185,7 @@ def pass2_guard(
         result = guard_file(audio_file)
 
         if result.allowed:
-            continue  # clean — keep it
+            continue  # clean â€” keep it
 
         # Determine sub-folder
         cat = (result.rejection_category or "").lower()
@@ -208,7 +208,7 @@ def pass2_guard(
         log.append(entry)
 
         verb = "Would reject" if dry_run else "Rejecting"
-        logger.info("  %s [%s]: %s — %s", verb, sub, audio_file.name, reason)
+        logger.info("  %s [%s]: %s â€” %s", verb, sub, audio_file.name, reason)
 
         if not dry_run:
             ok = _safe_move(audio_file, dest, dry_run=False)
@@ -233,7 +233,7 @@ def pass2_guard(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Sweep A:\\Music — remove Picard duplicates + guard rejects."
+        description="Sweep a library root - remove Picard duplicates and guard rejects."
     )
     parser.add_argument(
         "--library",
@@ -266,9 +266,9 @@ def main() -> None:
         sys.exit(1)
 
     if dry_run:
-        logger.info("DRY RUN — pass --apply to execute moves")
+        logger.info("DRY RUN â€” pass --apply to execute moves")
     else:
-        logger.warning("APPLY MODE — files will be moved")
+        logger.warning("APPLY MODE â€” files will be moved")
 
     all_log: List[Dict[str, Any]] = []
 

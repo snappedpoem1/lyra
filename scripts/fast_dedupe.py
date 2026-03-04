@@ -1,18 +1,18 @@
-"""scripts/fast_dedupe.py — Fast local-only deduplication sweep for A:\\Music.
+"""scripts/fast_dedupe.py - Fast local-only deduplication sweep for a library root.
 
 No external API calls. Three passes:
 
-  Pass 1 — Picard *(N).ext duplicates
+  Pass 1 - Picard *(N).ext duplicates
             Find files matching "stem (N).ext" where canonical "stem.ext" exists.
-            If canonical missing → move both to Uncertain for manual review.
+            If canonical missing -> move both to Uncertain for manual review.
 
-  Pass 2 — Content-hash duplicates
+  Pass 2 - Content-hash duplicates
             SHA-256 the first 64KB of every file (fast fingerprint).
-            When 2+ files hash the same → keep lexicographically first path,
+            When 2+ files hash the same -> keep lexicographically first path,
             move the rest to Duplicates.
 
-  Pass 3 — Filename junk patterns (karaoke, tribute, lo-fi, 8-bit etc.)
-            Pure regex on filename + path — zero network calls.
+  Pass 3 - Filename junk patterns (karaoke, tribute, lo-fi, 8-bit etc.)
+            Pure regex on filename + path - zero network calls.
 
 Usage:
   python scripts/fast_dedupe.py                 # dry run (safe default)
@@ -111,18 +111,18 @@ def _safe_move(src: Path, dest: Path, dry_run: bool, log: List[Dict]) -> bool:
         log.append(entry)
         return True
     except Exception as exc:
-        logger.error("  MOVE FAILED %s → %s: %s", src.name, dest, exc)
+        logger.error("  MOVE FAILED %s â†’ %s: %s", src.name, dest, exc)
         return False
 
 
 # ---------------------------------------------------------------------------
-# Pass 1 — Picard *(N) duplicates
+# Pass 1 â€” Picard *(N) duplicates
 # ---------------------------------------------------------------------------
 
 def pass1_picard(library: Path, rejected: Path, dry_run: bool) -> Tuple[int, List[Dict]]:
     log: List[Dict] = []
     moved = 0
-    logger.info("Pass 1: Picard *(N) duplicates …")
+    logger.info("Pass 1: Picard *(N) duplicates â€¦")
 
     for f in library.rglob("*"):
         if not f.is_file() or f.suffix.lower() not in AUDIO_EXTS:
@@ -152,17 +152,17 @@ def pass1_picard(library: Path, rejected: Path, dry_run: bool) -> Tuple[int, Lis
 
 
 # ---------------------------------------------------------------------------
-# Pass 2 — Content-hash duplicates
+# Pass 2 â€” Content-hash duplicates
 # ---------------------------------------------------------------------------
 
 def pass2_hash(library: Path, rejected: Path, dry_run: bool) -> Tuple[int, List[Dict]]:
     log: List[Dict] = []
     moved = 0
-    logger.info("Pass 2: content-hash duplicates …")
+    logger.info("Pass 2: content-hash duplicates â€¦")
 
     hash_map: Dict[str, List[Path]] = defaultdict(list)
     all_files = [f for f in library.rglob("*") if f.is_file() and f.suffix.lower() in AUDIO_EXTS]
-    logger.info("  Hashing %d files …", len(all_files))
+    logger.info("  Hashing %d files â€¦", len(all_files))
 
     for f in all_files:
         try:
@@ -192,13 +192,13 @@ def pass2_hash(library: Path, rejected: Path, dry_run: bool) -> Tuple[int, List[
 
 
 # ---------------------------------------------------------------------------
-# Pass 3 — Filename junk patterns
+# Pass 3 â€” Filename junk patterns
 # ---------------------------------------------------------------------------
 
 def pass3_junk(library: Path, rejected: Path, dry_run: bool) -> Tuple[int, List[Dict]]:
     log: List[Dict] = []
     moved = 0
-    logger.info("Pass 3: filename junk patterns …")
+    logger.info("Pass 3: filename junk patterns â€¦")
 
     for f in library.rglob("*"):
         if not f.is_file() or f.suffix.lower() not in AUDIO_EXTS:
@@ -221,7 +221,7 @@ def pass3_junk(library: Path, rejected: Path, dry_run: bool) -> Tuple[int, List[
         rel  = f.relative_to(library)
         dest = rejected / sub / rel
         verb = "Would move" if dry_run else "Moving"
-        logger.info("  [Junk] %s: %s — %s", verb, f.name, why)
+        logger.info("  [Junk] %s: %s â€” %s", verb, f.name, why)
         if _safe_move(f, dest, dry_run, log):
             log[-1]["reason"] = why
             moved += 1
@@ -233,7 +233,7 @@ def pass3_junk(library: Path, rejected: Path, dry_run: bool) -> Tuple[int, List[
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fast local-only deduplication of A:\\Music")
+    parser = argparse.ArgumentParser(description="Fast local-only deduplication of a library root")
     parser.add_argument("--library",   default=str(LIBRARY_BASE))
     parser.add_argument("--rejected",  default=str(REJECTED_FOLDER))
     parser.add_argument("--apply",     action="store_true")
@@ -249,7 +249,7 @@ def main() -> None:
         logger.error("Library not found: %s", library)
         sys.exit(1)
 
-    logger.info("%s — library: %s", "DRY RUN" if dry_run else "APPLY", library)
+    logger.info("%s â€” library: %s", "DRY RUN" if dry_run else "APPLY", library)
 
     all_log: List[Dict] = []
 

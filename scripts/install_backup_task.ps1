@@ -4,7 +4,8 @@
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts\install_backup_task.ps1
 
-$ScriptPath = "C:\MusicOracle\scripts\backup_db.ps1"
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$ScriptPath = Join-Path $PSScriptRoot "backup_db.ps1"
 
 # ---------------------------------------------------------------------------
 # Nightly daily backup — 03:00 every day

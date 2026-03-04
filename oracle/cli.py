@@ -55,7 +55,7 @@ def main() -> None:
     scan_parser.add_argument(
         "--library",
         required=True,
-        help="Library path (use a real path, e.g. A:\\music\\Active Music; avoid placeholder examples)",
+        help="Library path (use a real path to your library root; avoid placeholder examples)",
     )
     scan_parser.add_argument("--limit", type=int, default=0, help="Limit files")
 

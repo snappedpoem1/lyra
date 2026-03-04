@@ -17,7 +17,7 @@ export function OracleRoute() {
     queryKey: ["oracle", mode],
     queryFn: () => getOracleRecommendations(mode, seedTrackId),
   });
-  const { data: constellation } = useQuery({
+  const { data: constellation, error: constellationError } = useQuery({
     queryKey: ["constellation"],
     queryFn: () => getConstellation(),
     staleTime: 10 * 60 * 1000,
@@ -44,13 +44,18 @@ export function OracleRoute() {
           })
         }
       />
-      {constellation && constellation.nodes.length > 0 && (
+      {constellationError ? (
+        <section className="lyra-panel empty-state-panel">
+          <h2>Constellation unavailable</h2>
+          <p>{constellationError instanceof Error ? constellationError.message : "The constellation backend did not respond."}</p>
+        </section>
+      ) : constellation && constellation.nodes.length > 0 ? (
         <ConstellationScene
           nodes={constellation.nodes}
           edges={constellation.edges}
           onSelectNode={() => undefined}
         />
-      )}
+      ) : null}
     </div>
   );
 }

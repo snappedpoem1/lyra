@@ -6,7 +6,7 @@
 services:
 
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:1.30.2.4917-ls130
+    image: lscr.io/linuxserver/prowlarr:latest
     container_name: lyra_prowlarr
     environment:
       - PUID=1000
@@ -69,7 +69,7 @@ services:
       start_period: 15s
 
   lidarr:
-    image: lscr.io/linuxserver/lidarr:2.8.2.4493-ls8
+    image: lscr.io/linuxserver/lidarr:latest
     container_name: lyra_lidarr
     environment:
       - PUID=1000

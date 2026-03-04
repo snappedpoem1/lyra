@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""xray_tags.py — Raw binary tag diagnostic tool.
+"""xray_tags.py - Raw binary tag diagnostic tool.
 
-Reads and displays ALL metadata tags from audio files using mutagen's
+Reads and displays all metadata tags from audio files using mutagen's
 low-level interfaces (not EasyID3). Useful for verifying the tag injection
 pipeline wrote correct values.
 
@@ -15,10 +15,10 @@ Features:
 
 Usage:
     # Single file
-    python scripts/xray_tags.py "A:\\Music\\Artist\\Album\\01 - Track.flac"
+    python scripts/xray_tags.py "/path/to/library/Artist/Album/01 - Track.flac"
 
     # Directory scan (all audio files)
-    python scripts/xray_tags.py "A:\\Music\\Artist\\Album\\" --recursive
+    python scripts/xray_tags.py "/path/to/library/Artist/Album/" --recursive
 
     # By track ID from database
     python scripts/xray_tags.py --track-id abc123def456
@@ -30,7 +30,7 @@ Usage:
     python scripts/xray_tags.py file.flac --filter mb,rg
 
     # Verify pipeline success (check for required tags)
-    python scripts/xray_tags.py "A:\\Music" --verify --recursive
+    python scripts/xray_tags.py "/path/to/library" --verify --recursive
 """
 
 from __future__ import annotations
@@ -432,7 +432,7 @@ def print_xray(data: Dict[str, Any], filters: Optional[List[str]] = None) -> Non
             dims = ""
             if pic.get("width") and pic.get("height"):
                 dims = f" ({pic['width']}x{pic['height']})"
-            print(f"    {fmt}{dims} — {size:,} bytes")
+            print(f"    {fmt}{dims} Ã¢â‚¬â€ {size:,} bytes")
 
     if data["warnings"]:
         print(f"\n  --- Warnings ---")
@@ -466,7 +466,7 @@ def main() -> None:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(
-        description="X-ray audio file tags — raw binary tag reader",
+        description="X-ray audio file tags Ã¢â‚¬â€ raw binary tag reader",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(

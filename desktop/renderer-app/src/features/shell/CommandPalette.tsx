@@ -41,9 +41,18 @@ export function CommandPalette() {
     addUserMessage(text);
     setInput("");
     setLoading(true);
-
-    const response = await queryAgent(text);
-    addAgentResponse(response);
+    try {
+      const response = await queryAgent(text);
+      addAgentResponse(response);
+    } catch (error) {
+      addAgentResponse({
+        action: "error",
+        thought: error instanceof Error ? error.message : "Agent request failed.",
+        intent: {},
+        next: "",
+        response: "Lyra could not reach the agent backend.",
+      });
+    }
   }, [input, loading, navigate, toggle, addUserMessage, addAgentResponse, setLoading]);
 
   if (!open) {

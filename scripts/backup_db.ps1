@@ -11,7 +11,7 @@ param(
     [string]$Type = "both"
 )
 
-$ProjectRoot  = "C:\MusicOracle"
+$ProjectRoot  = Split-Path -Parent $PSScriptRoot
 $BackupRoot   = Join-Path $ProjectRoot "backups"
 $DbSource     = Join-Path $ProjectRoot "lyra_registry.db"
 $ChromaSource = Join-Path $ProjectRoot "chroma_storage"

@@ -41,7 +41,7 @@ class RemixSearchTests(unittest.TestCase):
                     "active",
                     "remix",
                     0.9,
-                    "A:\\music\\song1.flac",
+                    "/library/song1.flac",
                     100.0,
                 ),
                 (
@@ -53,7 +53,7 @@ class RemixSearchTests(unittest.TestCase):
                     "active",
                     "original",
                     0.6,
-                    "A:\\music\\song2.flac",
+                    "/library/song2.flac",
                     101.0,
                 ),
                 (
@@ -65,7 +65,7 @@ class RemixSearchTests(unittest.TestCase):
                     "active",
                     "original",
                     0.8,
-                    "A:\\music\\song3.flac",
+                    "/library/song3.flac",
                     102.0,
                 ),
                 (
@@ -77,7 +77,7 @@ class RemixSearchTests(unittest.TestCase):
                     "quarantine",
                     "remix",
                     0.95,
-                    "A:\\music\\song4.flac",
+                    "/library/song4.flac",
                     103.0,
                 ),
             ],

@@ -18,7 +18,7 @@ export function PlaylistDetailRoute() {
     queryKey: ["playlist-detail", playlistId],
     queryFn: () => getPlaylistDetail(playlistId ?? "after-midnight-ritual"),
   });
-  const { data: constellation } = useQuery({ queryKey: ["constellation"], queryFn: () => getConstellation() });
+  const { data: constellation, error: constellationError } = useQuery({ queryKey: ["constellation"], queryFn: () => getConstellation() });
   const replaceQueue = useQueueStore((state) => state.replaceQueue);
   const setCurrentTrack = useQueueStore((state) => state.setCurrentTrack);
   const setTrack = usePlayerStore((state) => state.setTrack);
@@ -104,13 +104,18 @@ export function PlaylistDetailRoute() {
         </aside>
       </section>
 
-      {constellation && (
+      {constellationError ? (
+        <section className="lyra-panel empty-state-panel">
+          <h2>Constellation unavailable</h2>
+          <p>{constellationError instanceof Error ? constellationError.message : "The constellation backend did not respond."}</p>
+        </section>
+      ) : constellation ? (
         <ConstellationScene
           nodes={constellation.nodes}
           edges={constellation.edges}
           onSelectNode={() => navigate({ to: "/oracle" })}
         />
-      )}
+      ) : null}
     </div>
   );
 }

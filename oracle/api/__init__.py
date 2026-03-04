@@ -27,6 +27,8 @@ from oracle.db.schema import get_connection, get_write_mode
 
 VERSION = "1.0.0"
 logger = logging.getLogger(__name__)
+_background_workers_started = False
+_playback_bridge = None
 
 
 def create_app() -> Flask:
@@ -167,6 +169,45 @@ def _schedule_startup_jobs() -> None:
     threading.Thread(target=_run, name="lyra-startup-init", daemon=True).start()
 
 
+def _schedule_playback_listener() -> None:
+    """Start the BeefWeb playback bridge in the background when reachable."""
+
+    def _run() -> None:
+        global _playback_bridge
+
+        if os.getenv("LYRA_AUTOSTART_PLAYBACK", "1").strip().lower() in {"0", "false", "no"}:
+            print("[startup] playback listener autostart disabled")
+            return
+
+        time.sleep(2)
+        try:
+            from oracle.integrations.beefweb_bridge import BeefWebBridge
+
+            host = os.getenv("BEEFWEB_HOST", "localhost")
+            port = int(os.getenv("BEEFWEB_PORT", "8880"))
+            bridge = BeefWebBridge(host=host, port=port)
+            if not bridge.check_connection():
+                print(f"[startup] BeefWeb not reachable at {host}:{port} - playback listener not started")
+                return
+            bridge.start_background()
+            _playback_bridge = bridge
+            print(f"[startup] PlayFaux bridge active via BeefWeb at {host}:{port}")
+        except Exception as exc:
+            print(f"[startup] playback listener error: {exc}")
+
+    threading.Thread(target=_run, name="lyra-playback-listener", daemon=True).start()
+
+
+def ensure_runtime_background_workers() -> None:
+    """Start one-time background workers for the current process."""
+    global _background_workers_started
+    if _background_workers_started:
+        return
+    _background_workers_started = True
+    _schedule_startup_jobs()
+    _schedule_playback_listener()
+
+
 def main() -> None:
     """Bootstrap services, print header, start Flask development server."""
     if os.getenv("LYRA_BOOTSTRAP", "1").strip().lower() not in {"0", "false", "no"}:
@@ -195,7 +236,7 @@ def main() -> None:
     print("=" * 60 + "\n")
 
     app = create_app()
-    _schedule_startup_jobs()
+    ensure_runtime_background_workers()
 
     debug_value = (
         os.getenv("LYRA_DEBUG", "")

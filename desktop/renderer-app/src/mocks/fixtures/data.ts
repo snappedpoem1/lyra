@@ -28,7 +28,7 @@ export const tracks: TrackListItem[] = [
     trackId: "lyra-001",
     artist: "Burial",
     title: "Untrue (Oracle Cut)",
-    path: "C:\\MusicOracle\\fixtures\\Burial\\Untrue (Oracle Cut).flac",
+    path: "/fixtures/Burial/Untrue (Oracle Cut).flac",
     album: "Night Transit",
     year: "2026",
     durationSec: 289,
@@ -45,7 +45,7 @@ export const tracks: TrackListItem[] = [
     trackId: "lyra-002",
     artist: "Massive Attack",
     title: "Angel in Static",
-    path: "C:\\MusicOracle\\fixtures\\Massive Attack\\Angel in Static.flac",
+    path: "/fixtures/Massive Attack/Angel in Static.flac",
     album: "Midnight Signals",
     year: "2024",
     durationSec: 372,
@@ -61,7 +61,7 @@ export const tracks: TrackListItem[] = [
     trackId: "lyra-003",
     artist: "Portishead",
     title: "Cathedral Dust",
-    path: "C:\\MusicOracle\\fixtures\\Portishead\\Cathedral Dust.flac",
+    path: "/fixtures/Portishead/Cathedral Dust.flac",
     album: "Dummy Echoes",
     year: "2025",
     durationSec: 241,
@@ -76,7 +76,7 @@ export const tracks: TrackListItem[] = [
     trackId: "lyra-004",
     artist: "Nils Frahm",
     title: "Ash Bloom",
-    path: "C:\\MusicOracle\\fixtures\\Nils Frahm\\Ash Bloom.wav",
+    path: "/fixtures/Nils Frahm/Ash Bloom.wav",
     album: "Rooms for Ghost Light",
     year: "2026",
     durationSec: 423,
@@ -98,7 +98,7 @@ export const bootStatus: BootStatus = {
 
 export const doctorChecks: DoctorCheck[] = [
   { name: "Python", status: "PASS", details: "3.12.2" },
-  { name: "Database", status: "PASS", details: "Writable: C:\\MusicOracle\\lyra_registry.db" },
+  { name: "Database", status: "PASS", details: "Writable: lyra_registry.db" },
   { name: "ChromaDB (local)", status: "WARNING", details: "Fixture mode using sample diagnostics" },
   { name: "LLM (fixture)", status: "FAIL", details: "Backend offline in fixture mode" },
 ];
@@ -222,7 +222,7 @@ export const searchResults: SearchResultGroup = {
 
 export const dossier: TrackDossier = {
   track: tracks[0],
-  filepath: "A:\\music\\Active Music\\Burial\\Untrue (Oracle Cut).flac",
+  filepath: "/library/Burial/Untrue (Oracle Cut).flac",
   fileType: "FLAC",
   scores: Object.fromEntries(DIMENSIONS.map((key, index) => [key, ((index + 2) * 0.08) % 1])) as TrackDossier["scores"],
   structure: {

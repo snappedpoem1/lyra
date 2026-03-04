@@ -1,10 +1,13 @@
 """
-fix_zeroed_tracks.py — Purge zeroed (null-byte) FLAC files from library + DB,
-restore the Bayside track from Rejected, re-index Poppy + Bayside.
+Recover corrupted zeroed audio files from a library and optionally restore files.
+
+This is a generic maintenance utility. It does not assume any artist, album, or
+machine-specific paths.
 
 Usage:
-    python scripts/fix_zeroed_tracks.py [--dry-run]
-    python scripts/fix_zeroed_tracks.py --apply
+    python scripts/fix_zeroed_tracks.py --library "<library path>"
+    python scripts/fix_zeroed_tracks.py --library "<library path>" --apply
+    python scripts/fix_zeroed_tracks.py --library "<library path>" --restore-src "<file>" --restore-dest "<file>" --apply
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ import argparse
 import logging
 import shutil
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 logging.basicConfig(
@@ -20,15 +24,6 @@ logging.basicConfig(
     format="%(levelname)s  %(message)s",
 )
 log = logging.getLogger(__name__)
-
-LIBRARY = Path(r"A:\Music")
-REJECTED_CORRUPTED = Path(r"A:\Rejected\Corrupted")
-BAYSIDE_SRC = Path(
-    r"A:\Rejected\Duplicates\Bayside\[standalone_recordings]\02_Sick,_Sick,_Sick.flac"
-)
-BAYSIDE_DEST = Path(
-    r"A:\Music\Bayside\[standalone_recordings]\02_Sick,_Sick,_Sick.flac"
-)
 
 AUDIO_EXT = {".flac", ".mp3", ".m4a", ".opus", ".ogg", ".wav"}
 
@@ -42,57 +37,54 @@ def is_zeroed(path: Path) -> bool:
         return False
 
 
-def find_zeroed_files() -> list[Path]:
-    """Return all audio files in LIBRARY whose content is null bytes."""
+def find_zeroed_files(library: Path) -> list[Path]:
+    """Return all audio files in the library whose content begins with null bytes."""
     zeroed: list[Path] = []
-    for f in LIBRARY.rglob("*"):
-        if f.suffix.lower() in AUDIO_EXT and is_zeroed(f):
-            zeroed.append(f)
+    for candidate in library.rglob("*"):
+        if candidate.suffix.lower() in AUDIO_EXT and is_zeroed(candidate):
+            zeroed.append(candidate)
     return sorted(zeroed)
 
 
 def purge_from_db(paths: list[Path], dry_run: bool) -> int:
     """Remove track + dependent rows for each path. Returns count purged."""
-    import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from oracle.db.schema import get_connection
 
     conn = get_connection()
-    c = conn.cursor()
+    cursor = conn.cursor()
     purged = 0
-    for p in paths:
-        # DB may store paths with different drive-letter casing (e.g. A:\music vs A:\Music)
-        c.execute(
+    for path in paths:
+        cursor.execute(
             "SELECT track_id FROM tracks WHERE lower(filepath) = lower(?)",
-            (str(p),),
+            (str(path),),
         )
-        row = c.fetchone()
+        row = cursor.fetchone()
         if not row:
-            log.warning("Not in DB: %s", p)
+            log.warning("Not in DB: %s", path)
             continue
-        tid = row[0]
+        track_id = row[0]
         if dry_run:
-            log.info("[DRY] Would delete track_id=%s  %s", tid, p.name)
+            log.info("[DRY] Would delete track_id=%s  %s", track_id, path.name)
         else:
             for table in ("embeddings", "track_scores", "errors", "tracks"):
-                c.execute(f"DELETE FROM {table} WHERE track_id = ?", (tid,))
+                cursor.execute(f"DELETE FROM {table} WHERE track_id = ?", (track_id,))
             conn.commit()
-            log.info("Deleted track_id=%s  %s", tid, p.name)
+            log.info("Deleted track_id=%s  %s", track_id, path.name)
         purged += 1
     conn.close()
     return purged
 
 
-def move_to_rejected(files: list[Path], dry_run: bool) -> int:
-    """Move zeroed files to REJECTED_CORRUPTED, preserving Artist/Album subpath."""
+def move_to_rejected(files: list[Path], library: Path, rejected_corrupted: Path, dry_run: bool) -> int:
+    """Move zeroed files to a rejected folder, preserving the relative subpath."""
     moved = 0
     for src in files:
-        # Preserve relative path under LIBRARY
         try:
-            rel = src.relative_to(LIBRARY)
+            rel = src.relative_to(library)
         except ValueError:
             rel = Path(src.name)
-        dest = REJECTED_CORRUPTED / rel
+        dest = rejected_corrupted / rel
         if dry_run:
             log.info("[DRY] Move -> %s", dest)
         else:
@@ -103,105 +95,105 @@ def move_to_rejected(files: list[Path], dry_run: bool) -> int:
     return moved
 
 
-def restore_bayside(dry_run: bool) -> bool:
-    """Move Bayside file from Rejected back to library."""
-    if not BAYSIDE_SRC.exists():
-        log.warning("Bayside source not found: %s", BAYSIDE_SRC)
+def restore_file(restore_src: Path | None, restore_dest: Path | None, dry_run: bool) -> bool:
+    """Restore a single file from a source path back into the library."""
+    if not restore_src or not restore_dest:
+        return False
+    if not restore_src.exists():
+        log.warning("Restore source not found: %s", restore_src)
         return False
     if dry_run:
-        log.info("[DRY] Restore Bayside -> %s", BAYSIDE_DEST)
+        log.info("[DRY] Restore -> %s", restore_dest)
         return True
-    BAYSIDE_DEST.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(BAYSIDE_SRC), str(BAYSIDE_DEST))
-    log.info("Restored Bayside -> %s", BAYSIDE_DEST)
+    restore_dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(restore_src), str(restore_dest))
+    log.info("Restored -> %s", restore_dest)
     return True
 
 
+def reindex_paths(paths: list[Path]) -> None:
+    """Scan and reindex any recovered files that now exist on disk."""
+    if not paths:
+        return
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from oracle.scanner import scan_paths
+    from oracle.indexer import index_track_ids
+
+    for path in paths:
+        if not path.exists() or is_zeroed(path):
+            continue
+        log.info("Scanning recovered file: %s", path)
+        result = scan_paths([path])
+        track_ids: list[str] = result.get("track_ids", [])  # type: ignore[assignment]
+        if track_ids:
+            index_result = index_track_ids(track_ids, force_reindex=True)
+            log.info("Re-index result: %s", index_result)
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Purge zeroed tracks and re-index recovered files")
+    parser = argparse.ArgumentParser(description="Purge zeroed tracks and optionally restore/reindex recovered files")
+    parser.add_argument("--library", required=True, help="Library root to scan")
+    parser.add_argument("--rejected-corrupted", help="Destination folder for moved corrupted files")
+    parser.add_argument("--restore-src", help="Optional source file to restore")
+    parser.add_argument("--restore-dest", help="Optional destination path for restored file")
+    parser.add_argument("--reindex-path", action="append", default=[], help="Path to re-scan and re-index after recovery; may be supplied multiple times")
     parser.add_argument("--apply", action="store_true", help="Actually make changes (default is dry-run)")
     args = parser.parse_args()
+
     dry_run = not args.apply
+    library = Path(args.library)
+    rejected_corrupted = Path(args.rejected_corrupted) if args.rejected_corrupted else (library.parent / "Rejected" / "Corrupted")
+    restore_src = Path(args.restore_src) if args.restore_src else None
+    restore_dest = Path(args.restore_dest) if args.restore_dest else None
+    reindex_targets = [Path(path) for path in args.reindex_path]
+    if restore_dest:
+        reindex_targets.append(restore_dest)
 
     if dry_run:
-        log.info("=== DRY RUN — pass --apply to make changes ===")
+        log.info("=== DRY RUN - pass --apply to make changes ===")
 
-    # 1. Find all zeroed files
     log.info("Scanning library for zeroed audio files...")
-    zeroed = find_zeroed_files()
-    log.info("Found %d zeroed files:", len(zeroed))
-    from collections import defaultdict
+    zeroed = find_zeroed_files(library)
+    log.info("Found %d zeroed files", len(zeroed))
+
     by_album: dict[Path, list[str]] = defaultdict(list)
-    for f in zeroed:
-        by_album[f.parent].append(f.name)
+    for item in zeroed:
+        by_album[item.parent].append(item.name)
     for album, names in sorted(by_album.items()):
         log.info("  (%d) %s", len(names), album)
 
-    # 2. Purge from DB
     log.info("--- Purging %d tracks from DB ---", len(zeroed))
     purged = purge_from_db(zeroed, dry_run=dry_run)
     log.info("Purged %d DB records", purged)
 
-    # 3. Move zeroed files to Rejected/Corrupted
-    log.info("--- Moving zeroed files to %s ---", REJECTED_CORRUPTED)
-    moved = move_to_rejected(zeroed, dry_run=dry_run)
+    log.info("--- Moving zeroed files to %s ---", rejected_corrupted)
+    moved = move_to_rejected(zeroed, library=library, rejected_corrupted=rejected_corrupted, dry_run=dry_run)
     log.info("Moved %d files", moved)
 
-    # 4. Restore Bayside
-    log.info("--- Restoring Bayside ---")
-    ok = restore_bayside(dry_run=dry_run)
-    log.info("Bayside restore: %s", "OK" if ok else "SKIPPED")
+    if restore_src and restore_dest:
+        log.info("--- Restoring file ---")
+        restored = restore_file(restore_src, restore_dest, dry_run=dry_run)
+        log.info("Restore: %s", "OK" if restored else "SKIPPED")
 
     if dry_run:
-        log.info("=== DRY RUN COMPLETE — re-run with --apply to execute ===")
+        log.info("=== DRY RUN COMPLETE - re-run with --apply to execute ===")
         return
 
-    # 5. Re-index recovered/skipped files
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-    from oracle.db.schema import get_connection as _get_conn
-    from oracle.scanner import scan_paths
-    from oracle.indexer import index_track_ids
+    if reindex_targets:
+        log.info("--- Re-indexing recovered files ---")
+        reindex_paths(reindex_targets)
 
-    # Poppy: already in DB (scanned), just needs embedding
-    poppy = Path(r"A:\Music\Poppy\Negative_Spaces\13_new_way_out.flac")
-    if poppy.exists() and not is_zeroed(poppy):
-        conn = _get_conn()
-        c = conn.cursor()
-        c.execute("SELECT track_id FROM tracks WHERE lower(filepath) = lower(?)", (str(poppy),))
-        row = c.fetchone()
-        conn.close()
-        if row:
-            log.info("Re-indexing Poppy (track_id=%s)...", row[0])
-            res = index_track_ids([row[0]], force_reindex=True)
-            log.info("Poppy index result: %s", res)
-        else:
-            log.warning("Poppy not in DB, scanning first...")
-            r = scan_paths([poppy])
-            tids: list[str] = r.get("track_ids", [])  # type: ignore[assignment]
-            if tids:
-                res = index_track_ids(tids, force_reindex=True)
-                log.info("Poppy index result: %s", res)
-
-    # Bayside: new to DB (was in Rejected during scan), needs full scan+index
-    if BAYSIDE_DEST.exists():
-        log.info("Scanning Bayside...")
-        r2 = scan_paths([BAYSIDE_DEST])
-        tids2: list[str] = r2.get("track_ids", [])  # type: ignore[assignment]
-        log.info("Bayside scan: %s  track_ids=%d", r2, len(tids2))
-        if tids2:
-            res2 = index_track_ids(tids2, force_reindex=True)
-            log.info("Bayside index result: %s", res2)
-
-    # 6. Report albums needing re-acquisition
-    log.info("")
-    log.info("=== ALBUMS REQUIRING RE-ACQUISITION ===")
-    for album in sorted(by_album.keys()):
-        # Folder name pattern: A:\Music\{Artist}\{Album}
-        parts = album.relative_to(LIBRARY).parts
-        artist = parts[0].replace("_", " ") if parts else "?"
-        album_name = parts[1].replace("_", " ") if len(parts) > 1 else "?"
-        log.info("  oracle acquire waterfall --artist %r --album %r", artist, album_name)
+    if by_album:
+        log.info("")
+        log.info("=== ALBUMS REQUIRING RE-ACQUISITION ===")
+        for album in sorted(by_album.keys()):
+            try:
+                parts = album.relative_to(library).parts
+            except ValueError:
+                parts = album.parts
+            artist = parts[0].replace("_", " ") if parts else "?"
+            album_name = parts[1].replace("_", " ") if len(parts) > 1 else "?"
+            log.info("  oracle acquire waterfall --artist %r --album %r", artist, album_name)
 
 
 if __name__ == "__main__":
