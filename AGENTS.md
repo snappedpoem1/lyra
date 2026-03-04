@@ -1,5 +1,19 @@
 # AGENTS.md — Lyra Oracle Review Agent Instructions
 
+## SESSION PROTOCOL
+
+**At the start of every chat session:**
+1. Read this file (`AGENTS.md`) in full.
+2. Read `current_state.md` for the latest system metrics, priorities, and direction.
+3. Orient silently — do not narrate what you read. State one sentence on current health, then proceed.
+
+**After every batch of changes:**
+1. Update `current_state.md` with: what changed, new metrics if applicable, and the next priority.
+2. Use the format already in `current_state.md` (timestamp header, sections for health, priorities, notes).
+3. Commit the update with a descriptive message so state is never lost between sessions.
+
+---
+
 ## YOUR ROLE
 
 You are the code reviewer and quality auditor for Lyra Oracle, a Python music intelligence system at `C:\MusicOracle`. Your job is NOT to build — it's to **catch what the builder missed**.
