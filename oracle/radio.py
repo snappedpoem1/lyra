@@ -334,14 +334,74 @@ class Radio:
         return profile
     
     def _filter_by_taste(self, candidates: List[Dict]) -> List[Dict]:
+        """Score and reorder candidates by taste profile alignment.
+
+        Uses the 10-dimensional taste_profile to compute an alignment score
+        for each candidate, then re-sorts candidates from best to worst fit.
+        Tracks without scores pass through (sorted to the end) so the system
+        still works when track_scores is sparse.
         """
-        Filter candidates by taste profile.
-        
-        Prioritize tracks matching user's learned preferences.
-        """
-        # For now, simple random filtering
-        # In production: Use taste profile to score each candidate
-        return candidates
+        if not candidates:
+            return candidates
+
+        # Load taste profile
+        conn = self._open_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT dimension, value, confidence FROM taste_profile")
+        profile_rows = cursor.fetchall()
+
+        if not profile_rows:
+            conn.close()
+            return candidates  # No taste data yet — pass through
+
+        taste: Dict[str, float] = {}
+        taste_conf: Dict[str, float] = {}
+        for dim, val, conf in profile_rows:
+            taste[dim] = float(val)
+            taste_conf[dim] = float(conf or 0)
+
+        # Fetch dimension scores for candidate track_ids
+        dims = ["energy", "valence", "tension", "density", "warmth",
+                "movement", "space", "rawness", "complexity", "nostalgia"]
+        track_ids = [c.get("track_id") for c in candidates if c.get("track_id")]
+        score_map: Dict[str, Dict[str, float]] = {}
+        if track_ids:
+            placeholders = ",".join("?" for _ in track_ids)
+            cols = ", ".join(dims)
+            cursor.execute(
+                f"SELECT track_id, {cols} FROM track_scores WHERE track_id IN ({placeholders})",
+                tuple(track_ids),
+            )
+            for row in cursor.fetchall():
+                tid = str(row[0])
+                score_map[tid] = dict(zip(dims, row[1:]))
+
+        conn.close()
+
+        # Score each candidate: confidence-weighted L1 alignment
+        def _taste_score(candidate: Dict) -> float:
+            tid = str(candidate.get("track_id", ""))
+            scores = score_map.get(tid)
+            if not scores:
+                return 0.0  # No scores → neutral (sorted last)
+
+            total = 0.0
+            weight_sum = 0.0
+            for dim in dims:
+                if dim in taste and dim in scores and scores[dim] is not None:
+                    # taste is in -1..1 space, scores are 0..1 — convert
+                    pref_01 = (taste[dim] + 1.0) / 2.0
+                    w = taste_conf.get(dim, 0.25)
+                    alignment = 1.0 - abs(float(scores[dim]) - pref_01)
+                    total += alignment * w
+                    weight_sum += w
+
+            return total / weight_sum if weight_sum > 0 else 0.0
+
+        # Sort by taste alignment descending (best first)
+        scored = [(c, _taste_score(c)) for c in candidates]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [c for c, _ in scored]
     
     def _keys_compatible(self, key1: str, key2: str) -> bool:
         """

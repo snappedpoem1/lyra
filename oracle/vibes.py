@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
@@ -15,6 +16,8 @@ from oracle.config import VIBES_FOLDER
 from oracle.db.schema import DB_PATH, get_connection, get_write_mode
 from oracle.search import search
 from oracle.types import PlaylistRun, PlaylistTrack, TrackReason
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VIBES_DIR = VIBES_FOLDER
@@ -85,9 +88,34 @@ def save_playlist_run(
         conn.close()
 
 
-def generate_vibe(prompt: str, n: int = 20, vibe_name: Optional[str] = None) -> PlaylistRun:
-    """Generate a playlist run from semantic search and persist it when writes are enabled."""
-    results = search(prompt, n=n)
+def generate_vibe(prompt: str, n: int = 20, vibe_name: Optional[str] = None,
+                   arc: Optional[str] = None) -> PlaylistRun:
+    """Generate a playlist run with oracle intelligence.
+
+    Pipeline:
+      1. Over-fetch 2× candidates via CLAP semantic search
+      2. Score each against taste profile for personal relevance
+      3. Re-rank by blended score (semantic × taste alignment)
+      4. Trim to requested count
+      5. Optionally sequence through an emotional arc template
+      6. Enrich with structured reasons (mood-bridge, taste-match, deep-cut, etc.)
+
+    Args:
+        prompt: Natural language query describing the vibe.
+        n: Number of tracks in result.
+        vibe_name: Optional name to save the vibe under.
+        arc: Optional arc template ID (e.g. 'slow_burn', 'catharsis', 'night_drive').
+             When set, tracks are reordered along an emotional journey.
+    """
+    # Step 1: Over-fetch candidates for better selection
+    fetch_count = min(n * 2, 100)
+    results = search(prompt, n=fetch_count)
+
+    # Step 2: Taste-boost scoring
+    results = _taste_boost(results)
+
+    # Step 3: Trim to requested count
+    results = results[:n]
 
     playlist_tracks: List[PlaylistTrack] = []
     for index, result in enumerate(results, start=1):
@@ -99,6 +127,7 @@ def generate_vibe(prompt: str, n: int = 20, vibe_name: Optional[str] = None) -> 
 
         playlist_tracks.append(
             PlaylistTrack(
+                track_id=result.get("track_id") or "",
                 path=result.get("path") or result.get("filepath") or "",
                 artist=result.get("artist") or "Unknown",
                 title=result.get("title") or "Unknown",
@@ -114,6 +143,10 @@ def generate_vibe(prompt: str, n: int = 20, vibe_name: Optional[str] = None) -> 
             )
         )
 
+    # Step 4: Arc sequencing (optional)
+    if arc and playlist_tracks:
+        playlist_tracks = _apply_arc(playlist_tracks, arc)
+
     run = PlaylistRun(
         uuid=str(uuid.uuid4()),
         prompt=prompt,
@@ -121,7 +154,7 @@ def generate_vibe(prompt: str, n: int = 20, vibe_name: Optional[str] = None) -> 
         tracks=playlist_tracks,
     )
 
-    # Enrich playlist with structured reasons (F-007) — silent on failure
+    # Step 5: Enrich playlist with structured reasons (F-007) — silent on failure
     try:
         from oracle.explain import ReasonBuilder
         rb = ReasonBuilder()
@@ -130,11 +163,155 @@ def generate_vibe(prompt: str, n: int = 20, vibe_name: Optional[str] = None) -> 
         logger.debug("ReasonBuilder enrichment skipped: %s", _exc)
 
     if get_write_mode() == "apply_allowed":
-        save_playlist_run(run, params={"query": prompt, "n": n}, vibe_name=vibe_name)
+        save_playlist_run(run, params={"query": prompt, "n": n, "arc": arc}, vibe_name=vibe_name)
     else:
         print("Warning: LYRA_WRITE_MODE is not apply_allowed; PlaylistRun not saved to DB.")
 
     return run
+
+
+def _taste_boost(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Re-rank search results by blending semantic score with taste alignment.
+
+    Reads the user's taste_profile and track_scores to compute a personal
+    relevance score for each candidate. The final score is:
+
+        blended = 0.6 × semantic + 0.4 × taste_alignment
+
+    This ensures the Oracle surfaces tracks that are both semantically
+    relevant AND personally meaningful.
+    """
+    if not results:
+        return results
+
+    dims = ["energy", "valence", "tension", "density", "warmth",
+            "movement", "space", "rawness", "complexity", "nostalgia"]
+
+    conn = get_connection(timeout=5.0)
+    c = conn.cursor()
+
+    # Load taste profile
+    c.execute("SELECT dimension, value FROM taste_profile")
+    taste: Dict[str, float] = {}
+    for dim, val in c.fetchall():
+        taste[dim] = float(val)
+
+    if not taste:
+        conn.close()
+        return results  # No taste data — keep semantic order
+
+    # Load track scores for candidates
+    track_ids = [r.get("track_id") for r in results if r.get("track_id")]
+    score_map: Dict[str, Dict[str, float]] = {}
+    if track_ids:
+        placeholders = ",".join("?" for _ in track_ids)
+        cols = ", ".join(dims)
+        c.execute(
+            f"SELECT track_id, {cols} FROM track_scores WHERE track_id IN ({placeholders})",
+            tuple(track_ids),
+        )
+        for row in c.fetchall():
+            score_map[str(row[0])] = dict(zip(dims, row[1:]))
+
+    conn.close()
+
+    if not score_map:
+        return results  # No scores to blend
+
+    for result in results:
+        tid = str(result.get("track_id", ""))
+        scores = score_map.get(tid)
+        if not scores:
+            result["_blended"] = float(result.get("score", 0))
+            continue
+
+        # taste is in -1..1, scores are 0..1. Convert taste → 0..1
+        alignment_sum = 0.0
+        count = 0
+        for dim in dims:
+            if dim in taste and dim in scores and scores[dim] is not None:
+                pref_01 = (taste[dim] + 1.0) / 2.0
+                alignment_sum += 1.0 - abs(float(scores[dim]) - pref_01)
+                count += 1
+
+        taste_alignment = alignment_sum / count if count > 0 else 0.5
+        semantic_score = float(result.get("score", 0))
+        result["_blended"] = 0.6 * semantic_score + 0.4 * taste_alignment
+
+    # Re-sort by blended score
+    results.sort(key=lambda r: r.get("_blended", 0), reverse=True)
+    return results
+
+
+def _apply_arc(tracks: List[PlaylistTrack], arc_id: str) -> List[PlaylistTrack]:
+    """Re-sequence PlaylistTrack objects along an emotional arc.
+
+    Delegates to the arc.sequence_tracks engine which fits tracks to
+    template trajectories (energy, tension, valence curves) and optimizes
+    transitions.
+    """
+    try:
+        from oracle.arc import sequence_tracks
+
+        # Convert PlaylistTracks to dicts the arc engine expects
+        conn = get_connection(timeout=5.0)
+        c = conn.cursor()
+        dims = ["energy", "valence", "tension", "density", "warmth",
+                "movement", "space", "rawness", "complexity", "nostalgia"]
+
+        tid_list = [t.track_id for t in tracks if t.track_id]
+        score_data: Dict[str, Dict[str, float]] = {}
+        if tid_list:
+            placeholders = ",".join("?" for _ in tid_list)
+            cols = ", ".join(dims)
+            c.execute(
+                f"SELECT track_id, {cols} FROM track_scores WHERE track_id IN ({placeholders})",
+                tuple(tid_list),
+            )
+            for row in c.fetchall():
+                score_data[str(row[0])] = dict(zip(dims, row[1:]))
+        conn.close()
+
+        arc_input = []
+        for t in tracks:
+            arc_input.append({
+                "track_id": t.track_id,
+                "path": t.path,
+                "artist": t.artist,
+                "title": t.title,
+                "scores": score_data.get(t.track_id, {}),
+                "global_score": t.global_score,
+            })
+
+        result = sequence_tracks(arc_input, arc_id, count=len(tracks))
+        journey = result.get("journey", [])
+
+        if not journey:
+            return tracks
+
+        # Rebuild PlaylistTrack list in arc order, preserving reasons
+        track_map = {t.track_id: t for t in tracks}
+        reordered: List[PlaylistTrack] = []
+        for idx, item in enumerate(journey, start=1):
+            tid = item.get("track_id", "")
+            original = track_map.get(tid)
+            if original:
+                original.rank = idx
+                # Add arc label as a reason
+                arc_label = item.get("arc_label", "")
+                if arc_label:
+                    original.reasons.append(TrackReason(
+                        type="arc-position",
+                        score=0.8,
+                        text=f"Arc: {arc_label}",
+                    ))
+                reordered.append(original)
+
+        return reordered if reordered else tracks
+
+    except Exception as exc:
+        logger.debug("Arc sequencing failed, keeping semantic order: %s", exc)
+        return tracks
 
 
 def save_vibe(name: str, query: str, n: int = 200) -> Dict[str, Any]:

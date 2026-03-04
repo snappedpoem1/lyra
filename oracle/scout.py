@@ -286,16 +286,17 @@ class Scout:
         
         # Search local library first
         cursor = self.conn.cursor()
-        placeholders = " OR ".join(["genre LIKE ?" for _ in genres])
+        where_clauses = ["genre LIKE ?" for _ in genres]
         params = [f"%{g}%" for g in genres]
-        
-        cursor.execute("""
-            SELECT track_id, artist, title, genre, filepath
-            FROM tracks
-            WHERE {placeholders}
-            ORDER BY RANDOM()
-            LIMIT ?
-        """, params + [limit])
+
+        sql = (
+            "SELECT track_id, artist, title, genre, filepath "
+            "FROM tracks "
+            f"WHERE ({' OR '.join(where_clauses)}) "
+            "ORDER BY RANDOM() "
+            "LIMIT ?"
+        )
+        cursor.execute(sql, params + [limit])
         
         results = [
             {

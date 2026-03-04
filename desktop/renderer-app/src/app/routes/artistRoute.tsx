@@ -1,4 +1,4 @@
-﻿import { useParams, useNavigate } from "@tanstack/react-router";
+import { useParams, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { audioEngine } from "@/services/audio/audioEngine";
 import { getLibraryArtistDetail, getArtistShrine } from "@/services/lyraGateway/queries";
@@ -8,14 +8,13 @@ import { Icon } from "@/ui/Icon";
 import { LyraButton } from "@/ui/LyraButton";
 import type { TrackListItem } from "@/types/domain";
 
-/** Hue derived from artist name â€” consistent per-artist color */
 function artistHue(name: string): number {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
   return h;
 }
 
-function ArtistAvatar({ name, thumbnail, size = 90 }: { name: string; thumbnail?: string; size?: number }) {
+function ArtistAvatar({ name, thumbnail, size = 80 }: { name: string; thumbnail?: string; size?: number }) {
   const hue = artistHue(name);
   const letter = name.trim()[0]?.toUpperCase() ?? "?";
   if (thumbnail) {
@@ -37,7 +36,6 @@ function ArtistAvatar({ name, thumbnail, size = 90 }: { name: string; thumbnail?
         background: `linear-gradient(145deg, hsl(${hue},38%,20%), hsl(${(hue + 50) % 360},46%,32%))`,
         color: `hsl(${hue},55%,82%)`,
         border: `2px solid hsl(${hue},30%,35%)`,
-        boxShadow: `0 0 32px hsl(${hue},38%,20%)`,
       }}
       aria-hidden="true"
     >
@@ -46,18 +44,10 @@ function ArtistAvatar({ name, thumbnail, size = 90 }: { name: string; thumbnail?
   );
 }
 
-function TrackRow({
-  track,
-  index,
-  onPlay,
-}: {
-  track: TrackListItem;
-  index: number;
-  onPlay: (track: TrackListItem) => void;
-}) {
+function TrackRow({ track, index, onPlay }: { track: TrackListItem; index: number; onPlay: (track: TrackListItem) => void }) {
   return (
     <div
-      className="track-row artist-track-row"
+      className="artist-track-row"
       onClick={() => onPlay(track)}
       role="button"
       tabIndex={0}
@@ -75,14 +65,6 @@ function TrackRow({
   );
 }
 
-const SECTION_HEADER: React.CSSProperties = {
-  margin: "0 0 16px",
-  fontSize: "0.8rem",
-  letterSpacing: "0.12em",
-  textTransform: "uppercase",
-  color: "var(--text-dim)",
-};
-
 export function ArtistRoute() {
   const { name } = useParams({ from: "/artist/$name" });
   const navigate = useNavigate();
@@ -90,14 +72,12 @@ export function ArtistRoute() {
   const setCurrentTrack = useQueueStore((state) => state.setCurrentTrack);
   const setTrack = usePlayerStore((state) => state.setTrack);
 
-  // Library detail: track list + album list + years
   const { data: detail, isLoading } = useQuery({
     queryKey: ["artist-detail", name],
     queryFn: () => getLibraryArtistDetail(name),
     enabled: Boolean(name),
   });
 
-  // Shrine: bio, genres, origin, related artists, credits (runs in parallel)
   const { data: shrine } = useQuery({
     queryKey: ["artist-shrine", name],
     queryFn: () => getArtistShrine(name),
@@ -112,13 +92,7 @@ export function ArtistRoute() {
 
   const playAll = async () => {
     if (!tracks.length) return;
-    replaceQueue({
-      queueId: `artist-${name}`,
-      origin: name,
-      reorderable: true,
-      currentIndex: 0,
-      items: tracks,
-    });
+    replaceQueue({ queueId: `artist-${name}`, origin: name, reorderable: true, currentIndex: 0, items: tracks });
     setCurrentTrack(tracks[0].trackId);
     setTrack(tracks[0], name, undefined);
     await audioEngine.playTrack(tracks[0]);
@@ -126,13 +100,7 @@ export function ArtistRoute() {
 
   const playTrack = async (track: TrackListItem) => {
     const idx = tracks.findIndex((t) => t.trackId === track.trackId);
-    replaceQueue({
-      queueId: `artist-${name}`,
-      origin: name,
-      reorderable: true,
-      currentIndex: Math.max(0, idx),
-      items: tracks,
-    });
+    replaceQueue({ queueId: `artist-${name}`, origin: name, reorderable: true, currentIndex: Math.max(0, idx), items: tracks });
     setCurrentTrack(track.trackId);
     setTrack(track, name, undefined);
     await audioEngine.playTrack(track);
@@ -141,9 +109,7 @@ export function ArtistRoute() {
   if (isLoading) {
     return (
       <div className="route-stack">
-        <section className="lyra-panel empty-state-panel" style={{ padding: "28px" }}>
-          Loading artistâ€¦
-        </section>
+        <section className="lyra-panel empty-state-panel">Loading artist\u2026</section>
       </div>
     );
   }
@@ -151,23 +117,18 @@ export function ArtistRoute() {
   if (!detail) {
     return (
       <div className="route-stack">
-        <section className="lyra-panel empty-state-panel" style={{ padding: "28px" }}>
+        <section className="lyra-panel empty-state-panel">
           <h2>Artist not found</h2>
           <p>"{name}" has no tracks in the library.</p>
-          <LyraButton onClick={() => void navigate({ to: "/library" })}>
-            Back to Library
-          </LyraButton>
+          <LyraButton onClick={() => void navigate({ to: "/library" })}>Back to Library</LyraButton>
         </section>
       </div>
     );
   }
 
-  const yearRange = years.length > 1
-    ? `${years[0]} â€“ ${years[years.length - 1]}`
-    : years[0] ?? "";
+  const yearRange = years.length > 1 ? `${years[0]} \u2013 ${years[years.length - 1]}` : years[0] ?? "";
   const hue = artistHue(name);
 
-  // Credit groups to surface (exclude generic "other")
   const notableCredits = (shrine?.credits ?? []).filter(
     (c) => ["producer", "featured", "composer", "remixer", "lyricist", "mixer"].includes(c.role),
   );
@@ -180,44 +141,38 @@ export function ArtistRoute() {
     <div className="artist-page route-stack">
       {/* Hero */}
       <section className="lyra-panel artist-hero">
-        <ArtistAvatar name={name} thumbnail={shrine?.wikiThumbnail || undefined} size={90} />
+        <ArtistAvatar name={name} thumbnail={shrine?.wikiThumbnail || undefined} size={80} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: "var(--text-dim)", fontSize: "0.72rem", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }}>
-            Artist
-          </div>
-          <h1 style={{ margin: "0 0 6px", fontSize: "2rem", fontWeight: 700, lineHeight: 1.1 }}>{name}</h1>
+          <span className="hero-kicker">Artist</span>
+          <h1 style={{ margin: "2px 0 6px", fontSize: "1.6rem", fontWeight: 700, lineHeight: 1.1 }}>{name}</h1>
 
-          {/* Origin / scene tagline */}
           {(shrine?.origin || shrine?.era || shrine?.scene) && (
-            <p style={{ margin: "0 0 8px", fontSize: "0.82rem", color: "var(--text-dim)" }}>
-              {[shrine.origin, shrine.era, shrine.scene].filter(Boolean).join(" Â· ")}
+            <p style={{ marginBottom: 8, fontSize: "0.82rem", color: "var(--text-dim)" }}>
+              {[shrine.origin, shrine.era, shrine.scene].filter(Boolean).join(" \u00b7 ")}
             </p>
           )}
 
-          {/* Genres */}
           {(shrine?.genres ?? []).length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
+            <div className="chip-row" style={{ marginBottom: 12 }}>
               {(shrine?.genres ?? []).slice(0, 8).map((g) => (
-                <span key={g} style={{
-                  background: `hsl(${hue},20%,18%)`,
-                  border: `1px solid hsl(${hue},25%,30%)`,
-                  color: `hsl(${hue},50%,72%)`,
-                  borderRadius: 20,
-                  padding: "2px 10px",
-                  fontSize: "0.75rem",
-                  fontWeight: 500,
-                }}>
+                <span
+                  key={g}
+                  className="artist-genre-chip"
+                  style={{
+                    background: `hsl(${hue},20%,18%)`,
+                    border: `1px solid hsl(${hue},25%,30%)`,
+                    color: `hsl(${hue},50%,72%)`,
+                  }}
+                >
                   {g}
                 </span>
               ))}
             </div>
           )}
 
-          {shrine?.bio && (
-            <p className="artist-bio">{shrine.bio}</p>
-          )}
+          {shrine?.bio && <p className="artist-bio">{shrine.bio}</p>}
 
-          <div className="artist-stats-row" style={{ marginBottom: 18 }}>
+          <div className="artist-stats-row" style={{ marginBottom: 16 }}>
             <div className="artist-stat">
               <span className="artist-stat-value">{detail.trackCount}</span>
               <span className="artist-stat-label">Tracks</span>
@@ -252,21 +207,14 @@ export function ArtistRoute() {
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div className="hero-actions">
             <LyraButton onClick={() => void playAll()} disabled={!tracks.length}>
               <Icon name="play" className="inline-icon" /> Play All
             </LyraButton>
-            <LyraButton onClick={() => void navigate({ to: "/library" })}>
-              Library
-            </LyraButton>
+            <LyraButton onClick={() => void navigate({ to: "/library" })}>Library</LyraButton>
             {shrine?.wikiUrl && (
-              <a
-                href={shrine.wikiUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--text-dim)", fontSize: "0.78rem", textDecoration: "none" }}
-              >
-                Wikipedia â†—
+              <a href={shrine.wikiUrl} target="_blank" rel="noopener noreferrer" className="artist-related-btn">
+                Wikipedia
               </a>
             )}
           </div>
@@ -275,23 +223,14 @@ export function ArtistRoute() {
 
       {/* Related Artists */}
       {(shrine?.relatedArtists ?? []).length > 0 && (
-        <section className="lyra-panel" style={{ padding: "18px 24px" }}>
-          <h3 style={SECTION_HEADER}>Related Artists</h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <section className="lyra-panel" style={{ padding: "16px 20px" }}>
+          <h3 className="artist-section-header">Related Artists</h3>
+          <div className="chip-row">
             {(shrine?.relatedArtists ?? []).slice(0, 12).map((rel) => (
               <button
                 key={rel.target}
+                className="artist-related-btn"
                 onClick={() => void navigate({ to: "/artist/$name", params: { name: rel.target } })}
-                style={{
-                  background: "var(--bg-soft)",
-                  border: "1px solid var(--panel-border)",
-                  borderRadius: 20,
-                  color: "var(--text)",
-                  cursor: "pointer",
-                  fontSize: "0.8rem",
-                  padding: "4px 14px",
-                  transition: "background 0.15s, border-color 0.15s",
-                }}
                 title={rel.type}
               >
                 {rel.target}
@@ -301,19 +240,15 @@ export function ArtistRoute() {
         </section>
       )}
 
-      {/* Notable Credits */}
+      {/* Credits */}
       {Object.keys(creditsByRole).length > 0 && (
-        <section className="lyra-panel" style={{ padding: "18px 24px" }}>
-          <h3 style={SECTION_HEADER}>Credits</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <section className="lyra-panel" style={{ padding: "16px 20px" }}>
+          <h3 className="artist-section-header">Credits</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {Object.entries(creditsByRole).map(([role, people]) => (
-              <div key={role} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-                <span style={{ fontSize: "0.72rem", color: "var(--text-dim)", width: 80, flexShrink: 0, textTransform: "capitalize" }}>
-                  {role}
-                </span>
-                <span style={{ fontSize: "0.82rem", color: "var(--text)" }}>
-                  {people.map((p) => p.name).join(", ")}
-                </span>
+              <div key={role} className="artist-credits-row">
+                <span className="artist-credits-role">{role}</span>
+                <span className="artist-credits-names">{people.map((p) => p.name).join(", ")}</span>
               </div>
             ))}
           </div>
@@ -322,42 +257,45 @@ export function ArtistRoute() {
 
       {/* Albums */}
       {albums.length > 0 && (
-        <section className="lyra-panel" style={{ padding: "20px 24px" }}>
-          <h3 style={SECTION_HEADER}>Discography</h3>
+        <section className="lyra-panel" style={{ padding: "16px 20px" }}>
+          <h3 className="artist-section-header">Discography</h3>
           <div className="artist-albums-grid">
-            {albums.map((album) => (
-              <div key={album.name} className="artist-album-card" title={`${album.count} tracks`}>
-                <div
-                  style={{
-                    width: "100%",
-                    aspectRatio: "1",
-                    borderRadius: 6,
-                    background: `linear-gradient(145deg, hsl(${artistHue(album.name)},28%,18%), hsl(${(artistHue(album.name) + 60) % 360},36%,26%))`,
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: "1.6rem",
-                    marginBottom: 10,
-                    color: `hsl(${artistHue(album.name)},60%,75%)`,
-                  }}
-                >
-                  {album.name[0]?.toUpperCase()}
+            {albums.map((album) => {
+              const albumHue = artistHue(album.name);
+              return (
+                <div key={album.name} className="artist-album-card" title={`${album.count} tracks`}>
+                  <div
+                    style={{
+                      width: "100%",
+                      aspectRatio: "1",
+                      borderRadius: 5,
+                      background: `linear-gradient(145deg, hsl(${albumHue},28%,18%), hsl(${(albumHue + 60) % 360},36%,26%))`,
+                      display: "grid",
+                      placeItems: "center",
+                      fontSize: "1.4rem",
+                      marginBottom: 8,
+                      color: `hsl(${albumHue},60%,75%)`,
+                    }}
+                  >
+                    {album.name[0]?.toUpperCase()}
+                  </div>
+                  <div style={{ fontSize: "0.80rem", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {album.name}
+                  </div>
+                  <div style={{ fontSize: "0.70rem", color: "var(--text-dim)", marginTop: 1 }}>
+                    {album.count} track{album.count !== 1 ? "s" : ""}
+                  </div>
                 </div>
-                <div style={{ fontSize: "0.82rem", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {album.name}
-                </div>
-                <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: 2 }}>
-                  {album.count} track{album.count !== 1 ? "s" : ""}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
 
       {/* Track list */}
       {tracks.length > 0 && (
-        <section className="lyra-panel" style={{ padding: "20px 24px" }}>
-          <h3 style={SECTION_HEADER}>All Tracks</h3>
+        <section className="lyra-panel" style={{ padding: "16px 20px" }}>
+          <h3 className="artist-section-header">All Tracks</h3>
           <div className="track-rows">
             {tracks.map((track, i) => (
               <TrackRow key={track.trackId} track={track} index={i} onPlay={playTrack} />

@@ -258,3 +258,24 @@ export interface AgentSuggestion {
   suggestion: string;
   action: string;
 }
+
+// ── Oracle Discovery ──────────────────────────────────────────────────────
+
+export interface OracleDiscoverySuggestion {
+  artist: string;
+  connectedFrom: string[];
+  connectionType: string;
+  weight: number;
+  score: number;
+  reasons: string[];
+  alreadyQueued: boolean;
+}
+
+export interface OracleGap {
+  artist: string;
+  title: string;
+  album: string | null;
+  popularity: number | null;
+  releaseDate: string | null;
+  spotifyUri: string | null;
+}

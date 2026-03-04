@@ -267,3 +267,32 @@ export const artistShrineSchema = z.object({
     albums: z.array(z.object({ album: z.string().nullable(), year: z.union([z.string(), z.number()]).nullable() })),
   }).optional(),
 });
+
+// ── Oracle Discovery ──────────────────────────────────────────────────────
+
+export const oracleDiscoverySuggestionSchema = z.object({
+  artist: z.string(),
+  connected_from: z.array(z.string()),
+  connection_type: z.string(),
+  weight: z.number(),
+  score: z.number(),
+  reasons: z.array(z.string()),
+  already_queued: z.boolean(),
+});
+
+export const oracleDiscoverySchema = z.object({
+  count: z.number(),
+  results: z.array(oracleDiscoverySuggestionSchema),
+});
+
+export const oracleGapsSchema = z.object({
+  count: z.number(),
+  results: z.array(z.object({
+    artist: z.string(),
+    title: z.string(),
+    album: z.string().nullable().optional(),
+    popularity: z.number().nullable().optional(),
+    release_date: z.string().nullable().optional(),
+    spotify_uri: z.string().nullable().optional(),
+  })),
+});

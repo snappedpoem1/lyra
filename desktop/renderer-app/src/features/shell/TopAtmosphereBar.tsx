@@ -18,7 +18,6 @@ export function TopAtmosphereBar() {
   const [bootReady, setBootReady] = useState(false);
   const apiBaseUrl = useSettingsStore((state) => state.apiBaseUrl);
 
-  // IPC boot status from Electron main process
   useEffect(() => {
     const cleanup = window.lyraWindow?.onBootStatus?.((status) => {
       setBootMessage(PHASE_LABELS[status.phase] ?? status.message);
@@ -27,7 +26,6 @@ export function TopAtmosphereBar() {
     return () => cleanup?.();
   }, []);
 
-  // Fall back to API health polling once boot IPC reports ready (or in browser dev)
   const { data } = useQuery({
     queryKey: ["boot-status"],
     queryFn: getBootStatus,
@@ -36,21 +34,37 @@ export function TopAtmosphereBar() {
 
   const statusText = bootReady || data?.ready
     ? "Connected"
-    : bootMessage ?? "Connecting...";
+    : bootMessage ?? "Connecting\u2026";
 
   return (
     <header className="top-atmosphere">
-      <div className="window-controls no-drag">
-        <button onClick={() => window.lyraWindow?.minimize?.()}>-</button>
-        <button onClick={() => window.lyraWindow?.maximize?.()}>[]</button>
-        <button onClick={() => window.lyraWindow?.close?.()}>x</button>
-      </div>
       <div>
-        <div className="atmosphere-title">LYRA DESKTOP</div>
-        <div className="atmosphere-copy">Transport: {statusText}</div>
+        <span className="atmosphere-copy">{statusText}</span>
       </div>
       <div className="atmosphere-meta">
-        <ConnectivityBadge /> {apiBaseUrl} v{window.lyraWindow?.appVersion ?? "dev"}
+        <ConnectivityBadge />
+        <span>{apiBaseUrl}</span>
+        <span>v{window.lyraWindow?.appVersion ?? "dev"}</span>
+      </div>
+      <div className="window-controls no-drag">
+        <button
+          className="window-control-btn window-control-btn--minimize"
+          onClick={() => window.lyraWindow?.minimize?.()}
+          title="Minimize"
+          aria-label="Minimize"
+        >&#x2015;</button>
+        <button
+          className="window-control-btn window-control-btn--maximize"
+          onClick={() => window.lyraWindow?.maximize?.()}
+          title="Maximize"
+          aria-label="Maximize"
+        >&#x25A1;</button>
+        <button
+          className="window-control-btn window-control-btn--close"
+          onClick={() => window.lyraWindow?.close?.()}
+          title="Close"
+          aria-label="Close"
+        >&#x2715;</button>
       </div>
     </header>
   );

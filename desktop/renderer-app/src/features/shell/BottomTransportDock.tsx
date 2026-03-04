@@ -25,15 +25,8 @@ function TrackArt({ artist, size = 48 }: { artist?: string; size?: number }) {
         width: size,
         height: size,
         background: `linear-gradient(135deg, hsl(${hue},42%,22%), hsl(${(hue + 40) % 360},50%,34%))`,
-        borderRadius: 8,
-        display: "grid",
-        placeItems: "center",
-        fontSize: size * 0.42,
-        fontWeight: 600,
         color: `hsl(${hue},60%,86%)`,
-        flexShrink: 0,
-        letterSpacing: "-0.01em",
-        userSelect: "none",
+        fontSize: size * 0.42,
       }}
       aria-hidden="true"
     >
@@ -154,10 +147,10 @@ export function BottomTransportDock() {
   const inlineFactDrop = factDrop && factDropTrackId === current?.trackId ? factDrop : null;
 
   return (
-    <footer className="bottom-dock lyra-panel">
+    <footer className="bottom-dock">
       {/* Left: track info */}
       <div className="dock-left">
-        <TrackArt artist={current?.artist} size={44} />
+        <TrackArt artist={current?.artist} size={40} />
         <div className="dock-meta">
           <div className="dock-title">{current?.title ?? "Nothing playing"}</div>
           <div className="dock-subtitle">

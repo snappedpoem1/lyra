@@ -16,8 +16,8 @@ bp = Blueprint("radio", __name__)
 # ---------------------------------------------------------------------------
 
 try:
-    from oracle.radio import RadioEngine as _RadioEngine
-    _radio_engine = _RadioEngine()
+    from oracle.radio import Radio
+    _radio_engine = Radio()
 except Exception:
     _radio_engine = None
 
@@ -73,13 +73,30 @@ def api_radio_flow():
 
 @bp.route("/api/radio/discovery", methods=["GET"])
 def api_radio_discovery():
-    """Get discovery mode track recommendations."""
+    """Get discovery mode track recommendations (library edges + Last.fm)."""
     if _radio_engine is None:
         return jsonify({"error": "Radio engine not available — check server logs"}), 503
     try:
-        count = request.args.get("count", 1, type=int)
-        results = _radio_engine.get_discovery_track(count=count)
-        return jsonify({"results": results, "count": len(results)})
+        count = request.args.get("count", 10, type=int)
+        include_external = request.args.get("external", "true", type=str).lower() != "false"
+
+        # Library edges (unplayed tracks with taste filtering)
+        library_results = _radio_engine.get_discovery_track(count=count)
+
+        # External discovery (Last.fm similar tracks not in library)
+        external_results = []
+        if include_external:
+            try:
+                external_results = _radio_engine.get_lastfm_discovery(count=count)
+            except Exception as exc:
+                external_results = [{"error": str(exc)}]
+
+        return jsonify({
+            "library": library_results,
+            "library_count": len(library_results),
+            "external": external_results,
+            "external_count": len(external_results),
+        })
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
@@ -160,12 +177,26 @@ def api_taste_profile():
 
 @bp.route("/api/taste/seed", methods=["POST"])
 def api_taste_seed():
-    """Seed taste profile from library averages (cold-start bootstrap)."""
+    """Seed taste profile from library averages or Spotify history."""
     try:
-        from oracle.taste import seed_taste_from_library
+        from oracle.taste import seed_taste_from_library, seed_taste_from_spotify
         data = request.get_json(silent=True) or {}
         overwrite = bool(data.get("overwrite", False))
-        result = seed_taste_from_library(overwrite_existing=overwrite)
+        source = (data.get("source") or "auto").strip().lower()
+
+        # Auto mode: try Spotify first (richer signal), fall back to library
+        if source == "spotify":
+            result = seed_taste_from_spotify(overwrite_existing=overwrite)
+        elif source == "library":
+            result = seed_taste_from_library(overwrite_existing=overwrite)
+        else:
+            # Auto: try spotify, fall back to library
+            result = seed_taste_from_spotify(overwrite_existing=overwrite)
+            if not result.get("seeded"):
+                result = seed_taste_from_library(overwrite_existing=overwrite)
+                result["auto_fallback"] = "library"
+            else:
+                result["auto_source"] = "spotify"
         return jsonify({"ok": True, "result": result})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

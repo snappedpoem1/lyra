@@ -17,32 +17,32 @@ bp = Blueprint("intelligence", __name__)
 # ---------------------------------------------------------------------------
 
 try:
-    from oracle.scout import ScoutEngine as _ScoutEngine
-    _scout_engine = _ScoutEngine()
+    from oracle.scout import Scout
+    _scout_engine = Scout()
 except Exception:
     _scout_engine = None
 
 try:
-    from oracle.lore import LoreEngine as _LoreEngine
-    _lore_engine = _LoreEngine()
+    from oracle.lore import Lore
+    _lore_engine = Lore()
 except Exception:
     _lore_engine = None
 
 try:
-    from oracle.dna import DNAEngine as _DNAEngine
-    _dna_engine = _DNAEngine()
+    from oracle.dna import DNA
+    _dna_engine = DNA()
 except Exception:
     _dna_engine = None
 
 try:
-    from oracle.hunter import HunterEngine as _HunterEngine
-    _hunter_engine = _HunterEngine()
+    from oracle.hunter import Hunter
+    _hunter_engine = Hunter()
 except Exception:
     _hunter_engine = None
 
 try:
-    from oracle.architect import ArchitectEngine as _ArchitectEngine
-    _architect_engine = _ArchitectEngine()
+    from oracle.architect import Architect
+    _architect_engine = Architect()
 except Exception:
     _architect_engine = None
 
@@ -58,11 +58,14 @@ def api_scout_cross_genre():
         return jsonify({"error": "Scout engine unavailable"}), 503
     try:
         data = request.get_json() or {}
-        track_id = data.get("track_id", "")
-        if not track_id:
-            return jsonify({"error": "track_id required"}), 400
+        source_genre = (data.get("source_genre") or data.get("track_id") or "").strip()
+        target_genre = (data.get("target_genre") or "").strip()
+        if not source_genre:
+            return jsonify({"error": "source_genre required"}), 400
+        if not target_genre:
+            return jsonify({"error": "target_genre required"}), 400
         n = sanitize_integer(data.get("n", 10), default=10, min_val=1, max_val=100)
-        results = _scout_engine.cross_genre(track_id, n=n)
+        results = _scout_engine.cross_genre_hunt(source_genre, target_genre, limit=n)
         return jsonify({"results": [_json_safe(r) for r in (results or [])], "count": len(results or [])})
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
@@ -83,7 +86,7 @@ def api_lore_trace():
         if not artist:
             return jsonify({"error": "artist required"}), 400
         depth = sanitize_integer(data.get("depth", 2), default=2, min_val=1, max_val=5)
-        result = _lore_engine.trace(artist, depth=depth)
+        result = _lore_engine.trace_lineage(artist, depth=depth)
         return jsonify({"result": _json_safe(result)})
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
@@ -100,7 +103,10 @@ def api_lore_connections():
         artist_b = data.get("artist_b", "")
         if not artist_a or not artist_b:
             return jsonify({"error": "artist_a and artist_b required"}), 400
-        result = _lore_engine.connections(artist_a, artist_b)
+        # Get connections for both artists and find overlap
+        conns_a = _lore_engine.get_artist_connections(artist_a)
+        conns_b = _lore_engine.get_artist_connections(artist_b)
+        result = {"artist_a": {"name": artist_a, "connections": conns_a}, "artist_b": {"name": artist_b, "connections": conns_b}}
         return jsonify({"result": _json_safe(result)})
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
@@ -121,7 +127,10 @@ def api_dna_trace():
         artist = data.get("artist", "")
         if not track_id and not artist:
             return jsonify({"error": "track_id or artist required"}), 400
-        result = _dna_engine.trace(track_id=track_id, artist=artist)
+        if track_id:
+            result = _dna_engine.trace_samples(track_id)
+        else:
+            result = []  # DNA trace requires a track_id
         return jsonify({"result": _json_safe(result)})
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
@@ -139,8 +148,10 @@ def api_dna_pivot():
         if not from_id or not to_id:
             return jsonify({"error": "from_id and to_id required"}), 400
         n = sanitize_integer(data.get("n", 5), default=5, min_val=1, max_val=20)
-        result = _dna_engine.pivot(from_id, to_id, n=n)
-        return jsonify({"result": _json_safe(result)})
+        result_from = _dna_engine.pivot_to_original(from_id)
+        result_to = _dna_engine.pivot_to_original(to_id)
+        result = {"from": _json_safe(result_from), "to": _json_safe(result_to)}
+        return jsonify({"result": result})
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
@@ -160,7 +171,7 @@ def api_hunter_hunt():
         if not query:
             return jsonify({"error": "query required"}), 400
         n = sanitize_integer(data.get("n", 20), default=20, min_val=1, max_val=100)
-        result = _hunter_engine.hunt(query, n=n)
+        result = _hunter_engine.hunt(query)
         return jsonify({"result": _json_safe(result)})
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
@@ -176,8 +187,24 @@ def api_hunter_acquire():
         tracks = data.get("tracks", [])
         if not tracks:
             return jsonify({"error": "tracks list required"}), 400
-        result = _hunter_engine.queue_acquisition(tracks)
-        return jsonify({"result": _json_safe(result)})
+        # Queue tracks for acquisition via the standard queue
+        from oracle.db.schema import get_connection as _get_conn
+        conn = _get_conn(timeout=10.0)
+        cursor = conn.cursor()
+        queued = 0
+        for t in tracks:
+            artist = (t.get("artist") or "").strip()
+            title = (t.get("title") or "").strip()
+            if not artist or not title:
+                continue
+            cursor.execute(
+                "INSERT OR IGNORE INTO acquisition_queue (artist, title, source, status) VALUES (?, ?, 'hunter', 'pending')",
+                (artist, title),
+            )
+            queued += cursor.rowcount
+        conn.commit()
+        conn.close()
+        return jsonify({"result": {"queued": queued, "total": len(tracks)}})
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
@@ -194,7 +221,17 @@ def api_architect_analyze():
     try:
         data = request.get_json() or {}
         focus = data.get("focus", "gaps")  # "gaps" | "depth" | "diversity"
-        result = _architect_engine.analyze(focus=focus)
+        # Architect doesn't have a general analyze(), do a library gap analysis
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM tracks WHERE status = 'active'")
+        total = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM track_scores")
+        scored = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM embeddings")
+        embedded = cursor.fetchone()[0]
+        conn.close()
+        result = {"focus": focus, "total_tracks": total, "scored": scored, "embedded": embedded, "gaps": {"unscored": total - scored, "unembedded": total - embedded}}
         return jsonify({"result": _json_safe(result)})
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
@@ -212,7 +249,8 @@ def api_structure_track(track_id: str):
 
         if _architect_engine is not None:
             try:
-                structure = _architect_engine.analyze_track(track_id)
+                filepath = track[7] if len(track) > 7 else ""
+                structure = _architect_engine.analyze_structure(track_id, str(filepath))
             except Exception:
                 structure = {}
         else:

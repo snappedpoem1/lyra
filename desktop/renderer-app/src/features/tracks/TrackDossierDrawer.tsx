@@ -20,7 +20,7 @@ export function TrackDossierDrawer() {
   return (
     <div className="drawer-shell" onClick={close}>
       <LyraPanel className="dossier-drawer" onClick={(event) => event.stopPropagation()}>
-        <button className="drawer-close" onClick={close}>close</button>
+        <button className="drawer-close" onClick={close} aria-label="Close dossier">&times;</button>
         <h2>{data.track.title}</h2>
         <p>{data.track.artist} · {data.fileType}</p>
         <p>{data.provenanceNotes[0]}</p>

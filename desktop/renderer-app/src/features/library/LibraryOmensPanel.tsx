@@ -3,6 +3,12 @@ import { useUiStore } from "@/stores/uiStore";
 import { LyraButton } from "@/ui/LyraButton";
 import { LyraPanel } from "@/ui/LyraPanel";
 
+function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export function LibraryOmensPanel({
   tracks,
   total,
@@ -82,11 +88,17 @@ export function LibraryOmensPanel({
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Filter by artist, title, or album"
         />
-        <div className="sort-strip">
-          <LyraButton onClick={() => onSortChange("artist")}>Artist {sortKey === "artist" ? sortDir : ""}</LyraButton>
-          <LyraButton onClick={() => onSortChange("album")}>Album {sortKey === "album" ? sortDir : ""}</LyraButton>
-          <LyraButton onClick={() => onSortChange("title")}>Title {sortKey === "title" ? sortDir : ""}</LyraButton>
-          <LyraButton onClick={onClearFilters}>Reset</LyraButton>
+        <div className="sort-segmented">
+          {(["artist", "album", "title"] as const).map((key) => (
+            <button
+              key={key}
+              className={`sort-seg-btn${sortKey === key ? " is-active" : ""}`}
+              onClick={() => onSortChange(key)}
+            >
+              {key}{sortKey === key ? (sortDir === "asc" ? " \u2191" : " \u2193") : ""}
+            </button>
+          ))}
+          <button className="sort-seg-btn" onClick={onClearFilters}>reset</button>
         </div>
       </div>
       <div className="library-browser">
@@ -160,16 +172,21 @@ export function LibraryOmensPanel({
           <div className="library-header-row">
             <span>Track</span>
             <span>Context</span>
+            <span>Duration</span>
             <span>Actions</span>
           </div>
           <div className="track-rows">
             {tracks.map((track) => (
               <div key={track.trackId} className="track-row">
-                <div className="track-meta">
-                  <strong>{track.title}</strong>
-                  <span>{track.artist} | {track.album ?? "Single"}</span>
+                <div className="track-art-cell">
+                  <div className="track-art-placeholder">{(track.title[0] ?? "?").toUpperCase()}</div>
+                  <div className="track-meta">
+                    <strong>{track.title}</strong>
+                    <span>{track.artist} {track.album ? `\u00b7 ${track.album}` : ""}</span>
+                  </div>
                 </div>
                 <div className="track-reason">{track.reason}</div>
+                <span className="track-duration">{track.durationSec ? formatDuration(track.durationSec) : "\u2014"}</span>
                 <div className="track-actions">
                   <LyraButton onClick={() => onPlayTrack(track)}>Play</LyraButton>
                   <LyraButton onClick={() => onQueueTrack(track)}>Queue</LyraButton>
@@ -181,6 +198,9 @@ export function LibraryOmensPanel({
           </div>
           <div className="library-pagination">
             <LyraButton onClick={onPrevPage} disabled={!hasPrevPage}>Prev</LyraButton>
+            <span className="text-dim" style={{ fontSize: "var(--text-sm)" }}>
+              {tracks.length} of {total}
+            </span>
             <LyraButton onClick={onNextPage} disabled={!hasNextPage}>Next</LyraButton>
           </div>
         </div>

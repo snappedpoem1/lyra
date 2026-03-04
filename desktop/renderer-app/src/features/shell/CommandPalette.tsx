@@ -7,10 +7,13 @@ import { LyraPanel } from "@/ui/LyraPanel";
 
 const commands = [
   { label: "Open Sanctuary", to: "/" },
+  { label: "Open Library", to: "/library" },
   { label: "Open Playlists", to: "/playlists" },
   { label: "Open Search", to: "/search" },
   { label: "Open Oracle", to: "/oracle" },
   { label: "Open Queue", to: "/queue" },
+  { label: "Open Vibes", to: "/vibes" },
+  { label: "Open Settings", to: "/settings" },
 ];
 
 export function CommandPalette() {

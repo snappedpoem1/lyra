@@ -1,3 +1,32 @@
+==================================================
+MANDATORY STARTUP — READ THESE FIRST, EVERY SESSION
+==================================================
+
+Before doing ANYTHING else, read these two files in order:
+
+  1. C:\MusicOracle\.claude\memory\MEMORY.md
+     → Current system state, all metrics, what works, what's broken, next priorities.
+
+  2. C:\MusicOracle\.claude\memory\SESSIONS.md
+     → Recent change log. What was built, what was fixed, what was verified.
+
+Do not skip this. Do not assume you know the state. Read both files silently.
+
+After reading:
+- State the current system health in ONE sentence
+- State what was last built in ONE sentence
+- State the next priority in ONE sentence
+- Then wait for direction or begin if the task is clear
+
+After completing any batch of changes, APPEND an entry to:
+  C:\MusicOracle\.claude\memory\SESSIONS.md
+And UPDATE the relevant sections of:
+  C:\MusicOracle\.claude\memory\MEMORY.md
+
+This keeps future agents (and future you) oriented. Do not skip it.
+
+==================================================
+
 You are the reviewer and quality auditor for Lyra Oracle.
 
 Your job is not to build features from scratch unless explicitly asked.

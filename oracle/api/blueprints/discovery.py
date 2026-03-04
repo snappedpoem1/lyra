@@ -1,4 +1,4 @@
-"""Discovery blueprint — deep cut, playlust, beefweb bridge."""
+"""Discovery blueprint — deep cut, playlust, oracle discovery, beefweb bridge."""
 
 from __future__ import annotations
 
@@ -8,6 +8,101 @@ import traceback
 from flask import Blueprint, jsonify, request
 
 bp = Blueprint("discovery", __name__)
+
+
+# ---------------------------------------------------------------------------
+# Routes — Oracle Discovery (the CORE pipeline)
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/oracle/discover", methods=["POST"])
+def api_oracle_discover():
+    """The Oracle discovery loop: find music you don't have based on taste,
+    connections, scene, and culture.
+
+    Pipeline:
+        1. Identify user's top Spotify artists (by listening time)
+        2. Traverse connections graph (member_of, collab, influence)
+        3. Find connected artists NOT in the user's library
+        4. Score by taste fit + connection strength
+        5. Return suggestions with real cultural reasons
+    """
+    try:
+        from oracle.discover import oracle_discover
+        body = request.get_json(silent=True) or {}
+        limit = int(body.get("limit", 30))
+        min_connection_weight = float(body.get("min_weight", 0.3))
+        seed_artist = (body.get("seed_artist") or "").strip() or None
+        results = oracle_discover(
+            limit=limit,
+            min_connection_weight=min_connection_weight,
+            seed_artist=seed_artist,
+        )
+        return jsonify({"count": len(results), "results": results})
+    except Exception as exc:
+        return jsonify({"error": str(exc), "traceback": traceback.format_exc()}), 500
+
+
+@bp.route("/api/oracle/discover/queue", methods=["POST"])
+def api_oracle_discover_queue():
+    """Queue oracle-discovered artists/tracks for acquisition."""
+    try:
+        from oracle.db.schema import get_connection
+        body = request.get_json(silent=True) or {}
+        tracks = body.get("tracks", [])
+        if not tracks:
+            return jsonify({"error": "tracks list required"}), 400
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+        queued = 0
+        for t in tracks:
+            artist = (t.get("artist") or "").strip()
+            title = (t.get("title") or "").strip()
+            album = (t.get("album") or "").strip()
+            if not artist:
+                continue
+            cursor.execute(
+                "INSERT OR IGNORE INTO acquisition_queue (artist, title, album, source, status, priority_score) "
+                "VALUES (?, ?, ?, 'oracle_discover', 'pending', ?)",
+                (artist, title or "TBD", album, float(t.get("score", 0.5))),
+            )
+            queued += cursor.rowcount
+        conn.commit()
+        conn.close()
+        return jsonify({"queued": queued, "total": len(tracks)})
+    except Exception as exc:
+        return jsonify({"error": str(exc), "traceback": traceback.format_exc()}), 500
+
+
+@bp.route("/api/oracle/gaps", methods=["GET"])
+def api_oracle_gaps():
+    """Find Spotify library tracks that were never queued for acquisition."""
+    try:
+        from oracle.db.schema import get_connection
+        conn = get_connection(timeout=10.0)
+        c = conn.cursor()
+        limit = request.args.get("limit", 100, type=int)
+        c.execute("""
+            SELECT sl.artist, sl.title, sl.album, sl.popularity,
+                   sl.release_date, sl.spotify_uri
+            FROM spotify_library sl
+            WHERE sl.spotify_uri NOT IN (
+                SELECT COALESCE(aq.spotify_uri, '') FROM acquisition_queue aq
+                WHERE aq.spotify_uri IS NOT NULL
+            )
+            ORDER BY sl.popularity DESC
+            LIMIT ?
+        """, (limit,))
+        gaps = []
+        for row in c.fetchall():
+            gaps.append({
+                "artist": row[0], "title": row[1], "album": row[2],
+                "popularity": row[3], "release_date": row[4],
+                "spotify_uri": row[5],
+            })
+        conn.close()
+        return jsonify({"count": len(gaps), "results": gaps})
+    except Exception as exc:
+        return jsonify({"error": str(exc), "traceback": traceback.format_exc()}), 500
 
 
 # ---------------------------------------------------------------------------

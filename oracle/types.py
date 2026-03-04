@@ -15,6 +15,7 @@ class TrackReason(BaseModel):
 
 
 class PlaylistTrack(BaseModel):
+    track_id: str = ""
     path: str
     artist: str
     title: str

@@ -29,6 +29,142 @@ DIMENSIONS = [
 # so any actual listen/skip will quickly override it.
 _SEED_CONFIDENCE = 0.25
 
+# Higher confidence for Spotify-derived profile (637K real plays > library AVG).
+_SPOTIFY_SEED_CONFIDENCE = 0.55
+
+
+def seed_taste_from_spotify(overwrite_existing: bool = False) -> Dict[str, Any]:
+    """Derive taste profile from Spotify listening history cross-referenced
+    with CLAP dimension scores on acquired tracks.
+
+    This is the proper bootstrap: use 637K real listening events to weight
+    dimension scores by actual listening time.  Tracks listened to longer
+    and more often pull the taste vector harder.
+
+    Algorithm:
+        1. Group spotify_history by (artist, track), sum ms_played
+        2. Fuzzy-match each to local tracks table
+        3. Look up track_scores for matched tracks
+        4. Compute listening-time-weighted mean per dimension
+        5. Store in taste_profile with confidence 0.55
+
+    Returns:
+        Dict with seeded, skipped, matched, unmatched counts.
+    """
+    conn = get_connection(timeout=30.0)
+    try:
+        c = conn.cursor()
+
+        # Step 1: Aggregate Spotify listening — total ms per track
+        c.execute("""
+            SELECT artist, track, SUM(ms_played) as total_ms, COUNT(*) as play_count
+            FROM spotify_history
+            WHERE ms_played > 30000
+            GROUP BY artist, track
+            ORDER BY total_ms DESC
+        """)
+        spotify_agg = c.fetchall()
+        if not spotify_agg:
+            return {"seeded": [], "skipped": [], "matched": 0, "unmatched": 0,
+                    "reason": "no_spotify_history"}
+
+        # Step 2: Build local track index for matching
+        c.execute("""
+            SELECT t.track_id, LOWER(t.artist), LOWER(t.title),
+                   ts.energy, ts.valence, ts.tension, ts.density, ts.warmth,
+                   ts.movement, ts.space, ts.rawness, ts.complexity, ts.nostalgia
+            FROM tracks t
+            JOIN track_scores ts ON t.track_id = ts.track_id
+            WHERE t.status = 'active'
+        """)
+        local_tracks = c.fetchall()
+        # Index by (lowercase_artist_fragment, lowercase_title_fragment)
+        local_index: Dict[str, tuple] = {}
+        for row in local_tracks:
+            key = (row[1].strip(), row[2].strip())
+            local_index[key] = row
+
+        # Step 3: Match spotify tracks to local scored tracks, accumulate
+        dim_weighted_sum: Dict[str, float] = {d: 0.0 for d in DIMENSIONS}
+        total_weight = 0.0
+        matched = 0
+        unmatched = 0
+
+        for sp_artist, sp_track, total_ms, play_count in spotify_agg:
+            sp_a = (sp_artist or "").strip().lower()
+            sp_t = (sp_track or "").strip().lower()
+            if not sp_a or not sp_t:
+                continue
+
+            # Try exact match first
+            local_row = local_index.get((sp_a, sp_t))
+
+            # Try fuzzy: artist contains or title contains
+            if local_row is None:
+                for (la, lt), row in local_index.items():
+                    if (sp_a in la or la in sp_a) and (sp_t in lt or lt in sp_t):
+                        local_row = row
+                        break
+
+            if local_row is None:
+                unmatched += 1
+                continue
+
+            matched += 1
+            # Weight = log(ms_played) so heavy rotation tracks don't dominate completely
+            import math
+            weight = math.log1p(total_ms / 60000.0)  # log(1 + minutes)
+
+            scores = local_row[3:]  # energy through nostalgia
+            for i, dim in enumerate(DIMENSIONS):
+                if scores[i] is not None:
+                    dim_weighted_sum[dim] += float(scores[i]) * weight
+            total_weight += weight
+
+        if total_weight == 0 or matched == 0:
+            return {"seeded": [], "skipped": [], "matched": matched,
+                    "unmatched": unmatched, "reason": "no_matches_with_scores"}
+
+        # Step 4: Compute weighted mean per dimension
+        averages: Dict[str, float] = {}
+        for dim in DIMENSIONS:
+            raw_mean = dim_weighted_sum[dim] / total_weight  # 0..1 space
+            averages[dim] = _to_pref(raw_mean)  # convert to -1..1
+
+        if get_write_mode() != "apply_allowed":
+            return {"seeded": [], "skipped": list(averages.keys()),
+                    "matched": matched, "unmatched": unmatched,
+                    "reason": "write_blocked"}
+
+        # Step 5: Store with higher confidence than library seed
+        seeded: List[str] = []
+        skipped: List[str] = []
+
+        for dim, val in averages.items():
+            if not overwrite_existing:
+                c.execute("SELECT confidence FROM taste_profile WHERE dimension = ?", (dim,))
+                existing = c.fetchone()
+                if existing and float(existing[0]) >= 0.7:
+                    skipped.append(dim)
+                    continue
+
+            c.execute(
+                "INSERT OR REPLACE INTO taste_profile (dimension, value, confidence, last_updated) "
+                "VALUES (?, ?, ?, ?)",
+                (dim, val, _SPOTIFY_SEED_CONFIDENCE, time.time()),
+            )
+            seeded.append(dim)
+
+        conn.commit()
+        logger.info(
+            "Spotify taste seed: %d dims seeded (matched %d/%d spotify tracks)",
+            len(seeded), matched, matched + unmatched,
+        )
+        return {"seeded": seeded, "skipped": skipped, "matched": matched,
+                "unmatched": unmatched, "total_weight": round(total_weight, 2)}
+    finally:
+        conn.close()
+
 
 def seed_taste_from_library(overwrite_existing: bool = False) -> Dict[str, Any]:
     """Derive a taste profile from the mean of all track_scores in the library.

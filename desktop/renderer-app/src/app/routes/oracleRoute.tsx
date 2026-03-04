@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ConstellationScene } from "@/features/constellation/ConstellationScene";
+import { OracleDiscoveryPanel } from "@/features/oracle/OracleDiscoveryPanel";
 import { OracleModeSwitch } from "@/features/oracle/OracleModeSwitch";
 import { OracleRecommendationDeck } from "@/features/oracle/OracleRecommendationDeck";
 import { TasteProfileCard } from "@/features/oracle/TasteProfileCard";
@@ -44,6 +45,7 @@ export function OracleRoute() {
           })
         }
       />
+      <OracleDiscoveryPanel />
       {constellation && constellation.nodes.length > 0 && (
         <ConstellationScene
           nodes={constellation.nodes}

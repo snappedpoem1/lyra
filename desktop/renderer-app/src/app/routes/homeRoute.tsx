@@ -1,22 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ConstellationScene } from "@/features/constellation/ConstellationScene";
-import { OracleRecommendationDeck } from "@/features/oracle/OracleRecommendationDeck";
 import { ConnectivityBadge } from "@/features/system/ConnectivityBadge";
 import { audioEngine } from "@/services/audio/audioEngine";
-import { getConstellation, getLibraryTracks, getOracleRecommendations, getPlaylistDetail, getPlaylists } from "@/services/lyraGateway/queries";
+import { getLibraryTracks, getOracleRecommendations, getPlaylistDetail, getPlaylists } from "@/services/lyraGateway/queries";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
 import { useUiStore } from "@/stores/uiStore";
 import { LyraButton } from "@/ui/LyraButton";
 import { LyraPill } from "@/ui/LyraPill";
 
+function fmtDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export function HomeRoute() {
   const navigate = useNavigate();
   const { data: playlists = [] } = useQuery({ queryKey: ["playlists"], queryFn: getPlaylists });
   const { data: recommendations = [] } = useQuery({ queryKey: ["oracle", "home"], queryFn: () => getOracleRecommendations("flow") });
   const { data: library } = useQuery({ queryKey: ["home-library"], queryFn: () => getLibraryTracks(10, 0, "") });
-  const { data: constellation } = useQuery({ queryKey: ["constellation"], queryFn: () => getConstellation() });
   const player = usePlayerStore();
   const queue = useQueueStore((state) => state.queue);
   const setCurrentIndex = useQueueStore((state) => state.setCurrentIndex);
@@ -46,13 +49,13 @@ export function HomeRoute() {
       <section className="lyra-panel page-intro player-heading">
         <div className="section-heading">
           <div>
-            <span className="hero-kicker">Player Workspace</span>
-            <h1>Thread, library, queue, dossier.</h1>
+            <span className="hero-kicker">Now Playing</span>
+            <h1>Your library, queue, and recommendations</h1>
           </div>
           <div className="chip-row">
             <LyraPill><ConnectivityBadge /></LyraPill>
-            <LyraPill>{library?.total ?? 0} library tracks</LyraPill>
-            <LyraPill>{playlists.length} saved threads</LyraPill>
+            <LyraPill>{library?.total ?? 0} tracks</LyraPill>
+            <LyraPill>{playlists.length} playlists</LyraPill>
           </div>
         </div>
       </section>
@@ -67,9 +70,9 @@ export function HomeRoute() {
             <button className="thread-row" onClick={() => currentTrack && openDossier(currentTrack.trackId)}>
               <div>
                 <strong>{currentTrack?.title ?? "No active track"}</strong>
-                <p>{currentTrack ? `${currentTrack.artist} | ${currentTrack.album ?? "Single"}` : "Start from library, thread, or Auto-DJ."}</p>
+                <p>{currentTrack ? `${currentTrack.artist} \u00b7 ${currentTrack.album ?? "Single"}` : "Start from library, playlist, or Auto-DJ."}</p>
                 {player.currentTimeSec > 0 && player.durationSec > 0 && (
-                  <p>Resume from {Math.round(player.currentTimeSec)}s of {Math.round(player.durationSec)}s</p>
+                  <p>Resume from {fmtDuration(player.currentTimeSec)} of {fmtDuration(player.durationSec)}</p>
                 )}
               </div>
               <span>{player.status}</span>
@@ -94,14 +97,14 @@ export function HomeRoute() {
           </div>
           <div className="hero-actions">
             <LyraButton onClick={() => currentTrack && void audioEngine.playTrack(currentTrack)} disabled={!currentTrack}>Resume</LyraButton>
-            <LyraButton onClick={() => navigate({ to: "/queue" })}>Open queue</LyraButton>
+            <LyraButton onClick={() => navigate({ to: "/queue" })}>Queue</LyraButton>
           </div>
         </section>
 
         <section className="lyra-panel workspace-column">
           <div className="section-heading">
-            <h2>Saved Threads</h2>
-            <span>Lead objects</span>
+            <h2>Saved Playlists</h2>
+            <span>{playlists.length} saved</span>
           </div>
           <div className="compact-list">
             {playlists.slice(0, 6).map((playlist) => (
@@ -119,15 +122,15 @@ export function HomeRoute() {
             ))}
           </div>
           <div className="hero-actions">
-            <LyraButton onClick={() => void playLead()}>Play lead</LyraButton>
-            <LyraButton onClick={() => navigate({ to: "/playlists" })}>Open threads</LyraButton>
+            <LyraButton onClick={() => void playLead()} disabled={!leadPlaylist}>Play lead</LyraButton>
+            <LyraButton onClick={() => navigate({ to: "/playlists" })}>All playlists</LyraButton>
           </div>
         </section>
 
         <section className="lyra-panel workspace-column">
           <div className="section-heading">
-            <h2>Library Jump</h2>
-            <span>Immediate access</span>
+            <h2>Library</h2>
+            <span>{library?.total ?? 0} tracks</span>
           </div>
           <div className="compact-list">
             {libraryTracks.map((track) => (
@@ -147,22 +150,22 @@ export function HomeRoute() {
               >
                 <div>
                   <strong>{track.title}</strong>
-                  <p>{track.artist} · {track.album ?? "Single"}</p>
+                  <p>{track.artist} \u00b7 {track.album ?? "Single"}</p>
                 </div>
-                <span>{track.durationSec ? `${Math.round(track.durationSec)}s` : "--"}</span>
+                <span>{track.durationSec ? fmtDuration(track.durationSec) : "\u2014"}</span>
               </button>
             ))}
           </div>
           <div className="hero-actions">
-            <LyraButton onClick={() => navigate({ to: "/library" })}>Open library</LyraButton>
-            <LyraButton onClick={() => navigate({ to: "/search" })}>Search library</LyraButton>
+            <LyraButton onClick={() => navigate({ to: "/library" })}>Browse</LyraButton>
+            <LyraButton onClick={() => navigate({ to: "/search" })}>Search</LyraButton>
           </div>
         </section>
 
         <section className="lyra-panel workspace-column">
           <div className="section-heading">
-            <h2>Auto-DJ Moves</h2>
-            <span>Current pivots</span>
+            <h2>Auto-DJ</h2>
+            <span>{recommendations.length} suggestions</span>
           </div>
           <div className="compact-list">
             {recommendations.map((item) => (
@@ -193,62 +196,11 @@ export function HomeRoute() {
             ))}
           </div>
           <div className="hero-actions">
-            <LyraButton onClick={() => navigate({ to: "/oracle" })}>Open Auto-DJ</LyraButton>
-            <LyraButton onClick={() => secondaryPlaylist && navigate({ to: "/playlists/$playlistId", params: { playlistId: secondaryPlaylist.id } })}>Adjacent thread</LyraButton>
+            <LyraButton onClick={() => navigate({ to: "/oracle" })}>Auto-DJ</LyraButton>
+            <LyraButton onClick={() => secondaryPlaylist && navigate({ to: "/playlists/$playlistId", params: { playlistId: secondaryPlaylist.id } })}>Browse playlists</LyraButton>
           </div>
         </section>
       </section>
-
-      <section className="lyra-panel layers-panel">
-        <div className="section-heading">
-          <h2>Lyra Layers</h2>
-          <span>Visible, not hidden</span>
-        </div>
-        <div className="layers-grid">
-          <button className="layer-card" onClick={() => navigate({ to: "/library" })}>
-            <span className="insight-kicker">Layer 1</span>
-            <strong>Library</strong>
-            <p>Real files, indexed metadata, streamable paths.</p>
-          </button>
-          <button className="layer-card" onClick={() => leadPlaylist && navigate({ to: "/playlists/$playlistId", params: { playlistId: leadPlaylist.id } })}>
-            <span className="insight-kicker">Layer 2</span>
-            <strong>Listening Thread</strong>
-            <p>Saved order, queue continuity, sequence logic.</p>
-          </button>
-          <button className="layer-card" onClick={() => navigate({ to: "/oracle" })}>
-            <span className="insight-kicker">Layer 3</span>
-            <strong>Oracle</strong>
-            <p>Flow, chaos, discovery, and queue generation.</p>
-          </button>
-          <button className="layer-card" onClick={() => libraryTracks[0] && openDossier(libraryTracks[0].trackId)}>
-            <span className="insight-kicker">Layer 4</span>
-            <strong>Dossier</strong>
-            <p>Structure, lineage, samples, and track reasoning.</p>
-          </button>
-        </div>
-      </section>
-
-      <OracleRecommendationDeck
-        recommendations={recommendations}
-        onPlayTrack={(track) => void audioEngine.playTrack(track)}
-        onReplaceQueue={(tracks) =>
-          replaceQueue({
-            queueId: "home-oracle",
-            origin: "home",
-            reorderable: true,
-            currentIndex: 0,
-            items: tracks,
-          })
-        }
-      />
-
-      {constellation && (
-        <ConstellationScene
-          nodes={constellation.nodes}
-          edges={constellation.edges}
-          onSelectNode={() => navigate({ to: "/oracle" })}
-        />
-      )}
     </div>
   );
 }

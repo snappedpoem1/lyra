@@ -1,4 +1,13 @@
-# Lyra Oracle — Copilot Instructions
+﻿# Lyra Oracle  Copilot Instructions
+
+## Read These First  Every Session
+
+Before writing any code, read:
+- `C:\MusicOracle\.claude\memory\MEMORY.md`  live state, metrics, what works/broken, priorities
+- `C:\MusicOracle\.claude\memory\SESSIONS.md`  recent change log
+
+After each batch of changes, update both files. Numbers in this file go stale; MEMORY.md does not.
+
 
 ## Project
 Local-first music intelligence system. Python 3.12, SQLite (`lyra_registry.db`), ChromaDB (`chroma_storage/`), Flask API, React 18 + TypeScript frontend. Windows, project root `C:\MusicOracle`, library on `A:\Music`.
@@ -29,3 +38,4 @@ Local-first music intelligence system. Python 3.12, SQLite (`lyra_registry.db`),
 ## The 10 dimensions
 energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia
 (not "darkness" or "transcendence" — those don't exist)
+

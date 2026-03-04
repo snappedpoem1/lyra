@@ -432,7 +432,7 @@ class ReasonBuilder:
         c = conn.cursor()
         try:
             c.execute(
-                "SELECT dimension, score FROM taste_profile ORDER BY updated_at DESC"
+                "SELECT dimension, value FROM taste_profile ORDER BY last_updated DESC"
             )
             rows = c.fetchall()
             if rows:
@@ -456,15 +456,15 @@ class ReasonBuilder:
         c = conn.cursor()
         try:
             c.execute(
-                """SELECT entity_b FROM connections
-                   WHERE entity_a = ? AND entity_type = 'artist'
+                """SELECT target FROM connections
+                   WHERE source = ?
                    UNION
-                   SELECT entity_a FROM connections
-                   WHERE entity_b = ? AND entity_type = 'artist'""",
+                   SELECT source FROM connections
+                   WHERE target = ?""",
                 (artist, artist),
             )
             connected = [row[0] for row in c.fetchall()]
-            self._connection_cache[artist] = [c.lower() for c in connected]
+            self._connection_cache[artist] = [cn.lower() for cn in connected]
         except Exception as exc:
             logger.debug("Connection load failed for %s: %s", artist, exc)
             self._connection_cache[artist] = []

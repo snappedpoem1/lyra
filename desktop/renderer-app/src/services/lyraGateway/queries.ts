@@ -499,6 +499,95 @@ export async function getFactDrop(trackId: string): Promise<AgentFactDrop> {
   return { track_id: trackId, fact: detail.fact ?? null };
 }
 
+// ── Oracle Intelligence Queries ────────────────────────────────────────────
+
+const playlustSchema = z.object({
+  arc: z.string(),
+  journey: z.array(z.record(z.any())),
+  transition_avg: z.number().optional(),
+  used_scores: z.boolean().optional(),
+}).passthrough();
+
+/**
+ * Generate a Playlust — an emotionally sequenced listening journey.
+ * Uses the arc engine to order tracks along a narrative trajectory.
+ */
+export async function generatePlaylust(
+  prompt: string,
+  arc: string = "slow_burn",
+  n: number = 20,
+): Promise<{ arc: string; journey: TrackListItem[]; transitionAvg: number }> {
+  const payload = await requestJson("/api/playlust/generate", playlustSchema, {
+    method: "POST",
+    body: JSON.stringify({ prompt, arc, n }),
+  }, 15000, 0);
+  return {
+    arc: payload.arc,
+    journey: (payload.journey ?? []).map((t: Record<string, unknown>) => mapTrack(t)),
+    transitionAvg: payload.transition_avg ?? 0,
+  };
+}
+
+const deepCutSchema = z.object({
+  results: z.array(z.record(z.any())),
+  count: z.number().optional(),
+}).passthrough();
+
+/**
+ * Hunt for deep cuts — acclaimed-but-obscure tracks aligned with taste.
+ */
+export async function getDeepCuts(limit: number = 20): Promise<TrackListItem[]> {
+  const payload = await requestJson("/api/deep-cut/hunt", deepCutSchema, {
+    method: "POST",
+    body: JSON.stringify({ limit }),
+  }, 10000, 0);
+  return (payload.results ?? []).map((t: Record<string, unknown>) => mapTrack(t));
+}
+
+const crossGenreSchema = z.object({
+  bridge_artists: z.array(z.record(z.any())).optional(),
+  results: z.array(z.record(z.any())).optional(),
+}).passthrough();
+
+/**
+ * Cross-genre discovery — find music that bridges two sonic worlds.
+ */
+export async function crossGenreDiscover(
+  genre1: string,
+  genre2: string,
+  limit: number = 15,
+): Promise<Array<{ artist: string; score: number; genres: string[] }>> {
+  const payload = await requestJson("/api/scout/cross-genre", crossGenreSchema, {
+    method: "POST",
+    body: JSON.stringify({ genre1, genre2, limit }),
+  }, 10000, 0);
+  return (payload.bridge_artists ?? payload.results ?? []).map((r: Record<string, unknown>) => ({
+    artist: String(r.artist ?? r.name ?? ""),
+    score: Number(r.score ?? r.bridge_score ?? 0),
+    genres: Array.isArray(r.genres) ? r.genres.map(String) : [],
+  }));
+}
+
+/**
+ * Trace artist lineage — discover influence chains, collaborations, rivalries.
+ */
+export async function traceArtistLineage(
+  artist: string,
+): Promise<{ connections: Array<{ target: string; type: string; weight: number }> }> {
+  const schema = z.object({
+    connections: z.array(z.object({
+      target: z.string(),
+      type: z.string(),
+      weight: z.number().default(0.5),
+    })).optional().default([]),
+  }).passthrough();
+  const payload = await requestJson("/api/lore/trace", schema, {
+    method: "POST",
+    body: JSON.stringify({ artist }),
+  }, 10000, 0);
+  return { connections: (payload.connections ?? []).map((c) => ({ target: c.target, type: c.type, weight: c.weight ?? 0.5 })) };
+}
+
 export async function getAgentSuggestion(_trackId?: string): Promise<AgentSuggestion> {
   try {
     return await requestJson("/api/agent/suggest", agentSuggestionSchema, undefined, 5000, 0);
@@ -507,12 +596,94 @@ export async function getAgentSuggestion(_trackId?: string): Promise<AgentSugges
   }
 }
 
-export async function queryAgent(_text: string): Promise<{ action: string; thought: string; intent: Record<string, unknown>; next: string; response: string }> {
+export async function queryAgent(text: string): Promise<{ action: string; thought: string; intent: Record<string, unknown>; next: string; response: string }> {
+  try {
+    const schema = z.object({
+      action: z.string().optional().default("noop"),
+      thought: z.string().optional().default(""),
+      intent: z.record(z.any()).optional().default({}),
+      next: z.string().optional().default(""),
+      response: z.string().optional().default(""),
+    }).passthrough();
+    const result = await requestJson("/api/agent/query", schema, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }, 15000, 0);
+    return {
+      action: result.action ?? "noop",
+      thought: result.thought ?? "",
+      intent: result.intent ?? {},
+      next: result.next ?? "",
+      response: result.response ?? "",
+    };
+  } catch (error) {
+    return {
+      action: "error",
+      thought: error instanceof Error ? error.message : "Agent unavailable",
+      intent: {},
+      next: "",
+      response: error instanceof Error ? error.message : "The oracle could not process this request.",
+    };
+  }
+}
+
+// ── Oracle Discovery ────────────────────────────────────────────────────────
+
+import type { OracleDiscoverySuggestion, OracleGap } from "@/types/domain";
+import { oracleDiscoverySchema, oracleGapsSchema } from "@/config/schemas";
+
+/**
+ * Oracle Discovery — find music you don't have based on taste,
+ * connections, scene, and cultural context.
+ */
+export async function getOracleDiscovery(
+  limit: number = 30,
+  seedArtist?: string,
+): Promise<{ count: number; results: OracleDiscoverySuggestion[] }> {
+  const body: Record<string, unknown> = { limit };
+  if (seedArtist) body.seed_artist = seedArtist;
+  const payload = await requestJson("/api/oracle/discover", oracleDiscoverySchema, {
+    method: "POST",
+    body: JSON.stringify(body),
+  }, 20000, 0);
   return {
-    action: "noop",
-    thought: "Agent path is available through the backend, but the desktop command palette is currently read-only.",
-    intent: {},
-    next: "",
-    response: "Agent execution is not wired in this rescue pass.",
+    count: payload.count,
+    results: payload.results.map((r) => ({
+      artist: r.artist,
+      connectedFrom: r.connected_from,
+      connectionType: r.connection_type,
+      weight: r.weight,
+      score: r.score,
+      reasons: r.reasons,
+      alreadyQueued: r.already_queued,
+    })),
   };
+}
+
+/**
+ * Queue oracle-discovered artists for acquisition.
+ */
+export async function queueOracleDiscoveries(
+  tracks: Array<{ artist: string; title?: string; album?: string; score?: number }>,
+): Promise<{ queued: number; total: number }> {
+  const schema = z.object({ queued: z.number(), total: z.number() });
+  return requestJson("/api/oracle/discover/queue", schema, {
+    method: "POST",
+    body: JSON.stringify({ tracks }),
+  }, 10000, 0);
+}
+
+/**
+ * Spotify gaps — tracks in the user's Spotify library never queued for acquisition.
+ */
+export async function getOracleGaps(limit: number = 100): Promise<OracleGap[]> {
+  const payload = await requestJson(`/api/oracle/gaps?limit=${limit}`, oracleGapsSchema);
+  return payload.results.map((r) => ({
+    artist: r.artist,
+    title: r.title,
+    album: r.album ?? null,
+    popularity: r.popularity ?? null,
+    releaseDate: r.release_date ?? null,
+    spotifyUri: r.spotify_uri ?? null,
+  }));
 }

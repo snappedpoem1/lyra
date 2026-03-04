@@ -1,5 +1,20 @@
 # CLAUDE.md — Lyra Oracle Project Instructions
 
+## MANDATORY STARTUP — READ THESE BEFORE ANYTHING ELSE
+
+Every session, every agent — read in this order:
+
+1. **[`C:\MusicOracle\.claude\memory\MEMORY.md`](.claude/memory/MEMORY.md)** — live system state, current metrics, what works, what's broken, next priorities
+2. **[`C:\MusicOracle\.claude\memory\SESSIONS.md`](.claude/memory/SESSIONS.md)** — recent change log, what was built per session
+
+After completing any batch of changes:
+- Append a block to `SESSIONS.md` (what was fixed/added/verified)
+- Update the relevant sections of `MEMORY.md` (metrics, what works, priorities)
+
+Do not rely on numbers or state written anywhere else in this file — those go stale. MEMORY.md is the truth.
+
+---
+
 ## WHAT THIS IS
 
 Lyra Oracle: AI-powered music intelligence system. Transforms Spotify listening history into a locally-owned, semantically searchable, emotionally intelligent music archive. Runs on Windows gaming rig (AMD Ryzen 7 7800X3D, AMD Radeon RX 9070 XT 16GB, 32GB RAM, 8TB A: drive). Project root: `C:\MusicOracle`.

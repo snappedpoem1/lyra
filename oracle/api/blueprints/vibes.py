@@ -172,6 +172,9 @@ def api_vibes_generate():
         if not valid:
             return jsonify({"error": error}), 400
 
+        # Optional arc template for emotional journey sequencing
+        arc = (data.get("arc") or "").strip() or None
+
         generated = _generate_vibe_from_prompt(prompt, n)
         candidate_name = generated.get("name", "").strip() or "Generated Vibe"
         if save_generated:
@@ -185,6 +188,7 @@ def api_vibes_generate():
             generated["query"],
             n=generated["n"],
             vibe_name=candidate_name if save_generated else None,
+            arc=arc,
         )
         return jsonify({
             "meta": {
