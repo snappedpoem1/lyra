@@ -1,0 +1,82 @@
+:root {
+  /* ── Surfaces ───────────────────────────────────────────────────────────── */
+  --bg:          #0c0f13;
+  --bg-elevated: rgba(30, 34, 40, 0.98);
+  --bg-soft:     rgba(42, 47, 54, 0.85);
+  --bg-glass:    rgba(18, 22, 28, 0.72);
+  --bg-inset:    rgba(10, 12, 16, 0.92);
+
+  /* ── Borders ────────────────────────────────────────────────────────────── */
+  --panel-border:  rgba(160, 170, 185, 0.16);
+  --border-subtle: rgba(160, 170, 185, 0.09);
+  --border-soft:   rgba(160, 170, 185, 0.22);
+  --border-divider: rgba(160, 170, 185, 0.06);
+
+  /* ── Text ───────────────────────────────────────────────────────────────── */
+  --text:      #e8edf4;
+  --text-soft: #7e8ea4;
+  --text-dim:  #4a5568;
+
+  /* ── Accent: lime green ─────────────────────────────────────────────────── */
+  --accent:        #8cd94a;
+  --accent-bright: #c8ff82;
+  --accent-glow:   rgba(140, 217, 74, 0.12);
+  --accent-subtle: rgba(140, 217, 74, 0.06);
+
+  /* ── Amber (warm state accents) ─────────────────────────────────────────── */
+  --amber:     rgba(255, 178, 72, 0.92);
+  --amber-dim: rgba(255, 178, 72, 0.10);
+
+  /* ── State ──────────────────────────────────────────────────────────────── */
+  --warning: #d98a30;
+  --error:   #d95151;
+
+  /* ── Shadows ────────────────────────────────────────────────────────────── */
+  --shadow:    rgba(0, 0, 0, 0.55);
+  --shadow-sm: rgba(0, 0, 0, 0.25);
+
+  /* ── Spacing scale ──────────────────────────────────────────────────────── */
+  --space-xs:  4px;
+  --space-sm:  6px;
+  --space-md:  8px;
+  --space-lg:  12px;
+  --space-xl:  16px;
+  --space-2xl: 24px;
+  --space-3xl: 36px;
+
+  /* ── Type scale ─────────────────────────────────────────────────────────── */
+  --text-2xs: 0.60rem;
+  --text-xs:  0.66rem;
+  --text-sm:  0.72rem;
+  --text-base: 0.82rem;
+  --text-md:  0.88rem;
+  --text-lg:  1.0rem;
+  --text-xl:  1.15rem;
+  --text-2xl: 1.35rem;
+
+  /* ── Geometry ───────────────────────────────────────────────────────────── */
+  --radius-xl:   10px;
+  --radius-lg:    6px;
+  --radius-md:    5px;
+  --radius-sm:    4px;
+  --radius-xs:    3px;
+  --radius-pill: 999px;
+
+  /* ── Layout constants ───────────────────────────────────────────────────── */
+  --sidebar-width:    220px;
+  --right-rail-width: 340px;
+  --transport-height: 72px;
+  --topbar-height:    40px;
+
+  /* ── Motion ─────────────────────────────────────────────────────────────── */
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:  cubic-bezier(0.45, 0, 0.55, 1);
+  --duration-fast: 100ms;
+  --duration-med:  200ms;
+  --duration-slow: 400ms;
+
+  /* ── Typography ─────────────────────────────────────────────────────────── */
+  --font-ui:      "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono:    "Cascadia Code", "Consolas", ui-monospace, monospace;
+}

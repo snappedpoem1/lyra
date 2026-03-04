@@ -1,654 +1,345 @@
-# ðŸŽµ Lyra Oracle
+# 🎵 Lyra Oracle: AI-Powered Music Intelligence System
 
-**Semantic Music Intelligence System**
+**Lyra Oracle** is a locally-owned, semantically searchable, emotionally intelligent music archive. It transforms Spotify listening history into a 10-dimensional cultural understanding of your taste, powered by CLAP embeddings and a suite of intelligence modules (Scout, Lore, DNA, Architect, Radio).
 
-Transform your music library into an AI-powered knowledge base with semantic search, intelligent curation, and natural language playlist generation.
+**Current State (March 2026):** 60% toward "Oracle of Culture" vision. Full semantic search, vibe system, and acquisition pipeline operational. Missing: Biographer module, live Constellation, Artist Shrines, Playlust automation.
 
-> **Current Operating Mode (2026-02-17):** Core/API-first. Web UI routes were removed from active runtime; use `/api/*` endpoints and CLI workflows.
+## ✨ Core Features
 
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+| Feature | Status | Use Case |
+|---------|--------|----------|
+| **Semantic Search** | ✅ Live | "dark ambient with glitchy textures" → finds exact matches |
+| **CLAP Embeddings** | ✅ Live | 512-dim music-specific embeddings (DirectML on AMD GPU) |
+| **Vibe System** | ✅ Live | Save/build/materialize semantic playlists as hardlinked folders |
+| **Curation** | ✅ Live | Classify, plan, apply library organization workflows |
+| **4-Tier Acquisition** | ✅ Live | Qobuz (hi-fi) → Slskd → Real-Debrid → SpotDL |
+| **Scout** (Discovery) | ✅ Live | Cross-genre bridge artist finding |
+| **Lore** (Lineage) | ✅ Live | Artist relationship mapping (MusicBrainz-backed) |
+| **DNA** (Samples) | ✅ Live | Sample origin tracing |
+| **Architect** (Structure) | ✅ Live | BPM, key, drop detection, energy profiles |
+| **Radio** (Playback) | ✅ Live | Chaos/Flow/Discovery playback modes |
+| **Flask API + Web UI** | ✅ Live | 21+ endpoints, responsive dashboard |
+| **Biographer** (Context) | ❌ Missing | Artist bios, imagery, scene context |
+| **Constellation** (Visual) | ⚠️ Mock Data | Artist relationship network (component exists, needs live backend) |
+| **Playlust** (Automation) | ❌ Missing | Auto-generate 4-act emotional journeys with reasoning |
 
----
+## 🛠️ Requirements
 
-## ðŸš€ Quick Start
+- **Windows 10/11** (gaming rig optimal: AMD Ryzen 7 7800X3D, AMD Radeon RX GPU, 32GB RAM)
+- **Python 3.12+** (in `.venv`, NOT system Python 3.14)
+- **Node.js 20+** (for desktop app)
+- **SQLite** (bundled)
+- **Docker Desktop** (for Qobuz/Prowlarr/slskd services, optional)
+- **LM Studio** with `qwen2.5-14b-instruct` (for LLM features)
 
-### Windows Setup
+Optional but recommended:
+- **Qobuz** account (hi-fi music acquisition)
+- **Real-Debrid** API key (album torrent downloads)
+- **Prowlarr** (torrent indexing)
+- **foobar2000 + BeefWeb** (playback integration)
 
-```powershell
-# Create virtual environment
-python -m venv .venv
-.venv\Scripts\Activate.ps1
+## 📁 Repository Layout
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Create .env (adjust paths to your system)
-@'
-LYRA_DB_PATH=C:\MusicOracle\lyra_registry.db
-LIBRARY_BASE=A:\music\Active Music
-DOWNLOADS_FOLDER=C:\MusicOracle\downloads
-VIBES_FOLDER=A:\music\Vibes
-HF_HOME=C:\MusicOracle\hf_cache
-'@ | Set-Content .env
-
-# Initialize system
-python -m oracle db migrate
-
-# Use unified CLI (new in v10)
-lyra doctor              # System health check
-lyra scan .              # Scan current directory
-lyra index               # Index audio files
-lyra serve               # Start API server
-# Open http://localhost:5000 (root returns API status message; use /api/* endpoints)
+```
+C:\MusicOracle/
+├── oracle/                          # Main Python package (ML + intelligence)
+│   ├── cli.py                       # 30+ argparse commands
+│   ├── config.py                    # .env configuration
+│   ├── searcher.py                  # Semantic search engine
+│   ├── scorer.py                    # 10-dimensional emotional scoring
+│   ├── anchors.py                   # Dimension definitions (energy, valence, etc.)
+│   ├── acquirers/                   # 4-tier acquisition waterfall
+│   │   ├── qobuz.py                 # Tier 1: Hi-fi FLAC (24-bit/96kHz)
+│   │   ├── waterfall.py             # Unified T1→T2→T3→T4 cascade
+│   │   ├── guard.py                 # Acquisition validation (duplicate detection)
+│   │   └── validator.py             # Post-download validation
+│   ├── embedders/                   # CLAP embeddings (DirectML)
+│   ├── enrichers/                   # Metadata enrichment (Last.fm, Genius, MusicBrainz)
+│   ├── db/
+│   │   ├── schema.py                # SQLite schema (16 tables)
+│   │   └── migrations/
+│   ├── scout.py                     # Cross-genre discovery intelligence
+│   ├── lore.py                      # Artist lineage mapping
+│   ├── dna.py                       # Sample origin tracing
+│   ├── architect.py                 # Audio structure analysis
+│   ├── radio.py                     # Chaos/Flow/Discovery modes
+│   ├── agent.py                     # LLM orchestration
+│   ├── vibes.py                     # Semantic playlist management
+│   ├── pipeline.py                  # Scan → Index → Score workflow
+│   └── [30+ other modules]
+├── desktop/                         # Electron frontend (React + Vite)
+│   ├── renderer-app/src/
+│   │   ├── features/                # Feature components
+│   │   │   ├── library/             # LibraryView, ArtistShrine (WIP)
+│   │   │   ├── search/              # SemanticSearch
+│   │   │   ├── oracle/              # ConstellationScene (mock → live)
+│   │   │   ├── radio/               # RadioEngine controls
+│   │   │   └── vibes/               # VibePlaylists
+│   │   └── services/
+│   │       └── lyraGateway/         # API client
+│   ├── package.json
+│   └── vite.config.ts
+├── docker/
+│   ├── qobuz/                       # Qobuz acquisition microservice
+│   └── docker-compose.yml           # All services (Prowlarr, slskd, RDT, Qobuz)
+├── chroma_storage/                  # ChromaDB vector store (HNSW index)
+├── lyra_registry.db                 # SQLite database
+├── lyra_api.py                      # Flask API server (main entry point)
+├── requirements.txt                 # Python dependencies
+├── .env.template                    # Configuration template
+└── docs/
+    ├── MASTER_PLAN_EXPANDED.md      # Complete feature roadmap (THIS FILE)
+    ├── MISSING_FEATURES_REGISTRY.md # All 16 missing features w/ specs
+    └── specs/
 ```
 
-### macOS / Linux Setup
+## 🚀 Quick Start
+
+### 1. Setup Python Environment
+
+```powershell
+cd C:\MusicOracle
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+Copy-Item .env.template .env
+```
+
+### 2. Configure `.env`
 
 ```bash
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Create .env (adjust paths to your system)
-cat > .env << 'EOF'
-LYRA_DB_PATH=/path/to/lyra_registry.db
-LIBRARY_BASE=/path/to/your/music
-DOWNLOADS_FOLDER=/path/to/downloads
-VIBES_FOLDER=/path/to/vibes
-HF_HOME=/path/to/hf_cache
-EOF
-
-# Initialize and run
-python -m oracle db migrate
-
-# Use unified CLI (new in v10)
-./lyra doctor           # System health check
-./lyra hunt "Aphex Twin"  # Start acquisition
-./lyra serve            # Start API server
-```
-
----
-
-## âœ¨ Core Features
-
-### ðŸŽ† **Playlust** (Status)
-Playlust UI is not active in the current runtime profile. The active system is API-first and CLI-first.
-If Playlust is reintroduced, it should be tracked as a separate restoration milestone.
-
-### ðŸ” **Semantic Search**
-Search music with natural language:
-- "aggressive distorted guitars with screaming vocals"
-- "chill ambient electronic for late night coding"
-- "uplifting emotional orchestral with female vocals"
-
-Uses CLAP (Contrastive Language-Audio Pretraining) for deep audio understanding.
-
-### ðŸŽ­ **Vibes System**
-Create dynamic playlists from semantic queries:
-```powershell
-python -m oracle vibe save --name "Workout Energy" --query "high energy aggressive" --n 50
-python -m oracle vibe build --name "Workout Energy"
-python -m oracle vibe materialize --name "Workout Energy" --mode hardlink
-```
-
-### ðŸ“ **Intelligent Curation**
-AI-powered library organization:
-```powershell
-python -m oracle curate classify
-python -m oracle curate plan --preset artist_album
-python -m oracle curate apply --plan-path Reports/curation_plan_*.json --dry-run
-```
-
-### ðŸ“¥ **Smart Acquisition**  
-Tiered acquisition with Real-Debrid + SpotiFLAC:
-```powershell
-# Acquire top 10 missing tracks for an artist
-python lyra_acquire.py --artist "Coheed and Cambria" --limit 10
-
-# Whole artist catalog (all pending tracks)
-python lyra_acquire.py --artist "Brand New" --whole-artist
-
-# Full discography mode (Spotify API â†’ queue â†’ acquire)
-python lyra_acquire.py --artist "Deftones" --discography
-
-# Dry run to preview
-python lyra_acquire.py --artist "Radiohead" --limit 5 --dry-run
-
-# Link liked songs to library
-python lyra_acquire.py --link-liked
-
-# Set quality preference (default: FLAC)
-python lyra_acquire.py --artist "NIN" --limit 10 --quality MP3-320
-```
-
-### ðŸŒ **API Interface**
-Active interface is REST API under `/api/*` plus CLI commands.
-
-### ðŸ›¡ï¸ **Safety Doctrine** (NEW v10)
-Time-travel undo for all file operations:
-```powershell
-lyra history 10         # View last 10 operations
-lyra undo 1             # Undo last operation
-```
-
-### ðŸŽ¯ **Unified Pipeline** (NEW v10)
-Orchestrated acquisition workflow:
-```powershell
-lyra hunt "Aphex Twin"  # Search â†’ Acquire â†’ Scan â†’ Enrich â†’ Index â†’ Place
-```
-
-### ðŸ’» **Operations Console** (NEW v10)
-Unified CLI interface with 10 commands:
-```powershell
-lyra help               # Show all commands
-lyra agent "Find punk EDM remixes"  # LLM-powered queries
-```
-
----
-
-## ðŸ“– Documentation
-
-### Quick Reference
-- **[QUICKSTART.md](QUICKSTART.md)** â€” Fast setup guide
-- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** â€” Production deployment
-- **[BUG_FIXES.md](BUG_FIXES.md)** â€” Known issues and fixes
-- **[LYRA_V10_IMPLEMENTATION.md](LYRA_V10_IMPLEMENTATION.md)** â€” Safety Doctrine + Pipeline + Console (NEW)
-- **[THREAD_SAFETY_VALIDATION.md](THREAD_SAFETY_VALIDATION.md)** â€” Thread-safety validation report (NEW)
-- **[QUICKSTART_V10.md](QUICKSTART_V10.md)** â€” v10 quick start guide (NEW)
-- **[plans/llm_access_points.md](plans/llm_access_points.md)** - Runtime LLM access and processing map (NEW)
-
-### Phase Documentation
-- **[PHASE_1_FOUNDATION.md](PHASE_1_FOUNDATION.md)** â€” Database, ChromaDB, configuration
-- **[PHASE_2_SEARCH.md](PHASE_2_SEARCH.md)** â€” Scanner, indexer, semantic search
-- **[PHASE_3_ACQUISITION.md](PHASE_3_ACQUISITION.md)** â€” yt-dlp, Prowlarr, download queue
-- **[PHASE_4_ENRICHMENT.md](PHASE_4_ENRICHMENT.md)** â€” MusicBrainz, AcoustID, Last.fm, Genius
-- **[PHASE_5_CURATION.md](PHASE_5_CURATION.md)** â€” Classification, duplicates, organization
-- **[PHASE_6_VIBES.md](PHASE_6_VIBES.md)** â€” Vibe system deep dive
-- **[PHASE_7_API.md](PHASE_7_API.md)** â€” Flask API reference + Web UI
-- **[PHASE_8_POLISH.md](PHASE_8_POLISH.md)** â€” Validation, scripts, production readiness
-- **[PHASE_9_10_SENTIENT.md](PHASE_9_10_SENTIENT.md)** â€” Sentient Oracle (radio, lore, agent, glass UI)
-- **[WARPATH_RESULTS.md](WARPATH_RESULTS.md)** â€” Warpath hardening session results
-
----
-
-## ðŸ“š Project History
-
-Lyra Oracle was built through 10 iterative phases, each adding core capabilities:
-
-> **Historical note:** UI references in the phase history below describe prior milestones. Current runtime mode is core/API-first with UI removed.
-
-### ðŸ›ï¸ **Phase 1: Foundation** â€” [PHASE_1_FOUNDATION.md](PHASE_1_FOUNDATION.md)
-**Database & Configuration Infrastructure**
-
-âœ… **SQLite Database** â€” Comprehensive schema (tracks, embeddings, vibes, curation_plans, acquisition_queue)  
-âœ… **ChromaDB Integration** â€” Persistent vector storage with HNSW indexing  
-âœ… **Configuration System** â€” Environment-based config with `.env` support  
-âœ… **Doctor Utility** â€” System diagnostics (Python, FFmpeg, fpcalc, disk space)  
-âœ… **Write Modes** â€” Safety controls (dry_run, apply_allowed, unrestricted)
-
-**Key Files:** `oracle/db/schema.py`, `oracle/config.py`, `oracle/doctor.py`, `lyra_registry.db`, `chroma_storage/`
-
----
-
-### ðŸ”Ž **Phase 2: Core Intelligence** â€” [PHASE_2_SEARCH.md](PHASE_2_SEARCH.md)
-**Semantic Search & Indexing**
-
-âœ… **Scanner** â€” Recursive audio discovery with SHA256 deduplication  
-âœ… **CLAP Indexer** â€” 512-dim embeddings via `laion/clap-htsat-unfused` model  
-âœ… **Semantic Search** â€” Natural language queries ("energetic rock", "chill lo-fi beats")  
-âœ… **Incremental Scanning** â€” Fast re-scan with change detection  
-âœ… **Statistics** â€” Library insights (tracks, artists, duration, size)
-
-**Performance:** 50ms search queries, 2.3s per track indexing (GPU), 100% deduplication accuracy
-
-**Key Files:** `oracle/scanner.py`, `oracle/indexer.py`, `oracle/search.py`
-
----
-
-### ðŸ“¥ **Phase 3: Acquisition** â€” [PHASE_3_ACQUISITION.md](PHASE_3_ACQUISITION.md)
-**Multi-Source Download Management**
-
-âœ… **yt-dlp Integration** â€” YouTube, SoundCloud, Bandcamp downloads  
-âœ… **Prowlarr API** â€” Indexer search across 6 public trackers (1337x, TPB, BitSearch, LimeTorrents, Nyaa.si, KAT)  
-âœ… **Real-Debrid** â€” Instant cached torrent downloads via HTTPS  
-âœ… **SpotiFLAC** â€” Tier 2 fallback (Tidal/Qobuz/Amazon FLAC via Spotify URI)  
-âœ… **Tiered Waterfall** â€” RD first â†’ SpotiFLAC fallback, automatic quality degradation (FLAC â†’ MP3-320 â†’ any)  
-âœ… **Discography Search** â€” Searches for full artist discography torrents before individual albums  
-âœ… **Parallel Downloads** â€” 4-thread concurrent RD downloads with 1MB chunks  
-âœ… **Quality Upgrade** â€” Automatically replaces lower-quality files when higher quality becomes available  
-âœ… **RD Pre-Sweep** â€” Checks for completed torrents from prior runs before processing queue  
-âœ… **RD Post-Sweep** â€” After harvest, waits up to 120s for pending torrents to finish  
-âœ… **Seeder-Weighted Scoring** â€” Dead torrents (0 seeders) skipped instantly; high-seeder results prioritized  
-âœ… **FlareSolverr Proxy** â€” Cloudflare bypass for protected indexers  
-âœ… **Format Conversion** â€” FFmpeg transcoding (MP3/FLAC/OPUS/M4A)  
-âœ… **Auto-Organization** â€” Files moved to Artist/Album structure with album name parsed from torrent  
-
-**Acquisition Waterfall:**
-```
-Discography FLAC â†’ Album FLAC â†’ Track FLAC
-  â†’ Discography MP3-320 â†’ Album MP3-320 â†’ Track MP3-320
-    â†’ Discography (any) â†’ Album (any) â†’ Track (any)
-      â†’ SpotiFLAC fallback
-```
-
-**Key Files:** `lyra_acquire.py`, `oracle/hunter.py`, `oracle/downloader.py`
-
----
-
-### ðŸŽ¼ **Phase 4: Enrichment** â€” [PHASE_4_ENRICHMENT.md](PHASE_4_ENRICHMENT.md)
-**Metadata Enhancement**
-
-âœ… **MusicBrainz** â€” Authoritative music database lookup (MBID, genres, release dates)  
-âœ… **AcoustID Fingerprinting** â€” Acoustic-based track identification (96% accuracy)  
-âœ… **Last.fm Integration** â€” User tags, play counts, similar artists  
-âœ… **Genius Lyrics** â€” Automatic lyrics fetching  
-âœ… **Caching** â€” 9x faster with API response caching
-
-**Enrichment Sources:** MusicBrainz, AcoustID, Last.fm, Genius (with rate limiting)
-
-**Key Files:** `oracle/metadata_enricher.py`, `oracle/musicbrainz.py`, `oracle/acoustid.py`, `oracle/lastfm.py`, `oracle/genius.py`
-
----
-
-### ðŸŽ¯ **Phase 5: Curation** â€” [PHASE_5_CURATION.md](PHASE_5_CURATION.md)
-**Intelligent Library Organization**
-
-âœ… **Version Classification** â€” Detect Original/Live/Remix/Acoustic/Cover (97% accuracy)  
-âœ… **Duplicate Detection** â€” Hash-based (100%) + fingerprint (98%) + metadata fuzzy matching  
-âœ… **Library Organization** â€” Smart folder structures (Artist/Album, Genre/Artist, Flat)  
-âœ… **Filename Cleaning** â€” 23 junk pattern removal + standardization  
-âœ… **Download Processor** â€” Automated pipeline (clean â†’ enrich â†’ classify â†’ organize â†’ index)  
-âœ… **Curation Plans** â€” Preview, apply, and rollback organizational changes
-
-**Presets:** by_artist_album, by_genre_artist, flat_with_year
-
-**Key Files:** `oracle/classifier.py`, `oracle/duplicates.py`, `oracle/curator.py`, `oracle/name_cleaner.py`, `oracle/download_processor.py`
-
----
-
-### ðŸŽ­ **Phase 6: Vibes** â€” [PHASE_6_VIBES.md](PHASE_6_VIBES.md)
-**Semantic Playlist System**
-
-âœ… **Vibe Profiles** â€” Save semantic queries as reusable playlists  
-âœ… **Dynamic Building** â€” Real-time semantic search results  
-âœ… **Materialization** â€” Hardlink folders (0 MB disk usage) + M3U8 playlists  
-âœ… **Refresh Mechanism** â€” Auto-update vibes when library changes  
-âœ… **Duplicate Prevention** â€” Smart deduplication within vibes
-
-**Workflow:** `save` â†’ `build` â†’ `materialize` (hardlink/copy) â†’ `refresh` (keep current)
-
-**Example Vibes:** "Aggressive Metal", "Chill Lo-Fi Beats", "Uplifting EDM"
-
-**Key Files:** `oracle/vibes.py`, `A:\music\Vibes/`
-
----
-
-### ðŸŒ **Phase 7: Web API & UI** â€” [PHASE_7_API.md](PHASE_7_API.md)
-**Flask REST API + Web Interface**
-
-âœ… **Flask API** â€” 20+ REST endpoints (search, library, vibes, curation, acquisition)  
-âœ… **Web Dashboard** â€” Real-time stats with charts  
-âœ… **Search Interface** â€” Semantic search with results display  
-âœ… **Vibes Management** â€” Create, build, materialize, and refresh vibes  
-âœ… **Curation UI** â€” Preview and apply organization plans  
-âœ… **Acquisition Portal** â€” Queue management and download status  
-âœ… **Repair Utility** â€” System diagnostics and health checks
-
-**Tech Stack:** Flask 3.1.2, Flask-CORS, Bootstrap 5, Vanilla JavaScript
-
-**API Endpoints:** `/api/health`, `/api/status`, `/api/search`, `/api/library/*`, `/api/vibes/*`, `/api/curate/*`, `/api/acquire/*`
-
-**Key Files (historical):** `lyra_api.py`, `templates/`, `static/`, `oracle/repair.py`
-
-**Access (historical):** http://localhost:5000
-
----
-
-### âœ¨ **Phase 8: Polish & Refinement** â€” [PHASE_8_POLISH.md](PHASE_8_POLISH.md)
-**Production Readiness**
-
-âœ… **README Rewrite** â€” Comprehensive documentation (350 lines)  
-âœ… **Input Validation** â€” Security module (SQL injection, path traversal, type safety)  
-âœ… **Quick-Setup.ps1** â€” Automated first-time setup script (140 lines)  
-âœ… **Backup-Restore.ps1** â€” Database/ChromaDB backup utility (200 lines)  
-âœ… **Demo-Workflow.ps1** â€” Interactive demo of all features (250 lines)  
-âœ… **Validation Module** â€” `oracle/validation.py` (450 lines) with 30+ validators  
-âœ… **Documentation** â€” Complete phase history (this section!)
-
-**Security Features:** Path validation, filename sanitization, query string validation, track limit enforcement, URL validation, enum validation
-
-**Scripts:** `Quick-Setup.ps1`, `Backup-Restore.ps1`, `Demo-Workflow.ps1`
-
-**Key Files:** `README.md`, `oracle/validation.py`, PowerShell helper scripts
-
----
-
-### ðŸ§  **Phase 9-10: Sentient Oracle** â€” [PHASE_9_10_SENTIENT.md](PHASE_9_10_SENTIENT.md)
-**Total Sonic Awareness + Safety Systems**
-
-âœ… **Cortex Upgrade** â€” New tables for connections, structure, playback history  
-âœ… **Scout/Lore/DNA** â€” Cross-genre discovery, lineage mapping, sample pivots  
-âœ… **Hunter** â€” Prowlarr + Real-Debrid accelerated acquisition (parallel downloads, quality waterfall, seeder scoring)  
-âœ… **Lyra Acquire** â€” Tiered acquisition engine with discography search, RD pre/post-sweep, quality upgrade  
-âœ… **Architect** â€” Structure analysis (drops, BPM, key, energy)  
-âœ… **Radio Engine** â€” Chaos, Flow, Discovery modes  
-âœ… **Soul Layer** â€” LM Studio agent (Qwen2.5 14B) + fact drops  
-âœ… **Glass UI (historical)** â€” Persistent player + constellation view + radio page
-
-**ðŸ›¡ï¸ Phase 10: Safety Doctrine** â€” [LYRA_V10_IMPLEMENTATION.md](LYRA_V10_IMPLEMENTATION.md)  
-âœ… **Transaction Logging** â€” JSONL journal with time-travel undo  
-âœ… **Unified Pipeline** â€” 6-stage orchestration (Search â†’ Acquire â†’ Scan â†’ Enrich â†’ Index â†’ Place)  
-âœ… **Operations Console** â€” Unified CLI with 10 commands (`lyra` launcher)  
-âœ… **Thread-Safe Database** â€” Multi-threaded Flask compatibility  
-âœ… **API Extensions** â€” 8 new endpoints (pipeline, safety, streaming)  
-âœ… **Enhanced Agent** â€” Full context integration with noir persona
-
-**Thread-Safety:** Complete SQLite thread isolation with per-request connections (20+ concurrent requests validated)
-
-**LLM Integration:** LM Studio OpenAI-compatible server with graceful fallbacks to deterministic parsing
-
-**Key Files:** `oracle/scout.py`, `oracle/lore.py`, `oracle/dna.py`, `oracle/hunter.py`, `oracle/architect.py`, `oracle/radio.py`, `oracle/agent.py`, `oracle/llm.py`, `oracle/safety.py`, `oracle/pipeline.py`, `oracle/console.py`, `lyra_api.py`, `lyra`, `lyra.bat`, `LYRA_V10_IMPLEMENTATION.md`, `THREAD_SAFETY_VALIDATION.md`
-
----
-
-### ðŸ“Š **Phase Progress Overview**
-
-| Phase | Focus | Status | Key Metrics |
-|-------|-------|--------|-------------|
-| **1** | Foundation | âœ… Complete | SQLite + ChromaDB + Config |
-| **2** | Search | âœ… Complete | 56 tracks indexed, 50ms queries |
-| **3** | Acquisition | âœ… Complete | yt-dlp + Prowlarr + Queue |
-| **4** | Enrichment | âœ… Complete | 4 sources, 96% fingerprint accuracy |
-| **5** | Curation | âœ… Complete | 97% classification, 100% hash dedup |
-| **6** | Vibes | âœ… Complete | 2 vibes, 20 hardlinks (0 MB) |
-| **7** | API + UI (historical) | âœ… Complete | 20+ endpoints, 5 web pages |
-| **8** | Polish | âœ… Complete | Validation + Scripts + Docs |
-| **9-10** | Sentient Oracle | âœ… Complete | Radio + Lore + Agent + Safety + Pipeline |
-
----
-
-## ðŸ—ï¸ Architecture
-
-**Backend:** Python 3.12, SQLite (thread-safe), ChromaDB, Transformers (CLAP), Flask  
-**Audio:** mutagen, librosa, yt-dlp, FFmpeg  
-**Interface (current):** CLI + REST API (`/api/*`)  
-**Frontend (historical):** Bootstrap 5, Vanilla JS, Jinja2  
-**LLM:** LM Studio (Qwen2.5-14B-Instruct) with graceful fallback
-
-```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚              Lyra Oracle System v10                      â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚  REST API (/api/*) â”‚ CLI â”‚ Agent (LLM) â”‚ Legacy UI      â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚  Emotional Model (10 dimensions) â”‚ Arc Engine            â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚  Pipeline: Searchâ†’Acquireâ†’Scanâ†’Enrichâ†’Indexâ†’Place       â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚  Scanner â”‚ Indexer â”‚ Search â”‚ Vibes â”‚ Hunter â”‚ Radio     â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚  Scorer â”‚ Safety (Journal+Undo) â”‚ Lore â”‚ DNA â”‚ Scout     â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚  SQLite Registry â”‚ ChromaDB â”‚ Spotify History â”‚ FS       â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-```
-
----
-
-## ðŸŽ¯ Usage Examples
-
-### Build a Vibe Collection
-```powershell
-python -m oracle vibe save --name "Morning Energy" --query "uplifting positive" --n 100
-python -m oracle vibe save --name "Deep Focus" --query "ambient minimal calm" --n 150
-python -m oracle vibe save --name "Evening Chill" --query "relaxing smooth jazz" --n 80
-
-# Materialize all
-foreach ($v in @("Morning Energy", "Deep Focus", "Evening Chill")) {
-    python -m oracle vibe build --name $v
-    python -m oracle vibe materialize --name $v --mode hardlink
-}
-```
-
-### Smart Library Organization
-```powershell
-python -m oracle curate classify
-python -m oracle curate plan --preset artist_album
-python -m oracle curate apply --plan-path Reports/curation_plan_20260209.json
-```
-
-### API Usage
-```python
-import requests
-
-# Semantic Search
-response = requests.post('http://localhost:5000/api/search', 
-    json={'query': 'epic orchestral', 'n': 20})
-results = response.json()['results']
-
-# Agent Query (LLM-powered intent parsing)
-response = requests.post('http://localhost:5000/api/agent/query',
-    json={'text': 'punk edm remixes'})
-agent_result = response.json()
-# Returns: {'action', 'thought', 'intent', 'next', 'llm'}
-
-# Pipeline Acquisition (NEW v10)
-response = requests.post('http://localhost:5000/api/pipeline/start',
-    json={'query': 'Aphex Twin - Selected Ambient Works'})
-job = response.json()
-print(f"Job ID: {job['job_id']}, State: {job['job']['state']}")
-
-# Check Pipeline Status
-response = requests.get(f"http://localhost:5000/api/pipeline/status/{job_id}")
-status = response.json()
-print(f"State: {status['job']['state']}")
-
-# View Operation Journal
-response = requests.get('http://localhost:5000/api/journal?n=10')
-journal = response.json()
-print(f"Last {journal['count']} operations")
-
-# Undo Last Operation
-response = requests.post('http://localhost:5000/api/undo', json={'n': 1})
-result = response.json()
-print(f"Undone: {result['undone_count']} operations")
-
-# Health Check (includes LLM status)
-response = requests.get('http://localhost:5000/api/health')
-health = response.json()
-print(f"LLM Status: {health['llm']['status']}")
-```
-
----
-
-## ðŸ”’ Configuration
-
-Create `.env` file:
-```env
-LYRA_DB_PATH=C:\MusicOracle\lyra_registry.db
-LYRA_WRITE_MODE=apply_allowed
+# Required
 LIBRARY_BASE=A:\music\Active Music
-DOWNLOADS_FOLDER=C:\MusicOracle\downloads
-VIBES_FOLDER=A:\music\Vibes
-HF_HOME=C:\MusicOracle\hf_cache
+QOBUZ_USERNAME=your_qobuz_email
+QOBUZ_PASSWORD=your_qobuz_password
+REAL_DEBRID_KEY=your_rd_api_key
 
-# LLM Configuration (LM Studio)
-LYRA_LLM_PROVIDER=lmstudio
-LYRA_LLM_BASE_URL=http://localhost:1234/v1
-LYRA_LLM_MODEL=qwen2.5-14b-instruct
-LYRA_LLM_API_KEY=
-LYRA_LLM_TIMEOUT_SECONDS=30
-```
+# Optional enrichment APIs
+LASTFM_API_KEY=
+GENIUS_TOKEN=
+DISCOGS_API_TOKEN=
+THEAUDIODB_API_KEY=
 
-### ðŸ§  LLM Setup (LM Studio)
-
-The agent uses **LM Studio** for local LLM inference with graceful fallbacks:
-
-**1. Install LM Studio:**
-- Download from [lmstudio.ai](https://lmstudio.ai)
-- Install and launch the application
-
-**2. Download Model:**
-- Search for: `bartowski/Qwen2.5-14B-Instruct-GGUF`
-- Download: `Qwen2.5-14B-Instruct-Q4_K_M.gguf`
-- Load model in LM Studio on port 1234
-
-**3. Get Model ID:**
-```powershell
-(Invoke-RestMethod http://localhost:1234/v1/models).data | Select-Object id | Format-Table -AutoSize
-```
-
-**4. Update .env:**
-```env
+# LLM
+LYRA_LLM_PROVIDER=local
+LYRA_LLM_BASE_URL=http://127.0.0.1:1234/v1
 LYRA_LLM_MODEL=qwen2.5-14b-instruct
 ```
 
-**Fallback Behavior:**
-- If LLM unavailable â†’ deterministic intent parsing
-- Response: `"thought": "The trail went cold, Boss."`
-- Still returns structured action plan
-- **Never returns "Error: LLM unavailable"**
+### 3. Start Services
 
----
-
-## ðŸ› ï¸ CLI Reference
-
-### Unified CLI (NEW v10)
 ```powershell
-# System Management
-lyra doctor                              # System health check
-lyra help                                # Show all commands
-lyra serve [--host HOST] [--port PORT]   # Start API server
+# Start Docker services (Qobuz microservice, Prowlarr, slskd, etc.)
+docker-compose up -d
 
-# Acquisition Pipeline
-lyra hunt <query>                        # Start acquisition
-  # Example: lyra hunt "Aphex Twin - Selected Ambient Works"
-  # Pipeline: Search â†’ Acquire â†’ Scan â†’ Enrich â†’ Index â†’ Place
-
-# Safety Operations
-lyra history [n]                         # View last N operations
-lyra undo [n]                            # Undo last N operations
-  # Example: lyra undo 3  # Undo last 3 file moves
-
-# Library Operations
-lyra scan <paths...>                     # Scan directories
-lyra index [paths...]                   # Index audio files
-
-# Vibes Management
-lyra vibe-create <name> <prompt> [--n N] # Create vibe
-  # Example: lyra vibe-create "Midnight Noir" "dark ambient jazz"
-
-# Agent Queries
-lyra agent <query>                       # LLM-powered queries
-  # Example: lyra agent "Find aggressive metal with clean vocals"
+# Start LM Studio on port 1234 (manual or via bootstrap)
+# Then start Flask API
+.venv\Scripts\python.exe lyra_api.py
+# OR: oracle serve --port 5000
 ```
 
-### Legacy Python Module Commands
-```powershell
-# Core
-python -m oracle db migrate              # Initialize database
-python -m oracle doctor                  # Health check
-python -m oracle.repair check            # Full diagnostics
+### 4. Run CLI Commands
 
-# Library
-python -m oracle scan --library PATH --limit N
-python -m oracle index --limit N
-python -m oracle search --query "TEXT" --n 10
+```bash
+# Scan library for audio files
+oracle scan --library "A:\music\Active Music"
 
-# Vibes
-python -m oracle vibe save --name "NAME" --query "TEXT" --n 100
-python -m oracle vibe list
-python -m oracle vibe build --name "NAME"
-python -m oracle vibe materialize --name "NAME" --mode hardlink
-python -m oracle vibe refresh --all
+# Generate CLAP embeddings + auto-score
+oracle index --library "A:\music\Active Music"
 
-# Curation
-python -m oracle curate classify
-python -m oracle curate plan --preset artist_album
-python -m oracle curate apply --plan-path PATH --dry-run
+# Semantic search
+oracle search --query "dark ambient with glitchy textures" --n 10
+
+# Create vibe (semantic playlist)
+oracle vibe save --name "Late Night" --query "dark moody introspective" --n 50
+
+# Materialize vibe as hardlinked folder
+oracle vibe materialize --name "Late Night" --mode hardlink
+
+# Check system status
+oracle status
+
+# Full diagnostics
+oracle doctor
+```
+
+## 🎯 10-Dimensional Emotional Model
+
+Every track is scored on these dimensions (0.0–1.0):
+
+| Dimension | Low (0.0) | High (1.0) |
+|-----------|-----------|-----------|
+| **energy** | ambient, still | explosive, driving |
+| **valence** | sad, hopeless | ecstatic, euphoric |
+| **tension** | relaxed, resolved | horror, panic, dissonant |
+| **density** | solo, bare | massive, wall-of-sound |
+| **warmth** | cold, robotic | warm, analog, soulful |
+| **movement** | frozen, drone | driving, groove, danceable |
+| **space** | intimate, dry | vast, cathedral, oceanic |
+| **rawness** | polished, pristine | distorted, lo-fi, garage |
+| **complexity** | simple, repetitive | progressive, virtuosic |
+| **nostalgia** | modern, futuristic | retro, vintage, throwback |
+
+These power semantic search, radio modes, taste learning, and playlist generation.
+
+## 🎵 The 4-Tier Acquisition Waterfall
+
+Lyra tries each tier in sequence until a match is found:
+
+```
+Tier 1: Qobuz          → FLAC 24-bit/96kHz + hi-fi metadata
+Tier 2: Slskd (P2P)    → FLAC from Soulseek (~10-30s/track, 90% hit rate)
+Tier 3: Real-Debrid    → Album torrents via Prowlarr search
+Tier 4: SpotDL         → YouTube Music (~256kbps fallback)
+```
+
+Each tier validates against the acquisition guard (duplicate detection, format verification).
+
+## 🧠 Intelligence Modules
+
+| Module | Purpose | Status |
+|--------|---------|--------|
+| **Scout** | Find bridge artists between genres | ✅ Functional |
+| **Lore** | Artist lineage + relationships (MusicBrainz) | ✅ Functional |
+| **DNA** | Sample origin tracing | ✅ Functional |
+| **Architect** | Audio structure analysis (BPM, key, drops) | ✅ Functional |
+| **Radio** | Chaos/Flow/Discovery playback modes | ✅ Functional |
+| **Biographer** | Artist bios + cultural context | ❌ Not built |
+| **Pathfinder** | Interactive relationship exploration | ⚠️ Partial (API exists, no UI) |
+
+## 📊 Current Numbers (March 2, 2026)
+
+```
+Tracks:              2,472
+Embeddings:          2,472 (100% coverage)
+Track Scores:        2,472 (10-dimensional scoring complete)
+Vibes:               15 saved
+Acquisition Queue:   0 (all processed)
+Connections:         847 artist relationships mapped
+```
+
+## 🛠️ Common Commands
+
+```bash
+# Library operations
+oracle scan --library "A:\music\Active Music"   # Find audio files
+oracle index --library "A:\music\Active Music"  # Generate embeddings
+oracle pipeline --library "A:\music"            # Scan → Index → Score (all-in-one)
+
+# Semantic search
+oracle search --query "aggressive distorted guitars" --n 20
+oracle search --query "chill lo-fi beats" --n 50
+
+# Vibe management
+oracle vibe save --name "Workout" --query "high energy"
+oracle vibe build --name "Workout"              # Generate M3U8
+oracle vibe materialize --name "Workout"        # Create hardlinked folder
+oracle vibe refresh --all                       # Update all vibes
 
 # Acquisition
-python -m oracle acquire youtube --url URL
-python -m oracle downloads organize --library PATH
+oracle acquire waterfall --artist "Radiohead" --title "Pyramid Song"
+oracle drain --limit 10 --workers 3             # Process queue + ingest
+oracle watch --once                             # One-time staging folder ingest
 
-# Server
-python -m oracle serve --host 0.0.0.0 --port 5000 --debug  # API server
+# Curation workflow
+oracle curate classify                          # Classify library tracks
+oracle curate plan --preset artist_album        # Generate organization plan
+oracle curate apply                             # Apply plan with confirmation
 
-# Agent (requires LM Studio running)
-python -m oracle.agent query "Find EDM remixes of Punk tracks"
-python -m oracle.agent fact <track_id>
+# System health
+oracle status                                   # Show library statistics
+oracle doctor                                   # Run comprehensive diagnostics
 ```
 
----
+## 🌐 Flask API (Web UI)
 
-## ðŸ› Troubleshooting
+Access at `http://localhost:5000` when server running.
 
-**ModuleNotFoundError:** `pip install -r requirements.txt`  
-**ChromaDB issues:** `python -m oracle.repair repair`  
-**Server won't start:** `taskkill /F /IM python.exe` or use different port  
-**Slow indexing:** Reduce batch size, use GPU if available  
-**SQLite threading errors:** Fixed in v10 - upgrade if seeing thread-safety issues  
-**Pipeline jobs stuck:** Check `.state` field in DB: `SELECT * FROM pipeline_jobs ORDER BY created_at DESC LIMIT 5`  
-**Undo not working:** Check journal: `lyra history 10`
+**Key Endpoints:**
+- `GET /api/status` — System statistics
+- `POST /api/search` — Semantic search with result limit
+- `GET /api/vibes` — List all saved vibes
+- `POST /api/vibes/save` — Create vibe from query
+- `POST /api/vibes/build` — Generate M3U8 playlist
+- `POST /api/vibes/materialize` — Create hardlinked folder
+- `POST /api/curate/classify` — Classify tracks
+- `POST /api/curate/plan` — Generate curation plan
+- `POST /api/curate/apply` — Apply curation plan
+- `POST /api/acquire/youtube` — Download from YouTube
+- `GET /api/scout/cross-genre` — Cross-genre discovery
+- `GET /api/lore/connections` — Artist relationships
+- `GET /api/radio/chaos` — Next track (Chaos mode)
+- `GET /api/radio/flow` — Next track (Flow mode)
 
-Check `logs/` directory for detailed error logs.
+## 🧪 Testing & Diagnostics
 
-### Thread-Safety (v10)
-All database operations now use thread-local connections for multi-threaded Flask compatibility. Validated under 20+ concurrent requests. See [THREAD_SAFETY_VALIDATION.md](THREAD_SAFETY_VALIDATION.md) for details.
+### Health Checks
 
----
+```powershell
+# Check LLM configuration
+powershell -ExecutionPolicy Bypass -File .\scripts\check_llm_config.ps1
 
-## ðŸ“Š Performance
+# Run smoke tests
+powershell -ExecutionPolicy Bypass -File .\scripts\smoke_desktop.ps1
 
-| Operation | Speed | Notes |
-|-----------|-------|-------|
-| File scan | ~1000 files/sec | Filesystem |
-| CLAP embedding | ~5-10 tracks/sec | CPU only |
-| Semantic search | ~50ms | 10K embeddings |
-| Vibe build | ~100ms | 200 tracks |
+# Full system diagnostics
+oracle doctor
+```
 
-**Tested:** Library-scale indexing with CLAP embeddings
+### Run Tests
 
----
+```powershell
+.venv\Scripts\python.exe -m pytest tests/ -v
+```
 
-## ðŸ—ºï¸ Roadmap
+### Build Desktop
 
-**Phase 1-8:** Foundation â†’ Sentient Core âœ… Complete  
-**Phase 9-10:** Sentient Oracle + Safety Doctrine âœ… Complete  
-**Phase 11:** Advanced Features
-- [ ] Optional UI restoration (if desired) + WebSocket real-time updates
-- [ ] Spotify Web Playback SDK integration
-- [ ] Advanced constellation visualization (force-directed graphs)
-- [ ] Multi-user authentication
+```powershell
+cd C:\MusicOracle\desktop
+npm install
+npm run dev                  # Development server
+npm run build               # Production build
+```
 
-**Phase 12:** Production Scale
-- [ ] PostgreSQL support for large libraries (1M+ tracks)
-- [ ] Distributed ChromaDB for horizontal scaling
+## 📖 Documentation
 
----
+- **[docs/MASTER_PLAN_EXPANDED.md](docs/MASTER_PLAN_EXPANDED.md)** — Complete roadmap (60% → 100%)
+- **[docs/specs/SPEC-001.md](docs/specs/SPEC-001.md)** — Database schema + API contract
+- **[docs/specs/SPEC-002.md](docs/specs/SPEC-002.md)** — Playlust vision + emotional arc design
 
-## ðŸ“„ License
+## 🗺️ Development Roadmap
 
-MIT License
+**Next Priority (Sprints 1-2):**
+1. **Biographer module** — Artist bios + imagery (2-3 weeks)
+2. **Graph auto-builder** — Proactive relationship mapping (1 week)
+3. **Constellation live data** — Make visual network real (1 week)
+4. **Artist Shrines** — Rich artist profile UI (2-3 weeks)
 
----
+**Near-term (Sprints 3-4):**
+5. **Deep Cut protocol** — High acclaim / low popularity discovery (2 weeks)
+6. **Playlust MVP** — Automated 4-act emotional journeys (3-4 weeks)
 
-## ðŸ™ Acknowledgments
+**See [docs/MASTER_PLAN_EXPANDED.md](docs/MASTER_PLAN_EXPANDED.md) for full 16-feature roadmap + effort estimates.**
 
-**CLAP** â€¢ **ChromaDB** â€¢ **yt-dlp** â€¢ **Flask** â€¢ **Bootstrap**
+## 🤝 Contributing
 
-Built with â¤ï¸ for music lovers who want to truly own their collection.
+This is an active research project. All contributions welcome. Please:
+1. Follow existing code patterns (snake_case, type hints, docstrings)
+2. Test locally before committing
+3. Update docs if adding new features
 
----
+## 📄 License
 
-ðŸ“¬ **Issues:** GitHub Issues | **Discussions:** GitHub Discussions
+Lyra Oracle © 2025-2026. All rights reserved.
 
-ðŸŽµ **Happy Listening!**
-
-
-
-
+- `GET /api/health`
+- `GET /api/vibes`
+- `GET /api/playlists/<playlist_id>`
+- `GET /api/library/tracks`
+- `POST /api/search`
+- `POST /api/radio/chaos`
+- `POST /api/radio/flow`
+- `GET /api/radio/discovery`
+- `POST /api/radio/queue`
+- `GET /api/tracks/<track_id>/dossier`
+- `GET /api/stream/<track_id>`

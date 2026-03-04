@@ -24,7 +24,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import xml.etree.ElementTree as ET
 
-from oracle.config import get_connection, DOWNLOADS_FOLDER
+from oracle.config import DOWNLOADS_FOLDER
+from oracle.db.schema import get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +168,7 @@ class Hunter:
         
         logger.info(f"  â†’ {len(targets)} targets ranked (top seeders: {targets[0].get('seeders', 0) if targets else 'n/a'})")
         if targets and targets[0]["is_cached"]:
-            logger.info(f"  âš¡ CACHED torrent available! Instant download ready.")
+            logger.info("  âš¡ CACHED torrent available! Instant download ready.")
         
         return targets
     
@@ -279,7 +280,7 @@ class Hunter:
                 data = response.json()
                 # If data is not empty, torrent is cached
                 if data.get(torrent_hash):
-                    logger.info(f"  âš¡ Torrent cached on Real-Debrid!")
+                    logger.info("  âš¡ Torrent cached on Real-Debrid!")
                     return True, None
             
             return False, None

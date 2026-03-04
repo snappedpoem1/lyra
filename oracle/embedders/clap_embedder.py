@@ -12,7 +12,17 @@ import time
 import logging
 import warnings
 
-import librosa
+# librosa is only needed for audio file loading. make it an optional dependency so
+# the rest of the embedder still works in environments where librosa may be
+# difficult to install (e.g. minimal containers).  If the import fails we
+# keep the name around as None and log a warning; callers will surface a
+# RuntimeError when they attempt to load audio.
+try:
+    import librosa
+except ImportError:  # pragma: no cover - optional dependency
+    librosa = None
+    logging.warning("librosa not available; audio embedding will be disabled")
+
 import numpy as np
 import torch
 from transformers import ClapModel, ClapProcessor
@@ -133,6 +143,12 @@ class CLAPEmbedder:
         raise RuntimeError(f"Failed to load CLAP model: {last_error}")
 
     def _load_audio(self, file_path: Path, duration: int = 30) -> Optional[np.ndarray]:
+        # librosa is required for audio loading. raise early if it's missing so
+        # callers can take appropriate action (logging/error return) instead of
+        # getting a confusing AttributeError deep in the call stack.
+        if librosa is None:
+            raise RuntimeError("librosa is not installed; audio loading unavailable")
+
         try:
             # Suppress librosa warnings about fallback
             with warnings.catch_warnings():
@@ -150,7 +166,12 @@ class CLAPEmbedder:
             return None
 
     def embed_audio(self, file_path: Path, duration: int = 30) -> Optional[np.ndarray]:
-        audio = self._load_audio(file_path, duration=duration)
+        try:
+            audio = self._load_audio(file_path, duration=duration)
+        except RuntimeError as exc:
+            logger.error(str(exc))
+            return None
+
         if audio is None:
             return None
 
@@ -209,7 +230,11 @@ class CLAPEmbedder:
 
         # Load audio in parallel (I/O bound)
         def _load(p) -> tuple:
-            return p, self._load_audio(p, duration=duration)
+            try:
+                return p, self._load_audio(p, duration=duration)
+            except RuntimeError as exc:
+                logger.error(str(exc))
+                return p, None
 
         with ThreadPoolExecutor(max_workers=min(8, len(file_paths))) as exe:
             loaded = list(exe.map(_load, file_paths))
@@ -296,7 +321,7 @@ def _main() -> None:
     load_dotenv(override=True)
     logging.basicConfig(level=logging.INFO)
     
-    print(f"Loading CLAP model (music-specific)...")
+    print("Loading CLAP model (music-specific)...")
     embedder = CLAPEmbedder()
     
     print(f"Model info: {embedder.get_model_info()}")

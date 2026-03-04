@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
 from typing import List
 
 from dotenv import load_dotenv
+from oracle.llm_config import diagnose_llm_config, load_llm_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = PROJECT_ROOT / "lyra_registry.db"
@@ -75,10 +77,31 @@ def _check_db() -> CheckResult:
 def _check_chroma_storage() -> CheckResult:
     if not CHROMA_PATH.exists():
         return CheckResult("ChromaDB (local)", "FAIL", f"Missing: {CHROMA_PATH}")
-    files = [p for p in CHROMA_PATH.rglob("*") if p.is_file()]
-    if not files:
-        return CheckResult("ChromaDB (local)", "WARNING", "chroma_storage is empty")
-    return CheckResult("ChromaDB (local)", "PASS", f"{len(files)} files in chroma_storage")
+    file_count = sum(1 for path in CHROMA_PATH.rglob("*") if path.is_file())
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        cursor = conn.cursor()
+        count = int(cursor.execute("SELECT COUNT(*) FROM embeddings").fetchone()[0] or 0)
+        conn.close()
+        if count <= 0:
+            return CheckResult(
+                "ChromaDB (local)",
+                "WARNING",
+                f"No embeddings indexed yet ({file_count} files on disk)",
+            )
+        return CheckResult(
+            "ChromaDB (local)",
+            "PASS",
+            f"{count} embeddings indexed ({file_count} files on disk)",
+        )
+    except Exception as exc:
+        if file_count == 0:
+            return CheckResult("ChromaDB (local)", "WARNING", "chroma_storage is empty")
+        return CheckResult(
+            "ChromaDB (local)",
+            "WARNING",
+            f"Storage present but collection check failed: {exc} ({file_count} files on disk)",
+        )
 
 
 def _check_env() -> CheckResult:
@@ -134,69 +157,20 @@ def _check_slskd() -> CheckResult:
     return CheckResult("slskd (T2)", "WARNING", f"HTTP {status} from {url}")
 
 
-def _check_lmstudio() -> CheckResult:
-    base = os.getenv("LYRA_LLM_BASE_URL", "http://localhost:1234/v1")
-    model = os.getenv("LYRA_LLM_MODEL", "")
-    url = base.rstrip("/") + "/models"
-    status, err = _http_get(url, timeout=3)
-    if status == 0:
-        return CheckResult("LM Studio (LLM)", "WARNING", "Offline - LLM classification disabled")
-    if status != 200:
-        return CheckResult("LM Studio (LLM)", "WARNING", f"HTTP {status} from {url}")
-
-    lms_path = shutil.which("lms")
-    if not lms_path:
-        return CheckResult(
-            "LM Studio (LLM)",
-            "WARNING",
-            "Live - API reachable (lms CLI missing, loaded-model check unavailable)",
-        )
-
-    try:
-        ps = subprocess.run(
-            [lms_path, "ps"],
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
-        out = (ps.stdout or "").strip()
-        merged = f"{ps.stdout or ''}\\n{ps.stderr or ''}"
-    except Exception as exc:
-        return CheckResult("LM Studio (LLM)", "WARNING", f"Live - unable to verify loaded model: {exc}")
-
-    if "No models are currently loaded" in merged:
-        expected = model or "LYRA_LLM_MODEL"
-        return CheckResult(
-            "LM Studio (LLM)",
-            "WARNING",
-            f"Live - no model loaded (expected: {expected}; run: lms load {expected})",
-        )
-
-    loaded_ids: list[str] = []
-    for raw_line in out.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("IDENTIFIER"):
-            continue
-        loaded_ids.append(line.split()[0])
-
-    if not loaded_ids and ps.returncode != 0:
-        detail = (merged.strip() or "unknown lms ps failure")[:180]
-        return CheckResult("LM Studio (LLM)", "WARNING", f"Live - lms ps failed: {detail}")
-    if not loaded_ids:
-        return CheckResult("LM Studio (LLM)", "WARNING", "Live - loaded-model state is unknown")
-
-    if model:
-        target = model.lower()
-        if any(mid.lower() == target for mid in loaded_ids):
-            return CheckResult("LM Studio (LLM)", "PASS", f"Live - loaded model: {model}")
-        preview = ", ".join(loaded_ids[:3])
-        return CheckResult(
-            "LM Studio (LLM)",
-            "WARNING",
-            f"Live - configured model not loaded ({model}); loaded: {preview}",
-        )
-
-    return CheckResult("LM Studio (LLM)", "PASS", f"Live - loaded model(s): {', '.join(loaded_ids[:3])}")
+def _check_llm() -> CheckResult:
+    config = load_llm_config()
+    diagnostics = diagnose_llm_config(config)
+    provider_name = f"LLM ({config.provider_type})"
+    if diagnostics.get("ok"):
+        selected = diagnostics.get("selected_model") or config.model or config.fallback_model or "none"
+        suffix = " via fallback" if diagnostics.get("fallback_used") else ""
+        return CheckResult(provider_name, "PASS", f"Ready: {selected}{suffix}")
+    status = "FAIL" if diagnostics.get("error_type") in {"provider_invalid", "model_missing"} else "WARNING"
+    detail = diagnostics.get("error", "LLM unavailable")
+    actions = diagnostics.get("actions") or []
+    if actions:
+        detail = f"{detail} | {actions[0]}"
+    return CheckResult(provider_name, status, detail)
 
 def _check_realdebrid() -> CheckResult:
     key = os.getenv("REAL_DEBRID_KEY") or os.getenv("REALDEBRID_API_KEY", "")
@@ -219,6 +193,21 @@ def _check_realdebrid() -> CheckResult:
         return CheckResult("Real-Debrid API", "WARNING", f"HTTP {r.status_code}")
     except Exception as exc:
         return CheckResult("Real-Debrid API", "WARNING", f"Could not reach API: {exc}")
+
+
+def _check_lidarr() -> CheckResult:
+    url = os.getenv("LIDARR_URL", "http://localhost:8686")
+    key = os.getenv("LIDARR_API_KEY", "")
+    if not key:
+        return CheckResult("Lidarr (discovery)", "WARNING", "No API key (LIDARR_API_KEY)")
+    status, err = _http_get(f"{url}/api/v1/system/status", timeout=4)
+    if status == 200:
+        return CheckResult("Lidarr (discovery)", "PASS", f"Live at {url}")
+    if status in (401, 403):
+        return CheckResult("Lidarr (discovery)", "WARNING", f"Running but API key invalid ({url})")
+    if status == 0:
+        return CheckResult("Lidarr (discovery)", "FAIL", f"Not reachable at {url} -- run: docker-compose up -d")
+    return CheckResult("Lidarr (discovery)", "WARNING", f"HTTP {status} from {url}")
 
 
 def _check_spotdl() -> CheckResult:
@@ -266,8 +255,10 @@ def run_doctor() -> List[CheckResult]:
         _check_rdtclient(),
         _check_slskd(),
         _check_spotdl(),
+        # Discovery
+        _check_lidarr(),
         # LLM
-        _check_lmstudio(),
+        _check_llm(),
     ]
     return checks
 

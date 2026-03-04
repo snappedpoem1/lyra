@@ -176,9 +176,12 @@ def search_discogs(artist: str, title: str) -> Optional[Dict[str, Any]]:
                     "per_page": 5,
                 },
                 headers=headers,
-                timeout=10,
+                timeout=30,
             )
 
+            if resp.status_code == 429:
+                time.sleep(2)
+                return {"_miss": True}
             if resp.status_code != 200:
                 return {"_miss": True}
 
@@ -239,9 +242,12 @@ def search_musicbrainz(artist: str, title: str) -> Optional[Dict[str, Any]]:
                     "inc": "isrcs+artist-credits+releases",
                 },
                 headers=headers,
-                timeout=10,
+                timeout=30,
             )
 
+            if resp.status_code in (429, 503):
+                time.sleep(2)
+                return {"_miss": True}
             if resp.status_code != 200:
                 return {"_miss": True}
 
@@ -330,8 +336,11 @@ def search_itunes(artist: str, title: str) -> Optional[Dict[str, Any]]:
                     "entity": "song",
                     "limit": 10,
                 },
-                timeout=10,
+                timeout=30,
             )
+            if resp.status_code == 429:
+                time.sleep(2)
+                return {"_miss": True}
             if resp.status_code != 200:
                 return {"_miss": True}
 

@@ -32,35 +32,38 @@ logger = logging.getLogger("oracle.fast_batch")
 # Defaults
 # ---------------------------------------------------------------------------
 DEFAULT_WORKERS = 4
-FAST_SLEEP_MIN = 0          # No yt-dlp inter-request sleep
-FAST_SLEEP_MAX = 1          # Minimal cap
-INTER_DOWNLOAD_SLEEP = 0    # No Python-level sleep between items
 
 
-def _download_one(query: str, config, db_path: Path, idx: int, total: int) -> dict:
-    """Download a single track. Runs inside a thread."""
-    from oracle.downloader import Downloader
+def _download_one(query: str, idx: int, total: int) -> dict:
+    """Download a single track via yt-dlp search. Runs inside a thread."""
+    from oracle.acquirers.ytdlp import YTDLPAcquirer
 
-    # Each thread gets its own Downloader (own yt-dlp instance, own DB conn)
-    dl = Downloader(config, db_path)
+    # Each thread gets its own acquirer (own yt-dlp instance, own temp dir)
+    acquirer = YTDLPAcquirer(staging_dir="downloads")
 
     tag = f"[{idx}/{total}]"
     try:
         t0 = time.perf_counter()
-        result = dl.search_and_download(query)
+        if " - " in query:
+            artist, title = query.split(" - ", 1)
+        else:
+            artist, title = "", query
+        result = acquirer.download_search(artist.strip(), title.strip())
         elapsed = time.perf_counter() - t0
 
-        if result.success:
-            fname = Path(result.filepath).name if result.filepath else "?"
+        if result.get("success"):
+            path = result.get("path", "")
+            fname = Path(path).name if path else "?"
             logger.info(f"{tag} OK  ({elapsed:.1f}s) {fname}")
             return {
                 "query": query, "success": True,
-                "artist": result.artist, "title": result.title,
-                "filepath": result.filepath, "elapsed": elapsed,
+                "artist": result.get("artist", ""), "title": result.get("title", ""),
+                "filepath": path, "elapsed": elapsed,
             }
         else:
-            logger.warning(f"{tag} FAIL ({elapsed:.1f}s) {result.error}")
-            return {"query": query, "success": False, "error": result.error, "elapsed": elapsed}
+            err = result.get("error", "unknown error")
+            logger.warning(f"{tag} FAIL ({elapsed:.1f}s) {err}")
+            return {"query": query, "success": False, "error": err, "elapsed": elapsed}
 
     except Exception as exc:
         logger.error(f"{tag} ERROR {exc}")
@@ -71,19 +74,14 @@ def fast_batch(
     queries: List[str],
     workers: int = DEFAULT_WORKERS,
     run_pipeline: bool = True,
-    sleep_min: int = FAST_SLEEP_MIN,
-    sleep_max: int = FAST_SLEEP_MAX,
 ) -> dict:
     """
-    Download tracks in parallel, then run scan â†’ index â†’ score.
+    Download tracks in parallel via yt-dlp, then run scan â†’ index â†’ score.
 
     Args:
         queries: List of search queries (artist - title format works best).
         workers: Number of concurrent download threads.
         run_pipeline: If True, auto-run scan â†’ index â†’ score after downloads.
-        sleep_min: yt-dlp sleep_interval (0 = fastest).
-        sleep_max: yt-dlp max_sleep_interval.
-
     Returns:
         Dict with download results and pipeline stats.
     """
@@ -92,14 +90,11 @@ def fast_batch(
     os.environ.setdefault("LYRA_WRITE_MODE", "apply_allowed")
 
     cfg = load_config()
-    cfg.sleep_min = sleep_min
-    cfg.sleep_max = sleep_max
-    db_path = Path(os.getenv("LYRA_DB_PATH", "lyra_registry.db"))
 
     total = len(queries)
     print(f"\n{'='*60}")
     print(f"  FAST BATCH â€” {total} tracks, {workers} workers")
-    print(f"  Sleep: {sleep_min}-{sleep_max}s | Pipeline: {'yes' if run_pipeline else 'no'}")
+    print(f"  Pipeline: {'yes' if run_pipeline else 'no'}")
     print(f"{'='*60}\n")
 
     # â”€â”€ Phase 1: Parallel Downloads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -108,7 +103,7 @@ def fast_batch(
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(_download_one, q.strip(), cfg, db_path, i, total): q
+            pool.submit(_download_one, q.strip(), i, total): q
             for i, q in enumerate(queries, 1)
             if q.strip()
         }
@@ -164,7 +159,7 @@ def fast_batch(
 
     # â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     print(f"\n{'='*60}")
-    print(f"  COMPLETE")
+    print("  COMPLETE")
     print(f"  Downloads: {ok}/{total} in {t_download:.1f}s")
     if pipeline_stats:
         print(f"  Scan:      {pipeline_stats.get('scan_time', 0)}s")
@@ -196,11 +191,9 @@ def _main():
 
     parser = argparse.ArgumentParser(description="Fast parallel batch downloader + pipeline")
     parser.add_argument("queries", nargs="*", help="Search queries")
-    parser.add_argument("--file", "-f", help="Text file with one query per line")
+    parser.add_argument("--file", "-", help="Text file with one query per line")
     parser.add_argument("--workers", "-w", type=int, default=DEFAULT_WORKERS, help="Parallel workers (default: 4)")
     parser.add_argument("--no-pipeline", action="store_true", help="Skip scan/index/score after download")
-    parser.add_argument("--sleep-min", type=int, default=FAST_SLEEP_MIN, help="yt-dlp sleep_interval")
-    parser.add_argument("--sleep-max", type=int, default=FAST_SLEEP_MAX, help="yt-dlp max_sleep_interval")
     args = parser.parse_args()
 
     queries = list(args.queries)
@@ -222,8 +215,6 @@ def _main():
         queries,
         workers=args.workers,
         run_pipeline=not args.no_pipeline,
-        sleep_min=args.sleep_min,
-        sleep_max=args.sleep_max,
     )
 
 

@@ -4,17 +4,175 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import shutil
 import time
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
 from dotenv import load_dotenv
 
 from oracle.config import LIBRARY_BASE
 from oracle.db.schema import get_connection, get_write_mode, get_content_hash_fast
 from oracle.classifier import classify_track
-from oracle.organizer import generate_target_path
+
+
+# ---------------------------------------------------------------------------
+# Canonical path helpers (formerly in organizer.py)
+# ---------------------------------------------------------------------------
+
+_RESERVED_NAMES = frozenset({
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+})
+
+
+def _sanitize_filename(text: str, max_length: int = 200) -> str:
+    """Sanitize text for use in filenames/folders."""
+    if not text:
+        return "Unknown"
+    sanitized = re.sub(r'[<>:"/\\|?*]', "_", text)
+    sanitized = sanitized.strip(". ")
+    sanitized = re.sub(r"[ _]+", " ", sanitized)
+    sanitized = sanitized.strip(". ")
+    if sanitized.upper().split(".")[0] in _RESERVED_NAMES:
+        sanitized = f"_{sanitized}"
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length].strip()
+    return sanitized or "Unknown"
+
+
+def _primary_album_artist(artist: str) -> str:
+    """Return the main album artist for folder naming."""
+    raw = (artist or "").strip()
+    if not raw:
+        return "Unknown Artist"
+    split_patterns = [
+        r"\s*,\s*",
+        r"\s+feat\.?\s+",
+        r"\s+featuring\s+",
+        r"\s+ft\.?\s+",
+        r"\s+with\s+",
+    ]
+    primary = raw
+    for pattern in split_patterns:
+        parts = re.split(pattern, primary, maxsplit=1, flags=re.IGNORECASE)
+        if parts and parts[0].strip() and parts[0].strip() != raw:
+            primary = parts[0].strip()
+            break
+    return primary or "Unknown Artist"
+
+
+def _layout_artist_album(
+    base: Path,
+    artist_safe: str,
+    album_artist_safe: str,
+    title_safe: str,
+    album_safe: str,
+    year_str: str,
+    track_str: str,
+    disc_prefix: str,
+    ext: str,
+    version_type: Optional[str],
+    artist_raw: Optional[str],
+    album_raw: Optional[str],
+) -> Tuple[Path, str]:
+    """Generate folder/filename for the artist_album preset."""
+    if version_type == "remix":
+        folder = (base / artist_safe / "Remixes" / album_safe
+                  if album_raw and album_raw.lower() != "unknown album"
+                  else base / artist_safe / "Remixes")
+        filename = f"{disc_prefix}{track_str} - {title_safe}{ext}"
+    elif version_type == "live":
+        folder = (base / artist_safe / "Live" / f"{album_safe}{year_str}"
+                  if album_raw and album_raw.lower() != "unknown album"
+                  else base / artist_safe / "Live")
+        filename = f"{disc_prefix}{track_str} - {title_safe}{ext}"
+    elif version_type == "cover":
+        folder = base / artist_safe / "Covers"
+        filename = f"{disc_prefix}{track_str} - {title_safe}{ext}"
+    else:
+        if artist_raw and artist_raw.lower() in {"various artists", "various", "compilation"}:
+            folder = base / "Various Artists" / album_safe
+            filename = f"{disc_prefix}{track_str} - {artist_safe} - {title_safe}{ext}"
+        elif album_raw and album_raw.lower() != "unknown album":
+            folder = base / album_artist_safe / f"{album_safe}{year_str}"
+            filename = f"{disc_prefix}{track_str} - {title_safe}{ext}"
+        else:
+            folder = base / album_artist_safe
+            filename = f"{disc_prefix}{track_str} - {title_safe}{ext}"
+    return folder, filename
+
+
+def generate_target_path(
+    track_id: str,
+    preset: str = "artist_album",
+    base_library: Optional[str] = None,
+) -> Optional[Path]:
+    """Generate ideal canonical path for a track based on preset.
+
+    Presets: artist_album, remix, live, compilation, various, flat_artist.
+    Returns canonical Path or None if track not found.
+    """
+    base = Path(base_library) if base_library else LIBRARY_BASE
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT artist, title, album, year, filepath, version_type, recording_mbid "
+        "FROM tracks WHERE track_id = ?",
+        (track_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        return None
+
+    artist, title, album, year, filepath, version_type, _ = row
+    ext = Path(filepath).suffix if filepath else ".flac"
+
+    artist_safe = _sanitize_filename(artist or "Unknown Artist")
+    album_artist_safe = _sanitize_filename(_primary_album_artist(artist or "Unknown Artist"))
+    title_safe = _sanitize_filename(title or "Unknown Title")
+    album_safe = _sanitize_filename(album or "Unknown Album")
+    track_str = "00"
+    disc_prefix = ""
+    year_str = f" ({year})" if year else ""
+
+    if version_type == "junk":
+        folder = base.parent / "_Quarantine" / "Junk"
+        return folder / f"{title_safe}{ext}"
+
+    if preset == "artist_album":
+        folder, filename = _layout_artist_album(
+            base, artist_safe, album_artist_safe, title_safe, album_safe,
+            year_str, track_str, disc_prefix, ext, version_type, artist, album,
+        )
+    elif preset == "remix":
+        folder = (base / album_artist_safe / "Remixes" / album_safe
+                  if album and album.lower() != "unknown album"
+                  else base / album_artist_safe / "Remixes")
+        filename = f"{disc_prefix}{track_str} - {title_safe}{ext}"
+    elif preset == "live":
+        folder = (base / album_artist_safe / "Live" / f"{album_safe}{year_str}"
+                  if album and album.lower() != "unknown album"
+                  else base / album_artist_safe / "Live")
+        filename = f"{disc_prefix}{track_str} - {title_safe}{ext}"
+    elif preset == "compilation":
+        folder = base / "Compilations" / album_safe
+        filename = f"{disc_prefix}{track_str} - {artist_safe} - {title_safe}{ext}"
+    elif preset == "various":
+        folder = base / "Various Artists" / album_safe
+        filename = f"{disc_prefix}{track_str} - {artist_safe} - {title_safe}{ext}"
+    elif preset == "flat_artist":
+        folder = base / album_artist_safe
+        filename = f"{disc_prefix}{track_str} - {title_safe}{ext}"
+    else:
+        return generate_target_path(track_id, preset="artist_album", base_library=str(base))
+
+    return folder / filename
 
 
 def generate_plan(
@@ -212,7 +370,7 @@ def generate_plan(
     print(f"\nPlan generated: {plan_id}")
     print(f"  JSON: {json_path}")
     print(f"  CSV: {csv_path}")
-    print(f"\nSummary:")
+    print("\nSummary:")
     for action_type, count in summary.items():
         if count > 0:
             print(f"  {action_type}: {count}")
@@ -340,7 +498,7 @@ def apply_plan(
                     to_hash = get_content_hash_fast(to_path)
                     
                     if from_hash != to_hash:
-                        print(f"ERROR: Hash mismatch after copy! Removing dest file.")
+                        print("ERROR: Hash mismatch after copy! Removing dest file.")
                         to_path.unlink()
                         raise RuntimeError("Hash verification failed")
                     
@@ -397,7 +555,7 @@ def apply_plan(
         
         print(f"\nJournal saved: {journal_path}")
     
-    print(f"\nResults:")
+    print("\nResults:")
     print(f"  Applied: {stats['applied']}")
     print(f"  Skipped: {stats['skipped']}")
     print(f"  Errors: {stats['errors']}")
@@ -454,7 +612,7 @@ def undo_plan(journal_path: str, dry_run: bool = False) -> Dict:
             if not dry_run:
                 # Check current file exists
                 if not to_path.exists():
-                    print(f"  WARNING: Destination file missing, skipping")
+                    print("  WARNING: Destination file missing, skipping")
                     stats["errors"] += 1
                     continue
                 
@@ -480,7 +638,7 @@ def undo_plan(journal_path: str, dry_run: bool = False) -> Dict:
     
     conn.close()
     
-    print(f"\nResults:")
+    print("\nResults:")
     print(f"  Reverted: {stats['reverted']}")
     print(f"  Errors: {stats['errors']}")
     

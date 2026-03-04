@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 import json
+import logging
 import time
 
 from dotenv import load_dotenv
 
 from oracle.db.schema import get_connection, get_write_mode
-from oracle.enrichers import musicbrainz, acoustid, discogs
+from oracle.enrichers import acoustid, discogs, genius, lastfm, musicbrainz, musicnn
+
+logger = logging.getLogger(__name__)
 
 
 def _cache_key(provider: str, track_id: str) -> str:
@@ -48,11 +51,43 @@ def _set_cached(cursor, provider: str, key: str, payload: Dict) -> None:
     )
 
 
+def _apply_tag_payload(cursor, track_id: str, payload: Dict, source: str) -> None:
+    if not isinstance(payload, dict):
+        return
+    tags = payload.get("tags") or payload.get("top_tags")
+    if not isinstance(tags, list) or not tags:
+        return
+    clean_tags = [str(t).strip().lower() for t in tags if str(t).strip()]
+    if not clean_tags:
+        return
+    genre = clean_tags[0]
+    subgenres = ",".join(clean_tags[:5])
+    cursor.execute(
+        """
+        UPDATE tracks
+        SET genre = CASE WHEN genre IS NULL OR trim(genre) = '' THEN ? ELSE genre END,
+            subgenres = CASE WHEN subgenres IS NULL OR trim(subgenres) = '' THEN ? ELSE subgenres END,
+            metadata_source = COALESCE(metadata_source, ?),
+            last_enriched_at = ?
+        WHERE track_id = ?
+        """,
+        (genre, subgenres, source, time.time(), track_id),
+    )
+
+
 def enrich_track(track_id: str, providers: Optional[List[str]] = None) -> Dict:
     if get_write_mode() != "apply_allowed":
         return {"error": "WRITE BLOCKED"}
 
-    providers = providers or ["musicbrainz", "acoustid", "discogs"]
+    providers = providers or [
+        "musicbrainz",
+        "acoustid",
+        "discogs",
+        "lastfm",
+        "genius",
+        "essentia",  # Replaces acousticbrainz (shut down 2022)
+        "musicnn",
+    ]
 
     conn = get_connection(timeout=10.0)
     cursor = conn.cursor()
@@ -70,7 +105,8 @@ def enrich_track(track_id: str, providers: Optional[List[str]] = None) -> Dict:
         cached = _get_cached(cursor, "musicbrainz", key)
         if cached is None:
             payload = musicbrainz.search_recording(artist, title, album, duration)
-            _set_cached(cursor, "musicbrainz", key, payload)
+            if payload:
+                _set_cached(cursor, "musicbrainz", key, payload)
             summary["musicbrainz"] = payload
         else:
             summary["musicbrainz"] = cached
@@ -83,7 +119,8 @@ def enrich_track(track_id: str, providers: Optional[List[str]] = None) -> Dict:
             if fp:
                 fingerprint, fp_duration = fp
                 payload = acoustid.lookup_fingerprint(fingerprint, fp_duration)
-                _set_cached(cursor, "acoustid", key, payload)
+                if payload:
+                    _set_cached(cursor, "acoustid", key, payload)
                 summary["acoustid"] = payload
         else:
             summary["acoustid"] = cached
@@ -93,13 +130,62 @@ def enrich_track(track_id: str, providers: Optional[List[str]] = None) -> Dict:
         cached = _get_cached(cursor, "discogs", key)
         if cached is None:
             payload = discogs.search_release(artist, album, year)
-            _set_cached(cursor, "discogs", key, payload)
+            if payload:
+                _set_cached(cursor, "discogs", key, payload)
             summary["discogs"] = payload
         else:
             summary["discogs"] = cached
 
+    if "lastfm" in providers and artist and title:
+        key = _cache_key("lastfm", track_id)
+        cached = _get_cached(cursor, "lastfm", key)
+        if cached is None:
+            payload = lastfm.build_track_profile(artist, title)
+            if payload:
+                _set_cached(cursor, "lastfm", key, payload)
+            summary["lastfm"] = payload
+            _apply_tag_payload(cursor, track_id, payload, "lastfm")
+        else:
+            summary["lastfm"] = cached
+
+    if "genius" in providers and artist and title:
+        key = _cache_key("genius", track_id)
+        cached = _get_cached(cursor, "genius", key)
+        if cached is None:
+            payload = genius.build_song_profile(artist, title)
+            if payload:
+                _set_cached(cursor, "genius", key, payload)
+            summary["genius"] = payload
+        else:
+            summary["genius"] = cached
+
+    if "essentia" in providers and filepath:
+        key = _cache_key("essentia", track_id)
+        cached = _get_cached(cursor, "essentia", key)
+        if cached is None:
+            from oracle.enrichers import essentia
+            payload = essentia.build_track_profile(filepath)
+            if payload:
+                _set_cached(cursor, "essentia", key, payload)
+            summary["essentia"] = payload
+        else:
+            summary["essentia"] = cached
+
+    if "musicnn" in providers and filepath:
+        key = _cache_key("musicnn", track_id)
+        cached = _get_cached(cursor, "musicnn", key)
+        if cached is None:
+            payload = musicnn.build_track_profile(filepath)
+            if payload:
+                _set_cached(cursor, "musicnn", key, payload)
+            summary["musicnn"] = payload
+            _apply_tag_payload(cursor, track_id, payload, "musicnn")
+        else:
+            summary["musicnn"] = cached
+
     conn.commit()
     conn.close()
+    logger.debug("enrich_track %s providers=%s", track_id, ",".join(providers))
     return summary
 
 

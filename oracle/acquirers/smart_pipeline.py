@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from oracle.config import LIBRARY_BASE, get_connection, guard_bypass_allowed, guard_bypass_reason
+from oracle.name_cleaner import target_path as _make_target_path
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +228,7 @@ class SmartAcquisition:
             album=canonical_album,
             spotify_uri=request.spotify_uri,
             skip_guard=self.skip_guard,
+            pre_validated=self.require_validation,
         )
 
         if not waterfall_result.success:
@@ -252,12 +254,20 @@ class SmartAcquisition:
         quality = self._infer_quality(acquired_path)
 
         ext = acquired_path.suffix
-        clean_filename = self._sanitize_filename(canonical_artist, canonical_title, ext)
-        final_path = self.library_path / clean_filename
+        final_path = _make_target_path(
+            self.library_path,
+            canonical_artist,
+            canonical_album or "Unknown Album",
+            None,   # track_num not known at acquisition stage
+            canonical_title,
+            ext.lstrip("."),
+        )
 
         counter = 1
         while final_path.exists():
-            final_path = self.library_path / f"{final_path.stem} ({counter}){ext}"
+            final_path = final_path.with_name(
+                f"{final_path.stem}_{counter}{final_path.suffix}"
+            )
             counter += 1
 
         import shutil

@@ -1,60 +1,82 @@
-# ── Python ──────────────────────────────────────────────────
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
-dist/
-build/
 *.egg
 
-# ── Virtual Environment ─────────────────────────────────────
+# Virtual Environment
 .venv/
+.venv*/
 venv/
 ENV/
 
-# ── IDE ─────────────────────────────────────────────────────
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# ── Environment & Secrets ───────────────────────────────────
+# Secrets & Credentials
 .env
-.spotify_cache
+.env.*
+!.env.template
 *.pem
 *.key
+/.spotify_cache
+scripts/.spotify_cache
 
-# ── Lyra Data (large / machine-generated) ───────────────────
-lyra_registry.db
-lyra_registry.db-journal
-lyra_registry.db-wal
+# Databases (all runtime SQLite)
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Build Artifacts
+dist/
+build/
+node_modules/
+
+# Runtime Data (large / machine-generated / personal)
 chroma_storage/
 hf_cache/
 downloads/
 staging/
 logs/
+journal.jsonl
+Reports/
+Backups/
+/playlists/
+/data/
 
-# ── Archives & Backups ──────────────────────────────────────
+# Beets
+.beets/
+
+# Archives & Binaries
 _archive/
 _backups/
-
-# Ignore Prowlarr database lock file
-Lyra_Oracle_System/config/prowlarr/prowlarr.db-shm
-Backups/
 *.rar
 *.zip
+*.gguf
+*.bak
+*.tmp
 
-# ── OS ──────────────────────────────────────────────────────
+# OS
 Thumbs.db
 Desktop.ini
 .DS_Store
 
-*.gguf
-data/
-node_modules/
-.cache/
+# Claude Code
+.claude/**
+!.claude/CLAUDE.md
+!.claude/AGENTS.md
+!.claude/settings.json
+!.claude/memory/
+!.claude/memory/MEMORY.md
+!.claude/memory/SESSIONS.md
 
-# Prevent oversized/index lock artifacts from entering commits.
-data/node/data/search.db
-*.bak
+# Docker runtime config (mounted volumes)
+Lyra_Oracle_System/config/prowlarr/

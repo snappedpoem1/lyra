@@ -136,7 +136,7 @@ def _sigmoid(x: float) -> float:
 
 @lru_cache(maxsize=1)
 def _get_embedder() -> CLAPEmbedder:
-    return CLAPEmbedder(model_name=MODEL_NAME)
+    return CLAPEmbedder(model_name=MODEL_NAME, use_fallback=False)
 
 
 def _get_store() -> LyraChromaStore:

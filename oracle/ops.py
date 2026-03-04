@@ -78,7 +78,7 @@ def _scope_environment() -> Dict[str, object]:
 
 def _write_markdown_report(path: Path, payload: Dict[str, object]) -> None:
     lines: List[str] = []
-    lines.append(f"# Lyra Ops Iteration Report")
+    lines.append("# Lyra Ops Iteration Report")
     lines.append("")
     lines.append(f"- Generated: {datetime.now().isoformat(timespec='seconds')}")
     lines.append(f"- Project: `{PROJECT_ROOT}`")

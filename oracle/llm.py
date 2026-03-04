@@ -1,15 +1,4 @@
-"""LLM client adapter for Lyra Oracle.
-
-Uses the OpenAI SDK pointed at LM Studio's OpenAI-compatible server
-(default: http://localhost:1234/v1).
-
-Features:
-- JSON Schema structured output (grammar-constrained, guaranteed valid JSON)
-- Streaming via generator
-- Tool/function calling
-- Auto-detect loaded model when none is configured
-- Graceful no-op when LM Studio is offline or provider='none'
-"""
+"""Provider-aware LLM client adapter for Lyra Oracle."""
 
 from __future__ import annotations
 
@@ -19,7 +8,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generator, List, Optional
 
-from oracle.config import get_llm_settings
+import requests
+from oracle.llm_config import OPENAI_COMPATIBLE_PROVIDERS, diagnose_llm_config, load_llm_config, resolve_llm_config
 
 logger = logging.getLogger(__name__)
 _STATUS_CACHE: Dict[str, Any] = {}
@@ -34,6 +24,8 @@ class LLMStatus:
     model: str
     base_url: str
     error: str = ""
+    error_type: str = ""
+    actions: List[str] = field(default_factory=list)
 
     def as_dict(self) -> Dict[str, Any]:
         payload = {
@@ -44,6 +36,10 @@ class LLMStatus:
         }
         if self.error:
             payload["error"] = self.error
+        if self.error_type:
+            payload["error_type"] = self.error_type
+        if self.actions:
+            payload["actions"] = list(self.actions)
         return payload
 
 
@@ -54,101 +50,81 @@ class LLMClient:
     model: str
     api_key: str
     timeout_seconds: int
+    fallback_model: str = ""
+    supports_model_listing: bool = False
+    supports_chat_completions: bool = False
+    supports_anthropic_messages: bool = False
     _cached_models: List[str] = field(default_factory=list)
     _client: Any = field(default=None, repr=False)
 
     @classmethod
     def from_env(cls) -> "LLMClient":
-        settings = get_llm_settings()
+        config = resolve_llm_config(load_llm_config(resolve_endpoint=False))
         return cls(
-            provider=settings["provider"],
-            base_url=settings["base_url"],
-            model=settings["model"],
-            api_key=settings["api_key"],
-            timeout_seconds=settings["timeout_seconds"],
+            provider=config.provider_type,
+            base_url=config.base_url,
+            model=config.model,
+            api_key=config.api_key,
+            timeout_seconds=config.timeout_seconds,
+            fallback_model=config.fallback_model,
+            supports_model_listing=config.supports_model_listing,
+            supports_chat_completions=config.supports_chat_completions,
+            supports_anthropic_messages=config.supports_anthropic_messages,
         )
 
-    # ------------------------------------------------------------------ #
-    # Internal
-    # ------------------------------------------------------------------ #
+    def _diagnose(self) -> Dict[str, Any]:
+        return diagnose_llm_config()
+
+    def _available(self) -> bool:
+        return self.provider != "disabled"
 
     def _get_client(self):
-        """Lazy-init the OpenAI SDK client."""
         if self._client is None:
             from openai import OpenAI
             self._client = OpenAI(
                 base_url=self.base_url.rstrip("/"),
-                api_key=self.api_key or "lm-studio",  # LM Studio ignores the key
+                api_key=self.api_key or "lyra-local",
                 timeout=float(self.timeout_seconds),
                 max_retries=1,
             )
         return self._client
 
-    def _available(self) -> bool:
-        return self.provider != "none"
-
-    def _resolve_model(self) -> str:
-        """Return configured model, or auto-detect first loaded model."""
-        if self.model:
-            return self.model
-        models = self._fetch_models()
-        if models:
-            logger.info(f"[LLM] Auto-detected model: {models[0]}")
-            self.model = models[0]
-        return self.model
-
     def _fetch_models(self) -> List[str]:
-        if not self._available():
+        if not self.supports_model_listing:
             return []
         try:
             client = self._get_client()
             response = client.models.list()
-            models = [m.id for m in response.data if m.id]
+            models = [m.id for m in response.data if getattr(m, "id", None)]
             self._cached_models = models
             return models
-        except Exception:
+        except Exception as exc:
+            logger.warning("[LLM] model list failed: %s", exc)
             return []
 
-    # ------------------------------------------------------------------ #
-    # Public API
-    # ------------------------------------------------------------------ #
+    def _resolve_model(self) -> tuple[str, Optional[Dict[str, Any]]]:
+        diagnostics = self._diagnose()
+        if diagnostics.get("ok"):
+            selected = diagnostics.get("selected_model") or self.model or self.fallback_model
+            if diagnostics.get("fallback_used") and selected:
+                self.model = selected
+            return selected, None
+        return "", diagnostics
 
     def check_available(self, probe: bool = False) -> LLMStatus:
-        if not self._available():
-            return LLMStatus(ok=False, provider=self.provider, model=self.model,
-                             base_url=self.base_url, error="provider=none")
+        diagnostics = self._diagnose()
+        if not diagnostics.get("ok"):
+            return LLMStatus(
+                ok=False,
+                provider=self.provider,
+                model=diagnostics.get("selected_model") or self.model,
+                base_url=self.base_url,
+                error=diagnostics.get("error", "LLM unavailable"),
+                error_type=diagnostics.get("error_type", ""),
+                actions=diagnostics.get("actions", []),
+            )
 
-        models = self._fetch_models()
-        if self.model:
-            model = self.model
-            if not models:
-                return LLMStatus(
-                    ok=False,
-                    provider=self.provider,
-                    model=model,
-                    base_url=self.base_url,
-                    error="model list unavailable or no model loaded",
-                )
-            if model not in models:
-                return LLMStatus(
-                    ok=False,
-                    provider=self.provider,
-                    model=model,
-                    base_url=self.base_url,
-                    error=f"configured model not loaded: {model}",
-                )
-        else:
-            if not models:
-                return LLMStatus(
-                    ok=False,
-                    provider=self.provider,
-                    model="",
-                    base_url=self.base_url,
-                    error="no model loaded in local LLM server",
-                )
-            model = models[0]
-            self.model = model
-
+        model = diagnostics.get("selected_model") or self.model or self.fallback_model
         if probe:
             probe_result = self.chat(
                 [{"role": "user", "content": "ping"}],
@@ -163,50 +139,25 @@ class LLMClient:
                     model=model,
                     base_url=self.base_url,
                     error=probe_result.get("error", "chat probe failed"),
+                    error_type=probe_result.get("error_type", ""),
+                    actions=probe_result.get("actions", []),
                 )
 
         return LLMStatus(ok=True, provider=self.provider, model=model, base_url=self.base_url)
 
-    def chat(
+    def _chat_openai_compatible(
         self,
+        model: str,
         messages: List[Dict[str, str]],
-        temperature: float = 0.7,
-        max_tokens: int = 512,
-        json_mode: bool = False,
-        json_schema: Optional[Dict[str, Any]] = None,
-        system: Optional[str] = None,
-        timeout: Optional[float] = None,
+        temperature: float,
+        max_tokens: int,
+        json_mode: bool,
+        json_schema: Optional[Dict[str, Any]],
+        timeout: Optional[float],
     ) -> Dict[str, Any]:
-        """Send a chat completion request.
-
-        Args:
-            messages: List of role/content dicts.
-            temperature: Sampling temperature.
-            max_tokens: Max tokens to generate.
-            json_mode: Simple JSON object mode (any valid JSON).
-            json_schema: Full JSON Schema dict for grammar-constrained output.
-                         Overrides json_mode when provided.
-            system: Optional system prompt prepended to messages.
-            timeout: Optional override for the HTTP timeout.
-
-        Returns:
-            Dict with 'ok', 'text', and optionally 'data' (parsed JSON).
-        """
-        if not self._available():
-            return {"ok": False, "error": "LLM not configured", "text": ""}
-
-        model = self._resolve_model()
-        if not model:
-            return {"ok": False, "error": "no model loaded in LM Studio", "text": ""}
-
-        all_messages = []
-        if system:
-            all_messages.append({"role": "system", "content": system})
-        all_messages.extend(messages)
-
         kwargs: Dict[str, Any] = {
             "model": model,
-            "messages": all_messages,
+            "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
@@ -228,29 +179,111 @@ class LLMClient:
             kwargs["response_format"] = {"type": "json_object"}
             is_json = True
 
+        response = self._get_client().chat.completions.create(**kwargs)
+        content = response.choices[0].message.content or ""
+        if is_json:
+            try:
+                data = json.loads(content)
+                return {"ok": True, "data": data, "text": content, "model": model, "provider": self.provider}
+            except json.JSONDecodeError as exc:
+                return {"ok": False, "error": f"JSON parse: {exc}", "text": content}
+        return {"ok": True, "text": content, "model": model, "provider": self.provider}
+
+    def _chat_anthropic(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        temperature: float,
+        max_tokens: int,
+        timeout: Optional[float],
+    ) -> Dict[str, Any]:
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        response = requests.post(
+            f"{self.base_url.rstrip('/')}/messages",
+            headers=headers,
+            json=payload,
+            timeout=timeout or self.timeout_seconds,
+        )
+        if response.status_code >= 400:
+            return {
+                "ok": False,
+                "error": f"HTTP {response.status_code}: {response.text[:240]}",
+                "error_type": "anthropic_messages_error",
+            }
+        payload = response.json()
+        content_blocks = payload.get("content") or []
+        text = "".join(block.get("text", "") for block in content_blocks if block.get("type") == "text")
+        return {"ok": True, "text": text, "model": model, "provider": self.provider}
+
+    def chat(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 512,
+        json_mode: bool = False,
+        json_schema: Optional[Dict[str, Any]] = None,
+        system: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        if not self._available():
+            return {"ok": False, "error": "LLM not configured", "text": "", "error_type": "provider_disabled"}
+
+        model, diagnostics = self._resolve_model()
+        if diagnostics:
+            return {
+                "ok": False,
+                "error": diagnostics.get("error", "LLM unavailable"),
+                "text": "",
+                "error_type": diagnostics.get("error_type", ""),
+                "actions": diagnostics.get("actions", []),
+            }
+
+        all_messages = []
+        if system:
+            all_messages.append({"role": "system", "content": system})
+        all_messages.extend(messages)
+
         try:
-            client = self._get_client()
-            response = client.chat.completions.create(**kwargs)
-            content = response.choices[0].message.content or ""
-
-            if is_json:
-                try:
-                    data = json.loads(content)
-                    return {"ok": True, "data": data, "text": content,
-                            "model": model, "provider": self.provider}
-                except json.JSONDecodeError as exc:
-                    logger.warning(f"[LLM] JSON parse failed: {exc}; raw={content[:200]}")
-                    return {"ok": False, "error": f"JSON parse: {exc}", "text": content}
-
-            return {"ok": True, "text": content, "model": model, "provider": self.provider}
-
+            if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
+                return self._chat_openai_compatible(
+                    model=model,
+                    messages=all_messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    json_mode=json_mode,
+                    json_schema=json_schema,
+                    timeout=timeout,
+                )
+            if self.provider == "anthropic":
+                if json_mode or json_schema:
+                    return {
+                        "ok": False,
+                        "error": "Anthropic path does not support structured JSON mode in this adapter yet.",
+                        "text": "",
+                        "error_type": "unsupported_feature",
+                    }
+                return self._chat_anthropic(
+                    model=model,
+                    messages=all_messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    timeout=timeout,
+                )
+            return {"ok": False, "error": f"Unsupported provider: {self.provider}", "text": "", "error_type": "provider_invalid"}
         except Exception as exc:
             err = str(exc)
-            if "connection" in err.lower() or "refused" in err.lower():
-                logger.debug(f"[LLM] LM Studio offline: {exc}")
-            else:
-                logger.warning(f"[LLM] Error: {exc}")
-            return {"ok": False, "error": err, "text": ""}
+            logger.warning("[LLM] Error: %s", err)
+            return {"ok": False, "error": err, "text": "", "error_type": "request_failed"}
 
     def stream(
         self,
@@ -259,12 +292,14 @@ class LLMClient:
         max_tokens: int = 1024,
         system: Optional[str] = None,
     ) -> Generator[str, None, None]:
-        """Stream a chat completion, yielding text chunks as they arrive."""
-        if not self._available():
+        if self.provider not in OPENAI_COMPATIBLE_PROVIDERS:
+            result = self.chat(messages, temperature=temperature, max_tokens=max_tokens, system=system)
+            if result.get("ok") and result.get("text"):
+                yield result["text"]
             return
 
-        model = self._resolve_model()
-        if not model:
+        model, diagnostics = self._resolve_model()
+        if diagnostics or not model:
             return
 
         all_messages = []
@@ -273,8 +308,7 @@ class LLMClient:
         all_messages.extend(messages)
 
         try:
-            client = self._get_client()
-            with client.chat.completions.stream(
+            with self._get_client().chat.completions.stream(
                 model=model,
                 messages=all_messages,
                 temperature=temperature,
@@ -284,7 +318,7 @@ class LLMClient:
                     if text:
                         yield text
         except Exception as exc:
-            logger.warning(f"[LLM] Stream error: {exc}")
+            logger.warning("[LLM] Stream error: %s", exc)
 
     def classify(
         self,
@@ -293,21 +327,6 @@ class LLMClient:
         categories: List[str],
         context: str = "",
     ) -> Dict[str, Any]:
-        """Classify a track into one of the given categories using JSON Schema mode.
-
-        Uses grammar-constrained output â€” result is guaranteed to be valid JSON
-        matching the schema. qwen2.5-14b-instruct at temperature=0.0 is reliable
-        for this task.
-
-        Args:
-            artist: Track artist.
-            title: Track title.
-            categories: List of allowed category strings.
-            context: Optional additional context (album, filename, bitrate).
-
-        Returns:
-            Dict with 'category', 'confidence' (0-1), 'reason', 'ok'.
-        """
         cats_str = ", ".join(f'"{c}"' for c in categories)
         prompt = (
             f"Artist: {artist}\nTitle: {title}\n"
@@ -338,8 +357,7 @@ class LLMClient:
             ),
         )
         if not result.get("ok") or "data" not in result:
-            return {"ok": False, "category": None, "confidence": 0.0,
-                    "reason": result.get("error", "unknown")}
+            return {"ok": False, "category": None, "confidence": 0.0, "reason": result.get("error", "unknown")}
         data = result["data"]
         return {
             "ok": True,
@@ -348,34 +366,23 @@ class LLMClient:
             "reason": data.get("reason", ""),
         }
 
-    def narrate_playlist(
-        self,
-        tracks: List[Dict[str, str]],
-        arc_type: str = "journey",
-    ) -> str:
-        """Generate a short poetic description of a playlist's emotional arc.
-
-        Args:
-            tracks: List of dicts with 'artist' and 'title' keys.
-            arc_type: Description of the intended arc (e.g. 'late night descent').
-
-        Returns:
-            Prose narrative string (streamed, returned as complete string).
-        """
+    def narrate_playlist(self, tracks: List[Dict[str, str]], arc_type: str = "journey") -> str:
         track_list = "\n".join(
-            f"{i+1}. {t.get('artist','?')} - {t.get('title','?')}"
+            f"{i+1}. {t.get('artist', '?')} - {t.get('title', '?')}"
             for i, t in enumerate(tracks[:20])
         )
         prompt = f"Arc: {arc_type}\n\n{track_list}\n\nDescribe this journey in 2-3 sentences."
-        chunks = list(self.stream(
-            [{"role": "user", "content": prompt}],
-            temperature=0.75,
-            max_tokens=150,
-            system=(
-                "You are Lyra, a poetic music intelligence. "
-                "Describe playlists with evocative, sensory language. Be concise."
-            ),
-        ))
+        chunks = list(
+            self.stream(
+                [{"role": "user", "content": prompt}],
+                temperature=0.75,
+                max_tokens=150,
+                system=(
+                    "You are Lyra, a poetic music intelligence. "
+                    "Describe playlists with evocative, sensory language. Be concise."
+                ),
+            )
+        )
         return "".join(chunks)
 
     def list_models(self) -> List[str]:
@@ -385,17 +392,28 @@ class LLMClient:
 def get_llm_status(force_refresh: bool = False) -> Dict[str, Any]:
     global _STATUS_CACHE, _STATUS_CACHE_TS
     now = time.time()
-    if (
-        not force_refresh
-        and _STATUS_CACHE
-        and (now - _STATUS_CACHE_TS) < _STATUS_CACHE_TTL_SECONDS
-    ):
+    if not force_refresh and _STATUS_CACHE and (now - _STATUS_CACHE_TS) < _STATUS_CACHE_TTL_SECONDS:
         return dict(_STATUS_CACHE)
 
-    client = LLMClient.from_env()
-    status = client.check_available(probe=False)
-    payload = status.as_dict()
-    payload["status"] = "ok" if status.ok else "unavailable"
+    config = load_llm_config(resolve_endpoint=False)
+    diagnostics = diagnose_llm_config(config, resolve_endpoint=False)
+    payload = {
+        "ok": bool(diagnostics.get("ok")),
+        "provider": config.provider_type,
+        "model": diagnostics.get("selected_model") or config.model or config.fallback_model,
+        "base_url": config.base_url,
+        "status": "ok" if diagnostics.get("ok") else "unavailable",
+    }
+    if diagnostics.get("error"):
+        payload["error"] = diagnostics["error"]
+    if diagnostics.get("error_type"):
+        payload["error_type"] = diagnostics["error_type"]
+    if diagnostics.get("actions"):
+        payload["actions"] = list(diagnostics["actions"])
+    if diagnostics.get("fallback_used"):
+        payload["fallback_used"] = True
+    payload["fallback_model"] = config.fallback_model
+    payload["supports_model_listing"] = config.supports_model_listing
     _STATUS_CACHE = dict(payload)
     _STATUS_CACHE_TS = now
     return payload

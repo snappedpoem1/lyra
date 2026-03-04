@@ -1,0 +1,6 @@
+node_modules/
+dist/
+renderer-app/node_modules/
+renderer-app/dist/
+out/
+oracle-engine.exe

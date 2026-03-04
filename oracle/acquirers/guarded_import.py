@@ -15,8 +15,8 @@ from typing import Dict, List, Set, Tuple
 
 import mutagen
 
-from oracle.acquirers.guard import guard_file, GuardResult
-from oracle.config import LIBRARY_BASE
+from oracle.acquirers.guard import guard_file, move_rejected_file, GuardResult
+from oracle.config import LIBRARY_BASE, REJECTED_FOLDER
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +107,7 @@ def process_downloads(
     """
     downloads_folder = Path(downloads_folder)
     library_folder = Path(library_folder)
-    quarantine_folder = downloads_folder.parent / "quarantine"
-    
+
     if not downloads_folder.exists():
         return {"error": f"Downloads folder not found: {downloads_folder}"}
     
@@ -146,17 +145,9 @@ def process_downloads(
                         logger.error(f"Failed to delete {filepath}: {e}")
                         action_taken = "delete_failed"
                 else:
-                    # Move to quarantine
-                    try:
-                        quarantine_folder.mkdir(parents=True, exist_ok=True)
-                        dest = quarantine_folder / filepath.name
-                        if dest.exists():
-                            dest = quarantine_folder / f"{filepath.stem}_{int(time.time())}{filepath.suffix}"
-                        shutil.move(str(filepath), str(dest))
-                        action_taken = "quarantined"
-                    except Exception as e:
-                        logger.error(f"Failed to quarantine {filepath}: {e}")
-                        action_taken = "quarantine_failed"
+                    # Route to REJECTED_FOLDER sub-directory via guard helper
+                    dest = move_rejected_file(filepath, guard_result)
+                    action_taken = "rejected" if dest else "reject_failed"
             
             logger.info(f"âŒ REJECTED: {filepath.name[:50]} â†’ {guard_result.rejection_reason[:40]} ({action_taken})")
             
@@ -173,14 +164,15 @@ def process_downloads(
             
             if not dry_run:
                 try:
-                    quarantine_folder.mkdir(parents=True, exist_ok=True)
-                    dest = quarantine_folder / filepath.name
+                    uncertain = REJECTED_FOLDER / "Uncertain"
+                    uncertain.mkdir(parents=True, exist_ok=True)
+                    dest = uncertain / filepath.name
                     shutil.move(str(filepath), str(dest))
-                    action_taken = "quarantined"
+                    action_taken = "moved_uncertain"
                 except Exception as e:
-                    logger.error(f"Failed to quarantine {filepath}: {e}")
-            
-            logger.warning(f"âš ï¸ LOW CONFIDENCE ({guard_result.confidence:.0%}): {filepath.name[:50]} ({action_taken})")
+                    logger.error(f"Failed to move low-confidence file {filepath}: {e}")
+
+            logger.warning(f"⚠️ LOW CONFIDENCE ({guard_result.confidence:.0%}): {filepath.name[:50]} ({action_taken})")
             
         else:
             # ALLOWED - import to library
@@ -330,13 +322,13 @@ if __name__ == "__main__":
         print(f"Rejected: {len(rejected)}")
         
         if rejected:
-            print(f"\nâŒ REJECTED:")
+            print("\nâŒ REJECTED:")
             for filepath, result in rejected:
                 print(f"  â€¢ {filepath.name[:50]}")
                 print(f"    Reason: {result.rejection_reason}")
         
         if allowed:
-            print(f"\nâœ… ALLOWED:")
+            print("\nâœ… ALLOWED:")
             for filepath, result in allowed[:10]:
                 print(f"  â€¢ {result.artist[:25]:25s} - {result.title[:30]}")
             if len(allowed) > 10:
@@ -352,7 +344,7 @@ if __name__ == "__main__":
         )
         
         print(f"\n{'='*60}")
-        print(f"IMPORT SUMMARY")
+        print("IMPORT SUMMARY")
         print(f"{'='*60}")
         print(f"Total scanned: {summary.get('total', 0)}")
         print(f"Imported: {summary.get('imported', 0)}")
@@ -374,7 +366,7 @@ if __name__ == "__main__":
         print(f"Junk: {audit['junk']}")
         
         if audit["junk_files"]:
-            print(f"\nâŒ JUNK FILES:")
+            print("\nâŒ JUNK FILES:")
             for item in audit["junk_files"][:20]:
                 filepath = Path(item["file"])
                 print(f"  â€¢ {filepath.name[:50]}")
@@ -386,7 +378,7 @@ if __name__ == "__main__":
         result = quarantine_junk(library, dry_run=args.dry_run)
         
         print(f"\n{'='*60}")
-        print(f"QUARANTINE RESULTS")
+        print("QUARANTINE RESULTS")
         print(f"{'='*60}")
         
         if result.get("dry_run"):

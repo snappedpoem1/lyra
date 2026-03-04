@@ -9,8 +9,18 @@ import os
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-import chromadb
-from chromadb.config import Settings
+
+# chromadb is an optional dependency; if it fails to import we allow the
+# module to load but any functionality that depends on it will raise at
+# runtime. This is useful for environments where chromadb isn't
+# installed or fails to build.
+try:
+    import chromadb
+    from chromadb.config import Settings
+except Exception:  # pragma: no cover - fallbacks for missing package
+    chromadb = None  # type: ignore
+    Settings = None  # type: ignore
+
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +34,16 @@ def get_write_mode() -> str:
     if mode not in VALID_WRITE_MODES:
         return "plan_only"
     return mode
+
+
+
+
+def _require_chromadb() -> None:
+    """Raise a RuntimeError if the chromadb library is unavailable."""
+    if chromadb is None:
+        raise RuntimeError(
+            "Chromadb package is not available; install it to use LyraChromaStore."
+        )
 
 
 def _normalize_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
@@ -56,6 +76,13 @@ class LyraChromaStore:
     allow_reset: bool = False
 
     def __post_init__(self) -> None:
+        # ensure chromadb was imported correctly before doing any work
+        if chromadb is None:
+            raise RuntimeError(
+                "Cannot initialize LyraChromaStore because the chromadb library "
+                "failed to import. Install chromadb and try again."
+            )
+
         persist_path = Path(self.persist_dir)
         if not persist_path.is_absolute():
             persist_path = PROJECT_ROOT / persist_path
@@ -74,6 +101,7 @@ class LyraChromaStore:
             self._init_client()
 
     def _init_client(self) -> None:
+        _require_chromadb()
         self.persist_dir.mkdir(parents=True, exist_ok=True)
         os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
         os.environ.setdefault("CHROMA_TELEMETRY", "FALSE")
@@ -94,13 +122,16 @@ class LyraChromaStore:
         )
 
     def _persist(self) -> None:
+        _require_chromadb()
         if hasattr(self.client, "persist"):
             self.client.persist()
 
     def _writes_allowed(self) -> bool:
+        _require_chromadb()
         return get_write_mode() == "apply_allowed"
 
     def upsert(self, track_id: str, embedding: List[float], metadata: Dict[str, Any]) -> bool:
+        _require_chromadb()
         if not self._writes_allowed():
             raise RuntimeError("WRITE BLOCKED: LYRA_WRITE_MODE must be apply_allowed.")
 
@@ -119,6 +150,7 @@ class LyraChromaStore:
         embeddings: List[List[float]],
         metadatas: List[Dict[str, Any]]
     ) -> bool:
+        _require_chromadb()
         if not self._writes_allowed():
             raise RuntimeError("WRITE BLOCKED: LYRA_WRITE_MODE must be apply_allowed.")
 
@@ -132,6 +164,7 @@ class LyraChromaStore:
         return True
 
     def search(self, query_embedding: List[float], n: int = 10, where: Optional[Dict[str, Any]] = None):
+        _require_chromadb()
         return self.collection.query(
             query_embeddings=[query_embedding],
             n_results=n,
@@ -144,6 +177,7 @@ class LyraChromaStore:
         Returns:
             Dict of track_id -> embedding vector.
         """
+        _require_chromadb()
         ids = [tid for tid in track_ids if tid]
         if not ids:
             return {}
@@ -170,6 +204,7 @@ class LyraChromaStore:
         return out
 
     def verify_persistence(self) -> bool:
+        _require_chromadb()
         try:
             return self.collection.count() > 0
         except Exception:

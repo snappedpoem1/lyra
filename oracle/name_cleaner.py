@@ -1,251 +1,169 @@
-"""Name cleaner for Lyra Oracle - removes junk from track titles and filenames."""
+"""oracle/name_cleaner.py — single source of truth for all naming logic.
 
+All modules (guard, scanner, normalizer, organizer, smart_pipeline, qobuz)
+should import from here instead of duplicating regex.
+
+Functions
+---------
+clean_artist(s)         → (primary_artist, [featured_artists])
+clean_title(s)          → (clean_title, [featured_artists])
+to_folder_name(s)       → filesystem-safe, spaces→underscores, max 100 chars
+to_file_stem(n, title)  → Picard-style "01_Title_Name"
+target_path(...)        → canonical library Path matching Picard layout
+"""
 from __future__ import annotations
 
 import re
-from typing import Dict, Tuple
 from pathlib import Path
+from typing import List, Optional, Tuple
 
-# Patterns to remove from titles (case-insensitive)
-JUNK_PATTERNS = [
-    # YouTube junk
-    r'\(official\s+(music\s+)?video\)',
-    r'\[official\s+(music\s+)?video\]',
-    r'\(official\s+audio\)',
-    r'\[official\s+audio\]',
-    r'\(lyric\s+video\)',
-    r'\[lyric\s+video\]',
-    r'\(music\s+video\)',
-    r'\[music\s+video\]',
-    
-    # Quality indicators
-    r'\(hq\)',
-    r'\[hq\]',
-    r'\(hd\)',
-    r'\[hd\]',
-    r'\(4k\s*remaster(?:ed)?\)',
-    r'\[4k\s*remaster(?:ed)?\]',
-    r'\(4k\)',
-    r'\[4k\]',
-    r'\bremaster(?:ed)?\b',
-    r'1080p',
-    r'720p',
-    r'4k',
-    
-    # YouTube IDs (11 chars in brackets/parens at end)
-    r'\[[a-zA-Z0-9_-]{11}\]$',
-    r'\([a-zA-Z0-9_-]{11}\)$',
-    
-    # Common suffixes
-    r'\(audio\)',
-    r'\[audio\]',
-    r'\(explicit\)',
-    r'\[explicit\]',
-    
-    # Year patterns at end (but keep in album)
-    r'\(\d{4}\)$',
-    r'\[\d{4}\]$',
-]
+# ---------------------------------------------------------------------------
+# Delegate to the authoritative implementations — no logic duplication
+# ---------------------------------------------------------------------------
+from oracle.normalizer import normalize_artist as _norm_artist
+from oracle.normalizer import normalize_title as _norm_title
 
-# Artist name patterns to clean
-ARTIST_PATTERNS = [
-    r'\s*-\s*topic$',  # "Artist - Topic"
-    r'vevo$',  # "ArtistVEVO"
-]
+# Re-export the organizer helpers so callers don't need to know where they live
+from oracle.organizer import _primary_album_artist, _sanitize_filename
 
-# Album patterns
-ALBUM_PATTERNS = [
-    r'\s*\(deluxe\s+edition\)',
-    r'\s*\[deluxe\s+edition\]',
-    r'\s*\(remaster(?:ed)?\)',
-    r'\s*\[remaster(?:ed)?\]',
-]
+# ---------------------------------------------------------------------------
+# Windows path chars that are always illegal  (also includes forward slash,
+# which Windows allows only as a path separator)
+# ---------------------------------------------------------------------------
+_WIN_ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
-def clean_title(title: str) -> str:
-    """
-    Remove junk patterns from track title.
-    
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def clean_artist(artist: str) -> Tuple[str, List[str]]:
+    """Normalise an artist tag and extract any featured artists.
+
     Args:
-        title: Original track title
-        
+        artist: Raw artist string from a file tag or DB field.
+
     Returns:
-        Cleaned title
+        Tuple of (primary_artist, [featured_artists]).
+        primary_artist is never empty — returns "Unknown Artist" as fallback.
     """
-    if not title:
-        return title
-    
-    cleaned = title
-    
-    # Apply all junk patterns
-    for pattern in JUNK_PATTERNS:
-        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
-    
-    # Clean up whitespace
-    cleaned = re.sub(r'\s+', ' ', cleaned)
-    cleaned = cleaned.strip(' -_')
-    
-    return cleaned or title  # Return original if we cleaned everything
+    primary, featured = _norm_artist(artist or "")
+    return primary or "Unknown Artist", featured
 
 
-def clean_artist(artist: str) -> str:
-    """
-    Remove junk patterns from artist name.
-    
+def clean_title(title: str) -> Tuple[str, List[str]]:
+    """Clean a track title: remove feat., video cruft, duplicate prefixes.
+
     Args:
-        artist: Original artist name
-        
+        title: Raw title string.
+
     Returns:
-        Cleaned artist name
+        Tuple of (clean_title, [featured_artists extracted from title]).
     """
-    if not artist:
-        return artist
-    
-    cleaned = artist
-    
-    # Apply artist-specific patterns
-    for pattern in ARTIST_PATTERNS:
-        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
-    
-    # Clean up whitespace
-    cleaned = re.sub(r'\s+', ' ', cleaned)
-    cleaned = cleaned.strip(' -_')
-    
-    return cleaned or artist
+    clean, featured = _norm_title(title or "")
+    return clean or "Unknown Title", featured
 
 
-def clean_album(album: str, keep_edition: bool = True) -> str:
-    """
-    Clean album name.
-    
+def to_folder_name(s: str, max_length: int = 100) -> str:
+    """Convert a string to a Picard-compatible folder/file component.
+
+    - Strips Windows-illegal characters
+    - Replaces spaces with underscores (matching Picard's default)
+    - Collapses multiple underscores to one
+    - Strips leading/trailing underscores and dots
+    - Truncates to *max_length* characters
+
     Args:
-        album: Original album name
-        keep_edition: If False, removes "Deluxe Edition" etc
-        
+        s:          Input string (artist name, album, title …).
+        max_length: Maximum character length (default 100).
+
     Returns:
-        Cleaned album name
+        Filesystem-safe string.
     """
-    if not album:
-        return album
-    
-    cleaned = album
-    
-    if not keep_edition:
-        for pattern in ALBUM_PATTERNS:
-            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
-    
-    # Clean up whitespace
-    cleaned = re.sub(r'\s+', ' ', cleaned)
-    cleaned = cleaned.strip(' -_')
-    
-    return cleaned or album
+    # First apply the standard organizer sanitisation (handles reserved names)
+    s = _sanitize_filename(s, max_length=max_length + 50)
+
+    # Convert spaces to underscores (Picard default)
+    s = s.replace(" ", "_")
+
+    # Drop remaining illegal characters
+    s = _WIN_ILLEGAL.sub("", s)
+
+    # Collapse repeated underscores
+    s = re.sub(r"_+", "_", s)
+
+    # Strip leading/trailing underscores and dots
+    s = s.strip("_.")
+
+    # Truncate
+    if len(s) > max_length:
+        s = s[:max_length].rstrip("_.")
+
+    return s or "Unknown"
 
 
-def clean_filename(filename: str) -> str:
-    """
-    Clean a filename stem (without extension).
-    
-    Extracts artist/title if present, cleans both, returns cleaned filename.
-    
+def to_file_stem(track_num: Optional[int], title: str) -> str:
+    """Build a Picard-style file stem: ``NN_Title_Name``.
+
     Args:
-        filename: Original filename (stem, no extension)
-        
+        track_num: Track number (1-based).  None → no prefix.
+        title:     Track title (will be run through to_folder_name).
+
     Returns:
-        Cleaned filename
+        String like ``"03_Everlong"`` or ``"Everlong"`` if no track number.
+
+    Examples::
+
+        >>> to_file_stem(3, "Everlong")
+        '03_Everlong'
+        >>> to_file_stem(None, "Everlong")
+        'Everlong'
     """
-    if not filename:
-        return filename
-    
-    # Try to extract artist - title format
-    if ' - ' in filename:
-        parts = filename.split(' - ', 1)
-        if len(parts) == 2:
-            artist = clean_artist(parts[0])
-            title = clean_title(parts[1])
-            return f"{artist} - {title}"
-    
-    # No artist separator, just clean as title
-    return clean_title(filename)
+    title_part = to_folder_name(title)
+    if track_num is None:
+        return title_part
+    return f"{track_num:02d}_{title_part}"
 
 
-def parse_filename(filename: str) -> Dict[str, str]:
-    """
-    Parse filename into artist/title/album components.
-    
-    Handles formats:
-    - "Artist - Title"
-    - "Artist - Album - Title"
-    - "Title"
-    
+def target_path(
+    library_base: Path,
+    artist: str,
+    album: str,
+    track_num: Optional[int],
+    title: str,
+    ext: str,
+) -> Path:
+    """Build the canonical library path for a track.
+
+    Matches Picard's default layout::
+
+        {library_base}/{Artist}/{Album}/{NN}_{Title}.{ext}
+
+    All components are passed through :func:`to_folder_name` so the result
+    always matches what Picard would produce.
+
     Args:
-        filename: Filename stem (without extension)
-        
+        library_base: Root of the music library (e.g. ``Path("A:/Music")``).
+        artist:       Primary artist name (feat. stripped internally).
+        album:        Album name.
+        track_num:    Track number; ``None`` if unknown.
+        title:        Track title.
+        ext:          File extension WITHOUT leading dot (e.g. ``"flac"``).
+
     Returns:
-        Dict with 'artist', 'title', 'album' keys (values may be None)
-    """
-    result = {'artist': None, 'title': None, 'album': None}
-    
-    if not filename:
-        return result
-    
-    # Split on ' - '
-    parts = [p.strip() for p in filename.split(' - ') if p.strip()]
-    
-    if len(parts) == 0:
-        return result
-    elif len(parts) == 1:
-        # Just title
-        result['title'] = clean_title(parts[0])
-    elif len(parts) == 2:
-        # Artist - Title
-        result['artist'] = clean_artist(parts[0])
-        result['title'] = clean_title(parts[1])
-    else:
-        # Artist - Album - Title (or more parts)
-        result['artist'] = clean_artist(parts[0])
-        result['album'] = clean_album(parts[1])
-        result['title'] = clean_title(' - '.join(parts[2:]))
-    
-    return result
+        :class:`pathlib.Path` for the target file.
 
+    Examples::
 
-def clean_metadata(meta: Dict[str, str]) -> Dict[str, str]:
+        >>> target_path(Path("A:/Music"), "Brand New", "Deja Entendu",
+        ...             3, "Sic Transit Gloria...Glory Fades", "flac")
+        WindowsPath('A:/Music/Brand_New/Deja_Entendu/03_Sic_Transit_Gloria...Glory_Fades.flac')
     """
-    Clean all metadata fields in place.
-    
-    Args:
-        meta: Metadata dict with 'artist', 'title', 'album' keys
-        
-    Returns:
-        Cleaned metadata dict (same object, modified)
-    """
-    if 'artist' in meta and meta['artist']:
-        meta['artist'] = clean_artist(meta['artist'])
-    
-    if 'title' in meta and meta['title']:
-        meta['title'] = clean_title(meta['title'])
-    
-    if 'album' in meta and meta['album']:
-        meta['album'] = clean_album(meta['album'])
-    
-    return meta
+    primary_artist = _primary_album_artist(artist)
 
+    artist_dir = to_folder_name(primary_artist)
+    album_dir  = to_folder_name(album)
+    stem       = to_file_stem(track_num, title)
+    ext        = ext.lstrip(".").lower()
 
-def suggest_rename(file_path: Path) -> Tuple[Path, bool]:
-    """
-    Suggest a cleaned filename for a file.
-    
-    Args:
-        file_path: Original file path
-        
-    Returns:
-        Tuple of (new_path, needs_rename)
-    """
-    stem = file_path.stem
-    cleaned_stem = clean_filename(stem)
-    
-    if stem == cleaned_stem:
-        return file_path, False
-    
-    new_path = file_path.parent / f"{cleaned_stem}{file_path.suffix}"
-    return new_path, True
+    return library_base / artist_dir / album_dir / f"{stem}.{ext}"

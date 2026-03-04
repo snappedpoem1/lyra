@@ -8,7 +8,11 @@ import sqlite3
 import time
 from typing import Any, Dict, Optional
 
+import logging
+
 from oracle.db.schema import get_connection
+
+logger = logging.getLogger(__name__)
 
 
 def make_lookup_key(*parts: object) -> str:
@@ -65,7 +69,8 @@ def get_cached_payload(
                 time.sleep(0.03 * attempt)
                 continue
             return None
-        except Exception:
+        except Exception as exc:
+            logger.debug("Cache read error for %s/%s: %s", provider, lookup_key, exc)
             return None
         finally:
             conn.close()

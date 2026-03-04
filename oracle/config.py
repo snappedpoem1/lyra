@@ -16,6 +16,8 @@ try:
 except ImportError:
     load_dotenv = None
 
+from oracle.llm_config import load_llm_config, resolve_llm_config
+
 
 # â”€â”€ Resolve project root (wherever start.py lives) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -39,9 +41,12 @@ LIBRARY_BASE = _env_path("LIBRARY_BASE", _env_path("LIBRARY_DIR", PROJECT_ROOT /
 DOWNLOADS_FOLDER = _env_path("DOWNLOADS_FOLDER", _env_path("DOWNLOAD_DIR", PROJECT_ROOT / "downloads"))
 STAGING_FOLDER = _env_path("STAGING_FOLDER", _env_path("STAGING_DIR", PROJECT_ROOT / "staging"))
 QUARANTINE_PATH = _env_path("QUARANTINE_PATH", LIBRARY_BASE.parent / "_Quarantine")
+REJECTED_FOLDER = _env_path("REJECTED_FOLDER", LIBRARY_BASE.parent / "_Rejected")
 VIBES_FOLDER = _env_path("VIBES_FOLDER", PROJECT_ROOT / "Vibes")
 REPORTS_FOLDER = _env_path("REPORTS_FOLDER", PROJECT_ROOT / "Reports")
 PLAYLISTS_FOLDER = _env_path("PLAYLISTS_FOLDER", PROJECT_ROOT / "playlists")
+ACOUSTID_API_KEY = os.environ.get("ACOUSTID_API_KEY", "").strip()
+FPCALC_PATH = os.environ.get("FPCALC_PATH", "").strip()
 
 
 def guard_bypass_allowed() -> bool:
@@ -58,23 +63,13 @@ def guard_bypass_reason() -> str:
 
 def get_llm_settings() -> dict:
     """Return LLM settings from environment."""
-    provider = os.environ.get("LYRA_LLM_PROVIDER", "lmstudio").strip() or "lmstudio"
-    base_url = os.environ.get("LYRA_LLM_BASE_URL", "http://localhost:1234/v1").strip()
-    model = os.environ.get("LYRA_LLM_MODEL", "").strip()
-    api_key = os.environ.get("LYRA_LLM_API_KEY", "").strip()
-    timeout_raw = os.environ.get("LYRA_LLM_TIMEOUT_SECONDS", "30").strip()
-    try:
-        timeout_seconds = int(timeout_raw)
-    except ValueError:
-        timeout_seconds = 30
-
-    return {
-        "provider": provider,
-        "base_url": base_url,
-        "model": model,
-        "api_key": api_key,
-        "timeout_seconds": timeout_seconds,
-    }
+    config = resolve_llm_config(load_llm_config(resolve_endpoint=False))
+    settings = config.masked_summary()
+    settings["provider"] = config.provider_type
+    settings["api_key"] = config.api_key
+    settings["fallback_model"] = config.fallback_model
+    settings["timeout_seconds"] = config.timeout_seconds
+    return settings
 
 
 def validate_required_env(required_keys: list[str]) -> None:
@@ -198,10 +193,21 @@ def load_config(env_path: Optional[Path] = None) -> OracleConfig:
         # Respect process env as source-of-truth when explicitly provided.
         load_dotenv(env_file, override=False)
     elif not env_file.exists():
-        # Copy template if .env doesn't exist
-        template = PROJECT_ROOT / ".env.template"
-        if template.exists():
-            shutil.copy2(template, env_file)
+        # Copy a sanitized example if available; never auto-materialize from
+        # local-only templates that may contain machine-specific secrets.
+        example_template = PROJECT_ROOT / ".env.example"
+        legacy_template = PROJECT_ROOT / ".env.template"
+
+        # Prefer the new .env.example when present, but fall back to the
+        # legacy .env.template for backward compatibility.
+        source_template = None
+        if example_template.exists():
+            source_template = example_template
+        elif legacy_template.exists():
+            source_template = legacy_template
+
+        if source_template is not None:
+            shutil.copy2(source_template, env_file)
             if load_dotenv:
                 load_dotenv(env_file, override=False)
 

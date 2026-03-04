@@ -1,5 +1,5 @@
 ﻿import sqlite3
-from oracle.config import get_connection
+from oracle.db.schema import get_connection
 
 
 def run_audit():

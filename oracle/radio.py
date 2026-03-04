@@ -19,7 +19,8 @@ import numpy as np
 from typing import Optional, List, Dict
 import uuid
 
-from oracle.config import get_connection, CHROMA_COLLECTION
+from oracle.config import CHROMA_COLLECTION
+from oracle.db.schema import get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +229,7 @@ class Radio:
         
         "Find the hidden gems"
         """
-        logger.info(f"ðŸ”­ RADIO: Discovering hidden gems")
+        logger.info("ðŸ”­ RADIO: Discovering hidden gems")
         
         conn = self._open_conn()
         cursor = conn.cursor()
@@ -333,14 +334,74 @@ class Radio:
         return profile
     
     def _filter_by_taste(self, candidates: List[Dict]) -> List[Dict]:
+        """Score and reorder candidates by taste profile alignment.
+
+        Uses the 10-dimensional taste_profile to compute an alignment score
+        for each candidate, then re-sorts candidates from best to worst fit.
+        Tracks without scores pass through (sorted to the end) so the system
+        still works when track_scores is sparse.
         """
-        Filter candidates by taste profile.
-        
-        Prioritize tracks matching user's learned preferences.
-        """
-        # For now, simple random filtering
-        # In production: Use taste profile to score each candidate
-        return candidates
+        if not candidates:
+            return candidates
+
+        # Load taste profile
+        conn = self._open_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT dimension, value, confidence FROM taste_profile")
+        profile_rows = cursor.fetchall()
+
+        if not profile_rows:
+            conn.close()
+            return candidates  # No taste data yet — pass through
+
+        taste: Dict[str, float] = {}
+        taste_conf: Dict[str, float] = {}
+        for dim, val, conf in profile_rows:
+            taste[dim] = float(val)
+            taste_conf[dim] = float(conf or 0)
+
+        # Fetch dimension scores for candidate track_ids
+        dims = ["energy", "valence", "tension", "density", "warmth",
+                "movement", "space", "rawness", "complexity", "nostalgia"]
+        track_ids = [c.get("track_id") for c in candidates if c.get("track_id")]
+        score_map: Dict[str, Dict[str, float]] = {}
+        if track_ids:
+            placeholders = ",".join("?" for _ in track_ids)
+            cols = ", ".join(dims)
+            cursor.execute(
+                f"SELECT track_id, {cols} FROM track_scores WHERE track_id IN ({placeholders})",
+                tuple(track_ids),
+            )
+            for row in cursor.fetchall():
+                tid = str(row[0])
+                score_map[tid] = dict(zip(dims, row[1:]))
+
+        conn.close()
+
+        # Score each candidate: confidence-weighted L1 alignment
+        def _taste_score(candidate: Dict) -> float:
+            tid = str(candidate.get("track_id", ""))
+            scores = score_map.get(tid)
+            if not scores:
+                return 0.0  # No scores → neutral (sorted last)
+
+            total = 0.0
+            weight_sum = 0.0
+            for dim in dims:
+                if dim in taste and dim in scores and scores[dim] is not None:
+                    # taste is in -1..1 space, scores are 0..1 — convert
+                    pref_01 = (taste[dim] + 1.0) / 2.0
+                    w = taste_conf.get(dim, 0.25)
+                    alignment = 1.0 - abs(float(scores[dim]) - pref_01)
+                    total += alignment * w
+                    weight_sum += w
+
+            return total / weight_sum if weight_sum > 0 else 0.0
+
+        # Sort by taste alignment descending (best first)
+        scored = [(c, _taste_score(c)) for c in candidates]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [c for c, _ in scored]
     
     def _keys_compatible(self, key1: str, key2: str) -> bool:
         """
@@ -425,6 +486,80 @@ class Radio:
         conn.close()
         return tracks
     
+    def get_lastfm_discovery(self, count: int = 10) -> List[Dict]:
+        """Discover tracks via Last.fm similar_tracks data in enrich_cache.
+
+        Queries cached Last.fm enrichment data for similar tracks that are NOT
+        already in the library. These become discovery candidates that complement
+        the CLAP-distance-based discovery.
+
+        Returns:
+            List of discovery candidate dicts with artist, title, source_track.
+        """
+        logger.info("RADIO: Querying Last.fm similar tracks for discovery")
+
+        conn = self._open_conn()
+        cursor = conn.cursor()
+
+        # Get all cached Last.fm enrichment data
+        cursor.execute(
+            "SELECT lookup_key, payload_json FROM enrich_cache WHERE provider = 'lastfm'"
+        )
+
+        import json as _json
+
+        candidates: List[Dict] = []
+        seen: set = set()
+
+        for lookup_key, payload_json in cursor.fetchall():
+            try:
+                payload = _json.loads(payload_json)
+            except Exception:
+                continue
+
+            similar = payload.get("similar_tracks", [])
+            if not isinstance(similar, list):
+                continue
+
+            source_artist = payload.get("artist", "")
+            source_title = payload.get("title", "")
+
+            for sim in similar:
+                if not isinstance(sim, dict):
+                    continue
+                sim_artist = sim.get("artist", "").strip()
+                sim_title = sim.get("title", "").strip()
+                if not sim_artist or not sim_title:
+                    continue
+
+                key = f"{sim_artist.lower()}|{sim_title.lower()}"
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                # Check if already in library
+                cursor.execute(
+                    "SELECT 1 FROM tracks WHERE LOWER(artist) = LOWER(?) AND LOWER(title) = LOWER(?) LIMIT 1",
+                    (sim_artist, sim_title),
+                )
+                if cursor.fetchone():
+                    continue
+
+                candidates.append({
+                    "artist": sim_artist,
+                    "title": sim_title,
+                    "source_track": f"{source_artist} - {source_title}",
+                    "match_score": float(sim.get("match", 0.0)),
+                })
+
+        conn.close()
+
+        # Sort by match score descending
+        candidates.sort(key=lambda x: x.get("match_score", 0), reverse=True)
+        result = candidates[:count]
+        logger.info("  Found %d Last.fm discovery candidates", len(result))
+        return result
+
     def _update_taste_profile(self, track_id: str, positive: bool) -> None:
         """Update taste profile based on playback feedback."""
         try:
@@ -526,7 +661,7 @@ if __name__ == "__main__":
         seed = sys.argv[2] if len(sys.argv) > 2 else None
         tracks = radio.get_chaos_track(seed, count=5)
         
-        print(f"\nðŸŽ² CHAOS TRACKS:\n")
+        print("\nðŸŽ² CHAOS TRACKS:\n")
         for i, track in enumerate(tracks, 1):
             print(f"{i}. {track['metadata']['artist']} - {track['metadata']['title']}")
             if 'similarity' in track:
@@ -537,7 +672,7 @@ if __name__ == "__main__":
         seed = sys.argv[2]
         tracks = radio.get_flow_track(seed, count=5)
         
-        print(f"\nðŸŒŠ FLOW TRACKS:\n")
+        print("\nðŸŒŠ FLOW TRACKS:\n")
         for i, track in enumerate(tracks, 1):
             print(f"{i}. {track['metadata']['artist']} - {track['metadata']['title']}")
             if 'compatibility' in track:
@@ -547,7 +682,7 @@ if __name__ == "__main__":
     elif command == "discover":
         tracks = radio.get_discovery_track(count=5)
         
-        print(f"\nðŸ”­ DISCOVERIES:\n")
+        print("\nðŸ”­ DISCOVERIES:\n")
         for i, track in enumerate(tracks, 1):
             print(f"{i}. {track['metadata']['artist']} - {track['metadata']['title']}")
             print(f"   Plays: {track.get('play_count', 0)}")

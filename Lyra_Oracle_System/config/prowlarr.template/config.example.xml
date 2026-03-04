@@ -1,0 +1,15 @@
+<!--
+Prowlarr config placeholder.
+DO NOT put secrets in this repo.
+
+Create your real config at:
+Lyra_Oracle_System/config/prowlarr/config.xml
+
+Tip: store secrets in .env and let scripts inject at runtime if needed.
+-->
+<Config>
+  <BindAddress>127.0.0.1</BindAddress>
+  <Port>9696</Port>
+  <UrlBase></UrlBase>
+  <ApiKey>__SET_IN_RUNTIME__</ApiKey>
+</Config>

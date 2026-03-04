@@ -1,5 +1,20 @@
 # CLAUDE.md — Lyra Oracle Project Instructions
 
+## MANDATORY STARTUP — READ THESE BEFORE ANYTHING ELSE
+
+Every session, every agent — read in this order:
+
+1. **[`C:\MusicOracle\.claude\memory\MEMORY.md`](.claude/memory/MEMORY.md)** — live system state, current metrics, what works, what's broken, next priorities
+2. **[`C:\MusicOracle\.claude\memory\SESSIONS.md`](.claude/memory/SESSIONS.md)** — recent change log, what was built per session
+
+After completing any batch of changes:
+- Append a block to `SESSIONS.md` (what was fixed/added/verified)
+- Update the relevant sections of `MEMORY.md` (metrics, what works, priorities)
+
+Do not rely on numbers or state written anywhere else in this file — those go stale. MEMORY.md is the truth.
+
+---
+
 ## WHAT THIS IS
 
 Lyra Oracle: AI-powered music intelligence system. Transforms Spotify listening history into a locally-owned, semantically searchable, emotionally intelligent music archive. Runs on Windows gaming rig (AMD Ryzen 7 7800X3D, AMD Radeon RX 9070 XT 16GB, 32GB RAM, 8TB A: drive). Project root: `C:\MusicOracle`.
@@ -20,7 +35,7 @@ Owner (Chris) is a novice programmer with professional ambitions. Write code he 
 - Full CLI with 30+ commands (argparse-based, `oracle/cli.py`)
 - CLAP embeddings generating with music-specific model (`laion/larger_clap_music`) via DirectML (AMD GPU)
 - ChromaDB vector storage in `chroma_storage/`
-- **4-tier acquisition waterfall: Qobuz → Slskd (Soulseek) → Real-Debrid → SpotDL**
+- **5-tier acquisition waterfall: Qobuz → Streamrip → Slskd (Soulseek) → Real-Debrid → SpotDL**
 - Qobuz hi-fi acquisition: FLAC up to 24-bit/96kHz with full metadata + cover art
 - Qobuz Docker microservice (`docker/qobuz/`) + direct `qobuz-dl` backend
 - Acquisition guard with pre-flight/post-flight validation (duplicate detection working)
@@ -35,11 +50,11 @@ Owner (Chris) is a novice programmer with professional ambitions. Write code he 
 - Taste learning from playback signals
 - Pipeline verified end-to-end: scan → index → score (737 tracks, 736 embedded+scored)
 
-### Current numbers (as of Feb 19, 2026):
-- **tracks**: 737 | **embeddings**: 736 | **track_scores**: 736
-- **acquisition_queue**: ~15,041 pending
-- **playback_history**: 2 (Layer 5 just started)
-- Layers 1-4 healthy; LM Studio offline (non-blocking)
+### Current numbers (as of Feb 27, 2026):
+- **tracks**: 2,472 | **embeddings**: 2,472 | **track_scores**: 2,472
+- **acquisition_queue**: 0 pending (23,192 total processed)
+- **playback_history**: 0
+- Layers 1-4 healthy; LM Studio [OK]; all Docker services [OK]
 
 ### Root-level script sprawl:
 Scripts at project root that should be in `scripts/` or `_archive/`:
@@ -76,7 +91,7 @@ Layer 0: Infrastructure — .env, Python 3.12, .venv, A: drive, Docker (for Prow
 Layer 1: Data — lyra_registry.db schema, tracks populated, spotify data imported
 Layer 2: Embeddings — CLAP on DirectML (AMD GPU), ChromaDB populated, search returns results
 Layer 3: Scores — track_scores populated for ALL tracks (736/737 ✓)
-Layer 4: Acquisition — Qobuz → Slskd → RD → SpotDL waterfall, guard validates everything
+Layer 4: Acquisition — Qobuz → Streamrip → Slskd → RD → SpotDL waterfall, guard validates everything
 Layer 5: Playback — foobar2000 + BeefWeb bridge, playback events → taste learning
 Layer 6: Intelligence — Radio, Playlust arcs, taste profiles, discovery
 ```
@@ -100,7 +115,7 @@ C:\MusicOracle\
 │   │   ├── qobuz.py                 # Tier 1: Qobuz hi-fi (qobuz-dl backend)
 │   │   ├── realdebrid.py            # Tier 3: Direct RD API
 │   │   ├── prowlarr_rd.py           # Prowlarr search (used by RD tier)
-│   │   ├── waterfall.py             # Unified T1→T2→T3→T4 cascade
+│   │   ├── waterfall.py             # Unified T1→T2→T3→T4→T5 cascade
 │   │   ├── smart_pipeline.py        # Smart acquisition with validation
 │   │   ├── spotdl.py                # Tier 4: YouTube fallback
 │   │   ├── validator.py             # Post-acquisition validation
@@ -169,13 +184,14 @@ nostalgia:  modern/futuristic ←→ retro/vintage/throwback
 
 NOTE: Previous docs said "darkness" and "transcendence" — those DON'T EXIST in anchors.py. The actual dimensions are **valence** and **density**. Always match the code.
 
-## ACQUISITION WATERFALL (ACTUAL — 4 TIERS)
+## ACQUISITION WATERFALL (ACTUAL — 5 TIERS)
 
 ```
 Tier 1: Qobuz (qobuz-dl)        — FLAC up to 24-bit/96kHz, full metadata + cover art
-Tier 2: Slskd (Soulseek)        — FLAC from P2P, ~10-30s/track, ~90% hit rate
-Tier 3: Real-Debrid + Prowlarr  — FLAC albums, direct HTTPS download
-Tier 4: SpotDL                   — YouTube Music fallback (~256kbps)
+Tier 2: Streamrip               — alternative hi-fi ripper fallback (if configured)
+Tier 3: Slskd (Soulseek)        — FLAC from P2P, ~10-30s/track, ~90% hit rate
+Tier 4: Real-Debrid + Prowlarr  — FLAC albums, direct HTTPS download
+Tier 5: SpotDL                   — YouTube Music fallback (~256kbps)
 ```
 
 ### Qobuz Details:
@@ -246,8 +262,8 @@ oracle search --query "dark ambient" --n 10
 oracle score --all               # Score ALL tracks
 oracle pipeline --library "A:\..." # Scan + index + score
 oracle acquire waterfall --artist X --title Y
-oracle drain --limit N [--max-tier 4] [--workers 3]  # Drain acquisition queue
-                                 # --max-tier: 1=Qobuz, 2=Slskd, 3=RD, 4=SpotDL
+oracle drain --limit N [--max-tier 4] [--workers 3]  # Drain queue + auto-ingest
+                                 # --no-ingest to skip embed/score after download
 oracle guard test --artist X --title Y
 oracle guard import --downloads downloads
 oracle watch [--once]            # Ingest watcher: staging/ → library
@@ -283,13 +299,18 @@ oracle catalog acquire --artist X    # Full discography acquisition
 
 ## WHAT DONE LOOKS LIKE
 
-- [x] track_scores count matches tracks count (736/737)
+- [x] track_scores count matches tracks count (2,472/2,472)
 - [x] `oracle search` returns sensible, differentiated results
-- [x] `oracle acquire waterfall` completes end-to-end (4-tier: Qobuz→Slskd→RD→SpotDL)
+- [x] `oracle acquire waterfall` completes end-to-end (5-tier: Qobuz→Streamrip→Slskd→RD→SpotDL)
 - [x] Qobuz acquirer downloads hi-fi FLAC with full metadata
 - [x] No duplicate get_connection() — config.py delegates to db/schema.py
 - [x] Single .env keys (no duplicates) — template consolidated
 - [x] No hardcoded paths — curator/organizer/download_processor use config.LIBRARY_BASE
+- [x] `oracle drain` auto-ingests (embed+score) — no manual `watch --once` needed
+- [x] `oracle hunt` routes directly through SmartAcquisition (pipeline.py decoupled from CLI)
+- [x] `oracle batch run` removed (superseded by `oracle drain`)
+- [x] `generate_target_path` moved to curator.py — organizer import removed
+- [x] `fast_batch.py` uses YTDLPAcquirer — downloader.py dependency removed
 - [ ] `oracle serve` → browser plays audio
 - [ ] Playback events flowing via foobar2000 + BeefWeb
 - [ ] Root dir has <10 non-config files

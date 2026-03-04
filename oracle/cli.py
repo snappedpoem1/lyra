@@ -6,6 +6,7 @@ import asyncio
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -99,11 +100,6 @@ def main() -> None:
     acquire_waterfall.add_argument("--title", required=True, help="Track title")
     acquire_waterfall.add_argument("--album", help="Album name (helps T1 search)")
     acquire_waterfall.add_argument("--max-tier", type=int, default=4, help="Stop after tier N (1-4)")
-
-    batch_parser = subparsers.add_parser("batch", help="Process acquisition queue")
-    batch_sub = batch_parser.add_subparsers(dest="batch_command")
-    batch_run = batch_sub.add_parser("run", help="Run acquisition queue")
-    batch_run.add_argument("--limit", type=int, default=0, help="Limit pending queue items")
 
     enrich_parser = subparsers.add_parser("enrich", help="Enrich track metadata")
     enrich_parser.add_argument("--track-id", required=True, help="Track ID to enrich")
@@ -201,6 +197,81 @@ def main() -> None:
     enrich_all_parser = subparsers.add_parser('enrich-all', help='Enrich all tracks with genre/metadata from Last.fm')
     enrich_all_parser.add_argument('--limit', type=int, default=0, help='Limit tracks')
 
+    biographer_parser = subparsers.add_parser('biographer', help='Enrich artist biographies and imagery')
+    biographer_sub = biographer_parser.add_subparsers(dest='biographer_command')
+    bio_enrich = biographer_sub.add_parser('enrich', help='Enrich a single artist')
+    bio_enrich.add_argument('--artist', required=True, help='Artist name')
+    bio_enrich.add_argument('--mbid', help='MusicBrainz artist ID')
+    bio_enrich.add_argument('--force', action='store_true', help='Bypass cache')
+    bio_all = biographer_sub.add_parser('enrich-all', help='Enrich all library artists')
+    bio_all.add_argument('--limit', type=int, default=0, help='Max artists (0=all)')
+    bio_all.add_argument('--force', action='store_true', help='Bypass cache')
+    biographer_sub.add_parser('stats', help='Show biographer cache stats')
+
+    graph_parser = subparsers.add_parser('graph', help='Artist relationship graph builder')
+    graph_sub = graph_parser.add_subparsers(dest='graph_command')
+    graph_build = graph_sub.add_parser('build', help='Build relationship graph (incremental)')
+    graph_build.add_argument('--full', action='store_true', help='Full rebuild (all artists)')
+    graph_build.add_argument('--depth', type=int, default=1, help='Lore trace depth (1-2)')
+    graph_sub.add_parser('stats', help='Show graph statistics')
+
+    # Playlust — 4-act emotional arc generator (F-008) *** FLAGSHIP ***
+    playlust_parser = subparsers.add_parser('playlust', help='Generate a 4-act emotional arc playlist')
+    playlust_sub = playlust_parser.add_subparsers(dest='playlust_command')
+
+    playlust_gen = playlust_sub.add_parser('generate', help='Generate a Playlust journey')
+    playlust_gen.add_argument('--mood', help='Mood / vibe seed (e.g. "volcanic shoegaze fever dream")')
+    playlust_gen.add_argument('--duration', type=int, default=60, dest='duration',
+                              help='Target duration in minutes (default: 60)')
+    playlust_gen.add_argument('--name', help='Playlist name (auto-generated if omitted)')
+    playlust_gen.add_argument('--no-deepcut', action='store_true', dest='no_deepcut',
+                              help='Disable deep cut injection in Acts II and IV')
+    playlust_gen.add_argument('--json', action='store_true', dest='output_json',
+                              help='Output raw JSON instead of formatted display')
+
+    playlust_sub.add_parser('acts', help='Show the four act profiles')
+
+    # Playlist Explainability (F-007)
+    playlist_parser = subparsers.add_parser('playlist', help='Playlist management and explainability')
+    playlist_sub = playlist_parser.add_subparsers(dest='playlist_command')
+
+    playlist_explain = playlist_sub.add_parser('explain', help='Show why each track was included')
+    playlist_explain.add_argument('--run-id', type=int, required=True, dest='run_id',
+                                  help='Playlist run ID to explain')
+    playlist_explain.add_argument('--json', action='store_true', dest='output_json',
+                                  help='Output raw JSON')
+
+    playlist_list = playlist_sub.add_parser('list', help='List recent playlist runs')
+    playlist_list.add_argument('--limit', type=int, default=10, help='Number of runs to show')
+
+    # Deep Cut Protocol — obscurity-weighted discovery
+    deepcut_parser = subparsers.add_parser('deep-cut', help='Find acclaimed-but-obscure tracks')
+    deepcut_sub = deepcut_parser.add_subparsers(dest='deepcut_command')
+
+    deepcut_hunt = deepcut_sub.add_parser('hunt', help='Hunt for deep cuts in library')
+    deepcut_hunt.add_argument('--genre', help='Filter by genre')
+    deepcut_hunt.add_argument('--artist', help='Filter by artist')
+    deepcut_hunt.add_argument('--min-obscurity', type=float, default=0.6, dest='min_obscurity',
+                              help='Minimum obscurity score (default: 0.6)')
+    deepcut_hunt.add_argument('--min-acclaim', type=float, default=0.0, dest='min_acclaim',
+                              help='Minimum acclaim score 0-1 (default: 0.0)')
+    deepcut_hunt.add_argument('--limit', type=int, default=20, help='Max results (default: 20)')
+    deepcut_hunt.add_argument('--json', action='store_true', dest='output_json',
+                              help='Output raw JSON')
+
+    deepcut_sub.add_parser('stats', help='Deep cut statistics for the library')
+
+    # PlayFaux BeefWeb Bridge (F-013)
+    listen_parser = subparsers.add_parser('listen', help='Monitor foobar2000 via BeefWeb bridge')
+    listen_parser.add_argument('--host', default='localhost', help='BeefWeb host (default: localhost)')
+    listen_parser.add_argument('--port', type=int, default=8880, help='BeefWeb port (default: 8880)')
+    listen_parser.add_argument('--interval', type=float, default=0.5, dest='interval',
+                               help='Poll interval in seconds (default: 0.5)')
+    listen_parser.add_argument('--check', action='store_true',
+                               help='Check BeefWeb connectivity and print now-playing, then exit')
+    listen_parser.add_argument('--once', action='store_true',
+                               help='Process one event and exit (useful for testing)')
+
     # Smart acquisition
     smart_acquire_parser = subparsers.add_parser('smart-acquire', help='Smart acquisition with validation')
     smart_acquire_parser.add_argument('--artist', help='Artist name')
@@ -264,15 +335,20 @@ def main() -> None:
     catalog_status_cmd.add_argument('--artist', help='Filter by artist')
 
     # Ingest watcher
-    # foobar2000 BeefWeb bridge
-    listen_parser = subparsers.add_parser(
-        "listen", help="Bridge foobar2000 (BeefWeb) playback events to oracle taste learning"
-    )
-    listen_parser.add_argument("--host", default="localhost", help="BeefWeb host (default: localhost)")
-    listen_parser.add_argument("--port", type=int, default=8880, help="BeefWeb port (default: 8880)")
-
     watch_parser = subparsers.add_parser("watch", help="Watch downloads/ and auto-ingest new audio files")
     watch_parser.add_argument("--once", action="store_true", help="Process existing files and exit")
+
+    import_parser = subparsers.add_parser(
+        "import", help="Import audio files via beets (auto-tag + organize + scan)"
+    )
+    import_parser.add_argument(
+        "--source", default="staging",
+        help="Source: 'staging', 'downloads', or an absolute path (default: staging)",
+    )
+    import_parser.add_argument("--dry-run", action="store_true", help="Preview without moving files")
+    import_parser.add_argument("--no-autotag", action="store_true", help="Skip MusicBrainz lookup")
+    import_parser.add_argument("--singletons", action="store_true", help="Import as non-album tracks")
+    import_parser.add_argument("--copy", action="store_true", help="Copy instead of move")
 
     # Playback signal â€” log plays/skips for taste learning without the server
     played_parser = subparsers.add_parser(
@@ -290,6 +366,7 @@ def main() -> None:
     drain_parser.add_argument("--max-tier", type=int, default=4, help="Max acquisition tier (1=Qobuz, 2=Slskd, 3=RD, 4=SpotDL)")
     drain_parser.add_argument("--workers", type=int, default=0, help="Parallel download workers (0=auto)")
     drain_parser.add_argument("--max-retries", type=int, default=3, help="Mark failed after N attempts")
+    drain_parser.add_argument("--no-ingest", action="store_true", help="Skip auto-ingest after download (run 'oracle watch --once' manually)")
 
     perf_parser = subparsers.add_parser("perf", help="Performance profile and runtime pause controls")
     perf_sub = perf_parser.add_subparsers(dest="perf_command")
@@ -393,7 +470,7 @@ def main() -> None:
             ("Prowlarr",     "http", "http://localhost:9696/health", None),
             ("rdtclient",    "http", "http://localhost:6500", None),
             ("slskd",        "http", "http://localhost:5030/api/v0/application", None),
-            ("LM Studio",    "http", "http://localhost:1234/v1/models", None),
+            ("LM Studio",    "http", "http://127.0.0.1:1234/v1/models", None),
         ]
         import subprocess
         import urllib.request
@@ -565,6 +642,16 @@ def main() -> None:
         print(f"  Indexed: {index_results.get('indexed', 0)}")
         print(f"  Scored: {index_results.get('scored', 0)}")
         print(f"  Failed: {index_results.get('failed', 0)}")
+
+        print("\n[3/3] Building relationship graph (incremental)...")
+        try:
+            from oracle.graph_builder import GraphBuilder
+            gb = GraphBuilder()
+            new_edges = gb.build_incremental()
+            print(f"  New edges: {new_edges}")
+        except Exception as _gb_exc:
+            print(f"  Graph builder: skipped ({_gb_exc})")
+
         print("\n" + "="*60)
         print("Pipeline complete!")
         print("="*60 + "\n")
@@ -574,16 +661,30 @@ def main() -> None:
         if get_write_mode() != "apply_allowed":
             print("WRITE BLOCKED: LYRA_WRITE_MODE must be apply_allowed to hunt.")
             return
-        from oracle.pipeline import run_pipeline
+        from oracle.acquirers.smart_pipeline import SmartAcquisition, AcquisitionRequest
+        import logging as _logging
+        _logging.basicConfig(level=_logging.INFO, format="%(message)s")
         query = " ".join(args.query).strip()
-        result = run_pipeline(query)
-        state = (result or {}).get("state", "unknown")
-        payload = (result or {}).get("result", {})
-        print(f"Pipeline state: {state}")
-        if payload.get("filepath"):
-            print(f"Placed at: {payload['filepath']}")
-        if payload.get("rejection_reason"):
-            print(f"Rejected: {payload['rejection_reason']}")
+        if " - " in query:
+            _artist, _title = query.split(" - ", 1)
+        else:
+            _artist, _title = "Unknown Artist", query
+        _hunt_pipeline = SmartAcquisition(library_path=LIBRARY_BASE, require_validation=True)
+        try:
+            _hunt_result = _hunt_pipeline.acquire(AcquisitionRequest(
+                artist=_artist.strip(), title=_title.strip(), source="hunt"
+            ))
+            if _hunt_result.success:
+                print(f"Acquired: {_hunt_result.filepath}")
+                if getattr(_hunt_result, "quality", None):
+                    print(f"  Quality: {_hunt_result.quality}")
+                if getattr(_hunt_result, "tier_used", None):
+                    print(f"  Tier: {_hunt_result.tier_used}")
+            else:
+                print(f"Failed: {_hunt_result.rejection_reason}")
+        finally:
+            if hasattr(_hunt_pipeline, "close"):
+                _hunt_pipeline.close()
         return
 
     if args.command == "acquire" and args.acquire_command == "youtube":
@@ -663,12 +764,6 @@ def main() -> None:
         if result.error:
             print(f"  Error: {result.error}")
         print(f"  Elapsed: {result.elapsed:.1f}s")
-        return
-
-    if args.command == "batch" and args.batch_command == "run":
-        from oracle.acquisition import process_queue
-        results = process_queue(limit=args.limit)
-        print(results)
         return
 
     if args.command == "enrich":
@@ -761,13 +856,19 @@ def main() -> None:
         return
 
     if args.command == "downloads" and args.downloads_command == "organize":
-        from oracle.download_processor import process_downloads
-        results = process_downloads(
-            target_library=args.library,
-            clean_names=not args.no_clean,
-            dry_run=args.dry_run,
-            scan_after=not args.no_scan
+        import logging as _logging
+        _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+        from oracle.download_processor import organize
+        dry = getattr(args, "dry_run", False)
+        result = organize(
+            library_path=Path(args.library),
+            dry_run=dry,
         )
+        moved  = result.get("moved", 0)
+        skpped = result.get("skipped", 0)
+        errors = result.get("errors", 0)
+        status = "(dry run)" if dry else ""
+        print(f"Organize {status}: {moved} moved, {skpped} skipped, {errors} errors")
         return
 
     if args.command == "vibe" and args.vibe_command == "save":
@@ -929,6 +1030,319 @@ def main() -> None:
     if args.command == "enrich-all":
         import subprocess
         subprocess.run([sys.executable, "enrich_genres.py"], cwd=".")
+        return
+
+    if args.command == "biographer":
+        from oracle.enrichers.biographer import Biographer
+        bio = Biographer()
+
+        if args.biographer_command == "enrich" or not args.biographer_command:
+            if not hasattr(args, 'artist') or not args.artist:
+                print("Usage: oracle biographer enrich --artist <name>")
+                return
+            print(f"Enriching '{args.artist}' ...")
+            mbid = getattr(args, 'mbid', None)
+            force = getattr(args, 'force', False)
+            result = bio.enrich_artist(args.artist, mbid=mbid, force=force)
+            if result:
+                print(f"  Bio source  : {result.get('bio_source', 'none')}")
+                print(f"  Origin      : {result.get('origin', 'unknown')}")
+                print(f"  Era         : {result.get('era', 'unknown')}")
+                print(f"  Scene       : {result.get('scene', 'unknown')}")
+                print(f"  Genres      : {', '.join(result.get('genres', [])[:5])}")
+                print(f"  Members     : {', '.join(result.get('members', [])[:5])}")
+                images = result.get('images') or {}
+                print(f"  Banner      : {images.get('banner', 'none')}")
+                print(f"  Listeners   : {result.get('lastfm_listeners', 'unknown')}")
+                bio_text = (result.get('bio') or '')[:200]
+                if bio_text:
+                    print(f"  Bio excerpt : {bio_text}...")
+            else:
+                print(f"  No data found for '{args.artist}'")
+            return
+
+        if args.biographer_command == "enrich-all":
+            limit = getattr(args, 'limit', 0)
+            force = getattr(args, 'force', False)
+            print(f"Enriching all library artists (limit={limit or 'none'}, force={force}) ...")
+
+            def progress(current, total, name):
+                print(f"  [{current}/{total}] {name}", end='\r', flush=True)
+
+            stats = bio.enrich_all_library_artists(limit=limit, force=force, progress_callback=progress)
+            print()
+            print(f"Done: {stats['processed']} enriched, {stats['cached']} cached, {stats['failed']} failed / {stats['total']} total")
+            return
+
+        if args.biographer_command == "stats":
+            conn = get_connection()
+            try:
+                c = conn.cursor()
+                c.execute("SELECT COUNT(*) FROM enrich_cache WHERE provider = 'biographer'")
+                cached = c.fetchone()[0]
+                c.execute("SELECT COUNT(DISTINCT artist) FROM tracks WHERE artist IS NOT NULL AND artist != ''")
+                total_artists = c.fetchone()[0]
+            finally:
+                conn.close()
+            print(f"Biographer cache: {cached} artists enriched / {total_artists} unique artists in library")
+            print(f"Coverage: {cached/total_artists*100:.1f}%" if total_artists else "No tracks")
+            return
+
+    if args.command == "graph":
+        from oracle.graph_builder import GraphBuilder
+        gb = GraphBuilder()
+
+        if args.graph_command == "build" or not args.graph_command:
+            full = getattr(args, 'full', False)
+            depth = getattr(args, 'depth', 1)
+            mode = 'full rebuild' if full else 'incremental'
+            print(f"Building relationship graph ({mode}, depth={depth}) ...")
+            if full:
+                count = gb.build_full_graph(depth=depth)
+            else:
+                count = gb.build_incremental(depth=depth)
+            stats = gb.get_stats()
+            print(f"Done: {count} new edges added")
+            print(f"Total: {stats['total_connections']} connections, {stats['total_artists']} artists")
+            return
+
+        if args.graph_command == "stats":
+            stats = gb.get_stats()
+            print(f"Graph stats:")
+            print(f"  Artists with connections : {stats['total_artists']}")
+            print(f"  Total connection edges   : {stats['total_connections']}")
+            if stats.get('last_run_ts'):
+                import datetime
+                ts = datetime.datetime.fromtimestamp(stats['last_run_ts'])
+                print(f"  Last build               : {ts.strftime('%Y-%m-%d %H:%M')}")
+            print(f"  Most connected:")
+            for a in stats.get('top_connected', []):
+                print(f"    {a['artist']}: {a['connections']} connections")
+            return
+
+    if args.command == "deep-cut":
+        from oracle.deepcut import DeepCut
+        dc = DeepCut()
+
+        if args.deepcut_command == "stats" or not args.deepcut_command:
+            stats = dc.get_stats()
+            print("Deep Cut Protocol — Library Statistics")
+            print(f"  Total tracks         : {stats['total_tracks']}")
+            print(f"  Tracks scored        : {stats['tracks_scored']}")
+            print(f"  Median obscurity     : {stats['median_obscurity']}")
+            print(f"  High-potential tracks: {stats['high_potential_count']} (score > 0.8)")
+            if stats['top_5_deep_cuts']:
+                print("  Top deep cuts:")
+                for t in stats['top_5_deep_cuts']:
+                    print(f"    [{t['obscurity_score']:.3f}] {t['artist']} - {t['title']}")
+            return
+
+        if args.deepcut_command == "hunt":
+            genre = getattr(args, 'genre', None)
+            artist = getattr(args, 'artist', None)
+            min_obs = getattr(args, 'min_obscurity', 0.6)
+            min_acc = getattr(args, 'min_acclaim', 0.0)
+            limit = getattr(args, 'limit', 20)
+            output_json = getattr(args, 'output_json', False)
+
+            print(f"Hunting for deep cuts (genre={genre or 'all'}, min_obscurity={min_obs}) ...")
+
+            def _progress(msg: str) -> None:
+                print(f"  {msg}")
+
+            results = dc.hunt_by_obscurity(
+                genre=genre,
+                artist=artist,
+                min_obscurity=min_obs,
+                min_acclaim=min_acc,
+                limit=limit,
+                progress_callback=_progress,
+            )
+
+            if output_json:
+                import json as _json
+                print(_json.dumps(results, ensure_ascii=False, indent=2))
+            else:
+                print(f"\nFound {len(results)} deep cuts:\n")
+                for i, t in enumerate(results, 1):
+                    tags = ', '.join(t.get('tags', [])[:3])
+                    print(f"  {i:2}. [{t['obscurity_score']:.3f}] {t['artist']} - {t['title']}")
+                    print(f"       Acclaim: {t['acclaim_score']:.3f}  Popularity pct: {t['popularity_percentile']:.3f}")
+                    print(f"       Listeners: {t.get('lastfm_listeners', 0):,}  Tags: {tags}")
+                    print()
+            return
+
+    if args.command == "playlust":
+        from oracle.playlust import Playlust, ACT_DEFINITIONS
+        output_json = getattr(args, 'output_json', False)
+
+        if args.playlust_command == "acts" or not args.playlust_command:
+            pl = Playlust()
+            acts = pl.get_act_definitions()
+            print("Playlust Act Profiles (HALFCOCKED.EXE)\n")
+            for act in acts:
+                print(f"  {act['label']} ({int(act['proportion']*100)}% of playlist)")
+                print(f"    Arc template  : {act['arc_template']}")
+                print(f"    Tone          : {act['narrative_tone']}")
+                print(f"    Target profile:")
+                for dim, val in act['target_profile'].items():
+                    bar = int(val * 20) * "="
+                    print(f"      {dim:<12} [{bar:<20}] {val:.2f}")
+                print()
+            return
+
+        if args.playlust_command == "generate":
+            import json as _json
+            mood = getattr(args, 'mood', None)
+            duration = getattr(args, 'duration', 60)
+            name = getattr(args, 'name', None)
+            no_deepcut = getattr(args, 'no_deepcut', False)
+
+            print(f"Generating {duration}-min Playlust journey" + (f' (mood: {mood})' if mood else '') + " ...")
+
+            def _progress(msg: str) -> None:
+                print(f"  {msg}")
+
+            pl = Playlust()
+            run = pl.generate(
+                mood=mood,
+                duration_minutes=duration,
+                name=name,
+                use_deepcut=not no_deepcut,
+                progress_callback=_progress,
+            )
+
+            if output_json:
+                output = {
+                    "uuid": run.uuid,
+                    "prompt": run.prompt,
+                    "track_count": len(run.tracks),
+                    "tracks": [
+                        {
+                            "rank": t.rank,
+                            "artist": t.artist,
+                            "title": t.title,
+                            "score": t.global_score,
+                            "reasons": [r.dict() for r in t.reasons],
+                        }
+                        for t in run.tracks
+                    ],
+                }
+                print(_json.dumps(output, ensure_ascii=False, indent=2))
+            else:
+                print(f"\nPlaylist generated: {len(run.tracks)} tracks\n")
+                print(f"Narrative: {run.prompt}\n")
+                print(f"{'#':>3}  {'Artist':<28} {'Title':<32} {'Act'}")
+                print("-" * 75)
+                for t in run.tracks:
+                    act_reason = next((r for r in t.reasons if r.type.startswith("act:")), None)
+                    act_label = act_reason.type.replace("act:", "").upper() if act_reason else ""
+                    print(f"{t.rank:>3}  {t.artist[:28]:<28} {t.title[:32]:<32} {act_label}")
+            return
+
+    if args.command == "playlist":
+        if args.playlist_command == "list" or not args.playlist_command:
+            limit = getattr(args, 'limit', 10)
+            from oracle.db.schema import get_connection as _gc
+            conn = _gc()
+            c = conn.cursor()
+            c.execute(
+                """SELECT id, vibe_name, created_at, track_count
+                   FROM playlist_runs ORDER BY created_at DESC LIMIT ?""",
+                (limit,)
+            )
+            rows = c.fetchall()
+            conn.close()
+            if not rows:
+                print("No playlist runs found.")
+                return
+            print(f"{'ID':>6}  {'Tracks':>6}  {'Name':<30}  Created")
+            print("-" * 65)
+            for row in rows:
+                import datetime as _dt
+                run_id, name, ts, track_count = row
+                dt = _dt.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M') if ts else ''
+                print(f"{run_id:>6}  {track_count or 0:>6}  {(name or 'unnamed'):<30}  {dt}")
+            return
+
+        if args.playlist_command == "explain":
+            from oracle.explain import ReasonBuilder
+            import json as _json
+            output_json = getattr(args, 'output_json', False)
+            rb = ReasonBuilder()
+            result = rb.explain_run(args.run_id)
+            if result['track_count'] == 0:
+                print(f"No tracks found for run_id {args.run_id}")
+                return
+            if output_json:
+                print(_json.dumps(result, ensure_ascii=False, indent=2))
+            else:
+                print(f"Playlist run {args.run_id} — {result['track_count']} tracks\n")
+                for t in result['tracks']:
+                    print(f"  {t['rank']:>2}. {t['artist']} - {t['title']}")
+                    for r in t.get('reasons', []):
+                        score = r.get('score', 0)
+                        rtype = r.get('type', '?')
+                        text = r.get('text', '')
+                        print(f"       [{score:.3f}] {rtype}: {text}")
+                    print()
+            return
+
+    if args.command == "listen":
+        from oracle.integrations.beefweb_bridge import BeefWebBridge
+        import logging as _logging
+        _logging.basicConfig(level=_logging.INFO, format='%(message)s')
+
+        host = getattr(args, 'host', 'localhost')
+        port = getattr(args, 'port', 8880)
+        interval = getattr(args, 'interval', 0.5)
+        check_only = getattr(args, 'check', False)
+        once = getattr(args, 'once', False)
+
+        bridge = BeefWebBridge(host=host, port=port, poll_interval=interval)
+
+        if check_only:
+            ok = bridge.check_connection()
+            if ok:
+                now = bridge.get_current_track()
+                if now and now.get('state') != 'stopped':
+                    print(f"BeefWeb OK -- Now playing: {now['artist']} - {now['title']} ({now['state']})")
+                    print(f"  Position: {now['position']:.1f}s / {now['duration']:.1f}s")
+                else:
+                    print(f"BeefWeb OK -- Player stopped or idle")
+            else:
+                print(f"BeefWeb UNREACHABLE at {host}:{port}")
+                print(" Install foo_beefweb plugin in foobar2000 and check port.")
+            return
+
+        print(f"PlayFaux bridge started (BeefWeb @ {host}:{port}, interval={interval}s)")
+        print("Ctrl+C to stop.\n")
+
+        if once:
+            generator = bridge.stream_events(max_events=3)
+            for event in generator:
+                import json as _json
+                print(_json.dumps(event, indent=2))
+            return
+
+        # Blocking event stream — runs until Ctrl+C
+        try:
+            for event in bridge.stream_events():
+                etype = event.get('type', '?')
+                artist = event.get('artist', '')
+                title = event.get('title', '')
+                rate = event.get('completion_rate', 0)
+                skipped = event.get('skipped', False)
+                if etype == 'track_start':
+                    print(f"  >> {artist} - {title}")
+                elif etype == 'track_end':
+                    flag = ' [SKIP]' if skipped else ''
+                    print(f"  << {artist} - {title} ({rate:.0%}){flag}")
+                elif etype == 'playback_stop':
+                    print(f"  [stopped] {artist} - {title}")
+        except KeyboardInterrupt:
+            bridge.stop()
+            print("\nBridge stopped.")
         return
 
     if args.command == "smart-acquire":
@@ -1203,19 +1617,38 @@ def main() -> None:
         print("Usage: oracle catalog {lookup|acquire|status}")
         return
 
-    if args.command == "listen":
-        import logging as _logging
-        import asyncio as _asyncio
-        _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
-        from oracle.integrations.beefweb_listener import run_listener
-        _asyncio.run(run_listener(host=args.host, port=args.port))
-        return
-
     if args.command == "watch":
         import logging as _logging
         _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
         from oracle.ingest_watcher import run_watcher
         run_watcher(once=args.once)
+        return
+
+    if args.command == "import":
+        import logging as _logging
+        from pathlib import Path as _Path
+        _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+        from oracle.integrations.beets_import import beets_import_and_ingest
+        from oracle.config import STAGING_FOLDER, DOWNLOADS_FOLDER
+        source_map = {
+            "staging": STAGING_FOLDER,
+            "downloads": DOWNLOADS_FOLDER,
+        }
+        source = source_map.get(args.source, _Path(args.source))
+        result = beets_import_and_ingest(
+            source,
+            dry_run=getattr(args, "dry_run", False),
+            no_autotag=getattr(args, "no_autotag", False),
+            singleton=getattr(args, "singletons", False),
+            move=not getattr(args, "copy", False),
+        )
+        print(f"Beets import: {result.get('imported', 0)} imported, "
+              f"{result.get('quarantined', 0)} quarantined, "
+              f"{result.get('errors', 0)} errors")
+        if result.get("scan"):
+            print(f"Scan: {result['scan']}")
+        if result.get("index"):
+            print(f"Index: {result['index']}")
         return
 
     if args.command == "drain":
@@ -1342,7 +1775,15 @@ def main() -> None:
         print(f"\nDone. {downloaded_count} downloaded, {failed_count} failed.")
         if retried_count or hard_failed_count:
             print(f"Retries queued: {retried_count} | Hard failed: {hard_failed_count}")
-        if downloaded_count:
+        if downloaded_count and not getattr(args, "no_ingest", False):
+            print("\n-- Ingesting downloads (embed + score)... --")
+            try:
+                from oracle.ingest_watcher import run_watcher
+                run_watcher(once=True)
+            except Exception as _exc:
+                print(f"[WARN] Auto-ingest failed: {_exc}")
+                print("       Run 'oracle watch --once' to retry.")
+        elif downloaded_count:
             print("Run 'oracle watch --once' to ingest and mark queue items completed.")
         return
 

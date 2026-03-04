@@ -59,12 +59,7 @@ def get_track_id(content_hash: str) -> str:
     return hashlib.sha256(content_hash.encode("utf-8")).hexdigest()[:32]
 
 
-def migrate() -> bool:
-    write_mode = get_write_mode()
-    if write_mode != "apply_allowed":
-        print(f"WRITE BLOCKED: LYRA_WRITE_MODE={write_mode}. Set to apply_allowed to migrate.")
-        return False
-
+def _apply_schema() -> bool:
     conn = get_connection(timeout=10.0)
     c = conn.cursor()
 
@@ -157,6 +152,34 @@ def migrate() -> bool:
 
     c.execute(
         """
+        CREATE TABLE IF NOT EXISTS playlist_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            prompt TEXT NOT NULL,
+            params JSON,
+            created_at TEXT DEFAULT (datetime('now')),
+            is_saved_vibe BOOLEAN DEFAULT 0,
+            vibe_name TEXT
+        )
+        """
+    )
+
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS playlist_tracks (
+            run_id INTEGER NOT NULL,
+            track_path TEXT NOT NULL,
+            rank INTEGER NOT NULL,
+            score REAL,
+            reasons JSON,
+            FOREIGN KEY (run_id) REFERENCES playlist_runs(id) ON DELETE CASCADE,
+            FOREIGN KEY (track_path) REFERENCES tracks(filepath)
+        )
+        """
+    )
+
+    c.execute(
+        """
         CREATE TABLE IF NOT EXISTS track_scores (
             track_id TEXT PRIMARY KEY,
             energy REAL,
@@ -211,6 +234,7 @@ def migrate() -> bool:
             priority_score REAL DEFAULT 0.0,
             play_count INTEGER DEFAULT 0,
             source TEXT,
+            playlist_name TEXT,
             search_query TEXT,
             status TEXT DEFAULT 'pending',
             url TEXT,
@@ -454,6 +478,38 @@ def migrate() -> bool:
     )
     _ensure_llm_audit_columns(c)
 
+    # Sprint 1: Credit attribution
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS track_credits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            track_id TEXT NOT NULL,
+            artist_id TEXT,
+            artist_name TEXT NOT NULL,
+            role TEXT NOT NULL,
+            credited_as TEXT,
+            connection_type TEXT,
+            source TEXT DEFAULT 'musicbrainz',
+            created_at REAL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (track_id) REFERENCES tracks(track_id)
+        )
+        """
+    )
+    c.execute("CREATE INDEX IF NOT EXISTS idx_credits_track ON track_credits(track_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_credits_role ON track_credits(role)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_credits_artist ON track_credits(artist_name)")
+
+    # Meta / key-value store (used by graph_builder + other modules)
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS meta (
+            key TEXT PRIMARY KEY,
+            value TEXT,
+            updated_at REAL DEFAULT (strftime('%s', 'now'))
+        )
+        """
+    )
+
     # â”€â”€ All indexes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_filepath ON tracks(filepath)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_status ON tracks(status)")
@@ -465,6 +521,9 @@ def migrate() -> bool:
     c.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_track ON embeddings(track_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_enrich_provider ON enrich_cache(provider)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_vibe_name ON vibe_tracks(vibe_name)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_playlist_runs_created_at ON playlist_runs(created_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_playlist_tracks_run_rank ON playlist_tracks(run_id, rank)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_playlist_tracks_track_path ON playlist_tracks(track_path)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_acq_status ON acquisition_queue(status)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_acq_priority ON acquisition_queue(priority_score DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_scores_scored_at ON track_scores(scored_at)")
@@ -479,6 +538,20 @@ def migrate() -> bool:
     conn.commit()
     conn.close()
     return True
+
+
+def create_tables() -> bool:
+    """Compatibility wrapper for callers that expect direct table creation."""
+    return _apply_schema()
+
+
+def migrate() -> bool:
+    write_mode = get_write_mode()
+    if write_mode != "apply_allowed":
+        print(f"WRITE BLOCKED: LYRA_WRITE_MODE={write_mode}. Set to apply_allowed to migrate.")
+        return False
+
+    return _apply_schema()
 
 
 def _ensure_tracks_columns(cursor: sqlite3.Cursor) -> None:
@@ -517,6 +590,8 @@ def _ensure_tracks_columns(cursor: sqlite3.Cursor) -> None:
         "added_at": "REAL",
         "created_at": "REAL",
         "updated_at": "REAL",
+        "track_number": "INTEGER",
+        "disc_number": "INTEGER",
     }
 
     for name, col_type in desired.items():
@@ -554,6 +629,7 @@ def _ensure_acquisition_queue_columns(cursor: sqlite3.Cursor) -> None:
     columns = {row[1] for row in cursor.fetchall()}
     desired = {
         "priority_score": "REAL DEFAULT 0.0",
+        "playlist_name": "TEXT",
         "added_at": "TEXT DEFAULT (datetime('now'))",
         "completed_at": "TEXT",
         "url": "TEXT",

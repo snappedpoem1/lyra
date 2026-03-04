@@ -1,0 +1,56 @@
+{
+  "name": "lyra-oracle",
+  "version": "1.0.0",
+  "description": "Local-first music library and desktop player",
+  "author": "Christian Wilson",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "npm --prefix renderer-app run dev",
+    "dev:electron": "wait-on tcp:5173 && cross-env LYRA_RENDERER_URL=http://127.0.0.1:5173 electron .",
+    "llm:check": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\check_llm_config.ps1",
+    "llm:fix": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\fix_lmstudio.ps1",
+    "build": "npm run build:renderer && electron-builder",
+    "build:renderer": "npm --prefix renderer-app run build",
+    "dist": "npm run build",
+    "installer:update": "powershell -ExecutionPolicy Bypass -File .\\install_or_update.ps1",
+    "installer:update:build": "npm run build && npm run installer:update"
+  },
+  "build": {
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "renderer-app/dist/**/*"
+    ],
+    "productName": "Lyra",
+    "extraResources": [
+      {
+        "to": "extra/oracle-engine.exe",
+        "from": "oracle-engine.exe"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "appId": "com.snapped.lyra",
+    "nsis": {
+      "oneClick": false,
+      "createDesktopShortcut": true,
+      "runAfterFinish": true,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3",
+    "wait-on": "^8.0.3"
+  }
+}

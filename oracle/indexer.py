@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 import logging
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional
 import time
@@ -16,7 +17,6 @@ from dotenv import load_dotenv
 
 from oracle.chroma_store import LyraChromaStore
 from oracle.db.schema import get_connection, get_write_mode
-from oracle.embedders.clap_embedder import CLAPEmbedder
 from oracle.perf import auto_workers
 from oracle.runtime_state import wait_if_paused, get_profile
 
@@ -26,6 +26,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # Use music-specific CLAP model (fallback handled in embedder)
 MODEL_NAME = "laion/larger_clap_music"
 MODEL_KEY = "clap_htsat_unfused"
+
+
+def _build_embedder():
+    try:
+        from oracle.embedders.clap_embedder import CLAPEmbedder
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Audio embedding dependencies are unavailable. Run Lyra from the repo .venv "
+            "or install torch/transformers into this Python environment."
+        ) from exc
+
+    return CLAPEmbedder(model_name=MODEL_NAME, cache_dir=os.getenv("HF_HOME"), use_fallback=False)
 
 
 def index_library(
@@ -159,8 +171,18 @@ def _index_rows(
     workers: int,
     embed_batch: int,
 ) -> Dict[str, int]:
-    embedder = CLAPEmbedder(model_name=MODEL_NAME, cache_dir=os.getenv("HF_HOME"))
-    store = LyraChromaStore(persist_dir="./chroma_storage")
+    try:
+        embedder = _build_embedder()
+        store = LyraChromaStore(persist_dir="./chroma_storage")
+    except Exception as exc:
+        logger.warning("Indexing dependencies unavailable: %s", exc)
+        return {
+            "indexed": 0,
+            "failed": 0,
+            "scored": 0,
+            "dependency_unavailable": True,
+            "error": str(exc),
+        }
 
     batch_ids: List[str] = []
     batch_embeddings: List[List[float]] = []
@@ -277,9 +299,65 @@ def _index_rows(
         stats["scored"] = scored
         logger.info(f"Scored {scored}/{len(indexed_ids)} tracks")
 
+    # Auto-enrich new artists with biographer data (background — never blocks indexing)
+    if indexed_ids:
+        _auto_enrich_new_artists(indexed_ids, conn=conn)
+
     stats["workers"] = workers
     stats["embed_batch"] = EMBED_BATCH
     return stats
+
+
+def _auto_enrich_new_artists(track_ids: List[str], conn) -> None:
+    """Fetch artist names for indexed tracks and enrich any not yet in cache.
+
+    Runs in a daemon thread so it never delays the indexing response.
+    Safe to call with an already-committed connection — opens its own read.
+    """
+    try:
+        c = conn.cursor()
+        placeholders = ",".join("?" * len(track_ids))
+        c.execute(
+            f"SELECT DISTINCT artist FROM tracks "
+            f"WHERE track_id IN ({placeholders}) AND artist IS NOT NULL AND artist != ''",
+            track_ids,
+        )
+        artists = [row[0] for row in c.fetchall()]
+    except Exception as exc:
+        logger.debug("auto_enrich: could not fetch artist names: %s", exc)
+        return
+
+    if not artists:
+        return
+
+    logger.info("[INDEX] Scheduling biographer enrichment for %d artist(s)", len(artists))
+
+    def _run():
+        try:
+            from oracle.enrichers.biographer import Biographer
+            stats = Biographer().enrich_new_artists(artists)
+            logger.info(
+                "[INDEX] Biographer: %d new, %d already cached, %d failed",
+                stats["processed"], stats["already_cached"], stats["failed"],
+            )
+        except Exception as exc:
+            logger.debug("[INDEX] Biographer background enrichment error: %s", exc)
+
+    t = threading.Thread(target=_run, name="biographer-auto-enrich", daemon=True)
+    t.start()
+
+    # Also trigger incremental graph build (only processes artists not yet in connections)
+    def _graph_run():
+        try:
+            from oracle.graph_builder import GraphBuilder
+            added = GraphBuilder().build_incremental()
+            if added:
+                logger.info("[INDEX] Graph build: %d new connection edges added", added)
+        except Exception as exc:
+            logger.debug("[INDEX] Graph build background error: %s", exc)
+
+    gt = threading.Thread(target=_graph_run, name="graph-auto-build", daemon=True)
+    gt.start()
 
 
 def _record_embeddings(cursor, track_ids: List[str]) -> None:
@@ -298,14 +376,24 @@ def _auto_score_tracks(track_ids: List[str], workers: int = 0) -> int:
         Number of tracks successfully scored
     """
     try:
-        from oracle.scorer import score_track
+        from oracle.scorer import score_track, _get_embedder, _anchor_embeddings
     except ImportError:
         logger.warning("Scorer not available, skipping auto-score")
         return 0
 
+    # Pre-warm embedder + anchor embeddings in the main thread so lru_cache is
+    # populated before worker threads start. Without this, 32 threads race to
+    # load the CLAP model simultaneously causing meta-tensor errors.
+    try:
+        _get_embedder()
+        _anchor_embeddings()
+    except Exception as e:
+        logger.warning(f"Scorer pre-warm failed: {e}")
+        return 0
+
     if workers <= 0:
         workers = auto_workers("cpu")
-    workers = max(1, min(int(workers), 24))
+    workers = max(1, min(int(workers), 8))  # cap at 8 — scoring is GPU-bound, more = contention
 
     scored = 0
 

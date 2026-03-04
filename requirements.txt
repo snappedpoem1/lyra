@@ -7,6 +7,7 @@ yt-dlp>=2026.2.4
 
 # Audio metadata / tagging
 mutagen
+beets>=2.0
 
 # HTTP + scraping
 requests
@@ -42,6 +43,12 @@ colorama
 # Retry logic
 tenacity
 tqdm
+
+# Code quality (linting + formatting — replaces flake8/black/isort)
+ruff
+
+# Structured logging (replaces print() debugging)
+loguru
 
 # Web API server (for future dashboard)
 flask

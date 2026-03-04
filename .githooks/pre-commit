@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+
+BLOCKED_REGEX='(^|/)(Lyra_Oracle_System/config/prowlarr/|data/|.*\.(db|sqlite|sqlite3)(-shm|-wal|-journal)?$|\.env(\..*)?)'
+BLOCKED_FILES="$(git diff --cached --name-only | grep -E "$BLOCKED_REGEX" | grep -vE '(^|/)\.env\.(template|example)$' || true)"
+
+if [ -n "$BLOCKED_FILES" ]; then
+  echo "Pre-commit blocked: runtime/secrets/db files staged."
+  echo "Remove them from staging and keep them local-only."
+  echo
+  printf '%s\n' "$BLOCKED_FILES" | sed 's/^/  - /'
+  exit 1
+fi
+
+exit 0
