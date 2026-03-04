@@ -72,7 +72,11 @@ Desktop.ini
 # Claude Code
 .claude/**
 !.claude/CLAUDE.md
+!.claude/AGENTS.md
 !.claude/settings.json
+!.claude/memory/
+!.claude/memory/MEMORY.md
+!.claude/memory/SESSIONS.md
 
 # Docker runtime config (mounted volumes)
 Lyra_Oracle_System/config/prowlarr/
