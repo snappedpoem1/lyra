@@ -145,6 +145,7 @@ For production-like behavior in the desktop app, keep `fixtureMode` disabled in 
 
 ## Key Docs
 
+- [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) - full audited project state snapshot
 - [`docs/MASTER_PLAN_EXPANDED.md`](docs/MASTER_PLAN_EXPANDED.md) - current high-level project status
 - [`docs/MISSING_FEATURES_REGISTRY.md`](docs/MISSING_FEATURES_REGISTRY.md) - real gaps, partials, and integration issues
 - [`docs/WORKLIST.md`](docs/WORKLIST.md) - short done / todo list
