@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ConstellationEdge, ConstellationNode } from "@/types/domain";
 import { LyraPanel } from "@/ui/LyraPanel";
+import { resolveApiUrl } from "@/services/lyraGateway/client";
 
 function layout(nodes: ConstellationNode[]): ConstellationNode[] {
   const centerX = 320;
@@ -31,6 +32,8 @@ export function ConstellationScene({
 }) {
   const [focusNodeId, setFocusNodeId] = useState<string | null>(nodes[0]?.id ?? null);
   const [tick, setTick] = useState(0);
+  const [acquiring, setAcquiring] = useState<string | null>(null);
+  const [acquireStatus, setAcquireStatus] = useState<"idle" | "queued" | "error">("idle");
 
   useEffect(() => {
     let frame = 0;
@@ -42,6 +45,23 @@ export function ConstellationScene({
     };
     animationId = window.requestAnimationFrame(loop);
     return () => window.cancelAnimationFrame(animationId);
+  }, []);
+
+  const handleAcquireArtist = useCallback(async (label: string) => {
+    setAcquiring(label);
+    setAcquireStatus("idle");
+    try {
+      const resp = await fetch(resolveApiUrl("/api/acquire/batch"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queries: [label], workers: 2 }),
+      });
+      setAcquireStatus(resp.ok ? "queued" : "error");
+    } catch {
+      setAcquireStatus("error");
+    } finally {
+      setAcquiring(null);
+    }
   }, []);
 
   const laidOut = useMemo(() => layout(nodes), [nodes]);
@@ -113,11 +133,11 @@ export function ConstellationScene({
           >
             <circle
               r={18 + node.weight * 16 + (focusNodeId === node.id ? 6 : 0)}
-              fill={node.accent ?? "#f0a44b"}
-              fillOpacity={focusNodeId === node.id ? 0.26 : 0.12 + node.weight * 0.12}
+              fill={node.inLibrary !== false ? (node.accent ?? "#f0a44b") : "#8896aa"}
+              fillOpacity={focusNodeId === node.id ? 0.26 : node.inLibrary !== false ? 0.12 + node.weight * 0.12 : 0.05}
             />
-            <circle r={5 + node.weight * 6} fill={node.accent ?? "#f0a44b"} />
-            <circle r={1.6 + node.weight * 2.3} fill="#fff5e0" />
+            <circle r={5 + node.weight * 6} fill={node.inLibrary !== false ? (node.accent ?? "#f0a44b") : "#8896aa"} />
+            <circle r={1.6 + node.weight * 2.3} fill={node.inLibrary !== false ? "#fff5e0" : "#aabbcc"} />
             <text y={36} textAnchor="middle" fill="#f3e5d0" fontSize="12">{node.label}</text>
           </g>
         ))}
@@ -127,6 +147,24 @@ export function ConstellationScene({
           <span className="insight-kicker">Selected</span>
           <strong>{focusNode?.label ?? "Click a node to inspect"}</strong>
           <p>{relatedEdges[0]?.reason ?? "Select a node to see how it connects to the rest of your library."}</p>
+          {focusNode && !focusNode.inLibrary && (
+            <div className="constellation-acquire-cta">
+              <span className="insight-kicker" style={{ color: "#8896aa" }}>Not in your library</span>
+              {acquireStatus === "queued" ? (
+                <span style={{ fontSize: 12, color: "#6dbb8a" }}>Queued for acquisition ✓</span>
+              ) : acquireStatus === "error" ? (
+                <span style={{ fontSize: 12, color: "#cc7a7a" }}>Acquisition failed — try again</span>
+              ) : (
+                <button
+                  className="lyra-btn lyra-btn--ghost lyra-btn--sm"
+                  disabled={acquiring === focusNode.label}
+                  onClick={() => handleAcquireArtist(focusNode.label)}
+                >
+                  {acquiring === focusNode.label ? "Queuing…" : `Scout ${focusNode.label}`}
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="constellation-legend">
           {relatedEdges.slice(0, 3).map((edge) => (

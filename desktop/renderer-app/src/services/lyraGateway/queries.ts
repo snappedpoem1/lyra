@@ -450,6 +450,7 @@ export async function getConstellation(
       kind: "artist" as const,
       weight: n.inLibrary ? 1.5 : 0.8,
       accent: n.inLibrary ? "#d4a03a" : undefined,
+      inLibrary: n.inLibrary ?? false,
     }));
     const edges: ConstellationEdge[] = payload.edges.map((e) => ({
       id: `${e.source}-${e.target}`,

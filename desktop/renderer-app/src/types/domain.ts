@@ -193,6 +193,7 @@ export interface ConstellationNode {
   x?: number;
   y?: number;
   accent?: string;
+  inLibrary?: boolean;
   trackId?: string;
   playlistId?: string;
 }
