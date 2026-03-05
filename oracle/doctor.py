@@ -115,11 +115,15 @@ def _check_env() -> CheckResult:
 # HTTP service checks
 # ---------------------------------------------------------------------------
 
-def _http_get(url: str, timeout: int = 4) -> tuple[int, str]:
+def _http_get(
+    url: str,
+    timeout: int = 4,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, str]:
     """Return (status_code, error_string). status_code=0 means connection failed."""
     try:
         import requests
-        r = requests.get(url, timeout=timeout)
+        r = requests.get(url, timeout=timeout, headers=headers)
         return r.status_code, ""
     except Exception as exc:
         return 0, str(exc)
@@ -200,7 +204,11 @@ def _check_lidarr() -> CheckResult:
     key = os.getenv("LIDARR_API_KEY", "")
     if not key:
         return CheckResult("Lidarr (discovery)", "WARNING", "No API key (LIDARR_API_KEY)")
-    status, err = _http_get(f"{url}/api/v1/system/status", timeout=4)
+    status, err = _http_get(
+        f"{url}/api/v1/system/status",
+        timeout=4,
+        headers={"X-Api-Key": key},
+    )
     if status == 200:
         return CheckResult("Lidarr (discovery)", "PASS", f"Live at {url}")
     if status in (401, 403):

@@ -410,8 +410,11 @@ class Playlust:
         conn = get_connection()
         c = conn.cursor()
         try:
+            c.execute("PRAGMA table_info(enrich_cache)")
+            cols = {row[1] for row in c.fetchall()}
+            payload_col = "payload_json" if "payload_json" in cols else "payload"
             c.execute(
-                "SELECT payload FROM enrich_cache WHERE provider = 'deepcut_score' LIMIT 1000"
+                f"SELECT {payload_col} FROM enrich_cache WHERE provider = 'deepcut_score' LIMIT 1000"
             )
             rows = c.fetchall()
         finally:

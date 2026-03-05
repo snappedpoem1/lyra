@@ -62,7 +62,7 @@ services:
       - "7700:7700"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:7700/health', timeout=3).raise_for_status()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7700/health', timeout=3).read()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -82,7 +82,7 @@ services:
       - "8686:8686"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8686/api/v1/system/status", "--max-time", "5"]
+      test: ["CMD", "curl", "-f", "http://localhost:8686", "--max-time", "5"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -98,7 +98,7 @@ services:
       - ${LIBRARY_BASE}:/app/library:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:7701/health', timeout=3).raise_for_status()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7701/health', timeout=3).read()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -111,7 +111,6 @@ services:
       - SLSKD_REMOTE_CONFIGURATION=true
       - SLSKD_SLSK_LISTEN_PORT=50300
     volumes:
-      - ./data/node/slskd.yml:/app/slskd.yml
       - ./data/node/data:/app/data
       - A:/Staging:/app/downloads
     ports:
@@ -119,7 +118,11 @@ services:
       - "50300:50300"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5030/api/v0/application", "--max-time", "5"]
+      test:
+        [
+          "CMD-SHELL",
+          "out=$$(wget -S -q -O /dev/null http://localhost:5030/api/v0/application 2>&1 || true); echo \"$$out\" | grep -Eq \"HTTP/1\\.[01] (200|401)\"",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

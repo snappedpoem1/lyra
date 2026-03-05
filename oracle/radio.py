@@ -385,12 +385,17 @@ class Radio:
             client = chromadb.PersistentClient(path=str(CHROMA_PATH))
             collection = client.get_or_create_collection(CHROMA_COLLECTION)
             
+            seed = collection.get(ids=[track_id], include=["embeddings"])
+            seed_embeddings = seed.get("embeddings") or []
+            if not seed_embeddings:
+                return self._random_tracks(count)
+
             result = collection.query(
-                query_embeddings=collection.get(ids=[track_id], include=["embeddings"])["embeddings"],
+                query_embeddings=seed_embeddings,
                 n_results=count + 1,  # +1 to exclude self
                 include=["metadatas", "distances"]
             )
-            
+
             tracks = []
             for i, track_id in enumerate(result["ids"][0][1:]):  # Skip first (self)
                 tracks.append({

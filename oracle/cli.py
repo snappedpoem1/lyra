@@ -1341,8 +1341,12 @@ def main() -> None:
             ok = fail = 0
             for track_id, filepath in rows:
                 try:
-                    ar.analyze_structure(track_id, filepath)
-                    ok += 1
+                    result = ar.analyze_structure(track_id, filepath)
+                    if isinstance(result, dict) and result.get("error"):
+                        fail += 1
+                        print(f"  FAIL {filepath}: {result['error']}")
+                    else:
+                        ok += 1
                 except Exception as exc:
                     fail += 1
                     print(f"  FAIL {filepath}: {exc}")

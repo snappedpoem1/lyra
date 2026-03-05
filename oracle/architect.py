@@ -164,18 +164,43 @@ class Architect:
         """
         # Compute MFCC features
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-        
+        frame_count = int(mfcc.shape[1]) if mfcc.ndim == 2 else 0
+        if frame_count < 4:
+            duration = float(len(y) / sr) if sr > 0 else 0.0
+            return [{
+                "label": "section",
+                "start": 0.0,
+                "end": duration,
+                "duration": duration,
+                "color": self._get_segment_color("section"),
+            }]
+
+        max_width = max(1, (frame_count - 1) // 2)
+        recurrence_width = min(43, max_width)
+        if recurrence_width == max_width and recurrence_width > 1:
+            recurrence_width -= 1
+        k_segments = max(2, min(8, frame_count - 1))
+
         # Compute recurrence matrix
         librosa.segment.recurrence_matrix(
             mfcc,
             mode='affinity',
             metric='cosine',
-            width=43  # ~2 seconds at 22050 Hz
+            width=recurrence_width
         )
-        
+
         # Detect segment boundaries
-        boundaries = librosa.segment.agglomerative(mfcc, k=8)  # Max 8 segments
+        boundaries = librosa.segment.agglomerative(mfcc, k=k_segments)
         boundary_times = librosa.frames_to_time(boundaries, sr=sr)
+        if len(boundary_times) < 2:
+            duration = float(len(y) / sr) if sr > 0 else 0.0
+            return [{
+                "label": "section",
+                "start": 0.0,
+                "end": duration,
+                "duration": duration,
+                "color": self._get_segment_color("section"),
+            }]
         
         # Label segments
         structure = []
@@ -244,6 +269,8 @@ class Architect:
             buildup_energy = onset_smooth[buildup_start:peak]
             
             if len(buildup_energy) > 0:
+                if len(buildup_energy) < 2:
+                    continue
                 # Rising energy trend?
                 energy_slope = np.polyfit(range(len(buildup_energy)), buildup_energy, 1)[0]
                 

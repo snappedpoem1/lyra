@@ -536,6 +536,9 @@ Remember: You are the system. The Oracle. The Architect. Act accordingly.
 # Singleton instance
 agent = Agent()
 
+# Backward-compatibility alias expected by API blueprint.
+AgentEngine = Agent
+
 
 # CLI interface
 if __name__ == "__main__":

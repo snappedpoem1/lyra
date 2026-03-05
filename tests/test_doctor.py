@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sqlite3
-from oracle.doctor import _check_chroma_storage
+from oracle.doctor import _check_chroma_storage, _check_lidarr
 
 
 def test_check_chroma_storage_reports_embedding_count(monkeypatch, tmp_path: Path):
@@ -41,3 +41,23 @@ def test_check_chroma_storage_warns_when_collection_probe_fails(monkeypatch, tmp
 
     assert result.status == "WARNING"
     assert "collection check failed" in result.details
+
+
+def test_check_lidarr_passes_api_key_header(monkeypatch):
+    monkeypatch.setenv("LIDARR_URL", "http://localhost:8686")
+    monkeypatch.setenv("LIDARR_API_KEY", "test-key")
+    seen: dict[str, object] = {}
+
+    def fake_http_get(url: str, timeout: int = 4, headers=None):
+        seen["url"] = url
+        seen["timeout"] = timeout
+        seen["headers"] = headers
+        return 200, ""
+
+    monkeypatch.setattr("oracle.doctor._http_get", fake_http_get)
+
+    result = _check_lidarr()
+
+    assert result.status == "PASS"
+    assert seen["url"] == "http://localhost:8686/api/v1/system/status"
+    assert seen["headers"] == {"X-Api-Key": "test-key"}
