@@ -143,9 +143,39 @@ powershell -ExecutionPolicy Bypass -File scripts/smoke_desktop.ps1 -AllowLlmFail
 
 For production-like behavior in the desktop app, keep `fixtureMode` disabled in Settings so all routes use live backend data.
 
+## Session Tracking
+
+Every work session that changes observable behavior should be logged so all agent tools
+(Copilot, Claude Code, Codex) stay aligned on the same project reality.
+
+**Start a new session:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/new_session.ps1 -Slug "my-work" -Goal "What I am doing"
+```
+
+This creates `docs/sessions/YYYY-MM-DD-my-work.md` from the template and adds a row to
+`docs/SESSION_INDEX.md`. Use the printed Session ID as the commit message prefix:
+
+```
+[S-20260305-01] feat: add hybrid search ranking fix
+```
+
+**Session protocol (short version):**
+
+1. Run `scripts/new_session.ps1` to create the log file
+2. Do the work
+3. Update `docs/PROJECT_STATE.md` if metrics or architecture changed
+4. Update `docs/WORKLIST.md` if done/next items changed
+5. Fill in the session log result and commit with the session prefix
+
+See [`AGENTS.md`](AGENTS.md) for the full session rules and ground-truth file list.
+See [`docs/SESSION_INDEX.md`](docs/SESSION_INDEX.md) for all past sessions.
+
 ## Key Docs
 
 - [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) - full audited project state snapshot
+- [`docs/SESSION_INDEX.md`](docs/SESSION_INDEX.md) - table of all work sessions
 - [`docs/MASTER_PLAN_EXPANDED.md`](docs/MASTER_PLAN_EXPANDED.md) - current high-level project status
 - [`docs/MISSING_FEATURES_REGISTRY.md`](docs/MISSING_FEATURES_REGISTRY.md) - real gaps, partials, and integration issues
 - [`docs/WORKLIST.md`](docs/WORKLIST.md) - short done / todo list
