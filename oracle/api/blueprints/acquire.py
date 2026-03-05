@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import queue as _queue
 import sqlite3
 import threading
@@ -14,11 +15,12 @@ from typing import Dict, List
 from flask import Blueprint, Response, jsonify, request
 
 from oracle.api.helpers import _json_safe
-from oracle.config import LIBRARY_BASE
+from oracle.config import LIBRARY_BASE, load_config
 from oracle.db.schema import get_connection
 from oracle.validation import sanitize_integer, validate_boolean, validate_url
 
 bp = Blueprint("acquire", __name__)
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # In-process batch job state  (module-level — lives for the server's lifetime)
@@ -44,68 +46,81 @@ def _run_batch_job(job_id: str, queries: List[str], workers: int, run_pipeline: 
     fail = 0
     results: list = []
     t0 = _time.perf_counter()
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(_download_one, q.strip(), i, total): (i, q)
+                for i, q in enumerate(queries, 1)
+                if q.strip()
+            }
+            for future in as_completed(futures):
+                idx, query = futures[future]
+                r = future.result()
+                results.append(r)
+                if r["success"]:
+                    ok += 1
+                    eq.put({
+                        "event": "downloaded", "idx": idx, "query": query,
+                        "artist": r.get("artist", ""), "title": r.get("title", ""),
+                        "elapsed": round(r.get("elapsed", 0), 1),
+                        "ok": ok, "fail": fail, "total": total,
+                    })
+                else:
+                    fail += 1
+                    eq.put({
+                        "event": "failed", "idx": idx, "query": query,
+                        "error": r.get("error", ""),
+                        "ok": ok, "fail": fail, "total": total,
+                    })
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {
-            pool.submit(_download_one, q.strip(), i, total): (i, q)
-            for i, q in enumerate(queries, 1)
-            if q.strip()
-        }
-        for future in as_completed(futures):
-            idx, query = futures[future]
-            r = future.result()
-            results.append(r)
-            if r["success"]:
-                ok += 1
-                eq.put({
-                    "event": "downloaded", "idx": idx, "query": query,
-                    "artist": r.get("artist", ""), "title": r.get("title", ""),
-                    "elapsed": round(r.get("elapsed", 0), 1),
-                    "ok": ok, "fail": fail, "total": total,
-                })
-            else:
-                fail += 1
-                eq.put({
-                    "event": "failed", "idx": idx, "query": query,
-                    "error": r.get("error", ""),
-                    "ok": ok, "fail": fail, "total": total,
-                })
+        dl_time = round(_time.perf_counter() - t0, 1)
+        eq.put({"event": "downloads_done", "ok": ok, "fail": fail, "time": dl_time})
+        job["download_results"] = results
 
-    dl_time = round(_time.perf_counter() - t0, 1)
-    eq.put({"event": "downloads_done", "ok": ok, "fail": fail, "time": dl_time})
-    job["download_results"] = results
+        if run_pipeline and ok > 0:
+            cfg = load_config()
+            downloads_path = str(cfg.download_dir.resolve())
 
-    if run_pipeline and ok > 0:
-        downloads_path = str(cfg.download_dir.resolve())
+            eq.put({"event": "pipeline", "stage": "scan"})
+            t1 = _time.perf_counter()
+            from oracle.scanner import scan_library as _scan
+            scan_r = _scan(downloads_path)
+            eq.put({"event": "pipeline_done", "stage": "scan", "result": scan_r,
+                    "time": round(_time.perf_counter() - t1, 2)})
 
-        eq.put({"event": "pipeline", "stage": "scan"})
-        t1 = _time.perf_counter()
-        from oracle.scanner import scan_library as _scan
-        scan_r = _scan(downloads_path)
-        eq.put({"event": "pipeline_done", "stage": "scan", "result": scan_r,
-                "time": round(_time.perf_counter() - t1, 2)})
+            eq.put({"event": "pipeline", "stage": "index"})
+            t1 = _time.perf_counter()
+            from oracle.indexer import index_library as _index
+            idx_r = _index(library_path=downloads_path)
+            eq.put({"event": "pipeline_done", "stage": "index", "result": idx_r,
+                    "time": round(_time.perf_counter() - t1, 2)})
 
-        eq.put({"event": "pipeline", "stage": "index"})
-        t1 = _time.perf_counter()
-        from oracle.indexer import index_library as _index
-        idx_r = _index(library_path=downloads_path)
-        eq.put({"event": "pipeline_done", "stage": "index", "result": idx_r,
-                "time": round(_time.perf_counter() - t1, 2)})
+            eq.put({"event": "pipeline", "stage": "score"})
+            t1 = _time.perf_counter()
+            from oracle.scorer import score_all as _score
+            score_r = _score(force=False)
+            eq.put({"event": "pipeline_done", "stage": "score", "result": score_r,
+                    "time": round(_time.perf_counter() - t1, 2)})
 
-        eq.put({"event": "pipeline", "stage": "score"})
-        t1 = _time.perf_counter()
-        from oracle.scorer import score_all as _score
-        score_r = _score(force=False)
-        eq.put({"event": "pipeline_done", "stage": "score", "result": score_r,
-                "time": round(_time.perf_counter() - t1, 2)})
-
-    total_time = round(_time.perf_counter() - t0, 1)
-    job["status"] = "complete"
-    job["ok"] = ok
-    job["fail"] = fail
-    job["total_time"] = total_time
-    eq.put({"event": "complete", "ok": ok, "fail": fail, "total_time": total_time})
-    eq.put(None)  # sentinel
+        total_time = round(_time.perf_counter() - t0, 1)
+        job["status"] = "complete"
+        job["ok"] = ok
+        job["fail"] = fail
+        job["total_time"] = total_time
+        eq.put({"event": "complete", "ok": ok, "fail": fail, "total_time": total_time, "status": "complete"})
+    except Exception as exc:  # noqa: BLE001
+        total_time = round(_time.perf_counter() - t0, 1)
+        job["status"] = "failed"
+        job["error"] = str(exc)
+        job["ok"] = ok
+        job["fail"] = fail
+        job["download_results"] = results
+        job["total_time"] = total_time
+        logger.exception("[acquire.batch] job %s failed", job_id)
+        eq.put({"event": "error", "error": str(exc), "ok": ok, "fail": fail})
+        eq.put({"event": "complete", "ok": ok, "fail": fail, "total_time": total_time, "status": "failed"})
+    finally:
+        eq.put(None)  # sentinel
 
 
 # ---------------------------------------------------------------------------
@@ -177,8 +192,10 @@ def api_acquire_batch():
     try:
         data = request.get_json() or {}
         raw = data.get("queries", "")
-        workers = min(int(data.get("workers", 4)), 8)
-        run_pipeline = data.get("pipeline", True)
+        workers = sanitize_integer(data.get("workers", 4), default=4, min_val=1, max_val=8)
+        valid, error, run_pipeline = validate_boolean(data.get("pipeline", True), "pipeline")
+        if not valid:
+            return jsonify({"error": error}), 400
 
         if isinstance(raw, str):
             queries = [q.strip() for q in raw.splitlines() if q.strip() and not q.strip().startswith("#")]
@@ -258,16 +275,18 @@ def api_downloads_organize():
     """Organize downloads into library."""
     try:
         from oracle.acquirers.guarded_import import process_downloads
+        from oracle.config import DOWNLOADS_FOLDER
         data = request.get_json() or {}
         results = process_downloads(
-            target_library=data.get("library") or str(LIBRARY_BASE),
-            clean_names=data.get("clean_names", True),
+            downloads_folder=data.get("downloads_folder") or str(DOWNLOADS_FOLDER),
+            library_folder=data.get("library") or str(LIBRARY_BASE),
             dry_run=data.get("dry_run", False),
-            scan_after=data.get("scan_after", True),
+            delete_rejected=data.get("delete_rejected", False),
+            min_confidence=float(data.get("min_confidence", 0.3)),
         )
         return jsonify(results)
     except Exception as e:
-        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+        return jsonify({"error": str(e)}), 500
 
 
 @bp.route("/api/spotify/missing", methods=["GET"])

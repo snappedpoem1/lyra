@@ -439,6 +439,13 @@ def main() -> None:
     perf_pause = perf_sub.add_parser("pause", help="Pause heavy workers")
     perf_pause.add_argument("--reason", default="", help="Optional pause reason")
     perf_sub.add_parser("resume", help="Resume paused workers")
+    perf_sub.add_parser("clap-status", help="Show shared CLAP runtime state")
+    perf_clap_unload = perf_sub.add_parser("clap-unload", help="Unload shared CLAP runtime state")
+    perf_clap_unload.add_argument(
+        "--idle-only",
+        action="store_true",
+        help="Evict only idle handles using LYRA_CLAP_IDLE_UNLOAD_SECONDS",
+    )
 
     args = parser.parse_args()
 
@@ -569,6 +576,35 @@ def main() -> None:
     if args.command == "perf":
         from oracle.runtime_state import get_profile, is_paused, pause, resume, set_profile
         from oracle.perf import auto_workers, cpu_count
+
+        if args.perf_command == "clap-status":
+            from oracle.embedders.clap_embedder import CLAPEmbedder
+
+            print(json.dumps(CLAPEmbedder.shared_stats(), indent=2))
+            return
+
+        if args.perf_command == "clap-unload":
+            from oracle.embedders.clap_embedder import CLAPEmbedder
+            from oracle import search as _search_mod
+            from oracle import scorer as _scorer_mod
+
+            # Clear process-local lru caches that can hold embedder wrappers.
+            try:
+                _search_mod._get_clap_embedder.cache_clear()
+            except Exception:
+                pass
+            try:
+                _scorer_mod._get_embedder.cache_clear()
+                _scorer_mod._anchor_embeddings.cache_clear()
+                _scorer_mod._anchor_directions.cache_clear()
+                _scorer_mod._dimension_calibration.cache_clear()
+            except Exception:
+                pass
+
+            evicted = CLAPEmbedder.evict_idle(force=not bool(args.idle_only))
+            mode = "idle" if bool(args.idle_only) else "force"
+            print(json.dumps({"mode": mode, "evicted": evicted, "stats": CLAPEmbedder.shared_stats()}, indent=2))
+            return
 
         if args.perf_command == "profile":
             profile = set_profile(args.name)

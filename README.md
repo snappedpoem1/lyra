@@ -107,7 +107,17 @@ Run a few CLI checks:
 .venv\Scripts\python.exe -m oracle doctor
 .venv\Scripts\python.exe -m oracle status
 .venv\Scripts\python.exe -m oracle search --query "dark ambient with glitchy textures" --n 10
+.venv\Scripts\python.exe -m oracle perf clap-status
 ```
+
+CLAP runtime controls:
+
+- `oracle perf clap-status` - show shared CLAP runtime handles
+- `oracle perf clap-unload` - force-evict shared CLAP handles
+- `oracle perf clap-unload --idle-only` - evict only idle handles (uses `LYRA_CLAP_IDLE_UNLOAD_SECONDS`)
+- `LYRA_CLAP_PREWARM=1` - prewarm CLAP during API startup
+- `LYRA_CLAP_PREWARM_MODE=background|sync` - choose async or blocking prewarm mode
+- `LYRA_CLAP_SKIP_LOCAL_PROBE=1` - skip local-only revision probe and load directly
 
 Run the desktop renderer:
 

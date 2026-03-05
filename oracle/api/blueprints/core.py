@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 import traceback
 from pathlib import Path
@@ -10,7 +11,7 @@ from flask import Blueprint, jsonify, request
 
 from oracle.api import VERSION
 from oracle.config import LIBRARY_BASE
-from oracle.db.schema import get_connection
+from oracle.db.schema import get_connection, get_write_mode
 from oracle.validation import sanitize_integer
 
 bp = Blueprint("core", __name__)
@@ -64,6 +65,22 @@ def _feature_flags() -> dict:
     }
 
 
+def _auth_config() -> dict:
+    token = os.getenv("LYRA_API_TOKEN", "").strip()
+    return {"enabled": bool(token)}
+
+
+def _cors_config() -> dict:
+    raw = os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,null",
+    )
+    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    if not origins or origins == ["*"]:
+        origins = ["*"]
+    return {"allowed_origins": origins}
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -80,6 +97,9 @@ def api_health():
     try:
         db = _db_health()
         lib = _library_health()
+        feature_flags = _feature_flags()
+        auth = _auth_config()
+        cors = _cors_config()
 
         llm_status: dict = {}
         try:
@@ -88,13 +108,27 @@ def api_health():
         except Exception:
             llm_status = {"status": "unavailable"}
 
+        ok = bool(db.get("ok")) and bool(lib.get("ok"))
+        timestamp = int(time.time())
+
         return jsonify({
             "status": "ok",
+            "ok": ok,
+            "service": "lyra-oracle",
             "version": VERSION,
+            "timestamp": timestamp,
+            "profile": os.getenv("LYRA_PROFILE", "default").strip() or "default",
+            "write_mode": get_write_mode(),
+            # Canonical keys used by current desktop schemas.
+            "db": db,
             "database": db,
             "library": lib,
+            "feature_flags": feature_flags,
             "llm": llm_status,
-            "features": _feature_flags(),
+            "auth": auth,
+            "cors": cors,
+            # Backward compatibility for existing consumers/tests.
+            "features": feature_flags,
         })
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500

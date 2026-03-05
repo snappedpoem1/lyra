@@ -7,7 +7,7 @@ html, body, #root {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 18px; /* scaled for 42" 4K TV */
   overflow: hidden;
 }
 
@@ -238,8 +238,8 @@ a { color: inherit; text-decoration: none; }
   color: var(--text);
 }
 
-.nav-icon    { width: 15px; height: 15px; flex-shrink: 0; }
-.inline-icon { width: 14px; height: 14px; }
+.nav-icon    { width: 20px; height: 20px; flex-shrink: 0; }
+.inline-icon { width: 20px; height: 20px; }
 
 .rail-footnote {
   display: flex;
@@ -260,12 +260,12 @@ a { color: inherit; text-decoration: none; }
 
 .rail-now-title {
   display: block;
-  font-size: 0.79rem;
+  font-size: 0.82rem;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 178px;
+  max-width: 242px;
   transition: color var(--duration-fast) ease;
 }
 .rail-now-playing:hover .rail-now-title { color: var(--accent-bright); }
@@ -277,7 +277,7 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 178px;
+  max-width: 242px;
 }
 
 .rail-idle   { font-size: var(--text-xs); color: var(--text-dim); }
@@ -376,7 +376,7 @@ a { color: inherit; text-decoration: none; }
 
 .dock-left    { display: flex; gap: var(--space-lg); align-items: center; min-width: 0; }
 .dock-meta    { min-width: 0; }
-.dock-center  { display: flex; flex-direction: column; gap: 6px; align-items: center; min-width: 200px; }
+.dock-center  { display: flex; flex-direction: column; gap: 8px; align-items: center; min-width: 280px; }
 .dock-right   { display: flex; gap: var(--space-sm); align-items: center; justify-content: flex-end; }
 .dock-controls { display: flex; gap: var(--space-sm); align-items: center; }
 
@@ -387,7 +387,7 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  max-width: 280px;
 }
 .dock-subtitle {
   font-size: var(--text-xs);
@@ -395,24 +395,24 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  max-width: 280px;
 }
 .dock-fact-drop {
   font-size: var(--text-2xs);
   color: var(--accent);
   margin-top: 1px;
-  max-width: 200px;
+  max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Transport buttons */
+/* Transport buttons — scaled for 42" 4K TV */
 .transport-btn {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   border: 1px solid transparent;
   background: transparent;
@@ -424,8 +424,8 @@ a { color: inherit; text-decoration: none; }
 }
 .transport-btn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
 .transport-btn--play {
-  width: 36px;
-  height: 36px;
+  width: 50px;
+  height: 50px;
   background: rgba(140, 217, 74, 0.10);
   border-color: rgba(200,255,130,0.28);
   color: var(--accent-bright);
@@ -434,10 +434,10 @@ a { color: inherit; text-decoration: none; }
   background: rgba(140, 217, 74, 0.18);
   border-color: rgba(200,255,130,0.50);
 }
-.transport-btn--sm { width: 26px; height: 26px; }
+.transport-btn--sm { width: 34px; height: 34px; }
 .transport-btn:active { transform: scale(0.92); }
-.transport-icon     { width: 14px; height: 14px; }
-.transport-icon--lg { width: 16px; height: 16px; }
+.transport-icon     { width: 20px; height: 20px; }
+.transport-icon--lg { width: 24px; height: 24px; }
 
 /* Progress */
 .dock-progress {
@@ -504,7 +504,7 @@ a { color: inherit; text-decoration: none; }
 .volume-rail {
   -webkit-appearance: none;
   appearance: none;
-  width: 70px;
+  width: 96px;
   height: 3px;
   border-radius: 999px;
   background: rgba(160,170,185,0.12);
@@ -804,8 +804,8 @@ a { color: inherit; text-decoration: none; }
 
 /* Small art cell for library list rows */
 .track-art-cell {
-  width: 32px;
-  height: 32px;
+  width: 42px;
+  height: 42px;
   flex-shrink: 0;
   position: relative;
   border-radius: var(--radius-sm);
@@ -1060,8 +1060,8 @@ a { color: inherit; text-decoration: none; }
 .empty-state-panel h2 { margin: 0; font-size: var(--text-md); color: var(--text-soft); }
 .empty-state-panel p  { margin: 0; font-size: var(--text-sm); color: var(--text-dim); }
 .empty-state-glyph {
-  width: 56px;
-  height: 56px;
+  width: 72px;
+  height: 72px;
   position: relative;
   margin-bottom: var(--space-sm);
 }
@@ -1219,19 +1219,19 @@ a { color: inherit; text-decoration: none; }
 .artist-credit-names { font-size: var(--text-base); color: var(--text); }
 
 /* ── Playlists ───────────────────────────────────────────────────────────── */
-.playlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-md); }
-.playlist-card { padding: var(--space-lg); min-height: 180px; }
+.playlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-md); }
+.playlist-card { padding: var(--space-lg); min-height: 220px; }
 .card-mosaic {
   display: grid;
-  grid-template-columns: repeat(2, 48px);
+  grid-template-columns: repeat(2, 64px);
   gap: 6px;
   margin-bottom: var(--space-lg);
 }
 .card-mosaic span, .track-art {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   border-radius: var(--radius-sm);
   background: linear-gradient(135deg, rgba(200,255,130,0.16), rgba(78,88,98,0.40));
   border: 1px solid var(--border-subtle);
@@ -1424,7 +1424,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 6px;
   padding: 0 var(--space-xl);
-  height: 44px;
+  height: 56px;
   border-radius: var(--radius-sm);
   border: 1px solid rgba(200,255,130,0.30);
   background: rgba(200,255,130,0.08);

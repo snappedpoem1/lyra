@@ -184,18 +184,30 @@ def save_vibe(name: str, query: str, n: int = 200) -> Dict[str, Any]:
     # Clear existing tracks for this vibe
     cursor.execute("DELETE FROM vibe_tracks WHERE vibe_name = ?", (safe_name,))
     
-    # Save tracks with position
+    # Save tracks with position — deduplicate by (artist, title) and track_id
     track_values = []
+    seen_track_ids: set = set()
+    seen_artist_title: set = set()
+    pos = 1
     for track in run.tracks:
+        key = (track.artist.lower().strip(), track.title.lower().strip())
+        if key in seen_artist_title:
+            continue
+        seen_artist_title.add(key)
         cursor.execute("SELECT track_id FROM tracks WHERE filepath = ?", (track.path,))
         row = cursor.fetchone()
         if row:
-            track_values.append((safe_name, row[0], track.rank))
+            tid = row[0]
+            if tid in seen_track_ids:
+                continue
+            seen_track_ids.add(tid)
+            track_values.append((safe_name, tid, pos))
+            pos += 1
 
     if track_values:
         cursor.executemany(
             """
-            INSERT INTO vibe_tracks (vibe_name, track_id, position)
+            INSERT OR IGNORE INTO vibe_tracks (vibe_name, track_id, position)
             VALUES (?, ?, ?)
             """,
             track_values,

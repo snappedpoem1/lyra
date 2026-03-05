@@ -242,6 +242,16 @@ class LLMClient:
             if label in _JSON_OBJECT_ONLY:
                 logger.debug("[LLM] %s does not support json_schema → downgrading to json_object", label)
                 kwargs["response_format"] = {"type": "json_object"}
+                # Groq (and similar) require the word "json" somewhere in messages.
+                # If it's absent, prepend a system note to satisfy the requirement.
+                all_content = " ".join(m.get("content", "") for m in messages).lower()
+                if "json" not in all_content:
+                    messages = list(messages)
+                    if messages and messages[0].get("role") == "system":
+                        messages[0] = {**messages[0], "content": messages[0]["content"] + " Respond with valid JSON."}
+                    else:
+                        messages.insert(0, {"role": "system", "content": "Respond with valid JSON."})
+                    kwargs["messages"] = messages
             else:
                 kwargs["response_format"] = {
                     "type": "json_schema",
@@ -473,7 +483,8 @@ class LLMClient:
         prompt = (
             f"Artist: {artist}\nTitle: {title}\n"
             + (f"Context: {context}\n" if context else "")
-            + f"\nClassify into one of: [{cats_str}]"
+            + f"\nClassify into exactly one of: [{cats_str}]\n"
+            + 'Respond in JSON with keys: "category", "confidence" (0-1), "reason".'
         )
         result = self.chat(
             [{"role": "user", "content": prompt}],
@@ -501,11 +512,18 @@ class LLMClient:
         if not result.get("ok") or "data" not in result:
             return {"ok": False, "category": None, "confidence": 0.0, "reason": result.get("error", "unknown")}
         data = result["data"]
+        # Handle providers that ignore json_schema and use alternative key names
+        category = data.get("category") or data.get("classification") or data.get("genre")
+        confidence = data.get("confidence", 0.0)
+        try:
+            confidence = float(confidence)
+        except (TypeError, ValueError):
+            confidence = 0.0
         return {
             "ok": True,
-            "category": data.get("category"),
-            "confidence": float(data.get("confidence", 0.0)),
-            "reason": data.get("reason", ""),
+            "category": category,
+            "confidence": confidence,
+            "reason": data.get("reason", data.get("explanation", "")),
         }
 
     def narrate_playlist(self, tracks: List[Dict[str, str]], arc_type: str = "journey") -> str:

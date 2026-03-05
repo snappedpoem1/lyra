@@ -1,21 +1,12 @@
-"""Flask application factory and CLI entry-point for the Lyra Oracle API.
-
-This module is the *spine*: it wires ribs together and nothing else.
-Business logic lives in the rib modules and blueprints; this file should
-rarely need to change.
-
-Ribs:
-  oracle.api.cors       — CORS initialisation
-  oracle.api.auth       — bearer-token before_request middleware
-  oracle.api.registry   — fault-tolerant blueprint registration
-  oracle.api.scheduler  — embedded APScheduler (BackgroundScheduler)
-"""
+"""Flask application factory and CLI entry-point for the Lyra Oracle API."""
 
 from __future__ import annotations
 
 import logging
 import os
 from pathlib import Path
+import threading
+import time
 
 from dotenv import load_dotenv
 from flask import Flask
@@ -26,16 +17,38 @@ VERSION = "1.0.0"
 logger = logging.getLogger(__name__)
 
 
+def _should_prewarm_clap() -> bool:
+    return os.getenv("LYRA_CLAP_PREWARM", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _run_clap_prewarm() -> None:
+    t0 = time.perf_counter()
+    try:
+        from oracle.search import _get_clap_embedder
+        from oracle.scorer import _anchor_embeddings, _get_embedder
+
+        # Warm both query-time and scoring-time CLAP paths.
+        _get_clap_embedder()
+        _get_embedder()
+        _anchor_embeddings()
+        logger.info("[warmup] CLAP prewarm complete in %.2fs", time.perf_counter() - t0)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[warmup] CLAP prewarm failed: %s", exc)
+
+
+def _maybe_start_clap_prewarm() -> None:
+    if not _should_prewarm_clap():
+        return
+    mode = os.getenv("LYRA_CLAP_PREWARM_MODE", "background").strip().lower()
+    if mode in {"sync", "blocking"}:
+        _run_clap_prewarm()
+        return
+    thread = threading.Thread(target=_run_clap_prewarm, name="clap-prewarm", daemon=True)
+    thread.start()
+
+
 def create_app() -> Flask:
-    """Create, configure, and return the Flask application.
-
-    Calls each rib's ``init_*`` / ``register_*`` function in order.
-    Rib failures are handled within the ribs themselves — a broken rib
-    degrades gracefully rather than crashing the factory.
-
-    Returns:
-        Configured :class:`flask.Flask` instance.
-    """
+    """Create, configure, and return the Flask application."""
     load_dotenv(override=False)
 
     # Point HuggingFace cache at the project-local directory so models are
@@ -47,7 +60,6 @@ def create_app() -> Flask:
 
     app = Flask(__name__)
 
-    # ── Ribs ──────────────────────────────────────────────────────────────
     from oracle.api.cors import init_cors
     from oracle.api.auth import init_auth
     from oracle.api.registry import register_blueprints
@@ -56,7 +68,8 @@ def create_app() -> Flask:
     init_cors(app)
     init_auth(app)
     register_blueprints(app)
-    init_scheduler(app)   # embedded BackgroundScheduler — no separate process needed
+    init_scheduler(app)
+    _maybe_start_clap_prewarm()
 
     return app
 
@@ -66,9 +79,8 @@ def main() -> None:
     if os.getenv("LYRA_BOOTSTRAP", "1").strip().lower() not in {"0", "false", "no"}:
         try:
             from oracle.bootstrap import bootstrap_runtime
-            result = bootstrap_runtime(
-                timeout_seconds=int(os.getenv("LYRA_BOOTSTRAP_TIMEOUT", "40"))
-            )
+
+            result = bootstrap_runtime(timeout_seconds=int(os.getenv("LYRA_BOOTSTRAP_TIMEOUT", "40")))
             docker = result.get("docker", {})
             llm = result.get("llm", {})
             logger.info("[bootstrap] docker: %s", "ready" if docker.get("ready") else "not ready")
@@ -85,12 +97,10 @@ def main() -> None:
     print("=" * 60)
     print(f"Version: {VERSION}")
     print(f"Write Mode: {get_write_mode()}")
-    print(f"\nStarting server at http://localhost:5000")
+    print("\nStarting server at http://localhost:5000")
     print("=" * 60 + "\n")
 
     app = create_app()
 
-    debug_value = (
-        os.getenv("LYRA_DEBUG", "") or os.getenv("FLASK_DEBUG", "")
-    ).strip().lower()
+    debug_value = (os.getenv("LYRA_DEBUG", "") or os.getenv("FLASK_DEBUG", "")).strip().lower()
     app.run(host="0.0.0.0", port=5000, debug=debug_value in {"1", "true", "yes"})

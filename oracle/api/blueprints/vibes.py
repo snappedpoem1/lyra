@@ -76,7 +76,8 @@ def _generate_vibe_from_prompt(prompt: str, n: int) -> dict:
             },
             system=(
                 "You build music vibe presets. Return a concise vibe name and a CLAP-friendly query "
-                "that captures sound and mood (tempo, texture, instrumentation, energy)."
+                "that captures sound and mood (tempo, texture, instrumentation, energy). "
+                "Respond with JSON only."
             ),
         )
         if not result.get("ok") or "data" not in result:

@@ -541,9 +541,15 @@ async function bootstrapBackend() {
 // ---------------------------------------------------------------------------
 
 async function createWindow() {
+  // Use the full display resolution — correct for a 42" 4K TV.
+  // Falls back gracefully on smaller monitors via minWidth/minHeight.
+  const { screen } = require("electron");
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenW, height: screenH } = primaryDisplay.workAreaSize;
+
   mainWindow = new BrowserWindow({
-    width: 1680,
-    height: 1040,
+    width: screenW,
+    height: screenH,
     minWidth: 1280,
     minHeight: 860,
     frame: false,
@@ -557,6 +563,7 @@ async function createWindow() {
       preload: path.join(__dirname, "preload.js"),
     },
   });
+  mainWindow.maximize();
 
   if (DEV_SERVER_URL) {
     console.log("[lyra] loading renderer dev server:", DEV_SERVER_URL);

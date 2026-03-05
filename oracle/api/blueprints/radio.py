@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import traceback
 
 from flask import Blueprint, jsonify, request
 
 from oracle.db.schema import get_connection
-from oracle.validation import validate_boolean
+from oracle.validation import sanitize_integer
 
 bp = Blueprint("radio", __name__)
 
@@ -16,8 +17,12 @@ bp = Blueprint("radio", __name__)
 # ---------------------------------------------------------------------------
 
 try:
-    from oracle.radio import RadioEngine as _RadioEngine
-    _radio_engine = _RadioEngine()
+    from oracle.radio import Radio as _RadioEngine
+except Exception:
+    _RadioEngine = None  # type: ignore[assignment]
+
+try:
+    _radio_engine = _RadioEngine() if _RadioEngine is not None else None
 except Exception:
     _radio_engine = None
 
@@ -34,7 +39,7 @@ def api_radio_chaos():
     try:
         data = request.get_json() or {}
         track_id = (data.get("track_id") or "").strip() or None
-        count = int(data.get("count", 1))
+        count = sanitize_integer(data.get("count", 1), default=1, min_val=1, max_val=100)
         results = _radio_engine.get_chaos_track(track_id, count=count)
         return jsonify({"results": results, "count": len(results)})
     except Exception as e:
@@ -49,7 +54,7 @@ def api_radio_flow():
     try:
         data = request.get_json() or {}
         track_id = (data.get("track_id") or data.get("seed_track") or "").strip()
-        count = int(data.get("count", 1))
+        count = sanitize_integer(data.get("count", 1), default=1, min_val=1, max_val=100)
 
         if not track_id:
             conn = get_connection(timeout=5.0)
@@ -77,7 +82,7 @@ def api_radio_discovery():
     if _radio_engine is None:
         return jsonify({"error": "Radio engine not available — check server logs"}), 503
     try:
-        count = request.args.get("count", 1, type=int)
+        count = sanitize_integer(request.args.get("count", 1), default=1, min_val=1, max_val=100)
         results = _radio_engine.get_discovery_track(count=count)
         return jsonify({"results": results, "count": len(results)})
     except Exception as e:
@@ -93,7 +98,7 @@ def api_radio_queue():
         data = request.get_json() or {}
         mode = (data.get("mode") or "chaos").strip()
         seed_track = (data.get("seed_track") or "").strip() or None
-        length = int(data.get("length", 20))
+        length = sanitize_integer(data.get("length", 20), default=20, min_val=1, max_val=200)
         queue = _radio_engine.build_queue(mode=mode, seed_track=seed_track, length=length)
         return jsonify({"queue": queue, "count": len(queue), "mode": mode})
     except Exception as e:

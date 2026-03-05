@@ -3,6 +3,7 @@ from __future__ import annotations
 import lyra_api
 import oracle.api.blueprints.core as core_bp
 import oracle.api.blueprints.library as library_bp
+import oracle.api.blueprints.radio as radio_bp
 import oracle.api.blueprints.vibes as vibes_bp
 import oracle.api.helpers as api_helpers
 import oracle.doctor
@@ -14,10 +15,19 @@ def test_health_contract(client):
     assert response.status_code == 200
     payload = response.get_json()
     assert "status" in payload
+    assert "ok" in payload
+    assert "service" in payload
     assert "version" in payload
+    assert "timestamp" in payload
+    assert "profile" in payload
+    assert "write_mode" in payload
+    assert "db" in payload
     assert "database" in payload
     assert "library" in payload
+    assert "feature_flags" in payload
     assert "features" in payload
+    assert "auth" in payload
+    assert "cors" in payload
 
 
 def test_doctor_contract(client, monkeypatch):
@@ -65,6 +75,10 @@ def test_playlist_detail_contract(client, monkeypatch):
     payload = response.get_json()
     assert payload["id"] == "test-playlist"
     assert isinstance(payload["tracks"], list)
+
+
+def test_radio_engine_is_available():
+    assert radio_bp._radio_engine is not None
 
 
 def test_dossier_contract(client, monkeypatch):

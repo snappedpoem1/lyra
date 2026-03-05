@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -136,7 +137,11 @@ def _sigmoid(x: float) -> float:
 
 @lru_cache(maxsize=1)
 def _get_embedder() -> CLAPEmbedder:
-    return CLAPEmbedder(model_name=MODEL_NAME, use_fallback=False)
+    return CLAPEmbedder(
+        model_name=MODEL_NAME,
+        cache_dir=os.getenv("HF_HOME"),
+        use_fallback=False,
+    )
 
 
 def _get_store() -> LyraChromaStore:

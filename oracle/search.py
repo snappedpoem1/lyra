@@ -8,6 +8,7 @@ Includes:
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 import random
 import re
 from typing import Any, Dict, List, Optional, Tuple
@@ -44,7 +45,11 @@ REMIX_HINT_TOKENS = (
 def _get_clap_embedder():
     from oracle.embedders.clap_embedder import CLAPEmbedder
 
-    return CLAPEmbedder(model_name=MODEL_NAME)
+    return CLAPEmbedder(
+        model_name=MODEL_NAME,
+        cache_dir=os.getenv("HF_HOME"),
+        use_fallback=False,
+    )
 
 
 @lru_cache(maxsize=1)

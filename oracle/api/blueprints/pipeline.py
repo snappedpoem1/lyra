@@ -72,7 +72,8 @@ def api_pipeline_jobs():
     if get_pipeline is None:
         return jsonify({"error": "Pipeline engine not available — check server logs"}), 503
     try:
-        limit = int(request.args.get("limit", 20))
+        from oracle.validation import sanitize_integer
+        limit = sanitize_integer(request.args.get("limit", 20), default=20, min_val=1, max_val=500)
         pipeline = get_pipeline()
         jobs = pipeline.list_jobs(limit)
         return jsonify({"success": True, "count": len(jobs), "jobs": jobs})

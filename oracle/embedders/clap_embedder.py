@@ -10,6 +10,7 @@ from typing import Optional
 import os
 import time
 import logging
+import threading
 import warnings
 
 # librosa is only needed for audio file loading. make it an optional dependency so
@@ -30,6 +31,16 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
+# Keep cold-start logs smaller and avoid terminal churn during first model load.
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+try:
+    from transformers.utils import logging as _hf_logging
+    _hf_logging.set_verbosity_error()
+    if hasattr(_hf_logging, "disable_progress_bar"):
+        _hf_logging.disable_progress_bar()
+except Exception:
+    pass
+
 # Music-specific CLAP model (better for music than general audio model)
 DEFAULT_MODEL = "laion/larger_clap_music"
 # Fallback to smaller model if larger one fails
@@ -37,6 +48,10 @@ FALLBACK_MODEL = "laion/clap-htsat-unfused"
 
 
 class CLAPEmbedder:
+    _shared_lock = threading.Lock()
+    _shared_handles: dict[str, dict] = {}
+    _skip_local_only_models: set[str] = set()
+
     def __init__(
         self,
         model_name: Optional[str] = None,
@@ -74,14 +89,141 @@ class CLAPEmbedder:
         self.use_fallback = use_fallback
         self.processor = None
         self.model = None
-        self._load_model_with_retry()
+        self._shared_enabled = os.getenv("LYRA_CLAP_SHARED_MODEL", "1").strip().lower() in {
+            "1", "true", "yes", "on"
+        }
+        self._shared_key = f"{self.model_name}|{self.cache_dir}|{self.device}"
+        self._attach_or_load_model()
+
+    @classmethod
+    def _idle_unload_seconds(cls) -> float:
+        raw = os.getenv("LYRA_CLAP_IDLE_UNLOAD_SECONDS", "0").strip()
+        try:
+            return max(0.0, float(raw))
+        except ValueError:
+            return 0.0
+
+    @classmethod
+    def _evict_entry(cls, key: str) -> None:
+        entry = cls._shared_handles.pop(key, None)
+        if not entry:
+            return
+        # Drop strong refs and release accelerator caches.
+        entry["model"] = None
+        entry["processor"] = None
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+    @classmethod
+    def evict_idle(cls, *, force: bool = False) -> int:
+        """Evict shared CLAP handles that are idle or all handles when force=True."""
+        with cls._shared_lock:
+            if force:
+                keys = list(cls._shared_handles.keys())
+            else:
+                ttl = cls._idle_unload_seconds()
+                if ttl <= 0:
+                    return 0
+                now = time.time()
+                keys = [
+                    key
+                    for key, entry in cls._shared_handles.items()
+                    if entry.get("refs", 0) <= 0 and (now - float(entry.get("last_used", now))) >= ttl
+                ]
+            for key in keys:
+                cls._evict_entry(key)
+            return len(keys)
+
+    @classmethod
+    def shared_stats(cls) -> dict:
+        with cls._shared_lock:
+            return {
+                "enabled": os.getenv("LYRA_CLAP_SHARED_MODEL", "1").strip().lower() in {"1", "true", "yes", "on"},
+                "handles": len(cls._shared_handles),
+                "keys": list(cls._shared_handles.keys()),
+                "idle_unload_seconds": cls._idle_unload_seconds(),
+            }
+
+    def _attach_or_load_model(self) -> None:
+        if not self._shared_enabled:
+            self._load_model_with_retry()
+            return
+
+        # Opportunistic cleanup before potential new allocations.
+        self.__class__.evict_idle(force=False)
+
+        with self.__class__._shared_lock:
+            existing = self.__class__._shared_handles.get(self._shared_key)
+            if existing is not None:
+                self.model_name = existing["model_name"]
+                existing["refs"] = int(existing.get("refs", 0)) + 1
+                existing["last_used"] = time.time()
+                logger.info("Reusing shared CLAP model: %s on %s", self.model_name, self.device)
+                # Shared mode reads runtime objects from the shared handle.
+                self.processor = None
+                self.model = None
+                return
+
+            # Hold lock while loading to avoid parallel duplicate loads.
+            self._load_model_with_retry()
+            self.__class__._shared_handles[self._shared_key] = {
+                "processor": self.processor,
+                "model": self.model,
+                "model_name": self.model_name,
+                "refs": 1,
+                "last_used": time.time(),
+            }
+            # Shared mode reads runtime objects from the shared handle.
+            self.processor = None
+            self.model = None
+
+    def _runtime(self):
+        """Return (processor, model), rehydrating shared handle if needed."""
+        if not self._shared_enabled:
+            return self.processor, self.model
+
+        with self.__class__._shared_lock:
+            entry = self.__class__._shared_handles.get(self._shared_key)
+            if (
+                entry is None
+                or entry.get("processor") is None
+                or entry.get("model") is None
+            ):
+                self._load_model_with_retry()
+                self.__class__._shared_handles[self._shared_key] = {
+                    "processor": self.processor,
+                    "model": self.model,
+                    "model_name": self.model_name,
+                    "refs": max(1, int(entry.get("refs", 0))) if entry else 1,
+                    "last_used": time.time(),
+                }
+                entry = self.__class__._shared_handles[self._shared_key]
+                # Drop per-instance refs in shared mode.
+                self.processor = None
+                self.model = None
+
+            entry["last_used"] = time.time()
+            return entry["processor"], entry["model"]
+
+    def close(self) -> None:
+        """Release this instance's shared-handle reference."""
+        if not self._shared_enabled:
+            return
+        with self.__class__._shared_lock:
+            entry = self.__class__._shared_handles.get(self._shared_key)
+            if not entry:
+                return
+            entry["refs"] = max(0, int(entry.get("refs", 0)) - 1)
+            entry["last_used"] = time.time()
+        self.__class__.evict_idle(force=False)
 
     # laion/larger_clap_music stores weights in a PR branch, not main.
     # Specifying this revision lets us skip all HF API network calls (~30-60s)
     # when the cache is warm.  Override via LYRA_CLAP_REVISION env var if needed.
-    _REVISION_HINTS: dict[str, str] = {
-        "laion/larger_clap_music": "refs/pr/5",
-    }
+    _REVISION_HINTS: dict[str, str] = {}
 
     def _load_model_with_retry(self, retries: int = 3, backoff: float = 2.0) -> None:
         models_to_try = [self.model_name]
@@ -97,8 +239,15 @@ class CLAPEmbedder:
                 "LYRA_CLAP_REVISION",
                 self._REVISION_HINTS.get(model_name),
             )
+            skip_local_probe = os.getenv("LYRA_CLAP_SKIP_LOCAL_PROBE", "0").strip().lower() in {
+                "1", "true", "yes", "on"
+            }
             load_variants: list[dict] = []
-            if revision_hint:
+            if (
+                not skip_local_probe
+                and revision_hint
+                and model_name not in self.__class__._skip_local_only_models
+            ):
                 load_variants.append(
                     {"revision": revision_hint, "local_files_only": True, "use_safetensors": True}
                 )
@@ -133,6 +282,9 @@ class CLAPEmbedder:
                         return
                     except Exception as exc:
                         last_error = exc
+                        if local_only:
+                            # Avoid repeating the same guaranteed local-only miss for this model.
+                            self.__class__._skip_local_only_models.add(model_name)
                         logger.warning(f"Load variant {kwargs} failed: {exc}")
                         # Only sleep between full retry cycles, not between variants
                 if attempt < retries:
@@ -166,6 +318,7 @@ class CLAPEmbedder:
             return None
 
     def embed_audio(self, file_path: Path, duration: int = 30) -> Optional[np.ndarray]:
+        processor, model = self._runtime()
         try:
             audio = self._load_audio(file_path, duration=duration)
         except RuntimeError as exc:
@@ -176,10 +329,10 @@ class CLAPEmbedder:
             return None
 
         try:
-            inputs = self.processor(audio=audio, sampling_rate=48000, return_tensors="pt")
+            inputs = processor(audio=audio, sampling_rate=48000, return_tensors="pt")
             inputs = {key: value.to(self.device) for key, value in inputs.items()}
             with torch.no_grad():
-                outputs = self.model.get_audio_features(**inputs)
+                outputs = model.get_audio_features(**inputs)
                 # Handle both tensor and BaseModelOutputWithPooling returns
                 if hasattr(outputs, 'cpu'):
                     # It's a tensor
@@ -200,7 +353,14 @@ class CLAPEmbedder:
                 logger.warning("GPU OOM, falling back to CPU")
                 self._dml = False
                 self.device = "cpu"
-                self.model = self.model.to(self.device)
+                if self._shared_enabled:
+                    with self.__class__._shared_lock:
+                        entry = self.__class__._shared_handles.get(self._shared_key)
+                        if entry and entry.get("model") is not None:
+                            entry["model"] = entry["model"].to(self.device)
+                            entry["last_used"] = time.time()
+                else:
+                    self.model = self.model.to(self.device)
                 return self.embed_audio(file_path, duration=duration)
             logger.error(f"Embedding failed for {file_path}: {exc}")
             return None
@@ -224,6 +384,7 @@ class CLAPEmbedder:
         Returns:
             Dict mapping each Path to its embedding np.ndarray (or None on failure).
         """
+        processor, model = self._runtime()
         from concurrent.futures import ThreadPoolExecutor
 
         results: dict = {}
@@ -251,7 +412,7 @@ class CLAPEmbedder:
             audios_chunk = [a for _, a in chunk]
 
             try:
-                inputs = self.processor(
+                inputs = processor(
                     audio=audios_chunk,
                     sampling_rate=48000,
                     return_tensors="pt",
@@ -260,7 +421,7 @@ class CLAPEmbedder:
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
                 with torch.no_grad():
-                    features = self.model.get_audio_features(**inputs)
+                    features = model.get_audio_features(**inputs)
                     if hasattr(features, "cpu"):
                         embeddings = features.cpu().numpy()
                     elif hasattr(features, "pooler_output") and features.pooler_output is not None:
@@ -289,11 +450,12 @@ class CLAPEmbedder:
         return results
 
     def embed_text(self, text: str) -> Optional[np.ndarray]:
+        processor, model = self._runtime()
         try:
-            inputs = self.processor(text=[text], return_tensors="pt")
+            inputs = processor(text=[text], return_tensors="pt")
             inputs = {key: value.to(self.device) for key, value in inputs.items()}
             with torch.no_grad():
-                outputs = self.model.get_text_features(**inputs)
+                outputs = model.get_text_features(**inputs)
                 # Handle both tensor and model output objects
                 if hasattr(outputs, 'cpu'):
                     text_features = outputs.cpu().numpy()[0]
