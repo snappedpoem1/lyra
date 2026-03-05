@@ -2,7 +2,7 @@
  * agentActionRouter — maps AgentResponse.action + intent to app-side effects.
  *
  * Call after every successful queryAgent(). Reads intent fields and fires
- * store mutations / navigation without rendering anything.
+ * store mutations / navigation / backend API calls without rendering anything.
  *
  * Register the TanStack navigate function from AppShell once on mount.
  */
@@ -18,6 +18,19 @@ export function registerNavigate(fn: (opts: { to: string }) => void) {
 }
 
 function nav(to: string) { _navigate?.({ to }); }
+
+/** Fire a backend API call without blocking the action router. */
+async function callApi(path: string, body?: unknown): Promise<void> {
+  try {
+    await fetch(`http://localhost:5000${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    // best-effort — router must not throw
+  }
+}
 
 export function routeAgentAction(response: AgentResponse): void {
   const { action, intent } = response;
@@ -47,6 +60,50 @@ export function routeAgentAction(response: AgentResponse): void {
         useSearchStore.getState().setQuery(query);
         nav("/search");
       }
+      break;
+    }
+
+    // ── Radio modes ──────────────────────────────────────────────────────
+    case "start_radio": {
+      const mode = (i.mode ?? "chaos") as string;
+      const seed = i.track_id ?? i.seed;
+      callApi(`/api/radio/${mode === "flow" ? "flow" : "chaos"}`, seed ? { seed_track_id: seed } : {});
+      nav("/queue");
+      break;
+    }
+
+    // ── Queue a specific track ────────────────────────────────────────────
+    case "queue_track": {
+      const trackId = (i.track_id ?? i.trackId) as string | undefined;
+      if (trackId) {
+        callApi("/api/radio/queue", { track_id: trackId });
+        nav("/queue");
+      }
+      break;
+    }
+
+    // ── Generate a playlist from intent ──────────────────────────────────
+    case "generate_playlist": {
+      const mood = (i.mood ?? i.query ?? i.text ?? "") as string;
+      callApi("/api/playlust/generate", { prompt: mood, duration: 60 });
+      nav("/playlists");
+      break;
+    }
+
+    // ── Acquire a track ──────────────────────────────────────────────────
+    case "acquire_track": {
+      const artist = i.artist as string | undefined;
+      const title = i.title as string | undefined;
+      if (artist && title) {
+        callApi("/api/acquire/queue", { artist, title, source: "agent" });
+      }
+      break;
+    }
+
+    // ── Enrich an artist ─────────────────────────────────────────────────
+    case "enrich_artist": {
+      const artist = (i.artist ?? i.name) as string | undefined;
+      if (artist) callApi("/api/enrich/artist", { artist });
       break;
     }
 

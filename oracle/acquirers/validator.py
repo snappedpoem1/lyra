@@ -429,13 +429,49 @@ def validate_track(
             confidence=0.0,
             rejection_reason=junk_reason,
         )
-    
+
+    # ── AcoustID fingerprint (Pass 0) ────────────────────────────────────────
+    # When a file path is provided and ACOUSTID_API_KEY is set, fingerprint
+    # first. HIGH confidence bypasses all metadata lookups — the audio IS
+    # the identity proof. MEDIUM confidence overrides artist/title for
+    # downstream lookups but doesn't short-circuit.
+    acoustid_recording_mbid: Optional[str] = None
+    acoustid_confidence: float = 0.0
+    if filepath and ACOUSTID_KEY:
+        try:
+            from oracle.enrichers.acoustid import identify_file, Confidence as AcoustIDConf
+            fp_result = identify_file(
+                Path(filepath),
+                existing_artist=artist,
+                existing_title=title,
+            )
+            acoustid_confidence = float(fp_result.acoustid_score or 0.0)
+            acoustid_recording_mbid = fp_result.recording_mbid
+
+            if fp_result.confidence == AcoustIDConf.HIGH:
+                return ValidationResult(
+                    valid=True,
+                    confidence=max(acoustid_confidence, 0.90),
+                    canonical_artist=fp_result.artist or artist,
+                    canonical_title=fp_result.title or title,
+                    canonical_album=fp_result.album,
+                    year=int(fp_result.year) if fp_result.year and fp_result.year.isdigit() else None,
+                    recording_mbid=fp_result.recording_mbid,
+                    source="acoustid",
+                )
+            elif fp_result.confidence == AcoustIDConf.MEDIUM and fp_result.artist:
+                # Let downstream MusicBrainz run with the corrected identity
+                artist = fp_result.artist
+                title = fp_result.title or title
+        except Exception as _acoustid_exc:
+            logger.debug("[validator] acoustid error: %s", _acoustid_exc)
+
     # Try MusicBrainz first (more structured data)
     mb_result = search_musicbrainz(artist, title)
     if mb_result and mb_result.get("confidence", 0) >= min_confidence:
         return ValidationResult(
             valid=True,
-            confidence=mb_result["confidence"],
+            confidence=max(mb_result["confidence"], acoustid_confidence or 0.0),
             canonical_artist=mb_result.get("artist"),
             canonical_title=mb_result.get("title"),
             canonical_album=mb_result.get("album"),
@@ -443,7 +479,7 @@ def validate_track(
             isrc=mb_result.get("isrc"),
             musicbrainz_id=mb_result.get("musicbrainz_id"),
             artist_mbid=mb_result.get("artist_mbid"),
-            recording_mbid=mb_result.get("recording_mbid"),
+            recording_mbid=acoustid_recording_mbid or mb_result.get("recording_mbid"),
             release_mbid=mb_result.get("release_mbid"),
             release_group_mbid=mb_result.get("release_group_mbid"),
             source="musicbrainz",

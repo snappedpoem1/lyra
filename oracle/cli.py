@@ -100,6 +100,9 @@ def main() -> None:
     acquire_waterfall.add_argument("--title", required=True, help="Track title")
     acquire_waterfall.add_argument("--album", help="Album name (helps T1 search)")
     acquire_waterfall.add_argument("--max-tier", type=int, default=4, help="Stop after tier N (1-4)")
+    acquire_prioritize = acquire_sub.add_parser("prioritize", help="Re-score queue by taste alignment")
+    acquire_prioritize.add_argument("--limit", type=int, default=0, help="Max items to rescore (0=all)")
+    acquire_prioritize.add_argument("--dry-run", action="store_true", help="Show top-10 priority items without writing")
 
     enrich_parser = subparsers.add_parser("enrich", help="Enrich track metadata")
     enrich_parser.add_argument("--track-id", required=True, help="Track ID to enrich")
@@ -369,6 +372,12 @@ def main() -> None:
     )
     backfill_parser.add_argument("--min-ms", type=int, default=30000, help="Min avg ms_played to count as real play (default 30000)")
     backfill_parser.add_argument("--dry-run", action="store_true", help="Show matches without writing")
+
+    # Worker — background APScheduler process
+    worker_parser = subparsers.add_parser("worker", help="Background worker job scheduler")
+    worker_sub = worker_parser.add_subparsers(dest="worker_command")
+    worker_sub.add_parser("start", help="Start the background worker (APScheduler)")
+    worker_sub.add_parser("run-once", help="Run all worker jobs once and exit")
 
     # Queue drain
     drain_parser = subparsers.add_parser("drain", help="Drain acquisition queue via guarded waterfall (T1-T4)")
@@ -1541,6 +1550,34 @@ def main() -> None:
             print(f"\n[taste backfill] Result: {result}")
         else:
             print("Usage: oracle taste backfill [--min-ms 30000] [--dry-run]")
+        return
+
+    if args.command == "worker":
+        import logging as _logging
+        _logging.basicConfig(
+            level=_logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        )
+        from oracle.worker import start, run_all_once
+        if args.worker_command == "run-once":
+            run_all_once()
+        else:
+            start()
+        return
+
+    if args.command == "acquire" and args.acquire_command == "prioritize":
+        import logging as _logging
+        _logging.basicConfig(level=_logging.INFO, format="%(asctime)s | %(message)s", datefmt="%H:%M:%S")
+        from oracle.acquirers.taste_prioritizer import prioritize_queue, get_next_priority_batch
+        if getattr(args, "dry_run", False):
+            items = get_next_priority_batch(limit=10)
+            print("[prioritize] Top-10 pending items (current priority):")
+            for item in items:
+                print(f"  [{item['priority']:5.2f}] {item['artist']} - {item['title']}")
+        else:
+            limit = getattr(args, "limit", 0)
+            stats = prioritize_queue(limit=limit)
+            print(f"[prioritize] updated={stats['updated']} skipped={stats['skipped']}")
         return
 
     if args.command == "played":

@@ -85,6 +85,71 @@ def api_agent_suggest():
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 
+@bp.route("/api/agent/briefing", methods=["GET"])
+def api_agent_briefing():
+    """Daily Oracle briefing — new tracks, taste-aligned queue items, radio seed."""
+    try:
+        from oracle.db.schema import get_connection as _gc
+        conn = _gc(timeout=10.0)
+        cursor = conn.cursor()
+
+        # New tracks added in last 24h
+        cursor.execute(
+            "SELECT COUNT(*) FROM tracks WHERE status='active' AND rowid > "
+            "(SELECT COALESCE(MAX(rowid),0) FROM tracks WHERE status='active') - 200"
+        )
+        # simpler: tracks added in last 24h via timestamp if available, else just top-5 newest
+        cursor.execute(
+            "SELECT artist, title FROM tracks WHERE status='active' ORDER BY rowid DESC LIMIT 5"
+        )
+        newest = [{"artist": r[0], "title": r[1]} for r in cursor.fetchall()]
+
+        # Taste profile snapshot
+        cursor.execute("SELECT dimension, value, confidence FROM taste_profile ORDER BY confidence DESC")
+        taste_rows = cursor.fetchall()
+        taste = {r[0]: {"value": round(float(r[1]), 3), "confidence": round(float(r[2]), 3)} for r in taste_rows}
+
+        # Top taste-aligned acquisition queue items
+        cursor.execute(
+            "SELECT artist, title, priority FROM acquisition_queue "
+            "WHERE status='pending' ORDER BY priority DESC LIMIT 10"
+        )
+        queue_top = [{"artist": r[0], "title": r[1], "priority": round(float(r[2] or 5.0), 2)}
+                     for r in cursor.fetchall()]
+
+        # Playback stats
+        cursor.execute("SELECT COUNT(*) FROM playback_history")
+        playback_total = cursor.fetchone()[0] or 0
+
+        cursor.execute("SELECT COUNT(*) FROM tracks WHERE status='active'")
+        library_total = cursor.fetchone()[0] or 0
+
+        conn.close()
+
+        return jsonify({
+            "newest_tracks": newest,
+            "taste_snapshot": taste,
+            "top_queue_items": queue_top,
+            "playback_total": playback_total,
+            "library_total": library_total,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@bp.route("/api/acquire/prioritize", methods=["POST"])
+def api_acquire_prioritize():
+    """Re-score acquisition queue by taste alignment."""
+    try:
+        data = request.get_json() or {}
+        limit = int(data.get("limit", 0))
+        from oracle.acquirers.taste_prioritizer import prioritize_queue
+        stats = prioritize_queue(limit=limit)
+        return jsonify({"ok": True, **stats})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "traceback": traceback.format_exc()}), 500
+
+
 # ---------------------------------------------------------------------------
 # Routes — Journal / Undo
 # ---------------------------------------------------------------------------

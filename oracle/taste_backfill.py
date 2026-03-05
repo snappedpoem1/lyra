@@ -4,6 +4,10 @@ Bridges the gap between spotify_history (127K+ records of real listening)
 and the taste_profile table. Groups plays by track, resolves to local
 track_ids, and feeds aggregated signals to update_taste_from_playback.
 
+Resolution uses a two-pass strategy for maximum match coverage:
+  Pass 0: Normalized exact match (lowercase, stripped punctuation)
+  Pass 1: rapidfuzz WRatio >= 85 against full active track index
+
 Usage:
     from oracle.taste_backfill import backfill_taste_from_spotify_history
     stats = backfill_taste_from_spotify_history(dry_run=True)
@@ -16,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -23,11 +28,77 @@ from oracle.db.schema import get_connection, get_write_mode
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Track index cache — populated once per backfill run, reused for all lookups
+# ---------------------------------------------------------------------------
+_TRACK_INDEX: List[Tuple[str, str, str]] = []  # (track_id, artist_norm, title_norm)
+
+
+def _norm(s: str) -> str:
+    """Lowercase, strip punctuation/featured credits for matching."""
+    s = s.lower()
+    # strip featured artists: "feat.", "ft.", "with ", parenthetical
+    s = re.sub(r"\s*[\(\[].*?[\)\]]", "", s)
+    s = re.sub(r"\s*feat\.?\s.*", "", s)
+    s = re.sub(r"\s*ft\.?\s.*", "", s)
+    # strip non-alphanumeric except spaces
+    s = re.sub(r"[^\w\s]", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _build_track_index(cursor) -> None:
+    """Load all active tracks into module-level index for rapidfuzz."""
+    global _TRACK_INDEX
+    cursor.execute(
+        "SELECT track_id, artist, title FROM tracks WHERE status = 'active'"
+    )
+    _TRACK_INDEX = [
+        (row[0], _norm(row[1] or ""), _norm(row[2] or ""))
+        for row in cursor.fetchall()
+    ]
+    logger.info("[backfill] track index loaded: %d entries", len(_TRACK_INDEX))
+
 
 def _resolve_track_id(
     cursor, artist: str, title: str
 ) -> Optional[str]:
-    """Resolve artist+title to track_id via LIKE match against tracks table."""
+    """Resolve artist+title to track_id using two-pass strategy.
+
+    Pass 0: Exact normalized match — fast dict lookup, zero false positives.
+    Pass 1: rapidfuzz WRatio >= 85 over artist AND title — catches punctuation
+            differences, parenthetical variants, and typos.
+    Falls back to LIKE if the index is empty (cold path).
+    """
+    a_norm = _norm(artist)
+    t_norm = _norm(title)
+
+    # Pass 0: exact normalized match
+    for track_id, db_artist, db_title in _TRACK_INDEX:
+        if db_artist == a_norm and db_title == t_norm:
+            return track_id
+
+    # Pass 1: rapidfuzz fuzzy match
+    try:
+        from rapidfuzz import fuzz, process as rf_process  # type: ignore
+
+        # Build combined key for joint scoring (artist ++ title)
+        query_key = f"{a_norm} {t_norm}"
+        candidates = [
+            (tid, f"{da} {dt}")
+            for tid, da, dt in _TRACK_INDEX
+        ]
+        if candidates:
+            keys = [c[1] for c in candidates]
+            result = rf_process.extractOne(
+                query_key, keys, scorer=fuzz.WRatio, score_cutoff=85
+            )
+            if result is not None:
+                _, score, idx = result
+                return candidates[idx][0]
+    except ImportError:
+        pass  # rapidfuzz not installed; fall through to LIKE
+
+    # LIKE fallback (cold path — no index built)
     cursor.execute(
         "SELECT track_id FROM tracks "
         "WHERE LOWER(artist) LIKE LOWER(?) AND LOWER(title) LIKE LOWER(?) "
@@ -58,6 +129,9 @@ def backfill_taste_from_spotify_history(
     """
     conn = get_connection(timeout=10.0)
     cursor = conn.cursor()
+
+    # Build in-memory track index for rapidfuzz resolution
+    _build_track_index(cursor)
 
     # Step 1: Aggregate spotify_history by (artist, track)
     logger.info("[backfill] Aggregating Spotify history...")

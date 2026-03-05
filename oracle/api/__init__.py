@@ -15,8 +15,6 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
-import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -28,7 +26,6 @@ from oracle.db.schema import get_connection, get_write_mode
 VERSION = "1.0.0"
 logger = logging.getLogger(__name__)
 _background_workers_started = False
-_playback_bridge = None
 
 
 def create_app() -> Flask:
@@ -98,114 +95,24 @@ def create_app() -> Flask:
     return app
 
 
-def _schedule_startup_jobs() -> None:
-    """Kick off lightweight background jobs when the server boots.
-
-    Checks for empty/sparse tables and fills them without blocking startup:
-      - Taste profile: seed from library scores if no playback recorded yet
-      - Artist graph: incremental build if connections table is empty
-      - Biographer: enrich up to 50 new/stale artists if cache is empty
-    """
-
-    def _run() -> None:
-        time.sleep(0.5)  # brief pause before startup jobs
-        try:
-            from oracle.db.schema import get_connection as _gc
-
-            # 1. Taste seed
-            _conn = _gc()
-            _c = _conn.cursor()
-            _c.execute("SELECT COUNT(*) FROM playback_history")
-            playback_count = _c.fetchone()[0] or 0
-            _c.execute("SELECT COUNT(*) FROM track_scores WHERE energy IS NOT NULL")
-            scored_count = _c.fetchone()[0] or 0
-            _c.execute("SELECT MAX(confidence) FROM taste_profile")
-            max_conf = _c.fetchone()[0] or 0
-            _conn.close()
-
-            if scored_count > 0 and (playback_count == 0 or float(max_conf) < 0.5):
-                try:
-                    from oracle.taste import seed_taste_from_library
-                    res = seed_taste_from_library()
-                    print(f"[startup] Taste seeded from library: {len(res.get('seeded', []))} dimensions")
-                except Exception as _e:
-                    print(f"[startup] Taste seed error: {_e}")
-
-            # 2. Artist graph (incremental)
-            _conn2 = _gc()
-            _c2 = _conn2.cursor()
-            _c2.execute("SELECT COUNT(*) FROM connections")
-            conn_count = _c2.fetchone()[0] or 0
-            _conn2.close()
-
-            if conn_count == 0:
-                print("[startup] connections=0 — scheduling incremental graph build...")
-                try:
-                    from oracle.graph_builder import GraphBuilder
-                    added = GraphBuilder().build_incremental()
-                    print(f"[startup] Graph build complete: {added} edges added")
-                except Exception as _e:
-                    print(f"[startup] Graph build error: {_e}")
-
-            # 3. Biographer (first 50 stale artists)
-            _conn3 = _gc()
-            _c3 = _conn3.cursor()
-            _c3.execute("SELECT COUNT(*) FROM enrich_cache WHERE provider='biographer'")
-            bio_count = _c3.fetchone()[0] or 0
-            _conn3.close()
-
-            if bio_count < 10:
-                print(f"[startup] biographer_cache={bio_count} — enriching first 50 artists...")
-                try:
-                    from oracle.enrichers.biographer import Biographer
-                    stats = Biographer().enrich_stale_artists(limit=50)
-                    print(f"[startup] Biographer: {stats['processed']} enriched, {stats['failed']} failed")
-                except Exception as _e:
-                    print(f"[startup] Biographer error: {_e}")
-
-        except Exception as _outer:
-            print(f"[startup] auto-init error: {_outer}")
-
-    threading.Thread(target=_run, name="lyra-startup-init", daemon=True).start()
-
-
-def _schedule_playback_listener() -> None:
-    """Start the BeefWeb playback bridge in the background when reachable."""
-
-    def _run() -> None:
-        global _playback_bridge
-
-        if os.getenv("LYRA_AUTOSTART_PLAYBACK", "1").strip().lower() in {"0", "false", "no"}:
-            print("[startup] playback listener autostart disabled")
-            return
-
-        time.sleep(2)
-        try:
-            from oracle.integrations.beefweb_bridge import BeefWebBridge
-
-            host = os.getenv("BEEFWEB_HOST", "localhost")
-            port = int(os.getenv("BEEFWEB_PORT", "8880"))
-            bridge = BeefWebBridge(host=host, port=port)
-            if not bridge.check_connection():
-                print(f"[startup] BeefWeb not reachable at {host}:{port} - playback listener not started")
-                return
-            bridge.start_background()
-            _playback_bridge = bridge
-            print(f"[startup] PlayFaux bridge active via BeefWeb at {host}:{port}")
-        except Exception as exc:
-            print(f"[startup] playback listener error: {exc}")
-
-    threading.Thread(target=_run, name="lyra-playback-listener", daemon=True).start()
-
-
 def ensure_runtime_background_workers() -> None:
-    """Start one-time background workers for the current process."""
+    """No-op: recurring jobs are now owned by oracle/worker.py (APScheduler).
+
+    Run the worker separately::
+
+        python -m oracle.worker start
+        oracle worker start
+
+    Keeping this function present so existing call sites in main() don't break.
+    """
     global _background_workers_started
     if _background_workers_started:
         return
     _background_workers_started = True
-    _schedule_startup_jobs()
-    _schedule_playback_listener()
+    logger.info(
+        "[api] background jobs are handled by oracle.worker — "
+        "start it with: python -m oracle.worker start"
+    )
 
 
 def main() -> None:

@@ -36,6 +36,10 @@ pandas
 
 # Fuzzy matching for track dedup
 thefuzz[speedup]
+rapidfuzz>=3.0
+
+# Background job scheduler
+apscheduler>=3.10
 
 # Terminal colors (fallback)
 colorama
