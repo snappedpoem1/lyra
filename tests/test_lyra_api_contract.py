@@ -1,28 +1,32 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import lyra_api
+import oracle.api.blueprints.core as core_bp
+import oracle.api.blueprints.library as library_bp
+import oracle.api.blueprints.vibes as vibes_bp
+import oracle.api.helpers as api_helpers
+import oracle.doctor
+from oracle.doctor import CheckResult
 
 
 def test_health_contract(client):
     response = client.get("/api/health")
     assert response.status_code == 200
     payload = response.get_json()
-    assert "timestamp" in payload
-    assert "profile" in payload
-    assert "db" in payload
+    assert "status" in payload
+    assert "version" in payload
+    assert "database" in payload
     assert "library" in payload
-    assert "feature_flags" in payload
+    assert "features" in payload
 
 
 def test_doctor_contract(client, monkeypatch):
     monkeypatch.setattr(
-        lyra_api,
+        oracle.doctor,
         "run_doctor",
         lambda: [
-            SimpleNamespace(name="Python", status="PASS", details="3.12.0"),
-            SimpleNamespace(name="ChromaDB", status="FAIL", details="Missing"),
+            CheckResult(name="Python", status="PASS", details="3.12.0"),
+            CheckResult(name="ChromaDB", status="FAIL", details="Missing"),
         ],
     )
 
@@ -37,7 +41,7 @@ def test_doctor_contract(client, monkeypatch):
 
 def test_playlist_detail_contract(client, monkeypatch):
     monkeypatch.setattr(
-        lyra_api,
+        vibes_bp,
         "_load_vibe_detail",
         lambda playlist_id: {
             "id": playlist_id,
@@ -64,16 +68,16 @@ def test_playlist_detail_contract(client, monkeypatch):
 
 
 def test_dossier_contract(client, monkeypatch):
-    monkeypatch.setattr(lyra_api, "_load_track", lambda track_id: {
+    monkeypatch.setattr(library_bp, "_load_track", lambda track_id: {
         "track_id": track_id,
         "artist": "Artist",
         "title": "Title",
         "filepath": "C:/music/file.flac",
     })
-    monkeypatch.setattr(lyra_api, "architect_engine", None)
-    monkeypatch.setattr(lyra_api, "lore_engine", None)
-    monkeypatch.setattr(lyra_api, "dna_engine", None)
-    monkeypatch.setattr(lyra_api, "agent_engine", None)
+    monkeypatch.setattr(library_bp, "_architect_engine", None)
+    monkeypatch.setattr(library_bp, "_lore_engine", None)
+    monkeypatch.setattr(library_bp, "_dna_engine", None)
+    monkeypatch.setattr(library_bp, "_agent_engine", None)
 
     response = client.get("/api/tracks/track-1/dossier")
     assert response.status_code == 200
@@ -84,12 +88,12 @@ def test_dossier_contract(client, monkeypatch):
 
 
 def test_auth_required_when_configured(client, monkeypatch):
-    monkeypatch.setattr(lyra_api, "API_TOKEN", "secret")
+    monkeypatch.setenv("LYRA_API_TOKEN", "secret")
     response = client.get("/api/vibes")
     assert response.status_code == 401
     response = client.get("/api/vibes", headers={"Authorization": "Bearer secret"})
     assert response.status_code in {200, 500}
-    monkeypatch.setattr(lyra_api, "API_TOKEN", "")
+    monkeypatch.delenv("LYRA_API_TOKEN", raising=False)
 
 
 def test_library_tracks_filters(client, monkeypatch):
@@ -123,7 +127,9 @@ def test_library_tracks_filters(client, monkeypatch):
         def close(self):
             return None
 
-    monkeypatch.setattr(lyra_api, "get_connection", lambda timeout=10.0: FakeConn())
+    fake_factory = lambda timeout=10.0: FakeConn()
+    monkeypatch.setattr(library_bp, "get_connection", fake_factory)
+    monkeypatch.setattr(api_helpers, "get_connection", fake_factory)
 
     response = client.get("/api/library/tracks?artist=Artist%20A&album=Album%20A&q=Song")
     assert response.status_code == 200
@@ -153,7 +159,7 @@ def test_library_navigation_endpoints(client, monkeypatch):
         def close(self):
             return None
 
-    monkeypatch.setattr(lyra_api, "get_connection", lambda timeout=10.0: FakeConn())
+    monkeypatch.setattr(library_bp, "get_connection", lambda timeout=10.0: FakeConn())
 
     artists = client.get("/api/library/artists?q=Artist")
     assert artists.status_code == 200
@@ -166,7 +172,7 @@ def test_library_navigation_endpoints(client, monkeypatch):
 
 def test_library_artist_detail_endpoint(client, monkeypatch):
     monkeypatch.setattr(
-        lyra_api,
+        library_bp,
         "_fetch_library_tracks",
         lambda query="", artist="", album="", limit=200, offset=0: [
             {"track_id": "track-1", "artist": artist or "Artist A", "title": "Song 1", "album": "Album A", "year": "2020"},
@@ -183,7 +189,7 @@ def test_library_artist_detail_endpoint(client, monkeypatch):
 
 def test_library_album_detail_endpoint(client, monkeypatch):
     monkeypatch.setattr(
-        lyra_api,
+        library_bp,
         "_fetch_library_tracks",
         lambda query="", artist="", album="", limit=200, offset=0: [
             {"track_id": "track-1", "artist": artist or "Artist A", "title": "Song 1", "album": album or "Album A", "year": "2020"},

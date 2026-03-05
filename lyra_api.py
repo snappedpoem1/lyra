@@ -74,10 +74,10 @@ os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(Path(hf_home) / "hub"))
 # The full API is implemented in oracle/api/ using Flask Blueprints.
 # ---------------------------------------------------------------------------
 
-from oracle.api import create_app, ensure_runtime_background_workers, main  # noqa: E402
+from oracle.api import create_app, main  # noqa: E402
 
+# Background workers (APScheduler) are started inside create_app() via init_scheduler().
 app = create_app()
-ensure_runtime_background_workers()
 
 if __name__ == "__main__":
     main()

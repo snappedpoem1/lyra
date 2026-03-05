@@ -23,7 +23,13 @@ PROVIDER_ALIASES = {
     "openai": "openai",
     "openai_compatible": "openai_compatible",
     "openai-compatible": "openai_compatible",
+    # Cloud shorthand aliases — map to openai_compatible (OpenAI SDK works for both)
+    "groq": "openai_compatible",
+    "openrouter": "openai_compatible",
+    "together": "openai_compatible",
+    "fireworks": "openai_compatible",
     "anthropic": "anthropic",
+    "claude": "anthropic",
     "none": "disabled",
     "disabled": "disabled",
     "off": "disabled",

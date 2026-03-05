@@ -1,6 +1,6 @@
 # Lyra Oracle Gap Registry
 
-Last audited: March 4, 2026 (updated post cultural intelligence + genre mood sprint)
+Last audited: March 5, 2026 (post stabilisation + force-layout sprint)
 
 This file is no longer a wishlist of imagined missing features. It is a registry of real gaps, partials, and connection problems observed in the codebase and current local state.
 
@@ -17,10 +17,10 @@ This file is no longer a wishlist of imagined missing features. It is a registry
 | --- | --- | --- | --- | --- |
 | G-001 | Playback ingestion | partial | bridge code exists, `playback_history = 1730` (from taste_backfill, not live BeefWeb) | Run real foobar2000 + BeefWeb session to confirm real-time writes land in DB |
 | G-002 | Constellation frontend trust | live | fixture fallback limited to explicit fixture mode | Keep honest, no silent masking |
-| G-003 | Constellation layout quality | partial | `ConstellationScene.tsx` uses custom ring layout | Upgrade to force-directed layout (e.g. D3 simulation) |
+| G-003 | Constellation layout quality | **live** | `ConstellationScene.tsx` now uses self-contained spring/charge force simulation (no D3 needed) | Monitor performance with large node counts (>80) |
 | G-004 | Text search route wiring | live | text search uses `/api/search` | Keep search semantics consistent |
 | G-005 | Desktop agent execution | **live** | `agentActionRouter.ts` maps all known actions to nav/dossier/search; registered in AppShell | Monitor for new action types added backend-side |
-| G-006 | Graph richness | partial | connections=8559 but still no sample_lineage edges, influence edges sparse | Run `oracle graph similarity-edges` to add Last.fm similar-artist edges |
+| G-006 | Graph richness | partial | `build_lastfm_similarity_edges()` ran against 950 artists (200 OK each) but 0 new edges added — pylast `SimilarItem.item` API returned unexpected shape | Fix: inspect `similar_list` type in pylast installed version; patch attribute access |
 | G-007 | Artist shrine depth | partial | shrine endpoint exists but `track_credits=0` limits credit display | `oracle credits enrich` now wired; 6hr schedule will populate incrementally |
 | G-008 | Playlist system adoption | partial | `playlist_runs=1`, `playlist_tracks=5` | Use persisted playlist runs more broadly |
 | G-009 | Spotify export | missing | no active `spotify_export.py` | Add export only if still desired |
@@ -47,8 +47,8 @@ This file is no longer a wishlist of imagined missing features. It is a registry
 | G-030 | Last.fm similarity graph | partial | `GraphBuilder.build_lastfm_similarity_edges()` exists, 72hr scheduler job wired | Has not run yet — will add `type='similar'` edges to `connections` |
 | G-031 | Track credits population | partial | `CreditMapper.map_batch_search()` added, `oracle credits enrich` CLI wired, 6hr scheduler job wired; `track_credits=0` | All 2454 tracks have no `recording_mbid` — will use MB search API at ~1 req/sec; expect weeks to populate fully |
 | G-032 | Track structure analysis | partial | `Architect.analyze_structure()` exists (librosa), `oracle structure analyze` CLI wired, 12hr scheduler job wired; `track_structure=0` | 2454 tracks pending — will process 20/run, expect 5+ days to saturate |
-| G-033 | Vibe tracks population | partial | `vibe_profiles=4` exist but `vibe_tracks=0` | Run `oracle vibe save --name <name> --query <text>` for each vibe to populate track assignments |
-| G-034 | Constellation force-directed layout | missing | Still using ring layout in `ConstellationScene.tsx` | Replace ring layout with D3-force or custom physics simulation |
+| G-033 | Vibe tracks population | **live** | `oracle vibe refresh --all` ran — all 4 vibe profiles now have track rows in `vibe_tracks` (10 total) | Re-run after adding new vibes |
+| G-034 | Constellation force-directed layout | **live** | `ConstellationScene.tsx` now runs a repulsion+spring+gravity simulation per animation frame, seeded from ring positions, settles after ~120 frames | None |
 
 ### March 2026 status correction
 

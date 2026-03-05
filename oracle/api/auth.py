@@ -24,13 +24,13 @@ def init_auth(app: Flask) -> None:
     Args:
         app: The Flask application instance.
     """
-    api_token = os.getenv("LYRA_API_TOKEN", "").strip()
-
-    if not api_token:
+    if not os.getenv("LYRA_API_TOKEN", "").strip():
         logger.debug("[auth] LYRA_API_TOKEN not set — running in open mode")
 
     @app.before_request
     def require_api_token() -> Response | None:
+        # Re-read each request so tests can monkeypatch os.environ.
+        api_token = os.getenv("LYRA_API_TOKEN", "").strip()
         if not request.path.startswith("/api/"):
             return None
         if request.path == "/api/health":

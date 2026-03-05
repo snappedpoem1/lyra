@@ -1,26 +1,122 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConstellationEdge, ConstellationNode } from "@/types/domain";
 import { LyraPanel } from "@/ui/LyraPanel";
 import { resolveApiUrl } from "@/services/lyraGateway/client";
 
-function layout(nodes: ConstellationNode[]): ConstellationNode[] {
-  const centerX = 320;
-  const centerY = 190;
-  return nodes.map((node, index) => {
-    if (index === 0) {
-      return { ...node, x: centerX, y: centerY };
+// ---------------------------------------------------------------------------
+// Force-directed simulation constants
+// ---------------------------------------------------------------------------
+const SVG_W = 640;
+const SVG_H = 420;
+const CX = SVG_W / 2;
+const CY = SVG_H / 2;
+
+const REPULSION = 3400;
+const SPRING_K = 0.032;
+const SPRING_REST = 138;
+const GRAVITY = 0.022;
+const DAMPING = 0.80;
+const DT = 0.85;
+// Simulation decays to near-still after ~120 frames; keep ticking gently after.
+const SIM_HOT_FRAMES = 120;
+
+type Vec2 = { x: number; y: number };
+
+function seedPositions(nodes: ConstellationNode[]): Map<string, Vec2> {
+  const pos = new Map<string, Vec2>();
+  nodes.forEach((node, i) => {
+    if (i === 0) {
+      pos.set(node.id, { x: CX, y: CY });
+    } else {
+      const angle = (i / nodes.length) * Math.PI * 2;
+      const r = 80 + (i % 3) * 68;
+      pos.set(node.id, {
+        x: CX + Math.cos(angle) * r,
+        y: CY + Math.sin(angle) * r * 0.72,
+      });
     }
-    const ring = Math.floor((index + 2) / 2);
-    const angle = 0.9 + index * 1.37;
-    const radius = 90 + ring * 74;
-    return {
-      ...node,
-      x: centerX + Math.cos(angle) * radius,
-      y: centerY + Math.sin(angle) * radius * 0.72,
-    };
+  });
+  return pos;
+}
+
+function seedVelocities(nodes: ConstellationNode[]): Map<string, Vec2> {
+  const vel = new Map<string, Vec2>();
+  nodes.forEach((n) => vel.set(n.id, { x: 0, y: 0 }));
+  return vel;
+}
+
+function simStep(
+  nodes: ConstellationNode[],
+  edges: ConstellationEdge[],
+  pos: Map<string, Vec2>,
+  vel: Map<string, Vec2>,
+): void {
+  const force = new Map<string, Vec2>();
+  nodes.forEach((n) => force.set(n.id, { x: 0, y: 0 }));
+
+  // Repulsion: every node pair (O(n²) but n is small — typically < 80 nodes)
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = pos.get(nodes[i].id)!;
+      const b = pos.get(nodes[j].id)!;
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const dist2 = dx * dx + dy * dy + 1;
+      const dist = Math.sqrt(dist2);
+      const mag = REPULSION / dist2;
+      const fx = (dx / dist) * mag;
+      const fy = (dy / dist) * mag;
+      const fa = force.get(nodes[i].id)!;
+      const fb = force.get(nodes[j].id)!;
+      fa.x += fx; fa.y += fy;
+      fb.x -= fx; fb.y -= fy;
+    }
+  }
+
+  // Spring attraction along edges
+  for (const edge of edges) {
+    const a = pos.get(edge.source);
+    const b = pos.get(edge.target);
+    if (!a || !b) continue;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) + 0.01;
+    const rest = SPRING_REST * (1 - edge.strength * 0.28);
+    const stretch = dist - rest;
+    const f = SPRING_K * stretch;
+    const fx = (dx / dist) * f;
+    const fy = (dy / dist) * f;
+    const fa = force.get(edge.source);
+    const fb = force.get(edge.target);
+    if (fa) { fa.x += fx; fa.y += fy; }
+    if (fb) { fb.x -= fx; fb.y -= fy; }
+  }
+
+  // Centre gravity — pulls all nodes toward the SVG centre
+  nodes.forEach((n) => {
+    const p = pos.get(n.id)!;
+    const f = force.get(n.id)!;
+    f.x += (CX - p.x) * GRAVITY;
+    f.y += (CY - p.y) * GRAVITY;
+  });
+
+  // Velocity integration + soft-wall boundary clamping
+  nodes.forEach((n) => {
+    const p = pos.get(n.id)!;
+    const v = vel.get(n.id)!;
+    const f = force.get(n.id)!;
+    v.x = (v.x + f.x * DT) * DAMPING;
+    v.y = (v.y + f.y * DT) * DAMPING;
+    pos.set(n.id, {
+      x: Math.max(44, Math.min(SVG_W - 44, p.x + v.x)),
+      y: Math.max(28, Math.min(SVG_H - 28, p.y + v.y)),
+    });
   });
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 export function ConstellationScene({
   nodes,
   edges,
@@ -35,17 +131,39 @@ export function ConstellationScene({
   const [acquiring, setAcquiring] = useState<string | null>(null);
   const [acquireStatus, setAcquireStatus] = useState<"idle" | "queued" | "error">("idle");
 
+  // Simulation state lives in refs — no re-render until setTick fires
+  const posRef = useRef<Map<string, Vec2>>(new Map());
+  const velRef = useRef<Map<string, Vec2>>(new Map());
+  const simFrameRef = useRef(0);
+
+  // Re-seed simulation whenever the node list identity changes
+  const nodeIds = nodes.map((n) => n.id).join(",");
+  useEffect(() => {
+    posRef.current = seedPositions(nodes);
+    velRef.current = seedVelocities(nodes);
+    simFrameRef.current = 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeIds]);
+
+  // Animation + simulation loop
   useEffect(() => {
     let frame = 0;
-    let animationId = 0;
+    let animId = 0;
     const loop = () => {
       frame += 1;
+      // Run more sim steps while still hot; 1 step per frame once settled
+      const steps = simFrameRef.current < SIM_HOT_FRAMES ? 3 : 1;
+      for (let s = 0; s < steps; s++) {
+        simStep(nodes, edges, posRef.current, velRef.current);
+      }
+      simFrameRef.current += steps;
       setTick(frame);
-      animationId = window.requestAnimationFrame(loop);
+      animId = window.requestAnimationFrame(loop);
     };
-    animationId = window.requestAnimationFrame(loop);
-    return () => window.cancelAnimationFrame(animationId);
-  }, []);
+    animId = window.requestAnimationFrame(loop);
+    return () => window.cancelAnimationFrame(animId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeIds]);
 
   const handleAcquireArtist = useCallback(async (label: string) => {
     setAcquiring(label);
@@ -64,17 +182,28 @@ export function ConstellationScene({
     }
   }, []);
 
-  const laidOut = useMemo(() => layout(nodes), [nodes]);
-  const lookup = useMemo(() => new Map(laidOut.map((node) => [node.id, node])), [laidOut]);
-  const focusNode = laidOut.find((node) => node.id === focusNodeId) ?? laidOut[0];
-  const relatedEdges = edges.filter((edge) => edge.source === focusNode?.id || edge.target === focusNode?.id);
+  // Derive positioned nodes from simulation state for render
+  const laidOut = useMemo(
+    () =>
+      nodes.map((node) => {
+        const p = posRef.current.get(node.id) ?? { x: CX, y: CY };
+        return { ...node, x: p.x, y: p.y };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tick, nodeIds],
+  );
+
+  const lookup = useMemo(() => new Map(laidOut.map((n) => [n.id, n])), [laidOut]);
+  const focusNode = laidOut.find((n) => n.id === focusNodeId) ?? laidOut[0];
+  const relatedEdges = edges.filter((e) => e.source === focusNode?.id || e.target === focusNode?.id);
+
   const stars = useMemo(
     () =>
-      Array.from({ length: 72 }, (_, index) => ({
-        id: `star-${index}`,
-        x: 20 + ((index * 71) % 600),
-        y: 18 + ((index * 53) % 380),
-        r: 0.5 + ((index % 5) * 0.35),
+      Array.from({ length: 72 }, (_, i) => ({
+        id: `star-${i}`,
+        x: 20 + ((i * 71) % 600),
+        y: 18 + ((i * 53) % 380),
+        r: 0.5 + ((i % 5) * 0.35),
       })),
     [],
   );
