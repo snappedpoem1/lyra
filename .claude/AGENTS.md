@@ -354,3 +354,25 @@ Final Principle
 Lyra is trying to become a real flagship application, not a pile of clever scripts.
 
 Review accordingly.
+
+Documentation and Session State Requirements (Mandatory)
+
+When work is committed or pushed, the documentation state must be treated as part of the deliverable.
+
+Always enforce:
+
+1) Session state capture
+- Update and include relevant session logs/state records (for example in `.claude/memory/`) when they changed during the work.
+- Do not claim completion if meaningful session context exists only in chat but not in project state docs.
+
+2) Current-state README/MD alignment
+- Ensure `README.md` and any affected docs in `docs/*.md` reflect the actual current behavior, commands, architecture, and constraints.
+- If behavior changed, docs must change in the same delivery unless explicitly marked as deferred with a reason.
+
+3) Markdown correctness gate
+- Verify markdown links and references are valid before finalizing.
+- Flag and fix stale, contradictory, or placeholder documentation that presents itself as current truth.
+
+4) Commit/push quality bar
+- A commit is not complete if code changed but required session/documentation updates were skipped.
+- If docs are intentionally excluded, explicitly state what was excluded and why.
