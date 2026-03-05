@@ -1,7 +1,12 @@
 """Diagnose search quality and library contents."""
 import sqlite3
+import sys
 from pathlib import Path
 from collections import Counter
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 db_path = Path("lyra_registry.db")
 conn = sqlite3.connect(str(db_path))

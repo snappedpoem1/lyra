@@ -1,5 +1,10 @@
 """List all artists in library."""
 import sqlite3
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 conn = sqlite3.connect('lyra_registry.db')
 cursor = conn.cursor()
 cursor.execute("SELECT DISTINCT artist FROM tracks WHERE status='active' ORDER BY artist")

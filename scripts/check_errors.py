@@ -1,6 +1,10 @@
 """Quick diagnostic to check embedding errors."""
 import sqlite3
 from pathlib import Path
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 db_path = Path("lyra_registry.db")
 if not db_path.exists():
@@ -43,7 +47,7 @@ cursor.execute("""
 """)
 for row in cursor.fetchall():
     fp = Path(row[1])
-    exists = "✓" if fp.exists() else "✗ MISSING"
+    exists = "OK" if fp.exists() else "MISSING"
     print(f"  {exists} {fp}")
 
 conn.close()

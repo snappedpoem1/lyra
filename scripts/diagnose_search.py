@@ -1,6 +1,11 @@
 """Diagnose search/embedding mismatch."""
 import sqlite3
+import sys
 from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 db_path = Path("lyra_registry.db")
 conn = sqlite3.connect(str(db_path))
@@ -26,14 +31,14 @@ for cid in chroma_ids[:5]:
     cursor.execute("SELECT track_id, artist, title FROM tracks WHERE track_id = ?", (cid,))
     row = cursor.fetchone()
     if row:
-        print(f"  ✓ {cid} → {row[1]} - {row[2]}")
+        print(f"  OK {cid} -> {row[1]} - {row[2]}")
     else:
         cursor.execute("SELECT track_id, artist, title FROM tracks WHERE track_id LIKE ?", (f"%{cid[:8]}%",))
         similar = cursor.fetchone()
         if similar:
-            print(f"  ✗ {cid} NOT FOUND (similar: {similar[0]})")
+            print(f"  MISSING {cid} NOT FOUND (similar: {similar[0]})")
         else:
-            print(f"  ✗ {cid} NOT FOUND")
+            print(f"  MISSING {cid} NOT FOUND")
 
 print("\n=== Embeddings table sample ===")
 cursor.execute("SELECT track_id, model FROM embeddings LIMIT 5")

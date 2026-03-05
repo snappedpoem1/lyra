@@ -84,6 +84,11 @@ function Test-LlmModels {
   }
 }
 
+function Test-IsLocalBase {
+  param([string]$BaseUrl)
+  return $BaseUrl -match '^https?://((localhost|127\.0\.0\.1)|((10|192\.168|172\.(1[6-9]|2[0-9]|3[0-1]))\.\d+\.\d+))(:\d+)?(/|$)'
+}
+
 function Find-LmsCli {
   $candidates = @(
     "$env:LYRA_LMS_CLI_EXE".Trim(),
@@ -133,6 +138,17 @@ if ($config.provider_type -notin @("local", "openai_compatible", "openai")) {
     error = "Configured provider '$($config.provider_type)' is not a local/OpenAI-compatible provider."
   } | ConvertTo-Json -Depth 6
   exit 1
+}
+
+if (-not (Test-IsLocalBase -BaseUrl $config.base_url)) {
+  [pscustomobject]@{
+    ready = $true
+    started = $false
+    method = "skipped_remote_endpoint"
+    probe_url = "$($config.base_url)/models"
+    note = "Configured endpoint is remote; LM Studio restart is not required."
+  } | ConvertTo-Json -Depth 6
+  exit 0
 }
 
 if ($CleanRestart) {

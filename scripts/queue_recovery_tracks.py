@@ -1,4 +1,5 @@
 """Queue corrupt/missing album tracks for re-acquisition."""
+import argparse
 import sys
 import re
 from pathlib import Path
@@ -38,25 +39,45 @@ MISSING = [
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Queue known missing tracks for re-acquisition.",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write rows to acquisition_queue. Default is dry-run.",
+    )
+    parser.add_argument(
+        "--source",
+        default="recovery",
+        help="Source label written to acquisition_queue (default: recovery).",
+    )
+    args = parser.parse_args()
+
     conn = get_connection()
     c = conn.cursor()
     now = datetime.now(timezone.utc).isoformat()
-    added = 0
+    queued = 0
 
     for artist, album, tracks in MISSING:
         for title in tracks:
-            c.execute(
-                """INSERT INTO acquisition_queue
-                   (artist, title, album, source, status, added_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (artist, title, album, "recovery", "pending", now),
-            )
-            added += 1
-            print(f"  Queued: {artist} - {title}")
+            if args.apply:
+                c.execute(
+                    """INSERT INTO acquisition_queue
+                       (artist, title, album, source, status, added_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (artist, title, album, args.source, "pending", now),
+                )
+            queued += 1
+            prefix = "Queued" if args.apply else "Would queue"
+            print(f"  {prefix}: {artist} - {title}")
 
-    conn.commit()
+    if args.apply:
+        conn.commit()
     conn.close()
-    print(f"\nTotal queued: {added}")
+    mode = "APPLY" if args.apply else "DRY-RUN"
+    print(f"\nMode: {mode}")
+    print(f"Total tracks: {queued}")
 
 
 if __name__ == "__main__":

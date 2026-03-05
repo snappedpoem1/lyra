@@ -1,12 +1,16 @@
 """Enrich track metadata from Last.fm API."""
+import argparse
 import sqlite3
 import time
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+import sys
 
 load_dotenv(override=True)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 LASTFM_API_KEY = os.getenv("LASTFM_API_KEY")
 LASTFM_URL = "http://ws.audioscrobbler.com/2.0/"
@@ -80,7 +84,13 @@ def get_artist_tags(artist: str) -> list:
         return []
 
 
-def main():
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Enrich missing track genres from Last.fm.")
+    parser.add_argument("--limit", type=int, default=25, help="Max tracks to inspect (default: 25)")
+    parser.add_argument("--apply", action="store_true", help="Write genre updates to DB (default: dry-run)")
+    parser.add_argument("--sleep", type=float, default=0.25, help="Delay between API calls in seconds")
+    args = parser.parse_args()
+
     if not LASTFM_API_KEY:
         print("ERROR: LASTFM_API_KEY not set in .env")
         return
@@ -94,9 +104,12 @@ def main():
         SELECT track_id, artist, title FROM tracks 
         WHERE status='active' AND (genre IS NULL OR genre = '')
         ORDER BY artist
-    """)
+        LIMIT ?
+    """, (max(1, args.limit),))
     tracks = cursor.fetchall()
     
+    mode = "APPLY" if args.apply else "DRY-RUN"
+    print(f"Mode: {mode}")
     print(f"Found {len(tracks)} tracks without genre\n")
     
     if not tracks:
@@ -126,21 +139,25 @@ def main():
                 genre = ", ".join(artist_tags)
         
         if genre:
-            cursor.execute("UPDATE tracks SET genre = ? WHERE track_id = ?", (genre, track_id))
-            print(f"→ {genre[:40]}")
+            if args.apply:
+                cursor.execute("UPDATE tracks SET genre = ? WHERE track_id = ?", (genre, track_id))
+                print(f"-> {genre[:40]}")
+            else:
+                print(f"-> would set {genre[:40]}")
             enriched += 1
         else:
-            print("→ (no tags found)")
+            print("-> (no tags found)")
             failed += 1
         
-        time.sleep(0.25)  # Rate limit: ~4 req/sec
+        time.sleep(max(0.0, args.sleep))
         
         # Commit every 50 tracks
-        if (i + 1) % 50 == 0:
+        if args.apply and (i + 1) % 50 == 0:
             conn.commit()
             print(f"\n  Checkpoint: {enriched} enriched, {failed} failed\n")
     
-    conn.commit()
+    if args.apply:
+        conn.commit()
     conn.close()
     
     print(f"\n=== Complete ===")
