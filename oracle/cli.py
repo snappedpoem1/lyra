@@ -368,10 +368,23 @@ def main() -> None:
     )
     taste_sub = taste_parser.add_subparsers(dest="taste_command")
     backfill_parser = taste_sub.add_parser(
-        "backfill", help="Backfill taste from Spotify streaming history"
+        "backfill", help="Backfill taste from already-imported Spotify history in the DB"
     )
     backfill_parser.add_argument("--min-ms", type=int, default=30000, help="Min avg ms_played to count as real play (default 30000)")
     backfill_parser.add_argument("--dry-run", action="store_true", help="Show matches without writing")
+
+    import_hist_parser = taste_sub.add_parser(
+        "import-history",
+        help="Import Spotify Extended Streaming History JSON files into the DB (then run backfill)",
+    )
+    import_hist_parser.add_argument(
+        "--backfill", action="store_true",
+        help="Also run taste backfill immediately after import",
+    )
+    import_hist_parser.add_argument(
+        "--min-ms", type=int, default=30000,
+        help="Min avg ms_played for backfill pass (default 30000)",
+    )
 
     # Worker — background APScheduler process
     worker_parser = subparsers.add_parser("worker", help="Background worker job scheduler")
@@ -1548,8 +1561,29 @@ def main() -> None:
                 dry_run=args.dry_run,
             )
             print(f"\n[taste backfill] Result: {result}")
+
+        elif args.taste_command == "import-history":
+            import os
+            os.environ.setdefault("LYRA_WRITE_MODE", "apply_allowed")
+            from oracle.importers import run_spotify_history_import
+            print("[taste import-history] Scanning for Streaming_History_Audio_*.json files...")
+            stats = run_spotify_history_import()
+            streams = stats.get("streams", 0)
+            skipped = stats.get("skipped", 0)
+            files = stats.get("files", 0)
+            errors = stats.get("errors", 0)
+            print(f"[taste import-history] Done: {files} file(s), {streams} new rows, {skipped} duplicates, {errors} errors")
+            if getattr(args, "backfill", False):
+                print("[taste import-history] Running taste backfill pass...")
+                from oracle.taste_backfill import backfill_taste_from_spotify_history
+                result = backfill_taste_from_spotify_history(min_ms_played=args.min_ms)
+                print(f"[taste import-history] Backfill: {result}")
+
         else:
-            print("Usage: oracle taste backfill [--min-ms 30000] [--dry-run]")
+            print("Usage: oracle taste <backfill|import-history>")
+            print("  backfill          — push already-imported Spotify history into taste_profile")
+            print("  import-history    — load JSON files from 'Spotify Extended Streaming History/' into DB")
+            print("                      add --backfill to also run the taste pass immediately")
         return
 
     if args.command == "worker":
