@@ -1,6 +1,6 @@
 # Lyra Oracle Gap Registry
 
-Last audited: March 4, 2026 (updated post UI sprint)
+Last audited: March 4, 2026 (updated post cultural intelligence + genre mood sprint)
 
 This file is no longer a wishlist of imagined missing features. It is a registry of real gaps, partials, and connection problems observed in the codebase and current local state.
 
@@ -15,14 +15,14 @@ This file is no longer a wishlist of imagined missing features. It is a registry
 
 | ID | Area | Status | Evidence | What Needs To Happen |
 | --- | --- | --- | --- | --- |
-| G-001 | Playback ingestion | partial | bridge code exists, API runtime now attempts autostart, but `playback_history = 0` | Run a real foobar2000 + BeefWeb session and confirm writes land in DB |
+| G-001 | Playback ingestion | partial | bridge code exists, `playback_history = 1730` (from taste_backfill, not live BeefWeb) | Run real foobar2000 + BeefWeb session to confirm real-time writes land in DB |
 | G-002 | Constellation frontend trust | live | fixture fallback limited to explicit fixture mode | Keep honest, no silent masking |
 | G-003 | Constellation layout quality | partial | `ConstellationScene.tsx` uses custom ring layout | Upgrade to force-directed layout (e.g. D3 simulation) |
 | G-004 | Text search route wiring | live | text search uses `/api/search` | Keep search semantics consistent |
 | G-005 | Desktop agent execution | **live** | `agentActionRouter.ts` maps all known actions to nav/dossier/search; registered in AppShell | Monitor for new action types added backend-side |
-| G-006 | Graph richness | partial | connections exist but edge diversity is shallow | Add influence, sample, scene, collaboration edges |
-| G-007 | Artist shrine depth | partial | shrine endpoint exists but coverage depends on enrichment runs | Improve enrichment coverage, credit population |
-| G-008 | Playlist system adoption | partial | `playlist_runs = 1`, `playlist_tracks = 5` | Use persisted playlist runs more broadly |
+| G-006 | Graph richness | partial | connections=8559 but still no sample_lineage edges, influence edges sparse | Run `oracle graph similarity-edges` to add Last.fm similar-artist edges |
+| G-007 | Artist shrine depth | partial | shrine endpoint exists but `track_credits=0` limits credit display | `oracle credits enrich` now wired; 6hr schedule will populate incrementally |
+| G-008 | Playlist system adoption | partial | `playlist_runs=1`, `playlist_tracks=5` | Use persisted playlist runs more broadly |
 | G-009 | Spotify export | missing | no active `spotify_export.py` | Add export only if still desired |
 | G-010 | Runtime/source separation | partial | repo root contains DB, vector store, logs | Decide on source-only vs all-in-one root |
 | G-011 | Source-of-truth docs | stale-doc | old README/roadmap overclaimed | Keep docs aligned with code and local state |
@@ -35,12 +35,20 @@ This file is no longer a wishlist of imagined missing features. It is a registry
 | G-018 | Transport dock waveform | **live** | Canvas RAF renderer (32 bars) in `BottomTransportDock`, reads `audioAnalyzer` frame data | None |
 | G-019 | Settings form styling | **live** | Proper field/label/checkbox/hint markup with `.settings-*` CSS classes | None |
 | G-020 | Command palette arrow nav | **live** | Up/Down keys, `is-active` highlight, Enter runs highlighted command, 14 static commands | None |
-| G-021 | Spotify history import integrity | **live** | `spotify_history` cleaned from duplicate imports and protected with a dedup guard (`UNIQUE INDEX` + `INSERT OR IGNORE`) | Monitor future imports for schema drift only |
-| G-022 | Taste profile from real listening history | **live** | `oracle/taste_backfill.py` bridges `spotify_history` into `taste_profile`; 1,730 matched local tracks written as real taste signals | Improve match quality over time with normalized/fuzzy title resolution |
-| G-023 | Desktop playback feedback loop | **live** | Desktop audio engine now reports playback on track end and track switch/skip so Lyra learns from in-app listening | Add richer completion / pause / seek telemetry if needed |
-| G-024 | Batch acquisition API stability | **live** | Fixed broken `/api/acquire/batch` worker path by removing bad `fast_batch` imports and correcting `_download_one(...)` call shape | Consider consolidating API batch flow more tightly around canonical queue processing later |
-| G-025 | Pipeline dead-time streamlining | **live** | Removed per-item batch sleep in `smart_pipeline`, reduced startup wait, reduced Real-Debrid poll interval | Keep profiling acquisition throughput before changing retry/backoff behavior further |
-| G-026 | Dead acquisition legacy module cleanup | **live** | Archived unused `oracle/downloader.py`; active acquisition paths remain `waterfall.py`, `smart_pipeline.py`, and queue/API entrypoints | Watch for any forgotten references during future refactors |
+| G-021 | Spotify history import integrity | **live** | `spotify_history` cleaned from duplicate imports and protected with a dedup guard | Monitor future imports for schema drift only |
+| G-022 | Taste profile from real listening history | **live** | `taste_backfill.py` bridges `spotify_history` into `taste_profile`; all 10 dims populated, confidence=1.0 | Improve match quality over time with fuzzy title resolution |
+| G-023 | Desktop playback feedback loop | **live** | Desktop audio engine reports playback on track end and skip | Add richer completion / pause / seek telemetry if needed |
+| G-024 | Batch acquisition API stability | **live** | Fixed `/api/acquire/batch` worker path | Consider consolidating API batch flow around canonical queue processing |
+| G-025 | Pipeline dead-time streamlining | **live** | Removed per-item batch sleep in `smart_pipeline` | Keep profiling acquisition throughput |
+| G-026 | Dead acquisition legacy module cleanup | **live** | Archived `oracle/downloader.py` | Watch for forgotten references during future refactors |
+| G-027 | Mood language → playlist targeting | **live** | `oracle/mood_interpreter.py` translates mood/genre text into per-act 10-dim targets; wired into `playlust.generate()` | None |
+| G-028 | Genre vocabulary in keyword fallback | **live** | ~90 genre/structural tokens added (edm, hardcore, indie, drop, groove etc.); arc modifiers handle "fading into" / "building" / "drops" | Expand token coverage iteratively — LLM handles nuance |
+| G-029 | Community track discovery | partial | `oracle/integrations/listenbrainz.py` exists, 24hr scheduler job wired | Has not run yet — will populate `acquisition_queue` with `source='listenbrainz_community'` on first run |
+| G-030 | Last.fm similarity graph | partial | `GraphBuilder.build_lastfm_similarity_edges()` exists, 72hr scheduler job wired | Has not run yet — will add `type='similar'` edges to `connections` |
+| G-031 | Track credits population | partial | `CreditMapper.map_batch_search()` added, `oracle credits enrich` CLI wired, 6hr scheduler job wired; `track_credits=0` | All 2454 tracks have no `recording_mbid` — will use MB search API at ~1 req/sec; expect weeks to populate fully |
+| G-032 | Track structure analysis | partial | `Architect.analyze_structure()` exists (librosa), `oracle structure analyze` CLI wired, 12hr scheduler job wired; `track_structure=0` | 2454 tracks pending — will process 20/run, expect 5+ days to saturate |
+| G-033 | Vibe tracks population | partial | `vibe_profiles=4` exist but `vibe_tracks=0` | Run `oracle vibe save --name <name> --query <text>` for each vibe to populate track assignments |
+| G-034 | Constellation force-directed layout | missing | Still using ring layout in `ConstellationScene.tsx` | Replace ring layout with D3-force or custom physics simulation |
 
 ### March 2026 status correction
 

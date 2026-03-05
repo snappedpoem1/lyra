@@ -234,6 +234,20 @@ def main() -> None:
     mood_parser.add_argument('text', nargs='+', help='Mood description text')
     mood_parser.add_argument('--no-llm', action='store_true', dest='no_llm', help='Skip LLM, use keyword heuristic only')
 
+    # Credits — MusicBrainz production/composition credit enrichment
+    credits_parser = subparsers.add_parser('credits', help='MusicBrainz track credit enrichment')
+    credits_sub = credits_parser.add_subparsers(dest='credits_command')
+    credits_enrich = credits_sub.add_parser('enrich', help='Map credits for tracks missing them (MB search API)')
+    credits_enrich.add_argument('--limit', type=int, default=30, help='Max tracks to process per run (default 30)')
+    credits_sub.add_parser('stats', help='Show track_credits table statistics')
+
+    # Structure — Audio structural analysis (BPM, key, drop detection)
+    structure_parser = subparsers.add_parser('structure', help='Audio structure analysis (BPM, key, drop detection)')
+    structure_sub = structure_parser.add_subparsers(dest='structure_command')
+    structure_analyze = structure_sub.add_parser('analyze', help='Analyze un-analyzed tracks (librosa)')
+    structure_analyze.add_argument('--limit', type=int, default=20, help='Max tracks to analyze per run (default 20)')
+    structure_sub.add_parser('stats', help='Show track_structure table statistics')
+
     # Playlust — 4-act emotional arc generator (F-008) *** FLAGSHIP ***
     playlust_parser = subparsers.add_parser('playlust', help='Generate a 4-act emotional arc playlist')
     playlust_sub = playlust_parser.add_subparsers(dest='playlust_command')
@@ -1224,6 +1238,80 @@ def main() -> None:
                 print(f"    {dim:<12} {bar}  {val:.3f}")
             print()
         return
+
+    if args.command == "credits":
+        from oracle.db.schema import get_connection
+        if not args.credits_command or args.credits_command == "stats":
+            conn = get_connection()
+            total = conn.execute("SELECT COUNT(*) FROM track_credits").fetchone()[0]
+            roles = conn.execute(
+                "SELECT role, COUNT(*) FROM track_credits GROUP BY role ORDER BY COUNT(*) DESC LIMIT 10"
+            ).fetchall()
+            producers = conn.execute(
+                "SELECT artist_name, COUNT(*) c FROM track_credits WHERE role='producer' "
+                "GROUP BY artist_name ORDER BY c DESC LIMIT 5"
+            ).fetchall()
+            conn.close()
+            print(f"Track Credits — {total} total credit rows")
+            if producers:
+                print("  Top producers:")
+                for name, cnt in producers:
+                    print(f"    {name}: {cnt}")
+            if roles:
+                print("  Roles breakdown:")
+                for role, cnt in roles:
+                    print(f"    {role}: {cnt}")
+            return
+        if args.credits_command == "enrich":
+            from oracle.enrichers.credit_mapper import CreditMapper
+            limit = getattr(args, 'limit', 30)
+            print(f"Enriching credits for up to {limit} tracks via MusicBrainz search...")
+            print("(~1s per track due to MB rate limit)")
+            stats = CreditMapper().map_batch_search(limit=limit)
+            print(f"  processed : {stats['processed']}")
+            print(f"  found     : {stats['found']}")
+            print(f"  empty     : {stats['empty']}")
+            print(f"  failed    : {stats['failed']}")
+            return
+
+    if args.command == "structure":
+        if not args.structure_command or args.structure_command == "stats":
+            from oracle.db.schema import get_connection
+            conn = get_connection()
+            total = conn.execute("SELECT COUNT(*) FROM track_structure").fetchone()[0]
+            drops = conn.execute("SELECT COUNT(*) FROM track_structure WHERE has_drop=1").fetchone()[0]
+            unanalyzed = conn.execute(
+                "SELECT COUNT(*) FROM tracks t WHERE t.status='active' AND NOT EXISTS "
+                "(SELECT 1 FROM track_structure ts WHERE ts.track_id=t.track_id)"
+            ).fetchone()[0]
+            conn.close()
+            print(f"Track Structure \u2014 {total} analyzed, {drops} with drops, {unanalyzed} pending")
+            return
+        if args.structure_command == "analyze":
+            from oracle.architect import Architect
+            from oracle.db.schema import get_connection
+            limit = getattr(args, 'limit', 20)
+            ar = Architect()
+            conn = get_connection()
+            rows = conn.execute(
+                "SELECT t.track_id, t.filepath FROM tracks t WHERE t.status='active' "
+                "AND t.filepath IS NOT NULL AND NOT EXISTS "
+                "(SELECT 1 FROM track_structure ts WHERE ts.track_id=t.track_id) "
+                "ORDER BY t.created_at ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            conn.close()
+            print(f"Analyzing {len(rows)} tracks...")
+            ok = fail = 0
+            for track_id, filepath in rows:
+                try:
+                    ar.analyze_structure(track_id, filepath)
+                    ok += 1
+                except Exception as exc:
+                    fail += 1
+                    print(f"  FAIL {filepath}: {exc}")
+            print(f"  done \u2014 ok={ok} failed={fail}")
+            return
 
     if args.command == "deep-cut":
         from oracle.deepcut import DeepCut

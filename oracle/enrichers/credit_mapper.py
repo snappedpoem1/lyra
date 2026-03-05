@@ -393,6 +393,63 @@ class CreditMapper:
             "roles_breakdown": roles,
         }
 
+    def map_batch_search(
+        self,
+        limit: int = 30,
+        rate_limit_s: float = 1.1,
+    ) -> Dict[str, Any]:
+        """Map credits for tracks without existing credit rows using MB search.
+
+        Suitable as a background job — works even when recording_mbid is NULL
+        by performing artist+title searches against MusicBrainz.
+
+        Rate-limits to ~1 request/second to respect MB policy.
+
+        Args:
+            limit: Max tracks to process per call.
+            rate_limit_s: Seconds to wait between MB requests.
+
+        Returns:
+            Dict with processed, found, empty, failed, skipped counts.
+        """
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT t.track_id, t.artist, t.title, t.album, t.duration
+            FROM tracks t
+            WHERE t.status = 'active'
+              AND NOT EXISTS (
+                  SELECT 1 FROM track_credits tc WHERE tc.track_id = t.track_id
+              )
+            ORDER BY t.created_at ASC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = c.fetchall()
+        conn.close()
+
+        processed = found = empty = failed = 0
+        for row in rows:
+            track_id, artist, title, album, duration = row
+            try:
+                credits = self.map_from_search(
+                    track_id, artist or "", title or "",
+                    album=album, duration=duration,
+                )
+                processed += 1
+                if credits:
+                    found += 1
+                else:
+                    empty += 1
+            except Exception as exc:
+                logger.warning("CreditMapper.map_batch_search: %s - %s failed: %s", artist, title, exc)
+                failed += 1
+            time.sleep(rate_limit_s)
+
+        return {"processed": processed, "found": found, "empty": empty, "failed": failed}
+
     # ─── Internal ─────────────────────────────────────────────────────────────
 
     def _persist(

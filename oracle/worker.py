@@ -49,6 +49,8 @@ _ACQUIRE_MIN = int(os.getenv("LYRA_WORKER_ACQUIRE_INTERVAL_MIN", "10"))
 _PRIORITIZE_HR = int(os.getenv("LYRA_WORKER_PRIORITIZE_INTERVAL_HR", "6"))
 _LB_DISCOVER_HR = int(os.getenv("LYRA_WORKER_LB_DISCOVER_INTERVAL_HR", "24"))
 _GRAPH_SIMILARITY_HR = int(os.getenv("LYRA_WORKER_GRAPH_SIMILARITY_INTERVAL_HR", "72"))
+_CREDITS_HR = int(os.getenv("LYRA_WORKER_CREDITS_INTERVAL_HR", "6"))
+_STRUCTURE_HR = int(os.getenv("LYRA_WORKER_STRUCTURE_INTERVAL_HR", "12"))
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +193,55 @@ def job_taste_prioritize() -> None:
         logger.error("[worker:prioritize] error: %s", exc, exc_info=True)
 
 
+def job_credits_enrich() -> None:
+    """Map MusicBrainz production/composition credits for tracks missing them."""
+    logger.info("[worker:credits] enriching credits for up to 30 tracks")
+    try:
+        from oracle.enrichers.credit_mapper import CreditMapper
+        stats = CreditMapper().map_batch_search(limit=30)
+        logger.info(
+            "[worker:credits] done — processed=%s found=%s empty=%s failed=%s",
+            stats.get("processed"), stats.get("found"), stats.get("empty"), stats.get("failed"),
+        )
+    except Exception as exc:
+        logger.error("[worker:credits] error: %s", exc, exc_info=True)
+
+
+def job_structure_analyze() -> None:
+    """Analyze audio structure (BPM, key, drop detection) for un-analyzed tracks."""
+    logger.info("[worker:structure] analyzing structure for up to 20 tracks")
+    try:
+        from oracle.architect import Architect
+        from oracle.db.schema import get_connection
+        architect = Architect()
+        conn = get_connection()
+        rows = conn.execute(
+            """
+            SELECT t.track_id, t.filepath
+            FROM tracks t
+            WHERE t.status = 'active'
+              AND t.filepath IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM track_structure ts WHERE ts.track_id = t.track_id
+              )
+            ORDER BY t.created_at ASC
+            LIMIT 20
+            """
+        ).fetchall()
+        conn.close()
+        processed = failed = 0
+        for track_id, filepath in rows:
+            try:
+                architect.analyze_structure(track_id, filepath)
+                processed += 1
+            except Exception as exc:
+                logger.debug("[worker:structure] %s failed: %s", filepath, exc)
+                failed += 1
+        logger.info("[worker:structure] done — processed=%d failed=%d", processed, failed)
+    except Exception as exc:
+        logger.error("[worker:structure] error: %s", exc, exc_info=True)
+
+
 # ---------------------------------------------------------------------------
 # Scheduler setup
 # ---------------------------------------------------------------------------
@@ -256,6 +307,20 @@ def build_scheduler():
         "interval",
         hours=_GRAPH_SIMILARITY_HR,
         id="graph_similarity",
+        next_run_time=None,
+    )
+    scheduler.add_job(
+        job_credits_enrich,
+        "interval",
+        hours=_CREDITS_HR,
+        id="credits_enrich",
+        next_run_time=None,
+    )
+    scheduler.add_job(
+        job_structure_analyze,
+        "interval",
+        hours=_STRUCTURE_HR,
+        id="structure_analyze",
         next_run_time=None,
     )
 

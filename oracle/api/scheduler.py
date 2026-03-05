@@ -79,10 +79,12 @@ def init_scheduler(app: Flask) -> None:
         from oracle.worker import (
             job_acquire_drain,
             job_biographer_enrich,
+            job_credits_enrich,
             job_graph_build,
             job_graph_similarity,
             job_lastfm_sync,
             job_listenbrainz_discover,
+            job_structure_analyze,
             job_taste_prioritize,
         )
     except Exception as exc:  # noqa: BLE001
@@ -96,6 +98,8 @@ def init_scheduler(app: Flask) -> None:
     _prioritize_hr = int(os.getenv("LYRA_WORKER_PRIORITIZE_INTERVAL_HR", "6"))
     _lb_discover_hr = int(os.getenv("LYRA_WORKER_LB_DISCOVER_INTERVAL_HR", "24"))
     _graph_similarity_hr = int(os.getenv("LYRA_WORKER_GRAPH_SIMILARITY_INTERVAL_HR", "72"))
+    _credits_hr = int(os.getenv("LYRA_WORKER_CREDITS_INTERVAL_HR", "6"))
+    _structure_hr = int(os.getenv("LYRA_WORKER_STRUCTURE_INTERVAL_HR", "12"))
 
     scheduler = BackgroundScheduler(
         executors={"default": APThreadPool(max_workers=2)},
@@ -107,8 +111,10 @@ def init_scheduler(app: Flask) -> None:
     scheduler.add_job(job_biographer_enrich,     "interval", hours=_enrich_hr,           id="biographer_enrich",   next_run_time=None)
     scheduler.add_job(job_acquire_drain,         "interval", minutes=_acquire_min,       id="acquire_drain",       next_run_time=None)
     scheduler.add_job(job_taste_prioritize,      "interval", hours=_prioritize_hr,       id="taste_prioritize",    next_run_time=None)
-    scheduler.add_job(job_listenbrainz_discover, "interval", hours=_lb_discover_hr,      id="listenbrainz_discover",next_run_time=None)
+    scheduler.add_job(job_listenbrainz_discover, "interval", hours=_lb_discover_hr,      id="listenbrainz_discover", next_run_time=None)
     scheduler.add_job(job_graph_similarity,      "interval", hours=_graph_similarity_hr, id="graph_similarity",    next_run_time=None)
+    scheduler.add_job(job_credits_enrich,        "interval", hours=_credits_hr,          id="credits_enrich",      next_run_time=None)
+    scheduler.add_job(job_structure_analyze,     "interval", hours=_structure_hr,        id="structure_analyze",   next_run_time=None)
 
     scheduler.start()
     _scheduler = scheduler
@@ -116,9 +122,9 @@ def init_scheduler(app: Flask) -> None:
     logger.info(
         "[scheduler] embedded scheduler started — "
         "lastfm=%dmin  graph=%dhr  enrich=%dhr  acquire=%dmin  prioritize=%dhr  "
-        "listenbrainz=%dhr  similarity=%dhr",
+        "listenbrainz=%dhr  similarity=%dhr  credits=%dhr  structure=%dhr",
         _lastfm_min, _graph_hr, _enrich_hr, _acquire_min, _prioritize_hr,
-        _lb_discover_hr, _graph_similarity_hr,
+        _lb_discover_hr, _graph_similarity_hr, _credits_hr, _structure_hr,
     )
 
 

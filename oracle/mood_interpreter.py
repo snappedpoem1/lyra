@@ -123,6 +123,100 @@ _KEYWORD_DIM_BOOSTS: Dict[str, Dict[str, float]] = {
     "complex":      {"complexity": 0.22, "density": 0.12},
     "labyrinth":    {"complexity": 0.20, "tension": 0.12, "space": 0.10},
     "intricate":    {"complexity": 0.20, "density": 0.10},
+
+    # -----------------------------------------------------------------------
+    # Genre vocabulary
+    # -----------------------------------------------------------------------
+    # Electronic / club
+    "edm":          {"movement": 0.25, "energy": 0.20, "density": 0.18, "space": 0.08},
+    "electronic":   {"movement": 0.18, "energy": 0.15, "density": 0.15, "complexity": 0.12},
+    "techno":       {"movement": 0.22, "energy": 0.18, "density": 0.20, "tension": 0.12, "warmth": -0.10},
+    "house":        {"movement": 0.22, "energy": 0.15, "density": 0.15, "warmth": 0.12, "valence": 0.10},
+    "rave":         {"energy": 0.25, "movement": 0.25, "density": 0.15, "tension": 0.10},
+    "dnb":          {"energy": 0.25, "movement": 0.28, "tension": 0.15, "density": 0.18},
+    "jungle":       {"energy": 0.22, "movement": 0.25, "density": 0.18, "rawness": 0.12},
+    "trance":       {"movement": 0.20, "energy": 0.18, "space": 0.12, "valence": 0.12},
+    "dubstep":      {"energy": 0.22, "rawness": 0.18, "tension": 0.15, "density": 0.18},
+    "synthwave":    {"nostalgia": 0.22, "movement": 0.15, "energy": 0.10, "warmth": 0.08},
+    # Heavy
+    "hardcore":     {"energy": 0.28, "rawness": 0.28, "tension": 0.22, "density": 0.20, "valence": -0.12},
+    "metal":        {"energy": 0.22, "rawness": 0.22, "tension": 0.18, "density": 0.15, "valence": -0.10},
+    "punk":         {"energy": 0.20, "rawness": 0.25, "tension": 0.15, "valence": -0.05},
+    "grunge":       {"rawness": 0.20, "tension": 0.15, "energy": 0.15, "nostalgia": 0.10},
+    "industrial":   {"tension": 0.20, "rawness": 0.18, "energy": 0.15, "density": 0.15, "warmth": -0.15},
+    "noise":        {"rawness": 0.25, "tension": 0.20, "density": 0.20, "energy": 0.15},
+    "grime":        {"rawness": 0.18, "tension": 0.15, "energy": 0.15, "movement": 0.12},
+    "drill":        {"rawness": 0.20, "tension": 0.18, "energy": 0.12, "density": 0.15},
+    # Indie / alternative
+    "indie":        {"warmth": 0.15, "complexity": 0.10, "nostalgia": 0.12, "valence": 0.10},
+    "alternative":  {"complexity": 0.12, "rawness": 0.08, "tension": 0.08},
+    "shoegaze":     {"space": 0.18, "complexity": 0.12, "density": 0.10, "nostalgia": 0.12},
+    "dream pop":    {"space": 0.20, "warmth": 0.15, "nostalgia": 0.12, "energy": -0.08},
+    # Hip-hop / urban
+    "trap":         {"tension": 0.15, "rawness": 0.18, "energy": 0.15, "density": 0.15, "movement": 0.12},
+    "rap":          {"energy": 0.15, "rawness": 0.15, "movement": 0.12, "density": 0.10},
+    "hip":          {"movement": 0.15, "energy": 0.12, "density": 0.10},
+    "hop":          {"movement": 0.12, "density": 0.08},
+    # Organic / warm
+    "jazz":         {"complexity": 0.22, "warmth": 0.15, "space": 0.10, "nostalgia": 0.12},
+    "folk":         {"nostalgia": 0.20, "warmth": 0.18, "complexity": -0.05, "rawness": -0.10},
+    "soul":         {"warmth": 0.20, "valence": 0.15, "nostalgia": 0.12},
+    "blues":        {"nostalgia": 0.18, "warmth": 0.12, "rawness": 0.10, "tension": 0.08},
+    "gospel":       {"valence": 0.20, "warmth": 0.18, "energy": 0.12, "density": 0.10},
+    "reggae":       {"movement": 0.15, "warmth": 0.18, "valence": 0.12, "tension": -0.10},
+    "dub":          {"space": 0.18, "warmth": 0.15, "movement": 0.12, "density": -0.10},
+    # Experimental / atmospheric
+    "ambient":      {"space": 0.25, "energy": -0.20, "density": -0.18, "tension": -0.10, "movement": -0.12},
+    "experimental": {"complexity": 0.22, "space": 0.12, "tension": 0.10},
+    "psychedelic":  {"space": 0.18, "complexity": 0.18, "tension": 0.08, "density": 0.10},
+    "drone":        {"space": 0.20, "density": 0.15, "energy": -0.12, "movement": -0.15},
+    "glitch":       {"complexity": 0.18, "tension": 0.15, "rawness": 0.15, "movement": 0.08},
+    "wave":         {"space": 0.15, "nostalgia": 0.15, "tension": 0.10, "warmth": -0.05},
+    # Mainstream
+    "pop":          {"valence": 0.18, "energy": 0.12, "warmth": 0.12, "complexity": -0.08},
+    "classical":    {"complexity": 0.22, "space": 0.15, "density": 0.12, "warmth": 0.10},
+    "orchestral":   {"complexity": 0.20, "density": 0.12, "space": 0.10},
+    "cinematic":    {"complexity": 0.18, "space": 0.15, "tension": 0.08},
+    # Fusion
+    "fusion":       {"complexity": 0.15, "space": 0.08},
+    "hybrid":       {"complexity": 0.12, "density": 0.08},
+    "crossover":    {"complexity": 0.10},
+
+    # -----------------------------------------------------------------------
+    # Structural / event vocabulary
+    # -----------------------------------------------------------------------
+    "drop":         {"energy": 0.28, "movement": 0.28, "density": 0.22, "tension": 0.18, "space": -0.12},
+    "drops":        {"energy": 0.28, "movement": 0.28, "density": 0.22, "tension": 0.18, "space": -0.12},
+    "build":        {"energy": 0.12, "movement": 0.12, "tension": 0.15, "density": 0.10},
+    "buildup":      {"energy": 0.15, "movement": 0.15, "tension": 0.18, "density": 0.12},
+    "hook":         {"valence": 0.15, "movement": 0.12, "energy": 0.10},
+    "chorus":       {"valence": 0.15, "energy": 0.12, "density": 0.10},
+    "bass":         {"energy": 0.12, "density": 0.15, "rawness": 0.10},
+    "beat":         {"movement": 0.18, "energy": 0.12, "density": 0.08},
+    "groove":       {"movement": 0.18, "warmth": 0.12, "tension": -0.05},
+    "bounce":       {"movement": 0.15, "energy": 0.12, "valence": 0.10},
+    "rhythm":       {"movement": 0.15, "complexity": 0.08},
+    "stomp":        {"energy": 0.18, "movement": 0.15, "rawness": 0.10},
+    "headbang":     {"energy": 0.20, "rawness": 0.18, "movement": 0.15},
+    "dance":        {"movement": 0.20, "energy": 0.15, "valence": 0.12},
+    "anthem":       {"energy": 0.20, "valence": 0.18, "density": 0.12, "complexity": 0.10},
+    "peak":         {"energy": 0.22, "tension": 0.15, "movement": 0.18},
+    "climax":       {"energy": 0.22, "tension": 0.18, "movement": 0.20},
+    "punch":        {"energy": 0.18, "rawness": 0.15, "density": 0.12},
+    # Texture
+    "heavy":        {"energy": 0.20, "density": 0.18, "rawness": 0.15},
+    "dense":        {"density": 0.20, "complexity": 0.10},
+    "thick":        {"density": 0.18, "energy": 0.10},
+    "lush":         {"space": 0.12, "density": 0.10, "warmth": 0.12},
+    "sparse":       {"space": 0.15, "density": -0.15, "energy": -0.10},
+    "distorted":    {"rawness": 0.20, "tension": 0.12, "energy": 0.10},
+    "fuzzy":        {"rawness": 0.15, "tension": 0.08, "complexity": 0.08},
+    "intense":      {"energy": 0.22, "tension": 0.18, "density": 0.15},
+    "chill":        {"energy": -0.18, "tension": -0.18, "warmth": 0.15, "space": 0.12},
+    "chilled":      {"energy": -0.18, "tension": -0.18, "warmth": 0.15, "space": 0.12},
+    "slow":         {"energy": -0.15, "movement": -0.18, "space": 0.12},
+    "fast":         {"energy": 0.18, "movement": 0.20, "density": 0.10},
+    "epic":         {"energy": 0.18, "complexity": 0.15, "space": 0.12, "density": 0.10},
 }
 
 # Per-act weights: how much of each dimension boost lands on each act (0–1)
@@ -159,6 +253,53 @@ _BASE_ACT_TARGETS: Dict[str, Dict[str, float]] = {
                    "warmth": 0.72, "movement": 0.62, "space": 0.78, "rawness": 0.28,
                    "complexity": 0.78, "nostalgia": 0.48},
 }
+
+# ---------------------------------------------------------------------------
+# Arc modifiers — directional/temporal cues that redistribute intensity across acts.
+# Tokens detected in the mood string scale each act's energy+movement+tension by
+# the multiplier below, allowing "fading into hardocre" to build rather than stay flat.
+# ---------------------------------------------------------------------------
+
+# Things that escalate toward the later acts (energy peaks in breakdown/sublime)
+_ARC_TOKENS_ESCALATE = frozenset({
+    "building", "rising", "escalating", "growing", "climbing",
+    "ascending", "crescendo", "mounting", "intensifying", "ramping",
+    "accelerating", "exploding",
+})
+# Things that fade / soften after an early peak
+_ARC_TOKENS_DESCEND = frozenset({
+    "fading", "fade", "dissolving", "decaying", "falling",
+    "dying", "drifting", "winding", "melting", "ebbing",
+    "dissipating", "quieting",
+})
+# A big moment lands in the middle of the arc (drop / climax in breakdown)
+_ARC_TOKENS_PEAK_MID = frozenset({
+    "drops", "drop", "erupts", "explodes", "detonates",
+    "peaks", "apex", "climax", "summit",
+})
+
+# Per-arc-token: multiplicative scale applied to (energy, movement, tension) per act.
+# "escalate" → starts softer (0.82 × aggressive), gets heavier by sublime (1.15 ×)
+_ARC_ACT_SCALE: Dict[str, Dict[str, float]] = {
+    "escalate": {"aggressive": 0.82, "seductive": 0.95, "breakdown": 1.10, "sublime": 1.15},
+    "descend":  {"aggressive": 1.12, "seductive": 1.00, "breakdown": 0.90, "sublime": 0.82},
+    "peak_mid": {"aggressive": 0.90, "seductive": 1.05, "breakdown": 1.20, "sublime": 0.95},
+}
+
+_ARC_DIMS_AFFECTED = frozenset({"energy", "movement", "tension", "density", "rawness"})
+
+
+def _detect_arc(tokens: list) -> Optional[str]:
+    """Return 'escalate', 'descend', 'peak_mid', or None based on mood tokens."""
+    token_set = set(tokens)
+    # Check peak_mid first (drop/climax is most specific)
+    if token_set & _ARC_TOKENS_PEAK_MID:
+        return "peak_mid"
+    if token_set & _ARC_TOKENS_ESCALATE:
+        return "escalate"
+    if token_set & _ARC_TOKENS_DESCEND:
+        return "descend"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -267,9 +408,11 @@ def _keyword_interpret(mood: str) -> Dict[str, Dict[str, float]]:
 
     # Accumulate global dimension deltas from all matched keywords
     global_delta: Dict[str, float] = {dim: 0.0 for dim in _DIMENSIONS}
+    matched: list = []
     for token in tokens:
         boosts = _KEYWORD_DIM_BOOSTS.get(token)
         if boosts:
+            matched.append(token)
             for dim, val in boosts.items():
                 global_delta[dim] = global_delta.get(dim, 0.0) + val
 
@@ -284,6 +427,24 @@ def _keyword_interpret(mood: str) -> Dict[str, Dict[str, float]]:
             raw = base[dim] + delta
             act_dims[dim] = round(max(0.0, min(1.0, raw)), 4)
         result[act] = act_dims
+
+    # Apply arc modifiers: directional/temporal cues redistribute intensity across acts
+    arc = _detect_arc(tokens)
+    if arc:
+        scale_map = _ARC_ACT_SCALE[arc]
+        for act in _ACT_NAMES:
+            factor = scale_map.get(act, 1.0)
+            if factor == 1.0:
+                continue
+            base_targets = _BASE_ACT_TARGETS[act]
+            for dim in _ARC_DIMS_AFFECTED:
+                original = result[act][dim]
+                # Scale the deviation from base, not the absolute value
+                deviation = original - base_targets[dim]
+                result[act][dim] = round(max(0.0, min(1.0, base_targets[dim] + deviation * factor)), 4)
+
+    if matched:
+        logger.debug("[MoodInterpreter] keyword matched: %s | arc: %s", matched, arc)
 
     return result
 
