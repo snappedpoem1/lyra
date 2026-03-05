@@ -359,6 +359,17 @@ def main() -> None:
     played_parser.add_argument("--skipped", action="store_true", help="Track was skipped (negative signal)")
     played_parser.add_argument("--weight", type=float, default=1.0, help="Signal weight (default 1.0)")
 
+    # Taste backfill from Spotify history
+    taste_parser = subparsers.add_parser(
+        "taste", help="Taste profile management"
+    )
+    taste_sub = taste_parser.add_subparsers(dest="taste_command")
+    backfill_parser = taste_sub.add_parser(
+        "backfill", help="Backfill taste from Spotify streaming history"
+    )
+    backfill_parser.add_argument("--min-ms", type=int, default=30000, help="Min avg ms_played to count as real play (default 30000)")
+    backfill_parser.add_argument("--dry-run", action="store_true", help="Show matches without writing")
+
     # Queue drain
     drain_parser = subparsers.add_parser("drain", help="Drain acquisition queue via guarded waterfall (T1-T4)")
     drain_parser.add_argument("--limit", type=int, default=10, help="Number of tracks to acquire")
@@ -1514,6 +1525,22 @@ def main() -> None:
         else:
             print(f"Quarantined: {result.get('quarantined', 0)}")
             print(f"Errors: {result.get('errors', 0)}")
+        return
+
+    if args.command == "taste":
+        import logging as _logging
+        _logging.basicConfig(level=_logging.INFO, format="%(asctime)s | %(message)s", datefmt="%H:%M:%S")
+        if args.taste_command == "backfill":
+            import os
+            os.environ.setdefault("LYRA_WRITE_MODE", "apply_allowed")
+            from oracle.taste_backfill import backfill_taste_from_spotify_history
+            result = backfill_taste_from_spotify_history(
+                min_ms_played=args.min_ms,
+                dry_run=args.dry_run,
+            )
+            print(f"\n[taste backfill] Result: {result}")
+        else:
+            print("Usage: oracle taste backfill [--min-ms 30000] [--dry-run]")
         return
 
     if args.command == "played":

@@ -6,9 +6,42 @@
   --bg-glass:    rgba(18, 22, 28, 0.72);
 
   /* Borders */
-  --panel-border:  rgba(160, 170, 185, 0.16);
-  --border-subtle: rgba(160, 170, 185, 0.09);
-  --border-soft:   rgba(160, 170, 185, 0.22);
+  --panel-border:   rgba(160, 170, 185, 0.16);
+  --border-subtle:  rgba(160, 170, 185, 0.09);
+  --border-soft:    rgba(160, 170, 185, 0.22);
+  --border-divider: rgba(160, 170, 185, 0.12);
+
+  /* Layout constants */
+  --sidebar-width:      220px;
+  --right-rail-width:   340px;
+  --transport-height:    72px;
+  --topbar-height:       40px;
+
+  /* Spacing scale */
+  --space-xs:  4px;
+  --space-sm:  6px;
+  --space-md:  8px;
+  --space-lg: 12px;
+  --space-xl: 16px;
+  --space-2xl: 24px;
+  --space-3xl: 36px;
+
+  /* Type scale */
+  --text-2xs: 0.60rem;
+  --text-xs:  0.66rem;
+  --text-sm:  0.72rem;
+  --text-base: 0.82rem;
+  --text-md:  0.88rem;
+  --text-lg:  1.0rem;
+  --text-xl:  1.2rem;
+  --text-2xl: 1.5rem;
+
+  /* Motion */
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:   cubic-bezier(0.45, 0, 0.55, 1);
+  --duration-fast: 100ms;
+  --duration-med:  200ms;
+  --duration-slow: 400ms;
 
   /* Text */
   --text:      #e8edf4;

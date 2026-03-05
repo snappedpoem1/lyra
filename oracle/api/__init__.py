@@ -108,7 +108,7 @@ def _schedule_startup_jobs() -> None:
     """
 
     def _run() -> None:
-        time.sleep(3)  # let Flask settle before hitting SQLite
+        time.sleep(0.5)  # brief pause before startup jobs
         try:
             from oracle.db.schema import get_connection as _gc
 

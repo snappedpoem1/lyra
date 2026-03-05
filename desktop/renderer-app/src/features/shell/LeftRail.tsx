@@ -27,7 +27,7 @@ export function LeftRail() {
   };
 
   return (
-    <aside className="left-rail lyra-panel">
+    <aside className="left-rail">
       <div className="window-drag">
         <div className="brand-mark">LYRA</div>
         <p className="brand-tagline">Music Intelligence</p>

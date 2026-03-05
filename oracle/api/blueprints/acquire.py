@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
 import queue as _queue
 import sqlite3
 import threading
 import time as _time
 import traceback
 import uuid as _uuid
-from pathlib import Path
 from typing import Dict, List
 
 from flask import Blueprint, Response, jsonify, request
@@ -32,17 +30,11 @@ _batch_queues: Dict[str, _queue.Queue] = {}
 
 def _run_batch_job(job_id: str, queries: List[str], workers: int, run_pipeline: bool) -> None:
     """Background thread: runs fast_batch and pushes SSE events."""
-    from oracle.fast_batch import _download_one, FAST_SLEEP_MIN, FAST_SLEEP_MAX
-    from oracle.config import load_config
+    from oracle.fast_batch import _download_one
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     eq = _batch_queues[job_id]
     job = _batch_jobs[job_id]
-
-    cfg = load_config()
-    cfg.sleep_min = FAST_SLEEP_MIN
-    cfg.sleep_max = FAST_SLEEP_MAX
-    db_path = Path(os.getenv("LYRA_DB_PATH", "lyra_registry.db"))
 
     total = len(queries)
     job["total"] = total
@@ -55,7 +47,7 @@ def _run_batch_job(job_id: str, queries: List[str], workers: int, run_pipeline: 
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(_download_one, q.strip(), cfg, db_path, i, total): (i, q)
+            pool.submit(_download_one, q.strip(), i, total): (i, q)
             for i, q in enumerate(queries, 1)
             if q.strip()
         }

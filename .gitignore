@@ -34,6 +34,7 @@ scripts/.spotify_cache
 *.db-journal
 *.sqlite
 *.sqlite3
+*.pre_dedup_backup
 
 # Build Artifacts
 dist/

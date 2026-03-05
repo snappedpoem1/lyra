@@ -1,6 +1,7 @@
 import type { PlaylistDetail } from "@/types/domain";
 import { LyraButton } from "@/ui/LyraButton";
 import { LyraPill } from "@/ui/LyraPill";
+import { PlaylistMosaic } from "@/features/playlists/PlaylistGrid";
 
 export function PlaylistHero({
   detail,
@@ -38,16 +39,20 @@ export function PlaylistHero({
             <strong>{detail.summary.lastTouchedLabel ?? "Tonight"}</strong>
           </div>
         </div>
-      </div>
-      <div className="hero-sidecar">
-        <div className="hero-sidecar-copy">
-          <span className="insight-kicker">Thread logic</span>
-          <p>Tracks are sequenced by emotional arc and library context. Order matters.</p>
-        </div>
         <div className="hero-actions">
           <LyraButton onClick={onPlay}>Play top</LyraButton>
           <LyraButton onClick={onQueue}>Load queue</LyraButton>
           <LyraButton onClick={onConstellation}>View graph</LyraButton>
+        </div>
+      </div>
+      <div className="hero-sidecar">
+        <PlaylistMosaic
+          items={detail.summary.coverMosaic?.length ? detail.summary.coverMosaic : [detail.summary.title]}
+          size={120}
+        />
+        <div className="hero-sidecar-copy">
+          <span className="insight-kicker">Thread logic</span>
+          <p>Tracks are sequenced by emotional arc and library context. Order matters.</p>
         </div>
       </div>
     </section>

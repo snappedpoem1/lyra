@@ -15,7 +15,7 @@ function fmtTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function TrackArt({ artist, size = 48 }: { artist?: string; size?: number }) {
+function TrackArt({ artist, size = 40 }: { artist?: string; size?: number }) {
   const letter = artist?.trim()[0]?.toUpperCase() ?? "\u266A";
   const hue = letter.charCodeAt(0) * 37 % 360;
   return (
@@ -25,7 +25,7 @@ function TrackArt({ artist, size = 48 }: { artist?: string; size?: number }) {
         width: size,
         height: size,
         background: `linear-gradient(135deg, hsl(${hue},42%,22%), hsl(${(hue + 40) % 360},50%,34%))`,
-        borderRadius: 8,
+        borderRadius: 6,
         display: "grid",
         placeItems: "center",
         fontSize: size * 0.42,
@@ -42,13 +42,69 @@ function TrackArt({ artist, size = 48 }: { artist?: string; size?: number }) {
   );
 }
 
+/** Canvas mini-waveform — reads from playerStore directly to avoid React re-render overhead. */
+function MiniWaveform({ isPlaying }: { isPlaying: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef    = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const BAR_COUNT = 32;
+    const ACCENT = "#8cd94a";
+    const DIM    = "rgba(140,217,74,0.22)";
+
+    const draw = () => {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const frame    = usePlayerStore.getState().frame;
+      const waveform = frame.waveform;
+      const playing  = usePlayerStore.getState().status === "playing";
+
+      const step     = Math.floor(waveform.length / BAR_COUNT);
+      const barW     = Math.floor(w / BAR_COUNT) - 1;
+
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const val   = waveform[i * step] ?? 0;
+        const barH  = Math.max(2, val * h * 0.9);
+        const x     = i * (barW + 1);
+        const y     = (h - barH) / 2;
+        ctx.fillStyle = playing ? ACCENT : DIM;
+        ctx.beginPath();
+        ctx.roundRect(x, y, barW, barH, 1);
+        ctx.fill();
+      }
+
+      rafRef.current = requestAnimationFrame(draw);
+    };
+
+    rafRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [isPlaying]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={128}
+      height={24}
+      className="dock-waveform"
+      aria-hidden="true"
+    />
+  );
+}
+
 export function BottomTransportDock() {
-  const player = usePlayerStore();
-  const queue = useQueueStore((state) => state.queue);
+  const player          = usePlayerStore();
+  const queue           = useQueueStore((state) => state.queue);
   const setCurrentIndex = useQueueStore((state) => state.setCurrentIndex);
-  const factDrop = useAgentStore((state) => state.lastFactDrop);
+  const factDrop        = useAgentStore((state) => state.lastFactDrop);
   const factDropTrackId = useAgentStore((state) => state.factDropTrackId);
-  const setFactDrop = useAgentStore((state) => state.setFactDrop);
+  const setFactDrop     = useAgentStore((state) => state.setFactDrop);
   const lastFetchedTrackId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -68,8 +124,8 @@ export function BottomTransportDock() {
       if (state.track && state.status === "ended") {
         reportPlayback(state.track.trackId, 1, false);
         const queueState = useQueueStore.getState();
-        const nextIndex = queueState.queue.currentIndex + 1;
-        const nextTrack = queueState.queue.items[nextIndex];
+        const nextIndex  = queueState.queue.currentIndex + 1;
+        const nextTrack  = queueState.queue.items[nextIndex];
         if (nextTrack) {
           queueState.setCurrentIndex(nextIndex);
           void audioEngine.playTrack(nextTrack);
@@ -98,7 +154,7 @@ export function BottomTransportDock() {
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!player.durationSec) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     audioEngine.element.currentTime = pct * player.durationSec;
   };
 
@@ -123,14 +179,13 @@ export function BottomTransportDock() {
 
   const goPrev = () => {
     if (!queue.items.length) return;
-    // If past 5 s, restart current track; otherwise go previous
     if (player.currentTimeSec > 5) {
       audioEngine.element.currentTime = 0;
       return;
     }
-    const next = Math.max(0, queue.currentIndex - 1);
-    setCurrentIndex(next);
-    void audioEngine.playTrack(queue.items[next]);
+    const prev = Math.max(0, queue.currentIndex - 1);
+    setCurrentIndex(prev);
+    void audioEngine.playTrack(queue.items[prev]);
   };
 
   const togglePlay = () => {
@@ -144,8 +199,8 @@ export function BottomTransportDock() {
     }
   };
 
-  const isPlaying = player.status === "playing";
-  const volumeIcon = player.muted || player.volume === 0
+  const isPlaying   = player.status === "playing";
+  const volumeIcon  = player.muted || player.volume === 0
     ? "volume-mute"
     : player.volume < 0.45
     ? "volume-low"
@@ -154,10 +209,10 @@ export function BottomTransportDock() {
   const inlineFactDrop = factDrop && factDropTrackId === current?.trackId ? factDrop : null;
 
   return (
-    <footer className="bottom-dock lyra-panel">
+    <footer className="bottom-dock">
       {/* Left: track info */}
       <div className="dock-left">
-        <TrackArt artist={current?.artist} size={44} />
+        <TrackArt artist={current?.artist} size={40} />
         <div className="dock-meta">
           <div className="dock-title">{current?.title ?? "Nothing playing"}</div>
           <div className="dock-subtitle">
@@ -171,16 +226,21 @@ export function BottomTransportDock() {
         </div>
       </div>
 
-      {/* Center: controls + seek */}
+      {/* Center: waveform + controls + seek */}
       <div className="dock-center">
+        <MiniWaveform isPlaying={isPlaying} />
         <div className="dock-controls">
-          <button className="transport-btn" onClick={goPrev} title="Previous">
+          <button className="transport-btn" onClick={goPrev} title="Previous  [J]">
             <Icon name="skip-back" className="transport-icon" />
           </button>
-          <button className="transport-btn transport-btn--play" onClick={togglePlay} title={isPlaying ? "Pause" : "Play"}>
+          <button
+            className="transport-btn transport-btn--play"
+            onClick={togglePlay}
+            title={isPlaying ? "Pause  [Space]" : "Play  [Space]"}
+          >
             <Icon name={isPlaying ? "pause" : "play"} className="transport-icon transport-icon--lg" />
           </button>
-          <button className="transport-btn" onClick={goNext} title="Next">
+          <button className="transport-btn" onClick={goNext} title="Next  [K]">
             <Icon name="skip-forward" className="transport-icon" />
           </button>
         </div>
@@ -204,7 +264,7 @@ export function BottomTransportDock() {
 
       {/* Right: volume */}
       <div className="dock-right">
-        <button className="transport-btn transport-btn--sm" onClick={toggleMute} title={player.muted ? "Unmute" : "Mute"}>
+        <button className="transport-btn transport-btn--sm" onClick={toggleMute} title={player.muted ? "Unmute  [M]" : "Mute  [M]"}>
           <Icon name={volumeIcon} className="transport-icon" />
         </button>
         <input

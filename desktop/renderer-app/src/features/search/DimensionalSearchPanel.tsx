@@ -136,11 +136,10 @@ export function DimensionalSearchPanel({
     setLoading(true);
     setError(null);
     try {
-      // Build dimension filters — only include dims the user has touched
       const dimFilters: Partial<DimensionValues> =
         activeDims.size > 0
           ? Object.fromEntries([...activeDims].map((d) => [d, values[d]]))
-          : values; // all dims if no specific selection
+          : values;
 
       const data = await requestJson(
         "/api/search",
@@ -165,49 +164,46 @@ export function DimensionalSearchPanel({
   }, [values, activeDims, limit]);
 
   return (
-    <section className="lyra-panel dimensional-search-panel" style={panelStyle}>
-      <header style={headerStyle}>
+    <section className="lyra-panel dimensional-search-panel dim-panel">
+      <header className="dim-panel-header">
         <span className="hero-kicker">Dimensional Search</span>
-        <h2 style={{ margin: "4px 0 8px", fontSize: "1.1rem", color: "var(--text)" }}>
+        <h2 style={{ margin: "4px 0 0", fontSize: "1.05rem" }}>
           Shape your search across 10 emotional dimensions
         </h2>
       </header>
 
       {/* Preset mood buttons */}
-      <div style={presetRowStyle}>
-        <span style={labelStyle}>Quick presets:</span>
+      <div className="dim-preset-row">
+        <span className="dim-label">Presets:</span>
         {Object.keys(MOOD_PRESETS).map((name) => (
           <button
             key={name}
+            className={`dim-preset-btn${activePreset === name ? " is-active" : ""}`}
             onClick={() => applyPreset(name)}
-            style={{
-              ...presetBtnStyle,
-              ...(activePreset === name ? presetActiveBtnStyle : {}),
-            }}
           >
             {name}
           </button>
         ))}
-        <button onClick={resetSliders} style={{ ...presetBtnStyle, marginLeft: 8, color: "var(--text-dim)" }}>
+        <button className="dim-preset-btn" onClick={resetSliders} style={{ marginLeft: 4, color: "var(--text-dim)" }}>
           reset
         </button>
       </div>
 
       {/* Sliders */}
-      <div style={slidersGridStyle}>
+      <div className="dim-sliders-grid">
         {DIMENSIONS.map((dim) => {
           const isActive = activeDims.has(dim.id);
           const val = values[dim.id];
           return (
-            <div key={dim.id} style={sliderRowStyle}>
-              <div style={dimLabelStyle}>
-                <span style={{ color: isActive ? "var(--accent)" : "var(--text)", fontWeight: isActive ? 600 : 400 }}>
+            <div key={dim.id} className="dim-slider-row">
+              <div className="dim-slider-label-row">
+                <span className={`dim-slider-label${isActive ? " is-active" : ""}`}>
                   {dim.label}
                 </span>
-                <span style={{ color: "var(--text-dim)", fontSize: "0.72rem" }}>{(val * 100).toFixed(0)}</span>
+                <span className="dim-slider-val">{(val * 100).toFixed(0)}</span>
               </div>
-              <div style={sliderTrackWrapStyle}>
-                <span style={sliderEndLabelStyle}>{dim.lo}</span>
+              <div className="dim-slider-track-wrap">
+                <span className="dim-slider-end">{dim.lo}</span>
                 <input
                   type="range"
                   min={0}
@@ -215,9 +211,9 @@ export function DimensionalSearchPanel({
                   step={1}
                   value={Math.round(val * 100)}
                   onChange={(e) => handleSliderChange(dim.id, parseInt(e.target.value, 10) / 100)}
-                  style={sliderInputStyle(val, isActive)}
+                  className={`dim-slider-input${isActive ? " is-active" : ""}`}
                 />
-                <span style={{ ...sliderEndLabelStyle, textAlign: "right" }}>{dim.hi}</span>
+                <span className="dim-slider-end dim-slider-end--right">{dim.hi}</span>
               </div>
             </div>
           );
@@ -225,9 +221,9 @@ export function DimensionalSearchPanel({
       </div>
 
       {/* Controls */}
-      <div style={controlsRowStyle}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <label style={labelStyle} htmlFor="dim-limit">Limit</label>
+      <div className="dim-controls-row">
+        <div className="dim-limit-wrap">
+          <label className="dim-label" htmlFor="dim-limit">Limit</label>
           <input
             id="dim-limit"
             type="number"
@@ -235,14 +231,13 @@ export function DimensionalSearchPanel({
             max={100}
             value={limit}
             onChange={(e) => setLimit(Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 20)))}
-            style={limitInputStyle}
+            className="dim-limit-input"
           />
         </div>
         <button
-          className="lyra-btn lyra-btn--primary"
+          className="dim-search-btn"
           onClick={handleSearch}
           disabled={loading}
-          style={searchBtnStyle}
         >
           {loading ? "Searching…" : `Search${activeDims.size > 0 ? ` (${activeDims.size} dims)` : ""}`}
         </button>
@@ -256,21 +251,21 @@ export function DimensionalSearchPanel({
 
       {/* Results */}
       {results.length > 0 && (
-        <div style={resultsContainerStyle}>
-          <p style={{ color: "var(--text-dim)", fontSize: "0.8rem", margin: "0 0 8px" }}>
+        <div className="dim-results-container">
+          <p className="dim-results-count">
             {results.length} result{results.length !== 1 ? "s" : ""}
           </p>
-          <div style={resultsGridStyle}>
+          <div className="dim-results-grid">
             {results.map((track) => (
               <div
                 key={track.track_id}
-                style={resultCardStyle}
+                className="dim-result-card"
                 onClick={() => onTrackSelect?.(track)}
                 title={`${track.artist} — ${track.title}\nScore: ${(track.score * 100).toFixed(1)}%`}
               >
-                <div style={resultArtistStyle}>{track.artist}</div>
-                <div style={resultTitleStyle}>{track.title}</div>
-                <div style={resultScoreStyle}>{(track.score * 100).toFixed(0)}%</div>
+                <div className="dim-result-artist">{track.artist}</div>
+                <div className="dim-result-title">{track.title}</div>
+                <div className="dim-result-score">{(track.score * 100).toFixed(0)}%</div>
               </div>
             ))}
           </div>
@@ -294,160 +289,3 @@ function _buildQueryString(values: DimensionValues, activeDims: Set<DimensionId>
   }
   return parts.slice(0, 5).join(", ") || "dimensional search";
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const panelStyle: React.CSSProperties = {
-  background: "var(--bg-elevated)",
-  border: "1px solid var(--panel-border)",
-  borderRadius: "var(--radius-lg)",
-  padding: "20px 24px",
-  display: "flex",
-  flexDirection: "column",
-  gap: 12,
-  maxWidth: 640,
-};
-
-const headerStyle: React.CSSProperties = { marginBottom: 4 };
-
-const presetRowStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  flexWrap: "wrap",
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: "0.78rem",
-  color: "var(--text-dim)",
-  userSelect: "none",
-};
-
-const presetBtnStyle: React.CSSProperties = {
-  background: "var(--bg-soft)",
-  border: "1px solid var(--panel-border)",
-  borderRadius: "var(--radius-sm)",
-  color: "var(--text-soft)",
-  cursor: "pointer",
-  fontSize: "0.78rem",
-  padding: "3px 10px",
-};
-
-const presetActiveBtnStyle: React.CSSProperties = {
-  background: "rgba(135, 214, 66, 0.18)",
-  borderColor: "var(--accent)",
-  color: "var(--accent)",
-};
-
-const slidersGridStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-};
-
-const sliderRowStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 2,
-};
-
-const dimLabelStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  fontSize: "0.8rem",
-};
-
-const sliderTrackWrapStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr auto 1fr",
-  alignItems: "center",
-  gap: 6,
-};
-
-const sliderEndLabelStyle: React.CSSProperties = {
-  fontSize: "0.68rem",
-  color: "var(--text-dim)",
-  lineHeight: 1.2,
-  maxWidth: 90,
-  wordBreak: "break-word",
-};
-
-const sliderInputStyle = (val: number, isActive: boolean): React.CSSProperties => ({
-  width: "100%",
-  accentColor: isActive ? "var(--accent)" : "var(--text-dim)",
-  cursor: "pointer",
-});
-
-const controlsRowStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  paddingTop: 4,
-};
-
-const limitInputStyle: React.CSSProperties = {
-  width: 52,
-  background: "var(--bg-soft)",
-  border: "1px solid var(--panel-border)",
-  borderRadius: "var(--radius-sm)",
-  color: "var(--text)",
-  padding: "3px 6px",
-  fontSize: "0.82rem",
-};
-
-const searchBtnStyle: React.CSSProperties = {
-  background: "var(--accent)",
-  border: "none",
-  borderRadius: "var(--radius-md)",
-  color: "#111",
-  cursor: "pointer",
-  fontWeight: 700,
-  fontSize: "0.88rem",
-  padding: "7px 20px",
-};
-
-const resultsContainerStyle: React.CSSProperties = {
-  borderTop: "1px solid var(--panel-border)",
-  paddingTop: 12,
-  marginTop: 4,
-};
-
-const resultsGridStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-};
-
-const resultCardStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 2fr auto",
-  alignItems: "center",
-  gap: 8,
-  background: "var(--bg-soft)",
-  border: "1px solid var(--panel-border)",
-  borderRadius: "var(--radius-sm)",
-  padding: "6px 10px",
-  cursor: "pointer",
-};
-
-const resultArtistStyle: React.CSSProperties = {
-  color: "var(--text-dim)",
-  fontSize: "0.78rem",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const resultTitleStyle: React.CSSProperties = {
-  color: "var(--text)",
-  fontSize: "0.85rem",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const resultScoreStyle: React.CSSProperties = {
-  color: "var(--accent)",
-  fontSize: "0.75rem",
-  fontWeight: 600,
-};

@@ -41,9 +41,9 @@ export function TopAtmosphereBar() {
   return (
     <header className="top-atmosphere">
       <div className="window-controls no-drag">
-        <button onClick={() => window.lyraWindow?.minimize?.()}>-</button>
-        <button onClick={() => window.lyraWindow?.maximize?.()}>[]</button>
-        <button onClick={() => window.lyraWindow?.close?.()}>x</button>
+        <button className="window-control-btn window-control-btn--close"    onClick={() => window.lyraWindow?.close?.()}    title="Close"    aria-label="Close" />
+        <button className="window-control-btn window-control-btn--minimize" onClick={() => window.lyraWindow?.minimize?.()} title="Minimize" aria-label="Minimize" />
+        <button className="window-control-btn window-control-btn--maximize" onClick={() => window.lyraWindow?.maximize?.()} title="Maximize" aria-label="Maximize" />
       </div>
       <div>
         <div className="atmosphere-title">LYRA DESKTOP</div>

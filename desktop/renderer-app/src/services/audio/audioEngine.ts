@@ -1,4 +1,5 @@
 import { audioAnalyzer } from "@/services/audio/audioAnalyzer";
+import { reportPlayback } from "@/services/audio/playbackReporter";
 import { resolveApiUrl } from "@/services/lyraGateway/client";
 import { usePlayerStore } from "@/stores/playerStore";
 import type { TrackListItem } from "@/types/domain";
@@ -24,6 +25,14 @@ class AudioEngine {
   private listeners = new Set<PlaybackListener>();
   private pendingSeekSec = 0;
 
+  private reportCurrentTrack(): void {
+    const { track, currentTimeSec, durationSec } = usePlayerStore.getState();
+    if (!track?.trackId || currentTimeSec < 10) return;
+    const completionRate = durationSec > 0 ? Math.min(currentTimeSec / durationSec, 1) : 0;
+    const skipped = completionRate < 0.3;
+    reportPlayback(track.trackId, completionRate, skipped);
+  }
+
   constructor() {
     this.audio.preload = "auto";
     this.audio.addEventListener("play", () => {
@@ -35,6 +44,7 @@ class AudioEngine {
       this.emit();
     });
     this.audio.addEventListener("ended", () => {
+      this.reportCurrentTrack();
       usePlayerStore.getState().setStatus("ended");
       this.emit();
     });
@@ -66,6 +76,7 @@ class AudioEngine {
   }
 
   async playTrack(track: TrackListItem): Promise<void> {
+    this.reportCurrentTrack();
     const state = usePlayerStore.getState();
     const source = resolveTrackSource(track);
     state.setTrack(track, state.sourceLabel, resolveTrackExplanation(track));

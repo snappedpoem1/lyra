@@ -169,3 +169,18 @@ def api_taste_seed():
         return jsonify({"ok": True, "result": result})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/api/taste/backfill", methods=["POST"])
+def api_taste_backfill():
+    """Backfill taste profile from Spotify extended streaming history."""
+    try:
+        from oracle.taste_backfill import backfill_taste_from_spotify_history
+        data = request.get_json(silent=True) or {}
+        result = backfill_taste_from_spotify_history(
+            min_ms_played=int(data.get("min_ms_played", 30000)),
+            dry_run=bool(data.get("dry_run", False)),
+        )
+        return jsonify({"ok": True, "result": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

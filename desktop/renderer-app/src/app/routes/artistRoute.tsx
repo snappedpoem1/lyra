@@ -75,13 +75,6 @@ function TrackRow({
   );
 }
 
-const SECTION_HEADER: React.CSSProperties = {
-  margin: "0 0 16px",
-  fontSize: "0.8rem",
-  letterSpacing: "0.12em",
-  textTransform: "uppercase",
-  color: "var(--text-dim)",
-};
 
 export function ArtistRoute() {
   const { name } = useParams({ from: "/artist/$name" });
@@ -181,32 +174,30 @@ export function ArtistRoute() {
       {/* Hero */}
       <section className="lyra-panel artist-hero">
         <ArtistAvatar name={name} thumbnail={shrine?.wikiThumbnail || undefined} size={90} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: "var(--text-dim)", fontSize: "0.72rem", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }}>
-            Artist
-          </div>
-          <h1 style={{ margin: "0 0 6px", fontSize: "2rem", fontWeight: 700, lineHeight: 1.1 }}>{name}</h1>
+        <div className="artist-hero-meta">
+          <span className="artist-hero-kicker">Artist</span>
+          <h1 className="artist-name">{name}</h1>
 
           {/* Origin / scene tagline */}
           {(shrine?.origin || shrine?.era || shrine?.scene) && (
-            <p style={{ margin: "0 0 8px", fontSize: "0.82rem", color: "var(--text-dim)" }}>
-              {[shrine.origin, shrine.era, shrine.scene].filter(Boolean).join(" Â· ")}
+            <p className="artist-tagline">
+              {[shrine.origin, shrine.era, shrine.scene].filter(Boolean).join(" · ")}
             </p>
           )}
 
           {/* Genres */}
           {(shrine?.genres ?? []).length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
+            <div className="artist-genre-chips">
               {(shrine?.genres ?? []).slice(0, 8).map((g) => (
-                <span key={g} style={{
-                  background: `hsl(${hue},20%,18%)`,
-                  border: `1px solid hsl(${hue},25%,30%)`,
-                  color: `hsl(${hue},50%,72%)`,
-                  borderRadius: 20,
-                  padding: "2px 10px",
-                  fontSize: "0.75rem",
-                  fontWeight: 500,
-                }}>
+                <span
+                  key={g}
+                  className="artist-genre-chip"
+                  style={{
+                    background: `hsl(${hue},20%,18%)`,
+                    border: `1px solid hsl(${hue},25%,30%)`,
+                    color: `hsl(${hue},50%,72%)`,
+                  }}
+                >
                   {g}
                 </span>
               ))}
@@ -217,7 +208,7 @@ export function ArtistRoute() {
             <p className="artist-bio">{shrine.bio}</p>
           )}
 
-          <div className="artist-stats-row" style={{ marginBottom: 18 }}>
+          <div className="artist-stats-row">
             <div className="artist-stat">
               <span className="artist-stat-value">{detail.trackCount}</span>
               <span className="artist-stat-label">Tracks</span>
@@ -252,7 +243,7 @@ export function ArtistRoute() {
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div className="artist-actions">
             <LyraButton onClick={() => void playAll()} disabled={!tracks.length}>
               <Icon name="play" className="inline-icon" /> Play All
             </LyraButton>
@@ -264,9 +255,9 @@ export function ArtistRoute() {
                 href={shrine.wikiUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--text-dim)", fontSize: "0.78rem", textDecoration: "none" }}
+                className="artist-wiki-link"
               >
-                Wikipedia â†—
+                Wikipedia ↗
               </a>
             )}
           </div>
@@ -275,23 +266,14 @@ export function ArtistRoute() {
 
       {/* Related Artists */}
       {(shrine?.relatedArtists ?? []).length > 0 && (
-        <section className="lyra-panel" style={{ padding: "18px 24px" }}>
-          <h3 style={SECTION_HEADER}>Related Artists</h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <section className="lyra-panel artist-section">
+          <h3 className="artist-section-header">Related Artists</h3>
+          <div className="artist-related-chips">
             {(shrine?.relatedArtists ?? []).slice(0, 12).map((rel) => (
               <button
                 key={rel.target}
+                className="artist-related-chip"
                 onClick={() => void navigate({ to: "/artist/$name", params: { name: rel.target } })}
-                style={{
-                  background: "var(--bg-soft)",
-                  border: "1px solid var(--panel-border)",
-                  borderRadius: 20,
-                  color: "var(--text)",
-                  cursor: "pointer",
-                  fontSize: "0.8rem",
-                  padding: "4px 14px",
-                  transition: "background 0.15s, border-color 0.15s",
-                }}
                 title={rel.type}
               >
                 {rel.target}
@@ -303,17 +285,13 @@ export function ArtistRoute() {
 
       {/* Notable Credits */}
       {Object.keys(creditsByRole).length > 0 && (
-        <section className="lyra-panel" style={{ padding: "18px 24px" }}>
-          <h3 style={SECTION_HEADER}>Credits</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <section className="lyra-panel artist-section">
+          <h3 className="artist-section-header">Credits</h3>
+          <div className="artist-credits-list">
             {Object.entries(creditsByRole).map(([role, people]) => (
-              <div key={role} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-                <span style={{ fontSize: "0.72rem", color: "var(--text-dim)", width: 80, flexShrink: 0, textTransform: "capitalize" }}>
-                  {role}
-                </span>
-                <span style={{ fontSize: "0.82rem", color: "var(--text)" }}>
-                  {people.map((p) => p.name).join(", ")}
-                </span>
+              <div key={role} className="artist-credit-row">
+                <span className="artist-credit-role">{role}</span>
+                <span className="artist-credit-names">{people.map((p) => p.name).join(", ")}</span>
               </div>
             ))}
           </div>
@@ -322,32 +300,22 @@ export function ArtistRoute() {
 
       {/* Albums */}
       {albums.length > 0 && (
-        <section className="lyra-panel" style={{ padding: "20px 24px" }}>
-          <h3 style={SECTION_HEADER}>Discography</h3>
+        <section className="lyra-panel artist-section">
+          <h3 className="artist-section-header">Discography</h3>
           <div className="artist-albums-grid">
             {albums.map((album) => (
               <div key={album.name} className="artist-album-card" title={`${album.count} tracks`}>
                 <div
+                  className="artist-album-art"
                   style={{
-                    width: "100%",
-                    aspectRatio: "1",
-                    borderRadius: 6,
                     background: `linear-gradient(145deg, hsl(${artistHue(album.name)},28%,18%), hsl(${(artistHue(album.name) + 60) % 360},36%,26%))`,
-                    display: "grid",
-                    placeItems: "center",
-                    fontSize: "1.6rem",
-                    marginBottom: 10,
                     color: `hsl(${artistHue(album.name)},60%,75%)`,
                   }}
                 >
                   {album.name[0]?.toUpperCase()}
                 </div>
-                <div style={{ fontSize: "0.82rem", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {album.name}
-                </div>
-                <div style={{ fontSize: "0.72rem", color: "var(--text-dim)", marginTop: 2 }}>
-                  {album.count} track{album.count !== 1 ? "s" : ""}
-                </div>
+                <div className="artist-album-name">{album.name}</div>
+                <div className="artist-album-count">{album.count} track{album.count !== 1 ? "s" : ""}</div>
               </div>
             ))}
           </div>
@@ -356,8 +324,8 @@ export function ArtistRoute() {
 
       {/* Track list */}
       {tracks.length > 0 && (
-        <section className="lyra-panel" style={{ padding: "20px 24px" }}>
-          <h3 style={SECTION_HEADER}>All Tracks</h3>
+        <section className="lyra-panel artist-section">
+          <h3 className="artist-section-header">All Tracks</h3>
           <div className="track-rows">
             {tracks.map((track, i) => (
               <TrackRow key={track.trackId} track={track} index={i} onPlay={playTrack} />

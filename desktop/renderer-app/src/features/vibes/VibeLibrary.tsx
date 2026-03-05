@@ -38,6 +38,7 @@ export function VibeLibrary() {
 
         {!error && !vibes.length && (
           <section className="empty-state-panel">
+            <div className="empty-state-glyph" aria-hidden="true" />
             <h2>No saved vibes yet</h2>
             <p>Generate a vibe from search, save it, and it will appear here.</p>
           </section>

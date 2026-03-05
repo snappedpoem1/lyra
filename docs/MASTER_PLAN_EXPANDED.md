@@ -5,6 +5,51 @@ Last audited: March 4, 2026
 This document is the current high-level status view of Lyra Oracle.
 It describes what exists in the repo now, what is still partial, and what the next practical steps are.
 
+## March 2026 Progress Update
+
+### What changed
+
+This cycle focused on **closing the learning loop** and **removing fake friction** instead of introducing new frameworks or infrastructure.
+
+#### 1. Spotify history was converted from archive into system memory
+- `spotify_history` was cleaned after repeated duplicate imports.
+- A dedup guard was added so future imports do not multiply the same listening rows again.
+- Result: Lyra now has a clean multi-year listening record to learn from instead of a noisy, duplicated import state.
+
+#### 2. Taste learning is no longer library-only
+- Added `oracle/taste_backfill.py`.
+- Spotify listening history is now aggregated and translated into taste signals for locally owned tracks.
+- 1,730 matched local tracks were written into the learning loop.
+- `playback_history` is no longer effectively zero-state.
+- `taste_profile` now reflects real listening behavior instead of only library-derived assumptions.
+
+#### 3. Desktop playback now feeds the backend
+- The desktop audio engine now reports playback completion and track-switch skip behavior back to the backend.
+- Lyra can now continue learning from in-app listening rather than relying only on one-time seed/backfill operations.
+
+#### 4. Batch acquisition path was repaired
+- Fixed the broken `/api/acquire/batch` path that referenced missing `fast_batch` constants and called `_download_one(...)` with the wrong signature.
+- This removes a hard runtime failure in one of the queue/acquisition entrypoints.
+
+#### 5. Dead time in the pipeline was reduced
+- Removed the per-item `sleep(1.0)` in batch acquisition.
+- Reduced API startup wait from 3.0s to 0.5s.
+- Reduced Real-Debrid poll interval from 10s to 5s.
+
+#### 6. Dead code was archived
+- `oracle/downloader.py` was archived after confirming it was no longer part of the active acquisition flow.
+
+### What this does not mean yet
+- Player architecture is still transitional.
+- Match quality between external listening history and local-library track identity can still improve.
+- Canonical path discipline still matters: `waterfall.py`, `smart_pipeline.py`, and the queue flow remain the architecture to protect.
+
+### Immediate next priorities
+1. Tighten track-resolution quality between Spotify history and local tracks.
+2. Continue consolidating around canonical acquisition paths.
+3. Expand desktop playback telemetry only where it creates real learning value.
+4. Reassess player-engine direction from the now-live taste foundation.
+
 ## Executive Summary
 
 Lyra Oracle is already a substantial local music system.

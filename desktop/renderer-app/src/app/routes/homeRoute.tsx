@@ -1,10 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ConstellationScene } from "@/features/constellation/ConstellationScene";
-import { OracleRecommendationDeck } from "@/features/oracle/OracleRecommendationDeck";
 import { ConnectivityBadge } from "@/features/system/ConnectivityBadge";
 import { audioEngine } from "@/services/audio/audioEngine";
-import { getConstellation, getLibraryTracks, getOracleRecommendations, getPlaylistDetail, getPlaylists } from "@/services/lyraGateway/queries";
+import { getLibraryTracks, getOracleRecommendations, getPlaylistDetail, getPlaylists } from "@/services/lyraGateway/queries";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
 import { useUiStore } from "@/stores/uiStore";
@@ -16,7 +14,6 @@ export function HomeRoute() {
   const { data: playlists = [] } = useQuery({ queryKey: ["playlists"], queryFn: getPlaylists });
   const { data: recommendations = [] } = useQuery({ queryKey: ["oracle", "home"], queryFn: () => getOracleRecommendations("flow") });
   const { data: library } = useQuery({ queryKey: ["home-library"], queryFn: () => getLibraryTracks(10, 0, "") });
-  const { data: constellation, error: constellationError } = useQuery({ queryKey: ["constellation"], queryFn: () => getConstellation() });
   const player = usePlayerStore();
   const queue = useQueueStore((state) => state.queue);
   const setCurrentIndex = useQueueStore((state) => state.setCurrentIndex);
@@ -199,61 +196,6 @@ export function HomeRoute() {
         </section>
       </section>
 
-      <section className="lyra-panel layers-panel">
-        <div className="section-heading">
-          <h2>Lyra Layers</h2>
-          <span>Visible, not hidden</span>
-        </div>
-        <div className="layers-grid">
-          <button className="layer-card" onClick={() => navigate({ to: "/library" })}>
-            <span className="insight-kicker">Layer 1</span>
-            <strong>Library</strong>
-            <p>Real files, indexed metadata, streamable paths.</p>
-          </button>
-          <button className="layer-card" onClick={() => leadPlaylist && navigate({ to: "/playlists/$playlistId", params: { playlistId: leadPlaylist.id } })}>
-            <span className="insight-kicker">Layer 2</span>
-            <strong>Listening Thread</strong>
-            <p>Saved order, queue continuity, sequence logic.</p>
-          </button>
-          <button className="layer-card" onClick={() => navigate({ to: "/oracle" })}>
-            <span className="insight-kicker">Layer 3</span>
-            <strong>Oracle</strong>
-            <p>Flow, chaos, discovery, and queue generation.</p>
-          </button>
-          <button className="layer-card" onClick={() => libraryTracks[0] && openDossier(libraryTracks[0].trackId)}>
-            <span className="insight-kicker">Layer 4</span>
-            <strong>Dossier</strong>
-            <p>Structure, lineage, samples, and track reasoning.</p>
-          </button>
-        </div>
-      </section>
-
-      <OracleRecommendationDeck
-        recommendations={recommendations}
-        onPlayTrack={(track) => void audioEngine.playTrack(track)}
-        onReplaceQueue={(tracks) =>
-          replaceQueue({
-            queueId: "home-oracle",
-            origin: "home",
-            reorderable: true,
-            currentIndex: 0,
-            items: tracks,
-          })
-        }
-      />
-
-      {constellationError ? (
-        <section className="lyra-panel empty-state-panel">
-          <h2>Constellation unavailable</h2>
-          <p>{constellationError instanceof Error ? constellationError.message : "The constellation backend did not respond."}</p>
-        </section>
-      ) : constellation ? (
-        <ConstellationScene
-          nodes={constellation.nodes}
-          edges={constellation.edges}
-          onSelectNode={() => navigate({ to: "/oracle" })}
-        />
-      ) : null}
     </div>
   );
 }

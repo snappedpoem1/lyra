@@ -160,6 +160,8 @@ CREATE TABLE IF NOT EXISTS acquisition_queue (
 CREATE INDEX IF NOT EXISTS idx_history_artist_track ON spotify_history(artist, track);
 CREATE INDEX IF NOT EXISTS idx_history_played_at ON spotify_history(played_at);
 CREATE INDEX IF NOT EXISTS idx_history_uri ON spotify_history(spotify_track_uri);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_history_dedup
+    ON spotify_history(artist, track, played_at, ms_played, spotify_track_uri);
 CREATE INDEX IF NOT EXISTS idx_library_artist_title ON spotify_library(artist, title);
 CREATE INDEX IF NOT EXISTS idx_library_source ON spotify_library(source);
 CREATE INDEX IF NOT EXISTS idx_queue_status ON acquisition_queue(status);
@@ -328,7 +330,7 @@ def import_streaming_history(conn: sqlite3.Connection) -> Dict:
 
         if batch:
             cursor.executemany("""
-                INSERT INTO spotify_history (
+                INSERT OR IGNORE INTO spotify_history (
                     artist, track, album, played_at, ms_played, spotify_track_uri,
                     reason_start, reason_end, shuffle, skipped,
                     platform, conn_country, ip_addr,

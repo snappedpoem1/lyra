@@ -174,7 +174,7 @@ def poll_real_debrid(torrent_id: str, max_wait: int = 300) -> Dict:
         status = info.get("status")
         if status in {"downloaded", "error", "dead"}:
             return info
-        time.sleep(10)
+        time.sleep(5)
     raise RuntimeError("Real-Debrid polling timed out")
 
 

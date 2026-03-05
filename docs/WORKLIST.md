@@ -4,6 +4,30 @@ Last updated: March 4, 2026
 
 This file is the short operational list of what is done and what still needs work.
 
+## Completed in this cycle
+
+- [x] Deduplicate `spotify_history` after repeated import multiplication
+- [x] Add import dedup guard for future Spotify history loads
+- [x] Generate a clean, priority-scored acquisition queue from real Spotify history
+- [x] Create `oracle/taste_backfill.py` to bridge Spotify history into `taste_profile`
+- [x] Seed Lyra taste from real listening history for matched local tracks
+- [x] Add CLI + API path for taste backfill
+- [x] Fix broken `/api/acquire/batch` call path
+- [x] Remove per-item batch dead sleep in `smart_pipeline`
+- [x] Reduce startup / polling waits that added avoidable latency
+- [x] Archive unused `oracle/downloader.py`
+- [x] Wire desktop playback reporting into the backend feedback loop
+- [x] Agent action router (`agentActionRouter.ts`), context menus, queue drag-to-reorder, transport waveform, playlist mosaic, keyboard shortcuts, playback position persistence
+
+## Next up
+
+- [ ] Improve Spotify-history-to-local-track matching quality
+- [ ] Add stronger normalization / fuzzy fallback for near-miss artist-title matches
+- [ ] Audit any remaining acquisition/API bypasses against canonical queue + waterfall paths
+- [ ] Verify desktop playback reporting behavior across skip / finish / manual track-switch cases
+- [ ] Re-evaluate embedded player direction from the now-live taste foundation
+- [ ] Expand playback telemetry only where it improves recommendation quality
+
 ## To Done
 
 - Documentation stack rewritten around audited repo reality.

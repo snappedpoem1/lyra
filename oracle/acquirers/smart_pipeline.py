@@ -307,7 +307,6 @@ class SmartAcquisition:
             else:
                 failures = 0
 
-            time.sleep(1.0)
 
         return results
 
