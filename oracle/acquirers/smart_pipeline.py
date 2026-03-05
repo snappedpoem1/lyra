@@ -102,6 +102,12 @@ class SmartAcquisition:
             self._db.close()
             self._db = None
 
+    def __enter__(self) -> "SmartAcquisition":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
     def _normalize_queue_statuses(self) -> int:
         """Normalize legacy queue statuses to canonical values."""
         cursor = self.db.cursor()

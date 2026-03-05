@@ -321,43 +321,46 @@ def _extract_real_artist_from_title(artist: str, title: str) -> Tuple[str, str]:
     return artist, title
 
 
-def _check_duplicate(artist: str, title: str, db_path: str = "lyra_registry.db") -> Optional[str]:
+def _check_duplicate(artist: str, title: str, db_path: str = "") -> Optional[str]:
     """Check if track already exists in library.
-    
+
+    Uses the canonical get_connection() so WAL mode and the correct DB path
+    from oracle.config are always applied. The db_path argument is kept for
+    backward compatibility but is ignored.
+
     Returns:
         Filepath of existing track if duplicate, None if OK
     """
-    import sqlite3
-    
+    from oracle.db.schema import get_connection
+
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT filepath, artist, title FROM tracks 
-            WHERE status = 'active'
-        """)
-        
-        artist_clean = _clean_string(artist)
-        title_clean = _clean_string(_clean_title(title))
-        
-        for filepath, db_artist, db_title in cursor.fetchall():
-            db_artist_clean = _clean_string(db_artist or "")
-            db_title_clean = _clean_string(_clean_title(db_title or ""))
-            
-            # Fuzzy match
-            artist_sim = _similarity(artist_clean, db_artist_clean)
-            title_sim = _similarity(title_clean, db_title_clean)
-            
-            if artist_sim > 0.85 and title_sim > 0.85:
-                conn.close()
-                return filepath
-        
-        conn.close()
-        return None
-        
+        conn = get_connection(timeout=5.0)
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT filepath, artist, title FROM tracks
+                WHERE status = 'active'
+            """)
+
+            artist_clean = _clean_string(artist)
+            title_clean = _clean_string(_clean_title(title))
+
+            for filepath, db_artist, db_title in cursor.fetchall():
+                db_artist_clean = _clean_string(db_artist or "")
+                db_title_clean = _clean_string(_clean_title(db_title or ""))
+
+                artist_sim = _similarity(artist_clean, db_artist_clean)
+                title_sim = _similarity(title_clean, db_title_clean)
+
+                if artist_sim > 0.85 and title_sim > 0.85:
+                    return filepath
+
+            return None
+        finally:
+            conn.close()
+
     except Exception as e:
-        logger.warning(f"Duplicate check failed: {e}")
+        logger.warning("Duplicate check failed: %s", e)
         return None
 
 

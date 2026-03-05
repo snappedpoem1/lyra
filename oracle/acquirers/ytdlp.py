@@ -47,9 +47,15 @@ def _sanitize(name: str) -> str:
 class YTDLPAcquirer:
     """yt-dlp based acquirer supporting both URL and search queries."""
 
-    def __init__(self, download_dir: str = "downloads", staging_dir: str = "staging"):
-        self.download_dir = (PROJECT_ROOT / download_dir).resolve()
-        self.staging_dir = (PROJECT_ROOT / staging_dir).resolve()
+    def __init__(
+        self,
+        download_dir: Optional[Path] = None,
+        staging_dir: Optional[Path] = None,
+    ):
+        from oracle.config import DOWNLOADS_FOLDER, STAGING_FOLDER  # lazy to avoid circular import
+
+        self.download_dir = (download_dir or DOWNLOADS_FOLDER).resolve()
+        self.staging_dir = (staging_dir or STAGING_FOLDER).resolve()
         self.download_dir.mkdir(parents=True, exist_ok=True)
         self.staging_dir.mkdir(parents=True, exist_ok=True)
 

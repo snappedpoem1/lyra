@@ -167,38 +167,42 @@ def _reconcile_downloaded_queue_rows() -> int:
 
     from oracle.db.schema import get_connection
     attempts = 4
-    for attempt in range(1, attempts + 1):
-        conn = get_connection(timeout=10.0)
-        try:
-            cur = conn.execute(
-                """
-                UPDATE acquisition_queue
-                SET status='completed', completed_at=datetime('now'), error=NULL
-                WHERE status='downloaded'
-                  AND EXISTS (
-                    SELECT 1
-                    FROM tracks t
-                    WHERE t.status='active'
-                      AND (
-                        lower(trim(t.artist)) = lower(trim(acquisition_queue.artist))
-                        OR lower(trim(t.artist)) LIKE lower(trim(acquisition_queue.artist)) || '%'
-                        OR lower(trim(acquisition_queue.artist)) LIKE lower(trim(t.artist)) || '%'
+    conn = get_connection(timeout=10.0)
+    try:
+        for attempt in range(1, attempts + 1):
+            try:
+                cur = conn.execute(
+                    """
+                    UPDATE acquisition_queue
+                    SET status='completed', completed_at=datetime('now'), error=NULL
+                    WHERE status='downloaded'
+                      AND EXISTS (
+                        SELECT 1
+                        FROM tracks t
+                        WHERE t.status='active'
+                          AND (
+                            lower(trim(t.artist)) = lower(trim(acquisition_queue.artist))
+                            OR lower(trim(t.artist)) LIKE lower(trim(acquisition_queue.artist)) || '%'
+                            OR lower(trim(acquisition_queue.artist)) LIKE lower(trim(t.artist)) || '%'
+                          )
+                          AND (
+                            lower(trim(t.title)) = lower(trim(acquisition_queue.title))
+                            OR lower(trim(t.title)) LIKE lower(trim(acquisition_queue.title)) || '%'
+                            OR lower(trim(acquisition_queue.title)) LIKE lower(trim(t.title)) || '%'
+                          )
                       )
-                      AND (
-                        lower(trim(t.title)) = lower(trim(acquisition_queue.title))
-                        OR lower(trim(t.title)) LIKE lower(trim(acquisition_queue.title)) || '%'
-                        OR lower(trim(acquisition_queue.title)) LIKE lower(trim(t.title)) || '%'
-                      )
-                  )
-                """
-            )
-            conn.commit()
-            return int(cur.rowcount or 0)
-        except sqlite3.OperationalError as exc:
-            if "locked" in str(exc).lower() and attempt < attempts:
-                time.sleep(0.05 * attempt)
-                continue
-            logger.warning("[INGEST] Queue reconciliation failed: %s", exc)
+                    """
+                )
+                conn.commit()
+                return int(cur.rowcount or 0)
+            except sqlite3.OperationalError as exc:
+                if "locked" in str(exc).lower() and attempt < attempts:
+                    time.sleep(0.05 * attempt)
+                    continue
+                logger.warning("[INGEST] Queue reconciliation failed: %s", exc)
+                return 0
+    finally:
+        conn.close()
     return 0
 
 

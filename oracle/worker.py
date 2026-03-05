@@ -104,7 +104,7 @@ def job_acquire_drain() -> None:
     logger.info("[worker:acquire] draining 5 queue items")
     try:
         from oracle.acquirers.taste_prioritizer import get_next_priority_batch
-        from oracle.acquirers.waterfall import AcquisitionWaterfall
+        from oracle.acquirers.waterfall import acquire as waterfall_acquire
         from oracle.db.schema import get_connection, get_write_mode
 
         if get_write_mode() != "apply_allowed":
@@ -116,43 +116,42 @@ def job_acquire_drain() -> None:
             logger.info("[worker:acquire] queue empty or fully processed")
             return
 
-        waterfall = AcquisitionWaterfall()
         conn = get_connection(timeout=10.0)
-
-        for item in items:
-            queue_id, artist, title = item["id"], item["artist"], item["title"]
-            try:
-                conn.execute(
-                    "UPDATE acquisition_queue SET status='processing' WHERE id=?",
-                    (queue_id,)
-                )
-                conn.commit()
-
-                result = waterfall.acquire(artist=artist, title=title)
-                status = "completed" if result.success else "failed"
-                error = result.error if not result.success else None
-
-                conn.execute(
-                    "UPDATE acquisition_queue SET status=?, error=? WHERE id=?",
-                    (status, error, queue_id)
-                )
-                conn.commit()
-                logger.info(
-                    "[worker:acquire] %s '%s - %s' via tier %s",
-                    "✓" if result.success else "✗", artist, title, result.tier
-                )
-            except Exception as exc:
-                logger.error("[worker:acquire] item %s failed: %s", queue_id, exc)
+        try:
+            for item in items:
+                queue_id, artist, title = item["id"], item["artist"], item["title"]
                 try:
                     conn.execute(
-                        "UPDATE acquisition_queue SET status='failed', error=? WHERE id=?",
-                        (str(exc), queue_id)
+                        "UPDATE acquisition_queue SET status='processing' WHERE id=?",
+                        (queue_id,)
                     )
                     conn.commit()
-                except Exception:
-                    pass
 
-        conn.close()
+                    result = waterfall_acquire(artist, title)
+                    status = "completed" if result.success else "failed"
+                    error = result.error if not result.success else None
+
+                    conn.execute(
+                        "UPDATE acquisition_queue SET status=?, error=? WHERE id=?",
+                        (status, error, queue_id)
+                    )
+                    conn.commit()
+                    logger.info(
+                        "[worker:acquire] %s '%s - %s' via tier %s",
+                        "\u2713" if result.success else "\u2717", artist, title, result.tier
+                    )
+                except Exception as exc:
+                    logger.error("[worker:acquire] item %s failed: %s", queue_id, exc)
+                    try:
+                        conn.execute(
+                            "UPDATE acquisition_queue SET status='failed', error=? WHERE id=?",
+                            (str(exc), queue_id)
+                        )
+                        conn.commit()
+                    except Exception:
+                        pass
+        finally:
+            conn.close()
     except Exception as exc:
         logger.error("[worker:acquire] drain error: %s", exc, exc_info=True)
 
@@ -257,7 +256,7 @@ def build_scheduler():
         )
         sys.exit(1)
 
-    executors = {"default": APThreadPool(max_workers=2)}
+    executors = {"default": APThreadPool(max_workers=5)}
     scheduler = BlockingScheduler(executors=executors, timezone="UTC")
 
     scheduler.add_job(

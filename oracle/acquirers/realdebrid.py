@@ -26,7 +26,13 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DOWNLOAD_DIR = (PROJECT_ROOT / "downloads").resolve()
+
+# Use config-driven path so DOWNLOADS_FOLDER env var is respected.
+# Resolved lazily to avoid import-order issues with load_dotenv.
+def _get_download_dir() -> Path:
+    from oracle.config import DOWNLOADS_FOLDER
+    return Path(DOWNLOADS_FOLDER)
+
 
 # Real-Debrid API
 RD_API_BASE = "https://api.real-debrid.com/rest/1.0"
@@ -295,13 +301,7 @@ def add_torrent_file(torrent_bytes: bytes) -> str:
     Returns:
         Torrent ID
     """
-    response = requests.put(
-        f"{RD_API_BASE}/torrents/addTorrent",
-        headers=_headers(),
-        data=torrent_bytes,
-        timeout=60,
-    )
-    response.raise_for_status()
+    response = _request("PUT", "/torrents/addTorrent", data=torrent_bytes, timeout=60)
     data = response.json()
     torrent_id = data.get("id")
     if not torrent_id:
@@ -408,7 +408,7 @@ def download_torrent_files(
     Returns:
         List of downloaded file paths
     """
-    output_dir = output_dir or DOWNLOAD_DIR
+    output_dir = output_dir or _get_download_dir()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     info = get_torrent_info(torrent_id)
@@ -464,10 +464,9 @@ def acquire_from_magnet(
     """
     # Check if cached first
     info_hash = extract_hash_from_magnet(magnet)
-    if info_hash:
-        availability = check_instant_availability([info_hash])
-        if availability.get(info_hash):
-            logger.info("Torrent is cached (instant availability)")
+    # NOTE: check_instant_availability() always returns False (RD deprecated the
+    # endpoint in 2024 — it returns 403). Skip the call entirely and proceed
+    # directly to add_magnet to avoid an unnecessary HTTP round-trip.
 
     # Add magnet
     torrent_id = add_magnet(magnet)

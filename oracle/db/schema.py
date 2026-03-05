@@ -536,8 +536,10 @@ def _apply_schema() -> bool:
     c.execute("CREATE INDEX IF NOT EXISTS idx_llm_audit_created_at ON llm_audit(created_at)")
 
     conn.commit()
-    conn.close()
-    return True
+    try:
+        return True
+    finally:
+        conn.close()
 
 
 def create_tables() -> bool:

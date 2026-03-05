@@ -801,14 +801,12 @@ def normalize_library(
         conn.close()
         return changes
 
-    # Apply changes
-    applied = 0
-    for change in changes:
-        cursor.execute(
-            "UPDATE tracks SET artist = ?, title = ? WHERE track_id = ?",
-            (change["new_artist"], change["new_title"], change["track_id"]),
-        )
-        applied += 1
+    # Apply all changes in a single batch transaction.
+    cursor.executemany(
+        "UPDATE tracks SET artist = ?, title = ? WHERE track_id = ?",
+        [(c["new_artist"], c["new_title"], c["track_id"]) for c in changes],
+    )
+    applied = len(changes)
 
     conn.commit()
     conn.close()

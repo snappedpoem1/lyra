@@ -219,22 +219,40 @@ def _try_tier3_slskd(artist: str, title: str) -> AcquisitionResult:
     try:
         from oracle.lyra_protocol import run_lyra_protocol
         import asyncio
+        import concurrent.futures
 
-        result = asyncio.run(run_lyra_protocol(artist, title))
+        # asyncio.run() raises RuntimeError if called from inside a running event
+        # loop (e.g. pytest-asyncio, Jupyter). Fall back to a dedicated thread
+        # with its own loop to stay safe in both sync and async call contexts.
+        def _run_sync():
+            return asyncio.run(run_lyra_protocol(artist, title))
+
+        try:
+            asyncio.get_running_loop()
+            # Already in a running loop — run in a worker thread
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _tp:
+                result = _tp.submit(_run_sync).result(timeout=120)
+        except RuntimeError:
+            # No running loop — safe to call asyncio.run() directly
+            result = _run_sync()
 
         if result.get("status") == "queued":
-            winner = result.get("winner")
+            # "queued" means slskd has scheduled the download, not that the file
+            # exists yet.  Returning success=True here would mark the queue item
+            # completed before the file materialises, producing stuck entries.
+            # Return failure so the caller can retry or escalate to T4/T5.
             return AcquisitionResult(
-                success=True,
+                success=False,
                 tier=3,
                 source="slskd",
-                path=winner.identifier if winner else None,
+                error="slskd queued but file not yet materialised",
                 artist=artist,
                 title=title,
                 elapsed=time.perf_counter() - start,
                 metadata={
+                    "queued": True,
                     "route": result.get("route"),
-                    "integrity_score": winner.integrity_score if winner else None,
+                    "integrity_score": result.get("winner") and getattr(result.get("winner"), "integrity_score", None),
                 },
             )
 
@@ -700,19 +718,21 @@ def _log_acquisition(artist: str, title: str, result: AcquisitionResult) -> None
 
     try:
         conn = get_connection(timeout=5.0)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            UPDATE acquisition_queue
-            SET status = 'completed', completed_at = datetime('now')
-            WHERE artist = ? AND title = ? AND status = 'pending'
-            """,
-            (artist, title),
-        )
-        conn.commit()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE acquisition_queue
+                SET status = 'completed', completed_at = datetime('now')
+                WHERE artist = ? AND title = ? AND status = 'pending'
+                """,
+                (artist, title),
+            )
+            conn.commit()
+        finally:
+            conn.close()
     except Exception as e:
-        logger.debug(f"Failed to update acquisition log: {e}")
+        logger.debug("Failed to update acquisition log: %s", e)
 
 
 def get_tier_status() -> Dict[str, Dict[str, Any]]:

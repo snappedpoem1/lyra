@@ -28,6 +28,19 @@ logger = logging.getLogger(__name__)
 
 _batch_jobs: Dict[str, dict] = {}
 _batch_queues: Dict[str, _queue.Queue] = {}
+_BATCH_JOB_TTL: float = 3600.0  # prune entries older than 1 hour
+
+
+def _prune_stale_batch_jobs() -> None:
+    """Remove batch job entries older than _BATCH_JOB_TTL seconds."""
+    cutoff = _time.time() - _BATCH_JOB_TTL
+    stale = [
+        jid for jid, job in list(_batch_jobs.items())
+        if job.get("created_at", 0) < cutoff and job.get("status") in ("complete", "failed", None)
+    ]
+    for jid in stale:
+        _batch_jobs.pop(jid, None)
+        _batch_queues.pop(jid, None)
 
 
 def _run_batch_job(job_id: str, queries: List[str], workers: int, run_pipeline: bool) -> None:
@@ -149,17 +162,19 @@ def api_acquire_queue():
     """Get acquisition queue."""
     try:
         conn = get_connection(timeout=10.0)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id, url, source, status, added_at, error
-            FROM acquisition_queue
-            ORDER BY added_at DESC
-            LIMIT 50
-            """
-        )
-        rows = cursor.fetchall()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, url, source, status, added_at, error
+                FROM acquisition_queue
+                ORDER BY added_at DESC
+                LIMIT 50
+                """
+            )
+            rows = cursor.fetchall()
+        finally:
+            conn.close()
         queue = [
             {"id": r[0], "url": r[1], "source": r[2], "status": r[3], "added_at": r[4], "error": r[5]}
             for r in rows
@@ -209,8 +224,9 @@ def api_acquire_batch():
         if len(queries) > 200:
             return jsonify({"error": f"Max 200 queries per batch, got {len(queries)}"}), 400
 
+        _prune_stale_batch_jobs()
         job_id = _uuid.uuid4().hex[:12]
-        _batch_jobs[job_id] = {"status": "running", "total": len(queries)}
+        _batch_jobs[job_id] = {"status": "running", "total": len(queries), "created_at": _time.time()}
         _batch_queues[job_id] = _queue.Queue()
 
         t = threading.Thread(
@@ -297,21 +313,23 @@ def api_spotify_missing():
         limit = sanitize_integer(request.args.get("limit", 100), default=100, min_val=1, max_val=1000)
 
         conn = get_connection(timeout=10.0)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT artist, title, album, spotify_uri, source, play_count, priority_score, status, added_at
-            FROM acquisition_queue
-            WHERE source IN ('history', 'liked', 'playlist', 'top_tracks')
-              AND status = 'pending'
-              AND COALESCE(play_count, 0) >= ?
-            ORDER BY COALESCE(priority_score, 0.0) DESC, COALESCE(play_count, 0) DESC, added_at DESC
-            LIMIT ?
-            """,
-            (min_plays, limit),
-        )
-        rows = cursor.fetchall()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT artist, title, album, spotify_uri, source, play_count, priority_score, status, added_at
+                FROM acquisition_queue
+                WHERE source IN ('history', 'liked', 'playlist', 'top_tracks')
+                  AND status = 'pending'
+                  AND COALESCE(play_count, 0) >= ?
+                ORDER BY COALESCE(priority_score, 0.0) DESC, COALESCE(play_count, 0) DESC, added_at DESC
+                LIMIT ?
+                """,
+                (min_plays, limit),
+            )
+            rows = cursor.fetchall()
+        finally:
+            conn.close()
         missing = [
             {
                 "artist": r[0], "title": r[1], "album": r[2], "spotify_uri": r[3],
@@ -330,45 +348,46 @@ def api_spotify_stats():
     """Spotify import statistics."""
     try:
         conn = get_connection(timeout=10.0)
-        cursor = conn.cursor()
-        stats: dict = {}
+        try:
+            cursor = conn.cursor()
+            stats: dict = {}
 
-        for table in ("spotify_history", "spotify_library", "spotify_features"):
-            cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", (table,))
-            exists = cursor.fetchone()[0] > 0
-            stats[f"{table}_count"] = int(cursor.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) if exists else 0
+            for table in ("spotify_history", "spotify_library", "spotify_features"):
+                cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", (table,))
+                exists = cursor.fetchone()[0] > 0
+                stats[f"{table}_count"] = int(cursor.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) if exists else 0
 
-        cursor.execute(
-            """
-            SELECT
-                SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),
-                SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END),
-                SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END)
-            FROM acquisition_queue
-            WHERE source IN ('history', 'liked', 'playlist', 'top_tracks')
-            """
-        )
-        pending, completed, failed = cursor.fetchone()
-        stats["queue_pending"] = int(pending or 0)
-        stats["queue_completed"] = int(completed or 0)
-        stats["queue_failed"] = int(failed or 0)
+            cursor.execute(
+                """
+                SELECT
+                    SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END)
+                FROM acquisition_queue
+                WHERE source IN ('history', 'liked', 'playlist', 'top_tracks')
+                """
+            )
+            pending, completed, failed = cursor.fetchone()
+            stats["queue_pending"] = int(pending or 0)
+            stats["queue_completed"] = int(completed or 0)
+            stats["queue_failed"] = int(failed or 0)
 
-        cursor.execute(
-            """
-            SELECT artist, COUNT(*) AS play_count, SUM(COALESCE(ms_played, 0)) AS total_ms
-            FROM spotify_history
-            WHERE artist IS NOT NULL AND trim(artist) != ''
-            GROUP BY artist
-            ORDER BY play_count DESC, total_ms DESC
-            LIMIT 25
-            """
-        )
-        stats["top_artists"] = [
-            {"name": r[0], "score": int(r[1] or 0), "plays": int(r[1] or 0), "total_ms": int(r[2] or 0)}
-            for r in cursor.fetchall()
-        ]
-
-        conn.close()
+            cursor.execute(
+                """
+                SELECT artist, COUNT(*) AS play_count, SUM(COALESCE(ms_played, 0)) AS total_ms
+                FROM spotify_history
+                WHERE artist IS NOT NULL AND trim(artist) != ''
+                GROUP BY artist
+                ORDER BY play_count DESC, total_ms DESC
+                LIMIT 25
+                """
+            )
+            stats["top_artists"] = [
+                {"name": r[0], "score": int(r[1] or 0), "plays": int(r[1] or 0), "total_ms": int(r[2] or 0)}
+                for r in cursor.fetchall()
+            ]
+        finally:
+            conn.close()
         return jsonify({"ok": True, **stats})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

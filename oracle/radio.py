@@ -88,29 +88,27 @@ class Radio:
                 # 2. Calculate similarity
                 # 3. Sort by ASCENDING similarity (most different first)
                 
-                all_results = collection.get(include=["embeddings", "metadatas"])
-                
-                similarities = []
-                for i, emb in enumerate(all_results["embeddings"]):
-                    if all_results["ids"][i] == current_track_id:
-                        continue
-                    
-                    # Cosine similarity
-                    sim = np.dot(current_embedding, emb) / (
-                        np.linalg.norm(current_embedding) * np.linalg.norm(emb)
-                    )
-                    
-                    similarities.append({
-                        "track_id": all_results["ids"][i],
-                        "metadata": all_results["metadatas"][i],
-                        "similarity": sim
-                    })
-                
-                # Sort by ASCENDING similarity (most orthogonal first)
-                similarities.sort(key=lambda x: x["similarity"])
-                
+                # Use negated query vector: ChromaDB nearest-neighbours of -v are the
+                # most dissimilar to v, so this ANN call replaces an O(n) Python loop.
+                negated = [-x for x in current_embedding]
+                ann = collection.query(
+                    query_embeddings=[negated],
+                    n_results=min(51, max(1, collection.count())),
+                    include=["metadatas", "distances"],
+                )
+                similarities = [
+                    {
+                        "track_id": ann["ids"][0][i],
+                        "metadata": ann["metadatas"][0][i],
+                        # distance(−v, track) = 1 + cos(v, track); lower = more dissimilar
+                        "similarity": float(ann["distances"][0][i]) - 1.0,
+                    }
+                    for i in range(len(ann["ids"][0]))
+                    if ann["ids"][0][i] != current_track_id
+                ]
+
                 # Filter by taste profile
-                candidates = self._filter_by_taste(similarities[:50])
+                candidates = self._filter_by_taste(similarities)
                 
                 # Select top N
                 selected = candidates[:count]
@@ -414,22 +412,23 @@ class Radio:
     def _random_tracks(self, count: int) -> List[Dict]:
         """Ultimate fallback: Random selection."""
         conn = self._open_conn()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT track_id, artist, title
-            FROM tracks
-            ORDER BY RANDOM()
-            LIMIT ?
-        """, (count,))
-        
-        tracks = []
-        for row in cursor.fetchall():
-            tracks.append({
-                "track_id": row[0],
-                "metadata": {"artist": row[1], "title": row[2]}
-            })
-        
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT track_id, artist, title
+                FROM tracks
+                ORDER BY RANDOM()
+                LIMIT ?
+            """, (count,))
+
+            tracks = []
+            for row in cursor.fetchall():
+                tracks.append({
+                    "track_id": row[0],
+                    "metadata": {"artist": row[1], "title": row[2]}
+                })
+        finally:
+            conn.close()
         return tracks
     
     def get_lastfm_discovery(self, count: int = 10) -> List[Dict]:
@@ -445,60 +444,61 @@ class Radio:
         logger.info("RADIO: Querying Last.fm similar tracks for discovery")
 
         conn = self._open_conn()
-        cursor = conn.cursor()
+        try:
+            cursor = conn.cursor()
 
-        # Get all cached Last.fm enrichment data
-        cursor.execute(
-            "SELECT lookup_key, payload_json FROM enrich_cache WHERE provider = 'lastfm'"
-        )
+            # Get all cached Last.fm enrichment data
+            cursor.execute(
+                "SELECT lookup_key, payload_json FROM enrich_cache WHERE provider = 'lastfm'"
+            )
 
-        import json as _json
+            import json as _json
 
-        candidates: List[Dict] = []
-        seen: set = set()
+            candidates: List[Dict] = []
+            seen: set = set()
 
-        for lookup_key, payload_json in cursor.fetchall():
-            try:
-                payload = _json.loads(payload_json)
-            except Exception:
-                continue
-
-            similar = payload.get("similar_tracks", [])
-            if not isinstance(similar, list):
-                continue
-
-            source_artist = payload.get("artist", "")
-            source_title = payload.get("title", "")
-
-            for sim in similar:
-                if not isinstance(sim, dict):
-                    continue
-                sim_artist = sim.get("artist", "").strip()
-                sim_title = sim.get("title", "").strip()
-                if not sim_artist or not sim_title:
+            for lookup_key, payload_json in cursor.fetchall():
+                try:
+                    payload = _json.loads(payload_json)
+                except Exception:
                     continue
 
-                key = f"{sim_artist.lower()}|{sim_title.lower()}"
-                if key in seen:
-                    continue
-                seen.add(key)
-
-                # Check if already in library
-                cursor.execute(
-                    "SELECT 1 FROM tracks WHERE LOWER(artist) = LOWER(?) AND LOWER(title) = LOWER(?) LIMIT 1",
-                    (sim_artist, sim_title),
-                )
-                if cursor.fetchone():
+                similar = payload.get("similar_tracks", [])
+                if not isinstance(similar, list):
                     continue
 
-                candidates.append({
-                    "artist": sim_artist,
-                    "title": sim_title,
-                    "source_track": f"{source_artist} - {source_title}",
-                    "match_score": float(sim.get("match", 0.0)),
-                })
+                source_artist = payload.get("artist", "")
+                source_title = payload.get("title", "")
 
-        conn.close()
+                for sim in similar:
+                    if not isinstance(sim, dict):
+                        continue
+                    sim_artist = sim.get("artist", "").strip()
+                    sim_title = sim.get("title", "").strip()
+                    if not sim_artist or not sim_title:
+                        continue
+
+                    key = f"{sim_artist.lower()}|{sim_title.lower()}"
+                    if key in seen:
+                        continue
+                    seen.add(key)
+
+                    # Check if already in library
+                    cursor.execute(
+                        "SELECT 1 FROM tracks WHERE LOWER(artist) = LOWER(?) AND LOWER(title) = LOWER(?) LIMIT 1",
+                        (sim_artist, sim_title),
+                    )
+                    if cursor.fetchone():
+                        continue
+
+                    candidates.append({
+                        "artist": sim_artist,
+                        "title": sim_title,
+                        "source_track": f"{source_artist} - {source_title}",
+                        "match_score": float(sim.get("match", 0.0)),
+                    })
+        finally:
+            conn.close()
 
         # Sort by match score descending
         candidates.sort(key=lambda x: x.get("match_score", 0), reverse=True)
@@ -560,22 +560,24 @@ class Radio:
         return queue
     
     def _store_queue(self, queue: List[Dict], algorithm: str) -> None:
-        """Store queue in database."""
+        """Store queue in database atomically (delete+insert in one transaction)."""
         conn = self._open_conn()
-        cursor = conn.cursor()
-        
-        # Clear existing queue
-        cursor.execute("DELETE FROM radio_queue")
-        
-        # Insert new queue
-        for i, track in enumerate(queue):
-            cursor.execute("""
-                INSERT INTO radio_queue (track_id, position, algorithm)
-                VALUES (?, ?, ?)
-            """, (track["track_id"], i, algorithm))
-        
-        conn.commit()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("BEGIN")
+            # Clear existing queue
+            cursor.execute("DELETE FROM radio_queue")
+            # Insert new queue
+            cursor.executemany(
+                "INSERT INTO radio_queue (track_id, position, algorithm) VALUES (?, ?, ?)",
+                [(track["track_id"], i, algorithm) for i, track in enumerate(queue)],
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
 
 # Singleton instance

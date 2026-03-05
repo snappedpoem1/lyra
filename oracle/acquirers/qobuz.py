@@ -33,10 +33,14 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STAGING_DIR = STAGING_FOLDER
 
-QOBUZ_USERNAME = os.getenv("QOBUZ_USERNAME", "")
-QOBUZ_PASSWORD = os.getenv("QOBUZ_PASSWORD", "")
-QOBUZ_QUALITY = int(os.getenv("QOBUZ_QUALITY", "7"))
-QOBUZ_SERVICE_URL = os.getenv("QOBUZ_SERVICE_URL", "http://localhost:7700")
+def _get_qobuz_config() -> Dict[str, Any]:
+    """Read Qobuz config at call time so .env values are always respected."""
+    return {
+        "username": os.getenv("QOBUZ_USERNAME", ""),
+        "password": os.getenv("QOBUZ_PASSWORD", ""),
+        "quality": int(os.getenv("QOBUZ_QUALITY", "7")),
+        "service_url": os.getenv("QOBUZ_SERVICE_URL", "http://localhost:7700"),
+    }
 
 # Quality IDs: 5=MP3 320, 6=FLAC 16/44, 7=FLAC 24/96, 27=FLAC 24/192
 QUALITY_LABELS = {5: "MP3 320k", 6: "FLAC 16/44", 7: "FLAC 24/96", 27: "FLAC 24/192"}
@@ -59,12 +63,13 @@ class QobuzAcquirer:
         self,
         email: str = "",
         password: str = "",
-        quality: int = QOBUZ_QUALITY,
+        quality: Optional[int] = None,
         staging_dir: Optional[Path] = None,
     ):
-        self.email = email or QOBUZ_USERNAME
-        self.password = password or QOBUZ_PASSWORD
-        self.quality = quality
+        _cfg = _get_qobuz_config()
+        self.email = email or _cfg["username"]
+        self.password = password or _cfg["password"]
+        self.quality = quality if quality is not None else _cfg["quality"]
         self.staging_dir = staging_dir or STAGING_DIR
         self._client = None  # qopy.Client, lazy-initialized
         self._app_id: Optional[str] = None
@@ -357,13 +362,14 @@ def is_available() -> bool:
 
     app_id and app_secret are auto-extracted â€” only user creds needed.
     """
-    return bool(QOBUZ_USERNAME and QOBUZ_PASSWORD)
+    _cfg = _get_qobuz_config()
+    return bool(_cfg["username"] and _cfg["password"])
 
 
 def is_service_available() -> bool:
     """Check if the Dockerised Qobuz microservice is running."""
     try:
-        resp = requests.get(f"{QOBUZ_SERVICE_URL}/health", timeout=3)
+        resp = requests.get(f"{_get_qobuz_config()['service_url']}/health", timeout=3)
         return resp.status_code == 200
     except Exception:
         return False

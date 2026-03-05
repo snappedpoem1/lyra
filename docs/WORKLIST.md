@@ -1,12 +1,35 @@
 # Worklist
 
-Last updated: March 5, 2026
+Last updated: March 5, 2026 (updated after codebase-integrity-pass session)
 
 This file is the short operational list of what is done and what still needs work.
 
 ## Completed in this cycle
 
-- [x] Deduplicate `spotify_history` after repeated import multiplication
+- [x] **Codebase integrity pass** — multi-milestone audit + fix session:
+  - M0: Fixed `AcquisitionWaterfall` `ImportError` crash in `worker.py` (acquisition drain was broken for every run)
+  - M0: Fixed `guard._check_duplicate()` hardcoded relative `sqlite3.connect()` path
+  - M0: Fixed T3 slskd returning `success=True` on queued (not-yet-downloaded) status
+  - M1: Wrapped 10+ connection-leaking call sites in `try/finally` across `radio.py`, `vibes.py`, `ingest_watcher.py`, `waterfall.py`, `acquire.py` blueprint
+  - M1: Converted `radio._store_queue()` DELETE+INSERT to atomic transaction with `ROLLBACK`
+  - M1: Added `executemany` batch INSERT to `radio._store_queue()` and `normalizer.py`
+  - M1: Added `_BATCH_JOB_TTL` eviction to `acquire.py` batch jobs dict
+  - M1: Added `SmartAcquisition.__enter__`/`__exit__` context-manager support
+  - M2: Removed hardcoded `DOWNLOAD_DIR`/`STAGING_DIR` constants from `realdebrid.py`, `spotdl.py`, `ytdlp.py` — all now read from `oracle.config`
+  - M2: Fixed `add_torrent_file()` in `realdebrid.py` to use retry-wrapped `_request()` instead of raw `requests.put()`
+  - M2: Removed dead `check_instant_availability()` HTTP call in `realdebrid.acquire_from_magnet()`
+  - M2: Replaced `asyncio.run()` in waterfall T3 with a safe wrapper that detects running event loop
+  - M2: Converted `qobuz.py` module-level `os.getenv()` globals to `_get_qobuz_config()` lazy function
+  - M2: Created `oracle/acquirers/streamrip.py` stub so T2 waterfall import no longer raises `ImportError`
+  - M2: Changed APScheduler `max_workers` from 2 → 5
+  - M3: Refactored `scorer.score_all()` to batch-fetch all embeddings in one ChromaDB call and persist via `executemany` (eliminates N per-track Chroma calls)
+  - M3: Replaced `radio.get_chaos_track()` O(n) Python cosine loop with ChromaDB ANN query using negated vector
+  - M3: Replaced per-row `cursor.execute()` loop in `normalizer.py` with `cursor.executemany()`
+- [x] Harden CLAP audio loading resilience for ingest/scoring:
+  - Added `soundfile` fallback path when `librosa.load()` fails (`ZeroDivisionError`/backend decode failures seen in pipeline logs)
+  - Added safe normalization guard for silent/invalid waveforms
+  - Added regression tests in `tests/test_clap_embedder_audio_loading.py`
+- [x] Repair `scripts/new_session.ps1` parse break (mojibake corruption) so session bootstrap works again
 - [x] Add import dedup guard for future Spotify history loads
 - [x] Generate a clean, priority-scored acquisition queue from real Spotify history
 - [x] Create `oracle/taste_backfill.py` to bridge Spotify history into `taste_profile`

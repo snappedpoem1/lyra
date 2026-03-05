@@ -17,7 +17,7 @@ import math
 import os
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor  # kept for potential future parallel use
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
@@ -389,86 +389,132 @@ def score_all(
     limit: int = 0,
     persist: bool = True,
     force: bool = False,
-    workers: int = 0,
+    workers: int = 0,  # kept for API compat; always 1 — batch fetch removes concurrency need
 ) -> Dict[str, Any]:
     """Score the whole library (or a limited subset).
 
+    Batch-optimised path:
+      1.  Fetch all active track IDs from SQLite in one query.
+      2.  Pre-fetch already-scored IDs in one IN-clause query (skip step if force=True).
+      3.  Batch-fetch all needed embeddings from ChromaDB in a single ``get()`` call.
+      4.  Run pure-math scoring per track (no I/O inside the loop).
+      5.  Persist all results in one ``executemany`` transaction.
+
     Args:
-        limit: 0 = all
-        persist: write results to DB if allowed
-        force: rescore even if already present
+        limit: Maximum tracks to process (0 = all).
+        persist: Write results to DB when write-mode allows.
+        force: Rescore even tracks that already have scores.
+        workers: Ignored — kept for backwards-compatible call sites.
 
     Returns:
-        Stats dict.
+        Stats dict with total/scored/skipped/persisted/errors counts.
     """
     if persist and get_write_mode() != "apply_allowed":
         persist = False
 
     conn = get_connection(timeout=10.0)
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
+        sql = "SELECT track_id FROM tracks WHERE status = 'active' ORDER BY rowid DESC"
+        params: Tuple[Any, ...] = ()
+        if limit and int(limit) > 0:
+            sql += " LIMIT ?"
+            params = (int(limit),)
+        cursor.execute(sql, params)
+        ids = [row[0] for row in cursor.fetchall() if row and row[0]]
 
-    # Some legacy databases may not have `created_at`; SQLite always provides `rowid`.
-    sql = "SELECT track_id FROM tracks WHERE status = 'active' ORDER BY rowid DESC"
-    params: Tuple[Any, ...] = ()
-    if limit and int(limit) > 0:
-        sql += " LIMIT ?"
-        params = (int(limit),)
+        # Pre-fetch already-scored set in one query — avoids N per-track SELECT calls.
+        if not force and ids:
+            ph = ",".join("?" * len(ids))
+            cursor.execute(f"SELECT track_id FROM track_scores WHERE track_id IN ({ph})", ids)
+            already_scored: set = {row[0] for row in cursor.fetchall()}
+        else:
+            already_scored = set()
+    finally:
+        conn.close()
 
-    cursor.execute(sql, params)
-    ids = [row[0] for row in cursor.fetchall() if row and row[0]]
-    conn.close()
+    stats: Dict[str, Any] = {
+        "total": len(ids),
+        "scored": 0,
+        "skipped": len(already_scored),
+        "persisted": 0,
+        "errors": 0,
+        "workers": 1,
+        "write_mode": get_write_mode(),
+    }
 
-    stats = {"total": len(ids), "scored": 0, "skipped": 0, "persisted": 0, "errors": 0}
-    # Chroma local client access is not reliable under concurrent per-track fetches.
-    # Keep scoring single-threaded until embedding fetch is refactored to batch mode.
-    if workers <= 0:
-        workers = 1
-    workers = max(1, min(int(workers), 24))
-    if workers != 1:
-        logger.warning(
-            "Parallel scoring is currently disabled due Chroma concurrency limits; forcing workers=1."
-        )
-        workers = 1
-    stats["workers"] = workers
+    ids_to_score = [tid for tid in ids if tid not in already_scored]
+    if not ids_to_score:
+        return stats
 
-    def _score_one(track_id: str) -> Tuple[str, Dict[str, Any]]:
+    # Single ChromaDB batch call — eliminates N individual get() round-trips.
+    store = _get_store()
+    try:
+        emb_map = store.get_embeddings(ids_to_score)
+    except Exception as exc:
+        logger.error("Batch embedding fetch failed: %s", exc)
+        emb_map = {}
+
+    scored_at = time.time()
+    rows_to_insert: List[Tuple] = []
+
+    for tid in ids_to_score:
         wait_if_paused("score")
-        return track_id, score_track(track_id, persist=persist, force=force)
+        vec = emb_map.get(tid)
+        if not vec:
+            stats["skipped"] += 1
+            stats["missing_embedding"] = stats.get("missing_embedding", 0) + 1
+            continue
+        try:
+            scores: Dict[str, float] = {}
+            for dim in ANCHORS.keys():
+                val = _score_dimension(vec, dim)
+                if val is not None:
+                    scores[dim] = val
+            stats["scored"] += 1
+            if persist:
+                rows_to_insert.append((
+                    tid,
+                    scores.get("energy"),
+                    scores.get("valence"),
+                    scores.get("tension"),
+                    scores.get("density"),
+                    scores.get("warmth"),
+                    scores.get("movement"),
+                    scores.get("space"),
+                    scores.get("rawness"),
+                    scores.get("complexity"),
+                    scores.get("nostalgia"),
+                    scored_at,
+                    SCORE_VERSION,
+                ))
+        except Exception as exc:
+            logger.warning("Scoring failed for %s: %s", tid, str(exc))
+            stats["errors"] += 1
 
-    if workers == 1:
-        for tid in ids:
-            try:
-                _, result = _score_one(tid)
-                if result.get("skipped"):
-                    stats["skipped"] += 1
-                    reason = result.get("reason", "unknown")
-                    if reason == "missing_embedding":
-                        stats["missing_embedding"] = stats.get("missing_embedding", 0) + 1
-                else:
-                    stats["scored"] += 1
-                    if result.get("persisted"):
-                        stats["persisted"] += 1
-            except Exception as e:
-                logger.warning("Scoring failed for %s: %s", tid, str(e))
-                stats["errors"] += 1
-    else:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = [pool.submit(_score_one, tid) for tid in ids]
-            for fut in as_completed(futures):
-                try:
-                    _tid, result = fut.result()
-                    if result.get("skipped"):
-                        stats["skipped"] += 1
-                        reason = result.get("reason", "unknown")
-                        if reason == "missing_embedding":
-                            stats["missing_embedding"] = stats.get("missing_embedding", 0) + 1
-                    else:
-                        stats["scored"] += 1
-                        if result.get("persisted"):
-                            stats["persisted"] += 1
-                except Exception as e:
-                    logger.warning("Scoring failed: %s", str(e))
-                    stats["errors"] += 1
+    # Persist all rows in a single transaction.
+    if persist and rows_to_insert:
+        conn = get_connection(timeout=10.0)
+        try:
+            cursor = conn.cursor()
+            cursor.executemany(
+                """
+                INSERT OR REPLACE INTO track_scores (
+                    track_id,
+                    energy, valence, tension, density,
+                    warmth, movement, space, rawness,
+                    complexity, nostalgia,
+                    scored_at, score_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows_to_insert,
+            )
+            conn.commit()
+            stats["persisted"] = len(rows_to_insert)
+        except Exception as exc:
+            logger.error("Batch score persist failed: %s", exc)
+            conn.rollback()
+        finally:
+            conn.close()
 
-    stats["write_mode"] = get_write_mode()
     return stats

@@ -26,6 +26,7 @@ This file tracks active gaps only. Closed items stay in git history and in
 | G-030 | Last.fm similarity scheduling coverage | partial | feature path works; CLI seeded `similar` edges in staged runs; scheduler interval is 72h; CLI now supports `--workers`, `--request-pause`, `--commit-every` for controlled larger runs | Continue staged/final full run and verify recurring scheduler coverage |
 | G-031 | Track credits population rate | partial | MusicBrainz search enrich works but grows slowly (`~1 req/sec`) | Keep scheduled/manual batch enrichment running and monitor fill rate |
 | G-032 | Track structure analysis | partial | `track_structure=13`; analyze runs fail with `librosa_not_installed` in current runtime | Install `librosa` in active runtime and resume batch analysis |
+| G-033 | Title normalization consolidation | partial | Three independent title-clean implementations: `guard._clean_title()`, `scanner._deep_clean_title()`, `name_cleaner.clean_title()` — pattern sets diverge | Unify into `name_cleaner.py`, add `clean_title_str()` wrapper, update callers |
 
 ## Explicitly Not Cancelled
 

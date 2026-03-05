@@ -20,8 +20,15 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DOWNLOAD_DIR = (PROJECT_ROOT / "downloads").resolve()
-STAGING_DIR = (PROJECT_ROOT / "staging").resolve()
+
+# Use config-driven paths so DOWNLOADS_FOLDER / STAGING_FOLDER env vars are respected.
+def _get_download_dir() -> Path:
+    from oracle.config import DOWNLOADS_FOLDER
+    return Path(DOWNLOADS_FOLDER)
+
+def _get_staging_dir() -> Path:
+    from oracle.config import STAGING_FOLDER
+    return Path(STAGING_FOLDER)
 
 # Load .env so Spotify creds are available even when invoked directly
 try:
@@ -65,8 +72,8 @@ class SpotDLAcquirer:
         staging_dir: Optional[Path] = None,
         use_guard: bool = True,
     ):
-        self.download_dir = download_dir or DOWNLOAD_DIR
-        self.staging_dir = staging_dir or STAGING_DIR
+        self.download_dir = download_dir or _get_download_dir()
+        self.staging_dir = staging_dir or _get_staging_dir()
         self.download_dir.mkdir(parents=True, exist_ok=True)
         self.staging_dir.mkdir(parents=True, exist_ok=True)
         self.spotdl_path = _find_spotdl()

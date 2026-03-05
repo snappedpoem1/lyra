@@ -43,7 +43,7 @@ From `scripts/ensure_workspace_docker.ps1` + `python -m oracle doctor` + desktop
 - Healthy target containers: `prowlarr`, `rdtclient`, `slskd`
 - Acquisition tiers:
   - Tier 1 Qobuz: OK
-  - Tier 2 Streamrip: configured but not active in status output
+  - Tier 2 Streamrip: stub module present (`oracle/acquirers/streamrip.py`), `is_available()` returns `False` — waterfall skips cleanly
   - Tier 3 slskd: OK
   - Tier 4 Real-Debrid: OK
   - Tier 5 SpotDL: OK
@@ -55,7 +55,7 @@ From `scripts/ensure_workspace_docker.ps1` + `python -m oracle doctor` + desktop
 
 ### Test and build
 
-- `python -m pytest -q` -> `64 passed`
+- `python -m pytest -q` -> `66 passed`
 - `npm run test` (`desktop/renderer-app`) -> `1 file / 3 tests passed`
 - `npm run build` (`desktop/renderer-app`) -> success (`vite` production bundle built)
 
@@ -108,7 +108,7 @@ Docs with explicit current-state role:
 - `README.md`
 - `docs/MASTER_PLAN_EXPANDED.md`
 - `docs/MISSING_FEATURES_REGISTRY.md`
-- `docs/WORKLIST.md` (last updated: March 4, 2026)
+- `docs/WORKLIST.md` (last updated: March 5, 2026)
 - `docs/REPO_STRUCTURE.md`
 
 ## 9) Known Gaps / Not Fully Closed Yet

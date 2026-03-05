@@ -33,8 +33,7 @@ def save_playlist_run(
     vibe_name: Optional[str] = None,
 ) -> int:
     """Persist a playlist run and its tracks."""
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute("PRAGMA foreign_keys=ON")
+    conn = get_connection(timeout=10.0)
     cursor = conn.cursor()
 
     try:

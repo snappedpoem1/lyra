@@ -24,6 +24,12 @@ except ImportError:  # pragma: no cover - optional dependency
     librosa = None
     logging.warning("librosa not available; audio embedding will be disabled")
 
+try:
+    import soundfile as sf
+except ImportError:  # pragma: no cover - optional dependency
+    sf = None
+    logging.warning("soundfile not available; fallback audio loading is disabled")
+
 import numpy as np
 import torch
 from transformers import ClapModel, ClapProcessor
@@ -294,6 +300,49 @@ class CLAPEmbedder:
 
         raise RuntimeError(f"Failed to load CLAP model: {last_error}")
 
+    def _load_audio_with_soundfile(
+        self,
+        file_path: Path,
+        *,
+        duration: int,
+        target_sr: int,
+    ) -> Optional[np.ndarray]:
+        """Load/convert audio with soundfile and optional librosa resampling."""
+        if sf is None:
+            return None
+
+        audio, sample_rate = sf.read(str(file_path), dtype="float32", always_2d=True)
+        if audio is None or audio.size == 0:
+            return None
+        if sample_rate <= 0:
+            logger.warning("Invalid sample rate %s for %s", sample_rate, file_path)
+            return None
+
+        # Convert to mono deterministically.
+        mono_audio = np.mean(audio, axis=1, dtype=np.float32)
+
+        if duration > 0:
+            max_samples = int(duration * sample_rate)
+            if max_samples > 0:
+                mono_audio = mono_audio[:max_samples]
+
+        if sample_rate != target_sr:
+            if librosa is None:
+                logger.warning(
+                    "Cannot resample %s from %s Hz to %s Hz because librosa is unavailable",
+                    file_path,
+                    sample_rate,
+                    target_sr,
+                )
+                return None
+            mono_audio = librosa.resample(
+                mono_audio,
+                orig_sr=sample_rate,
+                target_sr=target_sr,
+            )
+
+        return mono_audio.astype(np.float32, copy=False)
+
     def _load_audio(self, file_path: Path, duration: int = 30) -> Optional[np.ndarray]:
         # librosa is required for audio loading. raise early if it's missing so
         # callers can take appropriate action (logging/error return) instead of
@@ -301,21 +350,54 @@ class CLAPEmbedder:
         if librosa is None:
             raise RuntimeError("librosa is not installed; audio loading unavailable")
 
+        target_sr = 48000
         try:
-            # Suppress librosa warnings about fallback
+            # Suppress librosa warnings about fallback.
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                audio, _sr = librosa.load(str(file_path), sr=48000, mono=True, duration=duration)
-            
-            if audio is None or (hasattr(audio, 'size') and audio.size == 0):
-                logger.warning(f"Empty audio loaded from {file_path}")
+                audio, _sr = librosa.load(str(file_path), sr=target_sr, mono=True, duration=duration)
+        except Exception as exc:
+            # Librosa/audioread occasionally throws backend- or metadata-related errors
+            # (including ZeroDivisionError on malformed duration metadata). Try a
+            # soundfile-based load path before giving up.
+            logger.warning(
+                "Primary librosa load failed for %s: %s: %s; trying soundfile fallback",
+                file_path,
+                type(exc).__name__,
+                exc,
+            )
+            try:
+                audio = self._load_audio_with_soundfile(
+                    file_path,
+                    duration=duration,
+                    target_sr=target_sr,
+                )
+            except Exception as fallback_exc:
+                logger.warning(
+                    "Failed to load audio %s: fallback %s: %s",
+                    file_path,
+                    type(fallback_exc).__name__,
+                    fallback_exc,
+                )
                 return None
-            
-            audio = librosa.util.normalize(audio)
-            return audio
-        except Exception as e:
-            logger.warning(f"Failed to load audio {file_path}: {type(e).__name__}: {e}")
+            if audio is None:
+                logger.warning(
+                    "Failed to load audio %s: no audio after fallback",
+                    file_path,
+                )
+                return None
+
+        if audio is None or (hasattr(audio, "size") and audio.size == 0):
+            logger.warning("Empty audio loaded from %s", file_path)
             return None
+
+        # Normalize safely without divide-by-zero.
+        peak = float(np.max(np.abs(audio)))
+        if peak <= 0:
+            logger.warning("Silent audio loaded from %s", file_path)
+            return None
+        audio = (audio / peak).astype(np.float32, copy=False)
+        return audio
 
     def embed_audio(self, file_path: Path, duration: int = 30) -> Optional[np.ndarray]:
         processor, model = self._runtime()
