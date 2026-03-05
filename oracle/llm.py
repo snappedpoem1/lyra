@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Generator, List, Optional
@@ -56,10 +57,26 @@ class LLMClient:
     supports_anthropic_messages: bool = False
     _cached_models: List[str] = field(default_factory=list)
     _client: Any = field(default=None, repr=False)
+    # ── cross-provider failover (e.g. Groq → OpenRouter on 429) ──
+    fb_base_url: str = ""
+    fb_api_key: str = ""
+    fb_provider_model: str = ""
+    fb_timeout_seconds: int = 30
+    _fb_client: Any = field(default=None, repr=False)
 
     @classmethod
     def from_env(cls) -> "LLMClient":
         config = resolve_llm_config(load_llm_config(resolve_endpoint=False))
+        fb_base_url = os.getenv("LYRA_LLM_FALLBACK_BASE_URL", "").strip()
+        fb_api_key = os.getenv("LYRA_LLM_FALLBACK_API_KEY", "").strip()
+        fb_provider_model = os.getenv("LYRA_LLM_FALLBACK_PROVIDER_MODEL", "").strip()
+        fb_timeout = int(os.getenv("LYRA_LLM_TIMEOUT_SECONDS", "30"))
+        if fb_base_url and fb_provider_model:
+            logger.debug(
+                "[LLM] fallback provider configured: %s → %s",
+                fb_base_url,
+                fb_provider_model,
+            )
         return cls(
             provider=config.provider_type,
             base_url=config.base_url,
@@ -70,6 +87,10 @@ class LLMClient:
             supports_model_listing=config.supports_model_listing,
             supports_chat_completions=config.supports_chat_completions,
             supports_anthropic_messages=config.supports_anthropic_messages,
+            fb_base_url=fb_base_url,
+            fb_api_key=fb_api_key,
+            fb_provider_model=fb_provider_model,
+            fb_timeout_seconds=fb_timeout,
         )
 
     def _diagnose(self) -> Dict[str, Any]:
@@ -88,6 +109,52 @@ class LLMClient:
                 max_retries=1,
             )
         return self._client
+
+    def _get_fb_client(self):
+        """Lazily create the fallback-provider OpenAI-compatible client."""
+        if self._fb_client is None:
+            from openai import OpenAI
+            self._fb_client = OpenAI(
+                base_url=self.fb_base_url.rstrip("/"),
+                api_key=self.fb_api_key or "lyra-fallback",
+                timeout=float(self.fb_timeout_seconds),
+                max_retries=1,
+            )
+        return self._fb_client
+
+    def _has_fallback(self) -> bool:
+        """Return True when a cross-provider fallback is configured."""
+        return bool(self.fb_base_url and self.fb_provider_model)
+
+    @staticmethod
+    def _is_rate_limited(exc: Exception) -> bool:
+        """Return True when *exc* looks like an HTTP 429 / rate-limit error."""
+        try:
+            from openai import RateLimitError
+            if isinstance(exc, RateLimitError):
+                return True
+        except ImportError:
+            pass
+        msg = str(exc).lower()
+        return "429" in msg or "rate limit" in msg or "rate_limit" in msg or "too many requests" in msg
+
+    @staticmethod
+    def _provider_label(base_url: str) -> str:
+        """Short human-readable provider label derived from the base URL."""
+        url = base_url.lower()
+        if "groq" in url:
+            return "groq"
+        if "openrouter" in url:
+            return "openrouter"
+        if "openai.com" in url:
+            return "openai"
+        if "anthropic" in url:
+            return "anthropic"
+        if "together" in url:
+            return "together"
+        if "localhost" in url or "127.0.0.1" in url:
+            return "local"
+        return "cloud"
 
     def _fetch_models(self) -> List[str]:
         if not self.supports_model_listing:
@@ -154,7 +221,13 @@ class LLMClient:
         json_mode: bool,
         json_schema: Optional[Dict[str, Any]],
         timeout: Optional[float],
+        _client: Any = None,
+        _provider_label: Optional[str] = None,
     ) -> Dict[str, Any]:
+        client = _client if _client is not None else self._get_client()
+        label = _provider_label or self._provider_label(self.base_url)
+        # Providers that only support json_object, not json_schema strict mode
+        _JSON_OBJECT_ONLY = {"groq", "together", "fireworks"}
         kwargs: Dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -166,28 +239,36 @@ class LLMClient:
 
         is_json = False
         if json_schema:
-            kwargs["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": json_schema.get("name", "response"),
-                    "strict": True,
-                    "schema": json_schema.get("schema", {}),
-                },
-            }
+            if label in _JSON_OBJECT_ONLY:
+                logger.debug("[LLM] %s does not support json_schema → downgrading to json_object", label)
+                kwargs["response_format"] = {"type": "json_object"}
+            else:
+                kwargs["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": json_schema.get("name", "response"),
+                        "strict": True,
+                        "schema": json_schema.get("schema", {}),
+                    },
+                }
             is_json = True
         elif json_mode:
             kwargs["response_format"] = {"type": "json_object"}
             is_json = True
 
-        response = self._get_client().chat.completions.create(**kwargs)
+        logger.debug("[LLM] → %s  %s", label, model)
+        t0 = time.monotonic()
+        response = client.chat.completions.create(**kwargs)
+        elapsed = time.monotonic() - t0
         content = response.choices[0].message.content or ""
+        logger.info("[LLM] ✓ %s  %s  %.2fs", label, model, elapsed)
         if is_json:
             try:
                 data = json.loads(content)
-                return {"ok": True, "data": data, "text": content, "model": model, "provider": self.provider}
+                return {"ok": True, "data": data, "text": content, "model": model, "provider": label}
             except json.JSONDecodeError as exc:
                 return {"ok": False, "error": f"JSON parse: {exc}", "text": content}
-        return {"ok": True, "text": content, "model": model, "provider": self.provider}
+        return {"ok": True, "text": content, "model": model, "provider": label}
 
     def _chat_anthropic(
         self,
@@ -253,6 +334,7 @@ class LLMClient:
             all_messages.append({"role": "system", "content": system})
         all_messages.extend(messages)
 
+        primary_label = self._provider_label(self.base_url)
         try:
             if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
                 return self._chat_openai_compatible(
@@ -281,8 +363,32 @@ class LLMClient:
                 )
             return {"ok": False, "error": f"Unsupported provider: {self.provider}", "text": "", "error_type": "provider_invalid"}
         except Exception as exc:
+            if self._is_rate_limited(exc) and self._has_fallback():
+                fb_label = self._provider_label(self.fb_base_url)
+                logger.warning(
+                    "[LLM] ✗ %s  %s  RATE_LIMITED → failover to %s",
+                    primary_label,
+                    model,
+                    fb_label,
+                )
+                try:
+                    return self._chat_openai_compatible(
+                        model=self.fb_provider_model,
+                        messages=all_messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        json_mode=json_mode,
+                        json_schema=json_schema,
+                        timeout=timeout,
+                        _client=self._get_fb_client(),
+                        _provider_label=fb_label,
+                    )
+                except Exception as fb_exc:
+                    fb_err = str(fb_exc)
+                    logger.warning("[LLM] ✗ %s fallback also failed: %s", fb_label, fb_err)
+                    return {"ok": False, "error": fb_err, "text": "", "error_type": "request_failed"}
             err = str(exc)
-            logger.warning("[LLM] Error: %s", err)
+            logger.warning("[LLM] ✗ %s  %s  Error: %s", primary_label, model, err)
             return {"ok": False, "error": err, "text": "", "error_type": "request_failed"}
 
     def stream(
@@ -307,18 +413,54 @@ class LLMClient:
             all_messages.append({"role": "system", "content": system})
         all_messages.extend(messages)
 
+        primary_label = self._provider_label(self.base_url)
         try:
-            with self._get_client().chat.completions.stream(
+            logger.debug("[LLM] → %s  %s  (stream)", primary_label, model)
+            t0 = time.monotonic()
+            response = self._get_client().chat.completions.create(
                 model=model,
                 messages=all_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-            ) as stream:
-                for text in stream.text_stream:
-                    if text:
-                        yield text
+                stream=True,
+            )
+            for chunk in response:
+                text = (chunk.choices[0].delta.content or "") if chunk.choices else ""
+                if text:
+                    yield text
+            logger.info("[LLM] ✓ %s  %s  %.2fs  (stream)", primary_label, model, time.monotonic() - t0)
         except Exception as exc:
-            logger.warning("[LLM] Stream error: %s", exc)
+            if self._is_rate_limited(exc) and self._has_fallback():
+                fb_label = self._provider_label(self.fb_base_url)
+                logger.warning(
+                    "[LLM] ✗ %s  %s  RATE_LIMITED → failover to %s  (stream)",
+                    primary_label,
+                    model,
+                    fb_label,
+                )
+                try:
+                    t0 = time.monotonic()
+                    fb_response = self._get_fb_client().chat.completions.create(
+                        model=self.fb_provider_model,
+                        messages=all_messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        stream=True,
+                    )
+                    for chunk in fb_response:
+                        text = (chunk.choices[0].delta.content or "") if chunk.choices else ""
+                        if text:
+                            yield text
+                    logger.info(
+                        "[LLM] ✓ %s  %s  %.2fs  (stream)",
+                        fb_label,
+                        self.fb_provider_model,
+                        time.monotonic() - t0,
+                    )
+                except Exception as fb_exc:
+                    logger.warning("[LLM] ✗ %s fallback stream failed: %s", fb_label, fb_exc)
+            else:
+                logger.warning("[LLM] ✗ %s  %s  Stream error: %s", primary_label, model, exc)
 
     def classify(
         self,
