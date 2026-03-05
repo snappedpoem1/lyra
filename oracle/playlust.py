@@ -214,6 +214,19 @@ class Playlust:
         acts = copy.deepcopy(ACT_DEFINITIONS)
         _assign_track_counts(acts, total_tracks)
 
+        # Translate natural language mood → per-act dimensional overrides.
+        # Works with LM Studio / any OpenAI-compatible local model; falls back
+        # to a deterministic keyword heuristic when no LLM is reachable.
+        if mood:
+            try:
+                from oracle.mood_interpreter import interpret_mood
+                mood_overrides = interpret_mood(mood)
+                if mood_overrides:
+                    acts = _apply_mood_overrides(acts, mood_overrides)
+                    logger.info("Playlust: mood overrides applied for '%s'", mood)
+            except Exception as _mood_exc:
+                logger.debug("Playlust: mood interpretation skipped (%s)", _mood_exc)
+
         playlist_tracks: List[PlaylistTrack] = []
         all_used_paths: set = set()
 
@@ -637,6 +650,36 @@ def _assign_track_counts(acts: List[PlaylustAct], total: int) -> None:
         act.track_count_target = max(1, round(act.proportion * total))
         assigned += act.track_count_target
     acts[-1].track_count_target = max(1, total - assigned)
+
+
+def _apply_mood_overrides(
+    acts: List[PlaylustAct],
+    overrides: Dict[str, Dict[str, float]],
+    blend: float = 0.65,
+) -> List[PlaylustAct]:
+    """Blend LLM/keyword mood overrides into each act's dimensional target.
+
+    Args:
+        acts: Deep-copied ACT_DEFINITIONS (mutable).
+        overrides: {act_name: {dim: float}} from interpret_mood().
+        blend: Weight given to the override vs. the fixed act target.
+               0.0 = ignore overrides, 1.0 = use overrides exclusively.
+
+    Returns:
+        The same acts list, with targets mutated in-place.
+    """
+    for act in acts:
+        act_override = overrides.get(act.name)
+        if not act_override:
+            continue
+        for dim in _DIMENSIONS:
+            if dim in act_override:
+                act.target[dim] = round(
+                    blend * float(act_override[dim])
+                    + (1.0 - blend) * act.target.get(dim, 0.5),
+                    4,
+                )
+    return acts
 
 
 def _best_dimension_fit(

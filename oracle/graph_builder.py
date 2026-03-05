@@ -161,6 +161,114 @@ class GraphBuilder:
         finally:
             conn.close()
 
+    def build_lastfm_similarity_edges(self, top_k: int = 15) -> int:
+        """Add ``similar`` edges derived from Last.fm's community-based similar-artists data.
+
+        For each library artist, calls ``pylast.Artist.get_similar(limit=top_k)``.
+        Results reflect global listening overlap — "people who play X also play Y" —
+        which is a cultural signal distinct from dimensional affinity.
+
+        Requires LASTFM_API_KEY + LASTFM_API_SECRET in environment.  Silently
+        skips if pylast is not installed or credentials are missing.
+
+        Args:
+            top_k: Max similar-artist neighbours to fetch per artist (default 15).
+
+        Returns:
+            Number of new ``similar`` edges inserted.
+        """
+        import os
+        api_key = os.getenv("LASTFM_API_KEY", "")
+        api_secret = os.getenv("LASTFM_API_SECRET", "")
+        if not api_key or not api_secret:
+            logger.info("[graph] build_lastfm_similarity_edges: no Last.fm credentials — skipping")
+            return 0
+
+        try:
+            import pylast
+        except ImportError:
+            logger.info("[graph] build_lastfm_similarity_edges: pylast not installed — skipping")
+            return 0
+
+        try:
+            network = pylast.LastFMNetwork(api_key=api_key, api_secret=api_secret)
+        except Exception as exc:
+            logger.warning("[graph] Last.fm network init failed: %s", exc)
+            return 0
+
+        # Load library artists
+        conn = get_connection()
+        try:
+            c = conn.cursor()
+            c.execute(
+                "SELECT DISTINCT artist FROM tracks "
+                "WHERE artist IS NOT NULL AND trim(artist) != '' AND status = 'active' "
+                "ORDER BY artist"
+            )
+            library_artists = {row[0].strip() for row in c.fetchall()}
+
+            # Load existing similar edges to avoid duplicates
+            c.execute("SELECT source, target FROM connections WHERE type = 'similar'")
+            existing: set = {(r[0], r[1]) for r in c.fetchall()}
+        finally:
+            conn.close()
+
+        new_edges: list = []
+        seen_pairs: set = set()
+
+        for artist_name in sorted(library_artists):
+            try:
+                lfm_artist = network.get_artist(artist_name)
+                similar_list = lfm_artist.get_similar(limit=top_k)
+            except Exception as exc:
+                logger.debug("[graph] Last.fm similar failed for '%s': %s", artist_name, exc)
+                time.sleep(0.5)
+                continue
+
+            for similar_item in similar_list:
+                try:
+                    sim_artist = similar_item.item
+                    match_score = float(similar_item.match or 0.0)
+                    target_name = sim_artist.get_name()
+                except Exception:
+                    continue
+
+                if not target_name or match_score < 0.05:
+                    continue
+
+                pair = (min(artist_name, target_name), max(artist_name, target_name))
+                if pair in seen_pairs:
+                    continue
+                if (artist_name, target_name) in existing or (target_name, artist_name) in existing:
+                    continue
+
+                seen_pairs.add(pair)
+                evidence = json.dumps({"match": round(match_score, 4), "source": "lastfm_similar"})
+                weight = round(match_score * 0.9, 4)  # cap below 1.0; source is community not identity
+                new_edges.append((artist_name, target_name, "similar", weight, evidence))
+                new_edges.append((target_name, artist_name, "similar", weight, evidence))
+
+            time.sleep(0.25)  # respect Last.fm rate limit
+
+        if not new_edges:
+            logger.info("[graph] build_lastfm_similarity_edges: 0 new edges")
+            return 0
+
+        conn2 = get_connection()
+        try:
+            c2 = conn2.cursor()
+            c2.executemany(
+                "INSERT INTO connections (source, target, type, weight, evidence) VALUES (?, ?, ?, ?, ?)",
+                new_edges,
+            )
+            conn2.commit()
+        finally:
+            conn2.close()
+
+        added = len(new_edges) // 2
+        logger.info("[graph] build_lastfm_similarity_edges: %d new similar-artist pairs", added)
+        return added
+
     def build_dimension_edges(
         self,
         threshold: float = _DIMENSION_SIM_THRESHOLD,

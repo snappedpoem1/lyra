@@ -80,7 +80,9 @@ def init_scheduler(app: Flask) -> None:
             job_acquire_drain,
             job_biographer_enrich,
             job_graph_build,
+            job_graph_similarity,
             job_lastfm_sync,
+            job_listenbrainz_discover,
             job_taste_prioritize,
         )
     except Exception as exc:  # noqa: BLE001
@@ -92,25 +94,31 @@ def init_scheduler(app: Flask) -> None:
     _enrich_hr = int(os.getenv("LYRA_WORKER_ENRICH_INTERVAL_HR", "24"))
     _acquire_min = int(os.getenv("LYRA_WORKER_ACQUIRE_INTERVAL_MIN", "10"))
     _prioritize_hr = int(os.getenv("LYRA_WORKER_PRIORITIZE_INTERVAL_HR", "6"))
+    _lb_discover_hr = int(os.getenv("LYRA_WORKER_LB_DISCOVER_INTERVAL_HR", "24"))
+    _graph_similarity_hr = int(os.getenv("LYRA_WORKER_GRAPH_SIMILARITY_INTERVAL_HR", "72"))
 
     scheduler = BackgroundScheduler(
         executors={"default": APThreadPool(max_workers=2)},
         timezone="UTC",
     )
 
-    scheduler.add_job(job_lastfm_sync,      "interval", minutes=_lastfm_min,    id="lastfm_sync",      next_run_time=None)
-    scheduler.add_job(job_graph_build,       "interval", hours=_graph_hr,        id="graph_build",      next_run_time=None)
-    scheduler.add_job(job_biographer_enrich, "interval", hours=_enrich_hr,       id="biographer_enrich",next_run_time=None)
-    scheduler.add_job(job_acquire_drain,     "interval", minutes=_acquire_min,   id="acquire_drain",    next_run_time=None)
-    scheduler.add_job(job_taste_prioritize,  "interval", hours=_prioritize_hr,   id="taste_prioritize", next_run_time=None)
+    scheduler.add_job(job_lastfm_sync,          "interval", minutes=_lastfm_min,        id="lastfm_sync",         next_run_time=None)
+    scheduler.add_job(job_graph_build,           "interval", hours=_graph_hr,            id="graph_build",         next_run_time=None)
+    scheduler.add_job(job_biographer_enrich,     "interval", hours=_enrich_hr,           id="biographer_enrich",   next_run_time=None)
+    scheduler.add_job(job_acquire_drain,         "interval", minutes=_acquire_min,       id="acquire_drain",       next_run_time=None)
+    scheduler.add_job(job_taste_prioritize,      "interval", hours=_prioritize_hr,       id="taste_prioritize",    next_run_time=None)
+    scheduler.add_job(job_listenbrainz_discover, "interval", hours=_lb_discover_hr,      id="listenbrainz_discover",next_run_time=None)
+    scheduler.add_job(job_graph_similarity,      "interval", hours=_graph_similarity_hr, id="graph_similarity",    next_run_time=None)
 
     scheduler.start()
     _scheduler = scheduler
 
     logger.info(
         "[scheduler] embedded scheduler started — "
-        "lastfm=%dmin  graph=%dhr  enrich=%dhr  acquire=%dmin  prioritize=%dhr",
+        "lastfm=%dmin  graph=%dhr  enrich=%dhr  acquire=%dmin  prioritize=%dhr  "
+        "listenbrainz=%dhr  similarity=%dhr",
         _lastfm_min, _graph_hr, _enrich_hr, _acquire_min, _prioritize_hr,
+        _lb_discover_hr, _graph_similarity_hr,
     )
 
 

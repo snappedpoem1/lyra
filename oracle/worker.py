@@ -47,6 +47,8 @@ _GRAPH_HR = int(os.getenv("LYRA_WORKER_GRAPH_INTERVAL_HR", "6"))
 _ENRICH_HR = int(os.getenv("LYRA_WORKER_ENRICH_INTERVAL_HR", "24"))
 _ACQUIRE_MIN = int(os.getenv("LYRA_WORKER_ACQUIRE_INTERVAL_MIN", "10"))
 _PRIORITIZE_HR = int(os.getenv("LYRA_WORKER_PRIORITIZE_INTERVAL_HR", "6"))
+_LB_DISCOVER_HR = int(os.getenv("LYRA_WORKER_LB_DISCOVER_INTERVAL_HR", "24"))
+_GRAPH_SIMILARITY_HR = int(os.getenv("LYRA_WORKER_GRAPH_SIMILARITY_INTERVAL_HR", "72"))
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +155,28 @@ def job_acquire_drain() -> None:
         logger.error("[worker:acquire] drain error: %s", exc, exc_info=True)
 
 
+def job_listenbrainz_discover() -> None:
+    """Pull community top tracks from ListenBrainz for graph-connected artists."""
+    logger.info("[worker:listenbrainz] community discovery starting")
+    try:
+        from oracle.integrations.listenbrainz import discover_community_tracks
+        added = discover_community_tracks(limit_artists=60, tracks_per_artist=8)
+        logger.info("[worker:listenbrainz] done — %d tracks queued", added)
+    except Exception as exc:
+        logger.error("[worker:listenbrainz] error: %s", exc, exc_info=True)
+
+
+def job_graph_similarity() -> None:
+    """Add Last.fm community similar-artist edges to the connection graph."""
+    logger.info("[worker:graph-similarity] Last.fm similar-artist edge build starting")
+    try:
+        from oracle.graph_builder import GraphBuilder
+        added = GraphBuilder().build_lastfm_similarity_edges(top_k=15)
+        logger.info("[worker:graph-similarity] done — %d new similar edges", added)
+    except Exception as exc:
+        logger.error("[worker:graph-similarity] error: %s", exc, exc_info=True)
+
+
 def job_taste_prioritize() -> None:
     """Re-score acquisition queue items by taste alignment."""
     logger.info("[worker:prioritize] rescoring acquisition queue")
@@ -220,6 +244,20 @@ def build_scheduler():
         id="taste_prioritize",
         next_run_time=None,
     )
+    scheduler.add_job(
+        job_listenbrainz_discover,
+        "interval",
+        hours=_LB_DISCOVER_HR,
+        id="listenbrainz_discover",
+        next_run_time=None,
+    )
+    scheduler.add_job(
+        job_graph_similarity,
+        "interval",
+        hours=_GRAPH_SIMILARITY_HR,
+        id="graph_similarity",
+        next_run_time=None,
+    )
 
     return scheduler
 
@@ -256,8 +294,12 @@ def start() -> None:
     signal.signal(signal.SIGTERM, _shutdown)
 
     logger.info("[worker] Lyra background worker starting")
-    logger.info("[worker] Jobs: lastfm=%dmin  graph=%dhr  enrich=%dhr  acquire=%dmin  prioritize=%dhr",
-                _LASTFM_MIN, _GRAPH_HR, _ENRICH_HR, _ACQUIRE_MIN, _PRIORITIZE_HR)
+    logger.info(
+        "[worker] Jobs: lastfm=%dmin  graph=%dhr  enrich=%dhr  acquire=%dmin  "
+        "prioritize=%dhr  listenbrainz=%dhr  similarity=%dhr",
+        _LASTFM_MIN, _GRAPH_HR, _ENRICH_HR, _ACQUIRE_MIN, _PRIORITIZE_HR,
+        _LB_DISCOVER_HR, _GRAPH_SIMILARITY_HR,
+    )
 
     # Run taste prioritize immediately on startup so queue is ordered
     try:

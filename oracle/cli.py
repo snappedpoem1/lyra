@@ -220,6 +220,19 @@ def main() -> None:
     dim_edges_parser = graph_sub.add_parser('dimension-edges', help='Build dimension_affinity edges from local track_scores (no API calls)')
     dim_edges_parser.add_argument('--threshold', type=float, default=0.60, help='Pearson sim threshold (default 0.60)')
     dim_edges_parser.add_argument('--top-k', type=int, default=8, dest='top_k', help='Max neighbours per artist (default 8)')
+    graph_sub.add_parser('similarity-edges', help='Add Last.fm community similar-artist edges')
+
+    # Discover — community-sourced acquisition candidates
+    discover_parser = subparsers.add_parser('discover', help='Seed acquisition queue from cultural sources')
+    discover_sub = discover_parser.add_subparsers(dest='discover_command')
+    lb_parser = discover_sub.add_parser('listenbrainz', help='Pull community top tracks from ListenBrainz')
+    lb_parser.add_argument('--limit-artists', type=int, default=60, dest='limit_artists', help='Max artists to query (default 60)')
+    lb_parser.add_argument('--tracks-per-artist', type=int, default=8, dest='tracks_per_artist', help='Recordings per artist (default 8)')
+
+    # Mood interpreter — test natural language mood → dimensions
+    mood_parser = subparsers.add_parser('mood', help='Interpret a mood string into dimensional targets')
+    mood_parser.add_argument('text', nargs='+', help='Mood description text')
+    mood_parser.add_argument('--no-llm', action='store_true', dest='no_llm', help='Skip LLM, use keyword heuristic only')
 
     # Playlust — 4-act emotional arc generator (F-008) *** FLAGSHIP ***
     playlust_parser = subparsers.add_parser('playlust', help='Generate a 4-act emotional arc playlist')
@@ -1167,6 +1180,50 @@ def main() -> None:
             print(f"Done: {count} new artist pairs added")
             print(f"Total connections now: {stats['total_connections']}")
             return
+
+        if args.graph_command == "similarity-edges":
+            import logging as _logging
+            _logging.basicConfig(level=_logging.INFO, format="%(asctime)s | %(message)s", datefmt="%H:%M:%S")
+            print("Building Last.fm community similar-artist edges...")
+            count = gb.build_lastfm_similarity_edges(top_k=15)
+            stats = gb.get_stats()
+            print(f"Done: {count} new similar-artist pairs")
+            print(f"Total connections now: {stats['total_connections']}")
+            return
+
+    if args.command == "discover":
+        discover_command = getattr(args, 'discover_command', None)
+        if discover_command == "listenbrainz" or not discover_command:
+            import logging as _logging
+            _logging.basicConfig(level=_logging.INFO, format="%(asctime)s | %(message)s", datefmt="%H:%M:%S")
+            limit_artists = getattr(args, 'limit_artists', 60)
+            tracks_per = getattr(args, 'tracks_per_artist', 8)
+            print(f"ListenBrainz community discovery — {limit_artists} artists, {tracks_per} tracks each...")
+            from oracle.integrations.listenbrainz import discover_community_tracks
+            added = discover_community_tracks(limit_artists=limit_artists, tracks_per_artist=tracks_per)
+            print(f"Done: {added} new community tracks queued for acquisition")
+        return
+
+    if args.command == "mood":
+        mood_tokens = getattr(args, 'text', [])
+        mood_text = " ".join(mood_tokens)
+        no_llm = getattr(args, 'no_llm', False)
+        if not mood_text.strip():
+            print("Usage: oracle mood <text>")
+            return
+        import json as _json
+        from oracle.mood_interpreter import interpret_mood
+        print(f'Interpreting: "{mood_text}"')
+        print(f'Mode: {"keyword heuristic" if no_llm else "LLM + keyword blend"}')
+        print()
+        result = interpret_mood(mood_text, try_llm=not no_llm)
+        for act_name, dims in result.items():
+            print(f"  [{act_name.upper()}]")
+            for dim, val in dims.items():
+                bar = "█" * int(val * 20) + "░" * (20 - int(val * 20))
+                print(f"    {dim:<12} {bar}  {val:.3f}")
+            print()
+        return
 
     if args.command == "deep-cut":
         from oracle.deepcut import DeepCut
