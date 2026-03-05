@@ -127,6 +127,22 @@ npm install
 npm run dev
 ```
 
+Reality checks (recommended before judging recommendation quality):
+
+```powershell
+# End-to-end backend/UI contract smoke
+powershell -ExecutionPolicy Bypass -File scripts/smoke_desktop.ps1 -AllowLlmFailure
+
+# Audit a playlist export against your actual local library
+.venv\Scripts\python.exe scripts\analyze_playlist_export.py --playlist-json "C:\Users\Admin\Documents\LYRA PROJECT\Playlist1.json"
+
+# Refresh factual artist enrichment + graph edges used by Artist/Constellation pages
+.venv\Scripts\python.exe -m oracle biographer enrich-all --limit 80
+.venv\Scripts\python.exe -m oracle graph dimension-edges --threshold 0.60 --top-k 8
+```
+
+For production-like behavior in the desktop app, keep `fixtureMode` disabled in Settings so all routes use live backend data.
+
 ## Key Docs
 
 - [`docs/MASTER_PLAN_EXPANDED.md`](docs/MASTER_PLAN_EXPANDED.md) - current high-level project status

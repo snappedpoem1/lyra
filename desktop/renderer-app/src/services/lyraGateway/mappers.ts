@@ -43,9 +43,9 @@ export function mapTrack(row: Record<string, unknown>): TrackListItem {
   const reasons = mapTrackReasons(row);
   const fallbackReason = row.file_exists === false ? "File is indexed but missing on disk." : `${artist} belongs in this listening thread.`;
   const primaryReason = reasons[0]?.text ?? (row.reason ? String(row.reason) : fallbackReason);
-  const scoreChips = DIMENSIONS.slice(0, 4).map((key, index) => ({
+  const scoreChips = DIMENSIONS.slice(0, 4).map((key) => ({
     key,
-    value: typeof row[key] === "number" ? (row[key] as number) : Number((((index + trackId.length) * 0.11) % 1).toFixed(2)),
+    value: typeof row[key] === "number" ? (row[key] as number) : null,
     label: key,
   }));
   return {

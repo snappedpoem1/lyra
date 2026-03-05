@@ -29,8 +29,8 @@ export function OracleRecommendationDeck({
             ))}
           </div>
           <div className="track-actions">
-            <LyraButton onClick={() => onPlayTrack(item.previewTracks[0])}>Play row</LyraButton>
-            <LyraButton onClick={() => onReplaceQueue(item.previewTracks)}>Load queue</LyraButton>
+            <LyraButton onClick={() => item.previewTracks[0] && onPlayTrack(item.previewTracks[0])} disabled={item.previewTracks.length === 0}>Play row</LyraButton>
+            <LyraButton onClick={() => onReplaceQueue(item.previewTracks)} disabled={item.previewTracks.length === 0}>Load queue</LyraButton>
           </div>
         </LyraPanel>
       ))}

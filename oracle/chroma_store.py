@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -16,15 +16,15 @@ import numpy as np
 # installed or fails to build.
 try:
     import chromadb
-    from chromadb.config import Settings
 except Exception:  # pragma: no cover - fallbacks for missing package
     chromadb = None  # type: ignore
-    Settings = None  # type: ignore
 
 from dotenv import load_dotenv
+from oracle.config import CHROMA_COLLECTION
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_COLLECTION = "lyra_clap_v1"
+DEFAULT_COLLECTION = CHROMA_COLLECTION or "clap_embeddings"
+LEGACY_COLLECTIONS = ("clap_embeddings", "lyra_clap_v1")
 
 VALID_WRITE_MODES = {"readonly", "plan_only", "apply_allowed"}
 
@@ -105,12 +105,19 @@ class LyraChromaStore:
         self.persist_dir.mkdir(parents=True, exist_ok=True)
         os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
         os.environ.setdefault("CHROMA_TELEMETRY", "FALSE")
-        self.client = chromadb.PersistentClient(
-            path=str(self.persist_dir),
-            settings=Settings(anonymized_telemetry=False)
-        )
+        # Use default client options so all call-sites share one compatible in-process client.
+        self.client = chromadb.PersistentClient(path=str(self.persist_dir))
+
+        preferred = (self.collection_name or CHROMA_COLLECTION or DEFAULT_COLLECTION).strip() or DEFAULT_COLLECTION
+        selected_name, selected_count = self._pick_existing_collection(preferred)
+        if selected_name and selected_count > 0:
+            self.collection_name = selected_name
+            self.collection = self.client.get_collection(name=selected_name)
+            return
+
+        self.collection_name = preferred
         self.collection = self.client.get_or_create_collection(
-            name=self.collection_name,
+            name=preferred,
             metadata={
                 "description": "Lyra CLAP embeddings",
                 # HNSW index settings (applied at creation only; rebuild with --force-reindex to change)
@@ -120,6 +127,21 @@ class LyraChromaStore:
                 "hnsw:M": 32,                    # More connections per node (default: 16)
             },
         )
+
+    def _pick_existing_collection(self, preferred: str) -> Tuple[str, int]:
+        candidates = [preferred, *[name for name in LEGACY_COLLECTIONS if name != preferred]]
+        best_name = ""
+        best_count = -1
+        for name in candidates:
+            try:
+                collection = self.client.get_collection(name=name)
+                count = int(collection.count() or 0)
+            except Exception:
+                continue
+            if count > best_count:
+                best_name = name
+                best_count = count
+        return best_name, max(best_count, 0)
 
     def _persist(self) -> None:
         _require_chromadb()

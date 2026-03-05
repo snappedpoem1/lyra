@@ -18,11 +18,21 @@ import json
 import numpy as np
 from typing import Optional, List, Dict
 import uuid
+from functools import lru_cache
 
-from oracle.config import CHROMA_COLLECTION
+from oracle.chroma_store import LyraChromaStore
+from oracle.config import CHROMA_COLLECTION, CHROMA_PATH
 from oracle.db.schema import get_connection
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _get_chroma_store() -> LyraChromaStore:
+    return LyraChromaStore(
+        persist_dir=str(CHROMA_PATH),
+        collection_name=CHROMA_COLLECTION,
+    )
 
 
 class Radio:
@@ -60,12 +70,7 @@ class Radio:
         logger.info(f"ðŸŽ² RADIO: Generating chaos from {current_track_id or 'START'}")
         
         try:
-            # Import ChromaDB locally to avoid circular imports
-            import chromadb
-            from oracle.config import CHROMA_PATH
-            
-            client = chromadb.PersistentClient(path=str(CHROMA_PATH))
-            collection = client.get_or_create_collection(CHROMA_COLLECTION)
+            collection = _get_chroma_store().collection
             
             if current_track_id:
                 # Get current track embedding
@@ -379,12 +384,8 @@ class Radio:
     def _semantic_similar_tracks(self, track_id: str, count: int) -> List[Dict]:
         """Fallback: Use semantic similarity."""
         try:
-            import chromadb
-            from oracle.config import CHROMA_PATH
-            
-            client = chromadb.PersistentClient(path=str(CHROMA_PATH))
-            collection = client.get_or_create_collection(CHROMA_COLLECTION)
-            
+            collection = _get_chroma_store().collection
+
             seed = collection.get(ids=[track_id], include=["embeddings"])
             seed_embeddings = seed.get("embeddings") or []
             if not seed_embeddings:

@@ -22,7 +22,7 @@ try:
 except Exception:  # pragma: no cover - environment may not have chromadb or pydantic errors
     LyraChromaStore = None
 
-from oracle.config import CHROMA_PATH
+from oracle.config import CHROMA_COLLECTION, CHROMA_PATH
 from oracle.db.schema import get_connection
 # CLAPEmbedder is heavy (librosa) so import inside search when needed
 from oracle.vibe_descriptors import describe_scores
@@ -54,7 +54,10 @@ def _get_clap_embedder():
 
 @lru_cache(maxsize=1)
 def _get_chroma_store():
-    return LyraChromaStore(persist_dir=str(CHROMA_PATH))
+    return LyraChromaStore(
+        persist_dir=str(CHROMA_PATH),
+        collection_name=CHROMA_COLLECTION,
+    )
 
 
 def search(query_text: str, n: int = 10) -> List[Dict[str, Any]]:

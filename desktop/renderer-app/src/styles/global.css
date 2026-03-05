@@ -4,10 +4,19 @@
 html, body, #root {
   margin: 0;
   height: 100%;
-  background: var(--bg);
+  background:
+    linear-gradient(180deg, rgba(8, 11, 15, 0.98), rgba(10, 13, 17, 0.99)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.015) 0,
+      rgba(255, 255, 255, 0.015) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: clamp(17px, 0.5vw, 21px);
+  font-size: clamp(17px, 0.55vw, 23px);
   overflow: hidden;
 }
 
@@ -29,6 +38,7 @@ a { color: inherit; text-decoration: none; }
   min-height: 0;
   border-left: 1px solid var(--border-divider);
   border-right: 1px solid var(--border-divider);
+  background: var(--deck-surface);
 }
 
 .route-canvas {
@@ -53,10 +63,12 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Panel ───────────────────────────────────────────────────────────────── */
 .lyra-panel {
-  background: var(--bg-elevated);
+  background:
+    linear-gradient(180deg, rgba(40, 47, 56, 0.14), rgba(0, 0, 0, 0) 16%),
+    var(--bg-elevated);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-lg);
-  box-shadow: 0 2px 8px var(--shadow-sm);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 3px 14px var(--shadow-sm);
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
@@ -190,7 +202,7 @@ a { color: inherit; text-decoration: none; }
   grid-template-rows: auto 1fr auto;
   gap: var(--space-lg);
   border-right: 1px solid var(--border-divider);
-  background: var(--bg-elevated);
+  background: linear-gradient(180deg, rgba(70, 84, 100, 0.14), rgba(16, 20, 25, 0.96) 32%);
 }
 
 .brand-mark {
@@ -321,6 +333,10 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   padding: 0 var(--space-lg);
   border-bottom: 1px solid var(--border-divider);
+  background:
+    linear-gradient(180deg, rgba(48, 58, 70, 0.24), rgba(13, 17, 22, 0.88) 68%),
+    rgba(8, 11, 15, 0.74);
+  box-shadow: inset 0 -1px 0 rgba(200, 255, 130, 0.06), inset 0 0 20px var(--deck-glow);
 }
 
 .window-controls { display: flex; gap: var(--space-sm); align-items: center; }
@@ -329,8 +345,8 @@ a { color: inherit; text-decoration: none; }
 .drawer-close,
 .sanctuary-mini-card,
 .queue-preview-card {
-  background: transparent;
-  border: 1px solid transparent;
+  background: linear-gradient(180deg, rgba(56, 66, 79, 0.22), rgba(22, 27, 34, 0.3));
+  border: 1px solid rgba(160,170,185,0.2);
   color: var(--text-soft);
   cursor: pointer;
   border-radius: var(--radius-sm);
@@ -344,7 +360,7 @@ a { color: inherit; text-decoration: none; }
   border-color: rgba(76,103,44,0.75);
 }
 .tab-button:not(.is-active):hover {
-  background: rgba(255,255,255,0.05);
+  background: linear-gradient(180deg, rgba(74, 88, 103, 0.36), rgba(23, 29, 36, 0.42));
   color: var(--text);
 }
 
@@ -371,7 +387,9 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   padding: 0 var(--space-xl);
   border-top: 1px solid var(--border-divider);
-  background: var(--bg-elevated);
+  background:
+    linear-gradient(180deg, rgba(54, 66, 79, 0.2), rgba(12, 15, 19, 0.92)),
+    var(--bg-elevated);
 }
 
 .dock-left    { display: flex; gap: var(--space-lg); align-items: center; min-width: 0; }
@@ -411,30 +429,31 @@ a { color: inherit; text-decoration: none; }
 .transport-btn {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid transparent;
-  background: transparent;
+  width: 42px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(160,170,185,0.24);
+  background: linear-gradient(180deg, rgba(58, 69, 82, 0.34), rgba(26, 31, 38, 0.4));
   color: var(--text-soft);
   cursor: pointer;
   transition: color var(--duration-fast) ease, background var(--duration-fast) ease;
   padding: 0;
   flex-shrink: 0;
 }
-.transport-btn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+.transport-btn:hover { color: var(--text); background: linear-gradient(180deg, rgba(74, 88, 103, 0.45), rgba(26, 31, 38, 0.58)); }
 .transport-btn--play {
-  width: 50px;
-  height: 50px;
-  background: rgba(140, 217, 74, 0.10);
-  border-color: rgba(200,255,130,0.28);
+  width: 58px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(140, 217, 74, 0.26), rgba(92, 156, 44, 0.22));
+  border-color: rgba(200,255,130,0.44);
   color: var(--accent-bright);
 }
 .transport-btn--play:hover {
-  background: rgba(140, 217, 74, 0.18);
+  background: linear-gradient(180deg, rgba(162, 232, 98, 0.3), rgba(96, 163, 46, 0.3));
   border-color: rgba(200,255,130,0.50);
 }
-.transport-btn--sm { width: 34px; height: 34px; }
+.transport-btn--sm { width: 34px; height: 28px; border-radius: 7px; }
 .transport-btn:active { transform: scale(0.92); }
 .transport-icon     { width: 20px; height: 20px; }
 .transport-icon--lg { width: 24px; height: 24px; }
@@ -1987,14 +2006,20 @@ a { color: inherit; text-decoration: none; }
   padding: var(--space-lg);
   border-radius: var(--radius-lg);
   border: 1px solid var(--panel-border);
-  background: var(--bg-elevated);
+  background:
+    linear-gradient(145deg, rgba(54, 66, 79, 0.2), rgba(12, 15, 19, 0.9) 48%),
+    var(--bg-elevated);
   color: inherit;
   text-decoration: none;
-  transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease;
+  box-shadow: inset 0 0 0 1px rgba(200, 255, 130, 0.04);
+  transition: border-color var(--duration-fast) ease, background var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
 }
 .playlist-card:hover {
   border-color: rgba(200,255,130,0.28);
-  background: rgba(30,35,42,0.80);
+  background:
+    linear-gradient(145deg, rgba(64, 76, 91, 0.3), rgba(12, 15, 19, 0.95) 52%),
+    rgba(30,35,42,0.80);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(200, 255, 130, 0.22);
 }
 .playlist-card-body { min-width: 0; display: grid; gap: 3px; }
 .playlist-card-title {
@@ -2018,4 +2043,15 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+@media (min-width: 3200px) and (min-height: 1800px) {
+  .route-stack { gap: var(--space-xl); padding: var(--space-xl); padding-bottom: calc(var(--space-2xl) + 12px); }
+  .playlist-cards { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+  .playlist-card { min-height: 128px; }
+  .track-table-header,
+  .track-row,
+  .library-track-header,
+  .library-track-row { min-height: 54px; }
+  .constellation-svg { min-height: 520px; }
 }

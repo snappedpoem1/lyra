@@ -20,6 +20,72 @@ except Exception:
     LLMClient = None  # type: ignore[assignment]
 
 
+def _as_text(value: object, default: str = "") -> str:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (int, float, bool)):
+        return str(value).strip()
+    if isinstance(value, dict):
+        for key in ("text", "value", "label", "query"):
+            nested = value.get(key)
+            if isinstance(nested, str) and nested.strip():
+                return nested.strip()
+    return default
+
+
+def _descriptor_tokens(payload: object) -> list[str]:
+    tokens: list[str] = []
+    if isinstance(payload, str):
+        text = payload.strip()
+        if text:
+            tokens.append(text)
+        return tokens
+    if isinstance(payload, bool):
+        if payload:
+            tokens.append("present")
+        return tokens
+    if isinstance(payload, (int, float)):
+        tokens.append(str(payload))
+        return tokens
+    if isinstance(payload, list):
+        for item in payload:
+            tokens.extend(_descriptor_tokens(item))
+        return tokens
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            key_name = _as_text(key).replace("_", " ")
+            if key_name in {"n", "intent", "rationale", "clap query", "query"}:
+                if key_name in {"clap query", "query"} and isinstance(value, (dict, list)):
+                    tokens.extend(_descriptor_tokens(value))
+                continue
+            if isinstance(value, bool):
+                if value:
+                    tokens.append(key_name)
+                continue
+            if isinstance(value, (int, float)):
+                tokens.append(f"{key_name} {value}")
+                continue
+            value_text = _as_text(value)
+            if value_text:
+                tokens.append(value_text)
+                continue
+            tokens.extend(_descriptor_tokens(value))
+    return tokens
+
+
+def _coerce_rewritten_query(query: str, payload: dict) -> str:
+    direct = _as_text(payload.get("clap_query")) or _as_text(payload.get("query")) or _as_text(payload.get("text"))
+    if direct:
+        return direct
+    tokens = [token for token in _descriptor_tokens(payload) if token]
+    if not tokens:
+        return query
+    candidate = " ".join(tokens).strip()
+    return candidate or query
+
+
 # ---------------------------------------------------------------------------
 # LLM helper (search-specific)
 # ---------------------------------------------------------------------------
@@ -74,15 +140,18 @@ def _rewrite_search_query_with_llm(query: str, n: int) -> dict:
             return fallback
 
         payload = result["data"]
-        rewritten = (payload.get("clap_query") or "").strip() or query
+        rewritten = _coerce_rewritten_query(query, payload)
         rewritten_n = sanitize_integer(payload.get("n", n), default=n, min_val=1, max_val=1000)
+        rationale = _as_text(payload.get("rationale"))
+        if not rationale and rewritten != query:
+            rationale = "Rewritten from structured provider payload."
         return {
             "query": rewritten,
             "n": rewritten_n,
             "used_llm": rewritten != query or rewritten_n != n,
             "llm": llm_payload,
-            "intent": (payload.get("intent") or "unknown").strip() or "unknown",
-            "rationale": (payload.get("rationale") or "").strip(),
+            "intent": _as_text(payload.get("intent"), "unknown") or "unknown",
+            "rationale": rationale,
         }
     except Exception as exc:
         fallback["rationale"] = f"LLM rewrite exception: {exc}"

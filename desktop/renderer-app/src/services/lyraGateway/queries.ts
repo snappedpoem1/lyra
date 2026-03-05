@@ -179,7 +179,20 @@ export async function createVibe(prompt: string, name: string): Promise<VibeCrea
 export async function getOracleRecommendations(mode: OracleMode, seedTrackId?: string): Promise<OracleRecommendation[]> {
   try {
     if (mode === "constellation") {
-      return oracleRecommendations;
+      const queuePayload = await requestJson("/api/radio/queue", queueSchema, {
+        method: "POST",
+        body: JSON.stringify({ mode, length: 4, seed_track: seedTrackId }),
+      });
+      return [{
+        id: "oracle-constellation",
+        mode,
+        title: "Oracle constellation pivots",
+        rationale: "Live pivots from your current library graph and radio queue.",
+        confidenceLabel: "Live graph",
+        seedLabel: "Constellation",
+        previewTracks: queuePayload.queue.map((row) => mapTrack(row)),
+        actions: ["play-now", "replace-queue", "append-queue", "open-constellation"],
+      }];
     }
     if (mode === "discovery") {
       const payload = await requestJson("/api/radio/discovery?count=4", radioResultsSchema);

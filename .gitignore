@@ -53,6 +53,7 @@ Reports/
 Backups/
 /playlists/
 /data/
+.lyra_scheduler.lock
 
 # Beets
 .beets/*
