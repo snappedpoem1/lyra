@@ -1,6 +1,6 @@
 # Worklist
 
-Last updated: March 4, 2026
+Last updated: March 5, 2026
 
 This file is the short operational list of what is done and what still needs work.
 
@@ -18,6 +18,12 @@ This file is the short operational list of what is done and what still needs wor
 - [x] Archive unused `oracle/downloader.py`
 - [x] Wire desktop playback reporting into the backend feedback loop
 - [x] Agent action router (`agentActionRouter.ts`), context menus, queue drag-to-reorder, transport waveform, playlist mosaic, keyboard shortcuts, playback position persistence
+- [x] Harden Last.fm similarity-edge builder for pylast response variants
+- [x] Add batch controls for similarity runs (`oracle graph similarity-edges --limit-artists --top-k`)
+- [x] Add controlled worker concurrency + chunked DB commits for similarity runs (`--workers`, `--request-pause`, `--commit-every`)
+- [x] Populate local-library similar edges from Last.fm in staged runs (`similar` edges: 0 -> 1,762)
+- [x] Run incremental MusicBrainz credit enrichment (`track_credits`: 1 -> 7)
+- [x] Verify structure analysis blocker (`librosa_not_installed` in current runtime)
 
 ## Next up
 
@@ -27,6 +33,16 @@ This file is the short operational list of what is done and what still needs wor
 - [ ] Verify desktop playback reporting behavior across skip / finish / manual track-switch cases
 - [ ] Re-evaluate embedded player direction from the now-live taste foundation
 - [ ] Expand playback telemetry only where it improves recommendation quality
+
+## Progress markers (easy -> hard)
+
+- [ ] P1: Install `librosa` in the active Python runtime; rerun `oracle structure analyze --limit 50` and confirm `track_structure` growth.
+- [ ] P2: Continue `oracle credits enrich` in bounded batches (20-50/run) until artist shrine credit coverage becomes useful.
+- [ ] P3: Continue staged `oracle graph similarity-edges` runs (`limit-artists=500` then full) to deepen cultural graph edges.
+- [ ] P4: Investigate why `oracle discover listenbrainz` returns `0` queued tracks; verify API payloads, duplicate filtering, and queue insert guards.
+- [ ] P5: Improve Spotify-history to local-track resolution with stronger normalization/fuzzy matching, then re-run playlist parity audit.
+- [ ] P6: Run an explicit live foobar2000 + BeefWeb verification session and confirm new playback rows are clearly attributable to live playback.
+- [ ] P7: Decide on Spotify export implementation scope (or explicit cancellation) and runtime-artifact separation policy.
 
 ## To Done
 

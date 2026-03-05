@@ -38,8 +38,10 @@ Author: Lyra Oracle — Sprint 1
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
+import threading
 import time
 from typing import Any, Callable, Dict, List, Optional
 
@@ -161,7 +163,15 @@ class GraphBuilder:
         finally:
             conn.close()
 
-    def build_lastfm_similarity_edges(self, top_k: int = 15) -> int:
+    def build_lastfm_similarity_edges(
+        self,
+        top_k: int = 15,
+        limit_artists: Optional[int] = None,
+        local_targets_only: bool = True,
+        workers: int = 1,
+        request_pause: float = 0.25,
+        commit_every: int = 500,
+    ) -> int:
         """Add ``similar`` edges derived from Last.fm's community-based similar-artists data.
 
         For each library artist, calls ``pylast.Artist.get_similar(limit=top_k)``.
@@ -173,6 +183,12 @@ class GraphBuilder:
 
         Args:
             top_k: Max similar-artist neighbours to fetch per artist (default 15).
+            limit_artists: Optional cap on number of source artists processed.
+            local_targets_only: When True, only connect to artists already in the
+                local library.
+            workers: Number of concurrent fetch workers.
+            request_pause: Global delay between Last.fm requests (seconds).
+            commit_every: Flush pending edge pairs every N pairs (0 = end only).
 
         Returns:
             Number of new ``similar`` edges inserted.
@@ -190,11 +206,10 @@ class GraphBuilder:
             logger.info("[graph] build_lastfm_similarity_edges: pylast not installed — skipping")
             return 0
 
-        try:
-            network = pylast.LastFMNetwork(api_key=api_key, api_secret=api_secret)
-        except Exception as exc:
-            logger.warning("[graph] Last.fm network init failed: %s", exc)
-            return 0
+        top_k = max(1, int(top_k))
+        workers = max(1, int(workers))
+        request_pause = max(0.0, float(request_pause))
+        commit_every = max(0, int(commit_every))
 
         # Load library artists
         conn = get_connection()
@@ -205,7 +220,10 @@ class GraphBuilder:
                 "WHERE artist IS NOT NULL AND trim(artist) != '' AND status = 'active' "
                 "ORDER BY artist"
             )
-            library_artists = {row[0].strip() for row in c.fetchall()}
+            library_artists = sorted({row[0].strip() for row in c.fetchall()})
+            library_artist_set = set(library_artists)
+            if limit_artists and limit_artists > 0:
+                library_artists = library_artists[:limit_artists]
 
             # Load existing similar edges to avoid duplicates
             c.execute("SELECT source, target FROM connections WHERE type = 'similar'")
@@ -213,27 +231,98 @@ class GraphBuilder:
         finally:
             conn.close()
 
-        new_edges: list = []
+        edge_buffer: list[tuple[str, str, str, float, str]] = []
         seen_pairs: set = set()
+        added_pairs = 0
 
-        for artist_name in sorted(library_artists):
-            try:
-                lfm_artist = network.get_artist(artist_name)
-                similar_list = lfm_artist.get_similar(limit=top_k)
-            except Exception as exc:
-                logger.debug("[graph] Last.fm similar failed for '%s': %s", artist_name, exc)
-                time.sleep(0.5)
-                continue
+        writer_conn = get_connection()
+        writer_cursor = writer_conn.cursor()
 
-            for similar_item in similar_list:
+        def _flush_edges() -> None:
+            nonlocal added_pairs
+            if not edge_buffer:
+                return
+            writer_cursor.executemany(
+                "INSERT INTO connections (source, target, type, weight, evidence) VALUES (?, ?, ?, ?, ?)",
+                edge_buffer,
+            )
+            writer_conn.commit()
+            added_pairs += len(edge_buffer) // 2
+            edge_buffer.clear()
+
+        def _extract_similar(similar_item: Any) -> tuple[str, float]:
+            """Normalise pylast similarity objects across version/API variants."""
+            artist_obj: Any = None
+            match_raw: Any = 0.0
+
+            if hasattr(similar_item, "item"):
+                artist_obj = getattr(similar_item, "item")
+                match_raw = getattr(similar_item, "match", 0.0)
+            elif hasattr(similar_item, "artist"):
+                artist_obj = getattr(similar_item, "artist")
+                match_raw = getattr(similar_item, "match", 0.0)
+            elif isinstance(similar_item, (tuple, list)) and len(similar_item) >= 2:
+                artist_obj = similar_item[0]
+                match_raw = similar_item[1]
+            elif isinstance(similar_item, dict):
+                artist_obj = similar_item.get("item") or similar_item.get("artist")
+                match_raw = similar_item.get("match", 0.0)
+
+            target_name = ""
+            if hasattr(artist_obj, "get_name"):
                 try:
-                    sim_artist = similar_item.item
-                    match_score = float(similar_item.match or 0.0)
-                    target_name = sim_artist.get_name()
+                    target_name = str(artist_obj.get_name() or "").strip()
                 except Exception:
-                    continue
+                    target_name = ""
+            elif isinstance(artist_obj, str):
+                target_name = artist_obj.strip()
+            elif artist_obj is not None and hasattr(artist_obj, "name"):
+                target_name = str(getattr(artist_obj, "name") or "").strip()
+
+            try:
+                match_score = float(match_raw or 0.0)
+            except Exception:
+                match_score = 0.0
+            return target_name, match_score
+
+        rate_lock = threading.Lock()
+        last_request_ts = [0.0]
+        thread_local = threading.local()
+
+        def _throttle() -> None:
+            if request_pause <= 0:
+                return
+            with rate_lock:
+                now = time.time()
+                wait = request_pause - (now - last_request_ts[0])
+                if wait > 0:
+                    time.sleep(wait)
+                last_request_ts[0] = time.time()
+
+        def _get_network():
+            network = getattr(thread_local, "network", None)
+            if network is None:
+                network = pylast.LastFMNetwork(api_key=api_key, api_secret=api_secret)
+                thread_local.network = network
+            return network
+
+        def _fetch_similar(artist_name: str) -> tuple[str, list, Optional[Exception]]:
+            try:
+                _throttle()
+                lfm_artist = _get_network().get_artist(artist_name)
+                return artist_name, lfm_artist.get_similar(limit=top_k), None
+            except Exception as exc:
+                return artist_name, [], exc
+
+        def _consume_result(artist_name: str, similar_list: list) -> None:
+            for similar_item in similar_list:
+                target_name, match_score = _extract_similar(similar_item)
 
                 if not target_name or match_score < 0.05:
+                    continue
+                if target_name == artist_name:
+                    continue
+                if local_targets_only and target_name not in library_artist_set:
                     continue
 
                 pair = (min(artist_name, target_name), max(artist_name, target_name))
@@ -245,29 +334,42 @@ class GraphBuilder:
                 seen_pairs.add(pair)
                 evidence = json.dumps({"match": round(match_score, 4), "source": "lastfm_similar"})
                 weight = round(match_score * 0.9, 4)  # cap below 1.0; source is community not identity
-                new_edges.append((artist_name, target_name, "similar", weight, evidence))
-                new_edges.append((target_name, artist_name, "similar", weight, evidence))
+                edge_buffer.append((artist_name, target_name, "similar", weight, evidence))
+                edge_buffer.append((target_name, artist_name, "similar", weight, evidence))
+                if commit_every > 0 and (len(edge_buffer) // 2) >= commit_every:
+                    _flush_edges()
 
-            time.sleep(0.25)  # respect Last.fm rate limit
+        try:
+            if workers == 1:
+                for artist_name in library_artists:
+                    source, similar_list, exc = _fetch_similar(artist_name)
+                    if exc is not None:
+                        logger.debug("[graph] Last.fm similar failed for '%s': %s", source, exc)
+                        continue
+                    _consume_result(source, similar_list)
+            else:
+                logger.info(
+                    "[graph] build_lastfm_similarity_edges: workers=%d request_pause=%.2fs",
+                    workers,
+                    request_pause,
+                )
+                with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="lfm-sim") as pool:
+                    for source, similar_list, exc in pool.map(_fetch_similar, library_artists):
+                        if exc is not None:
+                            logger.debug("[graph] Last.fm similar failed for '%s': %s", source, exc)
+                            continue
+                        _consume_result(source, similar_list)
 
-        if not new_edges:
+            _flush_edges()
+        finally:
+            writer_conn.close()
+
+        if added_pairs == 0:
             logger.info("[graph] build_lastfm_similarity_edges: 0 new edges")
             return 0
 
-        conn2 = get_connection()
-        try:
-            c2 = conn2.cursor()
-            c2.executemany(
-                "INSERT INTO connections (source, target, type, weight, evidence) VALUES (?, ?, ?, ?, ?)",
-                new_edges,
-            )
-            conn2.commit()
-        finally:
-            conn2.close()
-
-        added = len(new_edges) // 2
-        logger.info("[graph] build_lastfm_similarity_edges: %d new similar-artist pairs", added)
-        return added
+        logger.info("[graph] build_lastfm_similarity_edges: %d new similar-artist pairs", added_pairs)
+        return added_pairs
 
     def build_dimension_edges(
         self,

@@ -220,7 +220,19 @@ def main() -> None:
     dim_edges_parser = graph_sub.add_parser('dimension-edges', help='Build dimension_affinity edges from local track_scores (no API calls)')
     dim_edges_parser.add_argument('--threshold', type=float, default=0.60, help='Pearson sim threshold (default 0.60)')
     dim_edges_parser.add_argument('--top-k', type=int, default=8, dest='top_k', help='Max neighbours per artist (default 8)')
-    graph_sub.add_parser('similarity-edges', help='Add Last.fm community similar-artist edges')
+    graph_similarity = graph_sub.add_parser('similarity-edges', help='Add Last.fm community similar-artist edges')
+    graph_similarity.add_argument('--top-k', type=int, default=15, dest='top_k',
+                                  help='Similar artists per source artist (default 15)')
+    graph_similarity.add_argument('--limit-artists', type=int, default=0, dest='limit_artists',
+                                  help='Only process the first N library artists (0 = all)')
+    graph_similarity.add_argument('--allow-external-targets', action='store_true', dest='allow_external_targets',
+                                  help='Allow similar targets not present in local library')
+    graph_similarity.add_argument('--workers', type=int, default=1, dest='workers',
+                                  help='Concurrent Last.fm fetch workers (default 1)')
+    graph_similarity.add_argument('--request-pause', type=float, default=0.25, dest='request_pause',
+                                  help='Global pause between Last.fm requests in seconds (default 0.25)')
+    graph_similarity.add_argument('--commit-every', type=int, default=500, dest='commit_every',
+                                  help='Flush edge pairs to DB every N pairs (default 500)')
 
     # Discover — community-sourced acquisition candidates
     discover_parser = subparsers.add_parser('discover', help='Seed acquisition queue from cultural sources')
@@ -1234,8 +1246,26 @@ def main() -> None:
         if args.graph_command == "similarity-edges":
             import logging as _logging
             _logging.basicConfig(level=_logging.INFO, format="%(asctime)s | %(message)s", datefmt="%H:%M:%S")
-            print("Building Last.fm community similar-artist edges...")
-            count = gb.build_lastfm_similarity_edges(top_k=15)
+            top_k = getattr(args, 'top_k', 15)
+            limit_artists = getattr(args, 'limit_artists', 0) or None
+            local_targets_only = not bool(getattr(args, 'allow_external_targets', False))
+            workers = getattr(args, 'workers', 1)
+            request_pause = getattr(args, 'request_pause', 0.25)
+            commit_every = getattr(args, 'commit_every', 500)
+            print(
+                "Building Last.fm community similar-artist edges "
+                f"(top_k={top_k}, limit_artists={limit_artists or 'all'}, "
+                f"local_targets_only={local_targets_only}, workers={workers}, "
+                f"request_pause={request_pause}, commit_every={commit_every})..."
+            )
+            count = gb.build_lastfm_similarity_edges(
+                top_k=top_k,
+                limit_artists=limit_artists,
+                local_targets_only=local_targets_only,
+                workers=workers,
+                request_pause=request_pause,
+                commit_every=commit_every,
+            )
             stats = gb.get_stats()
             print(f"Done: {count} new similar-artist pairs")
             print(f"Total connections now: {stats['total_connections']}")
