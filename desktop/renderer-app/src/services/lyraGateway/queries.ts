@@ -495,6 +495,43 @@ export async function getTasteProfile(): Promise<TasteProfile> {
   };
 }
 
+// ── Agent Briefing ────────────────────────────────────────────────────────
+
+export interface AgentBriefing {
+  newest_tracks: Array<{ artist: string; title: string }>;
+  taste_snapshot: Record<string, { value: number; confidence: number }>;
+  top_queue_items: Array<{ artist: string; title: string; priority: number }>;
+  playback_total: number;
+  library_total: number;
+}
+
+export async function getAgentBriefing(): Promise<AgentBriefing> {
+  try {
+    const payload = await requestJson(
+      "/api/agent/briefing",
+      z.object({
+        newest_tracks: z.array(z.object({ artist: z.string(), title: z.string() })).default([]),
+        taste_snapshot: z.record(z.object({ value: z.number(), confidence: z.number() })).default({}),
+        top_queue_items: z.array(z.object({ artist: z.string(), title: z.string(), priority: z.number() })).default([]),
+        playback_total: z.number().default(0),
+        library_total: z.number().default(0),
+      }).passthrough(),
+      undefined,
+      5000,
+      0,
+    );
+    return payload as AgentBriefing;
+  } catch {
+    return {
+      newest_tracks: [],
+      taste_snapshot: {},
+      top_queue_items: [],
+      playback_total: 0,
+      library_total: 0,
+    };
+  }
+}
+
 export async function getFactDrop(trackId: string): Promise<AgentFactDrop> {
   const detail = await getTrackDossier(trackId);
   return { track_id: trackId, fact: detail.fact ?? null };

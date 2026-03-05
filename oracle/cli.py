@@ -217,6 +217,9 @@ def main() -> None:
     graph_build.add_argument('--full', action='store_true', help='Full rebuild (all artists)')
     graph_build.add_argument('--depth', type=int, default=1, help='Lore trace depth (1-2)')
     graph_sub.add_parser('stats', help='Show graph statistics')
+    dim_edges_parser = graph_sub.add_parser('dimension-edges', help='Build dimension_affinity edges from local track_scores (no API calls)')
+    dim_edges_parser.add_argument('--threshold', type=float, default=0.60, help='Pearson sim threshold (default 0.60)')
+    dim_edges_parser.add_argument('--top-k', type=int, default=8, dest='top_k', help='Max neighbours per artist (default 8)')
 
     # Playlust — 4-act emotional arc generator (F-008) *** FLAGSHIP ***
     playlust_parser = subparsers.add_parser('playlust', help='Generate a 4-act emotional arc playlist')
@@ -1151,6 +1154,18 @@ def main() -> None:
             print(f"  Most connected:")
             for a in stats.get('top_connected', []):
                 print(f"    {a['artist']}: {a['connections']} connections")
+            return
+
+        if args.graph_command == "dimension-edges":
+            import logging as _logging
+            _logging.basicConfig(level=_logging.INFO, format="%(asctime)s | %(message)s", datefmt="%H:%M:%S")
+            threshold = getattr(args, 'threshold', 0.60)
+            top_k = getattr(args, 'top_k', 8)
+            print(f"Building dimension_affinity edges (threshold={threshold}, top_k={top_k})...")
+            count = gb.build_dimension_edges(threshold=threshold, top_k=top_k)
+            stats = gb.get_stats()
+            print(f"Done: {count} new artist pairs added")
+            print(f"Total connections now: {stats['total_connections']}")
             return
 
     if args.command == "deep-cut":

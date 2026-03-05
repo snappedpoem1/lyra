@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ConnectivityBadge } from "@/features/system/ConnectivityBadge";
 import { audioEngine } from "@/services/audio/audioEngine";
-import { getLibraryTracks, getOracleRecommendations, getPlaylistDetail, getPlaylists } from "@/services/lyraGateway/queries";
+import { getAgentBriefing, getLibraryTracks, getOracleRecommendations, getPlaylistDetail, getPlaylists } from "@/services/lyraGateway/queries";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
 import { useUiStore } from "@/stores/uiStore";
@@ -14,6 +14,7 @@ export function HomeRoute() {
   const { data: playlists = [] } = useQuery({ queryKey: ["playlists"], queryFn: getPlaylists });
   const { data: recommendations = [] } = useQuery({ queryKey: ["oracle", "home"], queryFn: () => getOracleRecommendations("flow") });
   const { data: library } = useQuery({ queryKey: ["home-library"], queryFn: () => getLibraryTracks(10, 0, "") });
+  const { data: briefing } = useQuery({ queryKey: ["agent", "briefing"], queryFn: getAgentBriefing, staleTime: 5 * 60 * 1000 });
   const player = usePlayerStore();
   const queue = useQueueStore((state) => state.queue);
   const setCurrentIndex = useQueueStore((state) => state.setCurrentIndex);
@@ -153,6 +154,51 @@ export function HomeRoute() {
           <div className="hero-actions">
             <LyraButton onClick={() => navigate({ to: "/library" })}>Open library</LyraButton>
             <LyraButton onClick={() => navigate({ to: "/search" })}>Search library</LyraButton>
+          </div>
+        </section>
+
+        <section className="lyra-panel workspace-column">
+          <div className="section-heading">
+            <h2>Oracle Intelligence</h2>
+            <span>{briefing?.library_total ?? 0} tracks · {briefing?.playback_total ?? 0} plays</span>
+          </div>
+          <div className="compact-list">
+            {briefing?.newest_tracks?.slice(0, 3).map((track, i) => (
+              <div key={i} className="thread-row">
+                <div>
+                  <span className="insight-kicker">Recently added</span>
+                  <strong>{track.title}</strong>
+                  <p>{track.artist}</p>
+                </div>
+              </div>
+            ))}
+            {briefing?.top_queue_items?.slice(0, 4).map((item, i) => (
+              <div key={`q-${i}`} className="thread-row">
+                <div>
+                  <span className="insight-kicker">Taste-aligned</span>
+                  <strong>{item.title}</strong>
+                  <p>{item.artist}</p>
+                </div>
+                <span>{item.priority.toFixed(1)}</span>
+              </div>
+            ))}
+            {briefing?.taste_snapshot && Object.keys(briefing.taste_snapshot).length > 0 && (
+              <div className="thread-row">
+                <div>
+                  <span className="insight-kicker">Top taste dimensions</span>
+                  <p>
+                    {Object.entries(briefing.taste_snapshot)
+                      .sort((a, b) => b[1].confidence - a[1].confidence)
+                      .slice(0, 3)
+                      .map(([dim, d]) => `${dim} ${(d.value * 100).toFixed(0)}%`)
+                      .join(" · ")}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="hero-actions">
+            <LyraButton onClick={() => navigate({ to: "/oracle" })}>Open Oracle</LyraButton>
           </div>
         </section>
 
