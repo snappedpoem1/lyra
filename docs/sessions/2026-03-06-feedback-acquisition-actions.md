@@ -44,7 +44,8 @@ Bullet list of completed work:
 
 | SHA (short) | Message |
 |---|---|
-| `pending` | `[S-20260306-09] feat: persist oracle feedback and acquisition lead actions` |
+| `e127c13` | `[S-20260306-09] feat: persist oracle feedback and tighten packaged runtime staging` |
+| `pending` | `[S-20260306-09] docs: finalize session state after feedback and staging pass` |
 
 ---
 

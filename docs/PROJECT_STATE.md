@@ -7,8 +7,8 @@ This is the current repo/runtime snapshot verified from this workspace.
 ## 1) Repository State
 
 - Branch: `main`
-- Working tree: dirty (active implementation session in progress)
-- Latest committed baseline before this audit: `b2bcde4` (bundled packaged acquisition runtime tools)
+- Working tree: clean
+- Latest committed baseline before this audit: `e127c13` (feedback loop, acquisition actions, dedicated packaged build staging)
 
 ## 2) Architecture State (Current)
 
