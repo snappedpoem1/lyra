@@ -14,10 +14,21 @@ import sqlite3
 
 from dotenv import load_dotenv
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+def _resolve_project_root() -> Path:
+    env_root = os.getenv("LYRA_PROJECT_ROOT", "").strip()
+    if env_root:
+        return Path(env_root)
+    if getattr(sys, "frozen", False):
+        return Path.cwd()
+    return Path(__file__).resolve().parent
+
+
+PROJECT_ROOT = _resolve_project_root()
 
 
 def _running_as_script() -> bool:
+    if getattr(sys, "frozen", False):
+        return False
     try:
         return Path(sys.argv[0]).resolve() == Path(__file__).resolve()
     except Exception:

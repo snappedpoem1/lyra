@@ -1,4 +1,4 @@
-# Session Log — [SESSION_ID]
+# Session Log - [SESSION_ID]
 
 **Date:** YYYY-MM-DD
 **Goal:** One sentence describing what this session set out to do.
@@ -9,13 +9,13 @@
 ## Context
 
 What was the state of the project at the start of this session?
-Reference `docs/PROJECT_STATE.md` snapshot if relevant.
+Reference `docs/PROJECT_STATE.md` if relevant.
 
 ---
 
 ## Work Done
 
-Bullet list of what was actually done:
+Bullet list of completed work:
 
 - [ ] Task 1
 - [ ] Task 2
@@ -32,8 +32,8 @@ Bullet list of what was actually done:
 
 ## Key Files Changed
 
-- `path/to/file.py` — what changed and why
-- `docs/PROJECT_STATE.md` — updated metric X
+- `path/to/file.py` - what changed and why
+- `docs/PROJECT_STATE.md` - state update summary
 
 ---
 

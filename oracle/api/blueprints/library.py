@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import traceback
+import json
 from pathlib import Path
 
 from flask import Blueprint, Response, jsonify, request, send_from_directory, stream_with_context
@@ -25,6 +26,19 @@ from oracle.validation import (
 
 bp = Blueprint("library", __name__)
 
+DIMENSIONS: tuple[str, ...] = (
+    "energy",
+    "valence",
+    "tension",
+    "density",
+    "warmth",
+    "movement",
+    "space",
+    "rawness",
+    "complexity",
+    "nostalgia",
+)
+
 # Optional intelligence engines used by the dossier endpoint.
 try:
     from oracle.architect import architect as _architect_engine
@@ -45,6 +59,74 @@ try:
     from oracle.agent import agent as _agent_engine
 except Exception:
     _agent_engine = None  # type: ignore[assignment]
+
+
+def _load_track_dimensions(track_id: str) -> dict[str, float | None]:
+    conn = get_connection(timeout=10.0)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia
+            FROM track_scores
+            WHERE track_id = ?
+            """,
+            (track_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return {dimension: None for dimension in DIMENSIONS}
+        return {
+            DIMENSIONS[index]: (float(value) if value is not None else None)
+            for index, value in enumerate(row)
+        }
+    finally:
+        conn.close()
+
+
+def _load_cached_genius_context(track_id: str) -> dict[str, object]:
+    conn = get_connection(timeout=10.0)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT payload_json
+            FROM enrich_cache
+            WHERE provider = ? AND lookup_key = ?
+            LIMIT 1
+            """,
+            ("genius", f"genius:{track_id}"),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return {}
+        payload_raw = row[0]
+        if not isinstance(payload_raw, str) or not payload_raw.strip():
+            return {}
+        try:
+            payload = json.loads(payload_raw)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+
+        description = str(payload.get("description") or "").strip()
+        excerpt = description
+        if len(excerpt) > 560:
+            excerpt = excerpt[:560].rstrip() + "..."
+
+        return {
+            "lyrics_state": payload.get("lyrics_state"),
+            "lyrics_excerpt": excerpt or None,
+            "release_date": payload.get("release_date"),
+            "annotation_count": payload.get("annotation_count"),
+            "pageviews": payload.get("pageviews"),
+            "url": payload.get("url"),
+            "song_art_image_url": payload.get("song_art_image_url"),
+            "provider": "genius",
+        }
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -456,19 +538,26 @@ def api_track_dossier(track_id: str):
             except Exception:
                 pass
 
-        return jsonify({
-            "track": track,
-            "structure": structure,
-            "lineage": connections,
-            "samples": samples,
-            "fact": fact,
-            "provenance_notes": [
-                track.get("filepath") or "Track path unavailable",
-                "Bundled dossier view assembled from Lyra back-end services.",
-            ],
-            "acquisition_notes": [
-                "Playback and queue state are managed in the desktop client.",
-            ],
-        })
+        dimensions = _load_track_dimensions(track_id)
+        lyrics = _load_cached_genius_context(track_id)
+
+        return jsonify(
+            {
+                "track": track,
+                "structure": structure,
+                "lineage": connections,
+                "samples": samples,
+                "fact": fact,
+                "dimensions": dimensions,
+                "lyrics": lyrics,
+                "provenance_notes": [
+                    track.get("filepath") or "Track path unavailable",
+                    "Bundled dossier view assembled from Lyra back-end services.",
+                ],
+                "acquisition_notes": [
+                    "Playback and queue state are managed in the desktop client.",
+                ],
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500

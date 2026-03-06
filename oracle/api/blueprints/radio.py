@@ -144,7 +144,11 @@ def api_playback_record():
             )
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
-        return jsonify({"status": "ok"})
+        return jsonify({
+            "status": "ok",
+            "canonical": "/api/player/*",
+            "deprecated": True,
+        })
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 

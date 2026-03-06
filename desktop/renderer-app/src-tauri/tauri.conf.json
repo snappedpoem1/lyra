@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/1",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:5173",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "Lyra Oracle",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "all": false,
+        "open": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "identifier": "com.lyra.oracle",
+      "targets": "all",
+      "resources": [
+        "bin"
+      ],
+      "icon": [
+        "icons/icon.ico",
+        "icons/icon.png"
+      ]
+    },
+    "systemTray": {
+      "iconPath": "icons/icon.ico",
+      "iconAsTemplate": false
+    },
+    "windows": [
+      {
+        "title": "Lyra Oracle",
+        "width": 1680,
+        "height": 1020,
+        "minWidth": 1180,
+        "minHeight": 760,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ]
+  }
+}

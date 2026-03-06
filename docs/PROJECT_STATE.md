@@ -1,32 +1,48 @@
 # Lyra Oracle Project State
 
-Last audited: March 5, 2026 (America/New_York)
+Last audited: March 6, 2026 (America/New_York)
 
-This is a reality-based snapshot of the repository and running system state as verified from this workspace.
+This is the current repo/runtime snapshot verified from this workspace.
 
-## 1) Repository And Delivery State
+## 1) Repository State
 
 - Branch: `main`
-- Working tree: clean
-- Latest commit: `ff4ebb3` (`policy: require session-log and markdown-state updates on delivery`)
-- Previous major stabilization commit: `18e7702` (`Stabilize search/data flow, harden rewrite parsing, and refine Winamp-style UI`)
+- Working tree: dirty (active implementation session in progress)
+- Head commit: `20e0362`
 
-## 2) Stack And Architecture (Current)
+## 2) Architecture State (Current)
 
-- Backend: Python 3.12, Flask API (`lyra_api.py`, `oracle/api/*`)
-- Data stores:
+- Backend: Python 3.12 + Flask (`lyra_api.py`, `oracle/api/*`)
+- Stores:
   - SQLite registry: `lyra_registry.db`
-  - Chroma vector store: `chroma_storage/`
-- Frontend: Electron direction with React/Vite renderer in `desktop/renderer-app/`
-- Core domains under `oracle/`: search, scoring, vibes/playlists, enrichment, discovery, acquisition
-- Runtime/source split contract documented in `docs/REPO_STRUCTURE.md`
+  - Chroma storage: `chroma_storage/`
+- Desktop runtime:
+  - Tauri host in `desktop/renderer-app/src-tauri/`
+  - React/Vite renderer in `desktop/renderer-app/`
+  - Canonical launcher: `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev`
+  - Docker is not required and not auto-started in unified launch path
+  - Unified runtime shell is active (Library, Semantic, Deep Cut, Now Playing, Queue, Artist Context, Oracle)
+  - Unified Oracle pane shows acquisition tier readiness/degraded status from backend `/api/status`
+  - Oracle queue action button now executes backend `/api/oracle/action/execute` routes
+  - Now Playing intelligence card uses dossier payload for:
+    - 10-dimension track profile
+    - cached lyrics/context (Genius cache payload)
+- Playback authority:
+  - Canonical backend player domain in `oracle/player/*`
+  - Persisted `player_state` and `player_queue` tables
+  - API surface: `/api/player/*`
+  - `/ws/player` is SSE event stream
+  - `/api/playback/record` retained as compatibility-only path
+  - Acquisition bootstrap snapshot exposed in `/api/health` and `/api/status` without Docker boot
+  - Oracle action routing now performs concrete backend actions for:
+    `queue_tracks`, `start_vibe`, `start_playlust`, and `switch_chaos_intensity`
 
-## 3) Live Catalog And Runtime Metrics
+## 3) Runtime Metrics
 
 From `python -m oracle status`:
 
-- Tracks (total): 2,454
-- Tracks (active): 2,454
+- Tracks total: 2,454
+- Tracks active: 2,454
 - Embeddings: 2,454
 - Scored tracks: 2,454
 - Vibes: 9
@@ -35,101 +51,37 @@ From `python -m oracle status`:
 - Spotify library rows: 4,026
 - Playback events: 30,680
 
-## 4) Services And Integrations State
+## 4) Verification Results (This Audit)
 
-From `scripts/ensure_workspace_docker.ps1` + `python -m oracle doctor` + desktop smoke:
+- `python -m pytest -q` -> `88 passed`
+- `cd desktop\renderer-app; npm run test` -> `1 file / 3 tests passed`
+- `cd desktop\renderer-app; npm run build` -> success
+- `cd desktop\renderer-app; npm run tauri:build -- --debug` -> success (MSI + NSIS debug bundles)
+- `powershell -ExecutionPolicy Bypass -File scripts/build_backend_sidecar.ps1` -> success (`desktop/renderer-app/src-tauri/bin/lyra_backend.exe`)
+- `powershell -ExecutionPolicy Bypass -File scripts/smoke_step1_step2.ps1 -StartupTimeoutSeconds 60 -SoakSeconds 20` -> success (full Step 1/2 path, including canonical player API + SSE checks)
+- `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SoakSeconds 10 -StartupTimeoutSeconds 60` -> success (smoke + forced restart recovery + SSE + stability soak)
+- `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev -HealthTimeoutSeconds 90 -LeaveRunning` -> success (cold start; backend + frontend active)
+- `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev -HealthTimeoutSeconds 30 -LeaveRunning` -> success (warm start; backend reused)
+- `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode packaged -SkipSidecarBuild` -> expected non-zero failure with clear error when packaged host binary is absent
+- `powershell -ExecutionPolicy Bypass -File scripts/check_docs_state.ps1` -> success
+- `python -m oracle status` -> success with healthy core metrics
 
-- Docker daemon: running
-- Healthy target containers: `prowlarr`, `rdtclient`, `slskd`
-- Acquisition tiers:
-  - Tier 1 Qobuz: OK
-  - Tier 2 Streamrip: executable adapter implemented in `oracle/acquirers/streamrip.py`; currently unavailable on this machine because `rip` CLI is not installed/configured
-  - Tier 3 slskd: OK
-  - Tier 4 Real-Debrid: OK
-  - Tier 5 SpotDL: OK
-- Lidarr endpoint: reachable
-- LLM provider: openai-compatible via Groq (`llama-3.3-70b-versatile`), API key present
-- LM Studio: offline (non-blocking in current profile)
+## 5) Documentation Truth Status
 
-## 5) Verification Results (This Audit Run)
+- Tracked markdown files: 26 (`git ls-files "*.md"`)
+- Relative markdown link check across tracked docs: passing
+- Forward plan authority: `docs/ROADMAP_ENGINE_TO_ENTITY.md`
+- Archived plan pointer: `docs/MASTER_PLAN_EXPANDED.md`
 
-### Test and build
+## 6) Active Gaps
 
-- `python -m pytest -q` -> `73 passed`
-- `npm run test` (`desktop/renderer-app`) -> `1 file / 3 tests passed`
-- `npm run build` (`desktop/renderer-app`) -> success (`vite` production bundle built)
+1. Clean-machine packaged installer validation for `lyra_backend.exe` sidecar flow.
+2. Native audio (`miniaudio`) production soak validation across real devices/sessions.
+3. Oracle action UX depth (chaos intensity presets + richer action outcome details).
+4. Runtime/source separation policy is still partial.
 
-### End-to-end smoke
+## 7) Immediate Next Pass
 
-- `scripts/smoke_desktop.ps1 -AllowLlmFailure` -> passed
-- Verified endpoints/flows in smoke output:
-  - health
-  - vibes
-  - library artists/tracks/albums
-  - artist detail
-  - album detail
-  - playlist detail
-  - flow
-  - stream
-  - search
-  - discovery
-  - queue
-
-## 6) Playlist Reality Check Against User Export
-
-From `scripts/analyze_playlist_export.py` against:
-`C:\Users\Admin\Documents\LYRA PROJECT\Playlist1.json`
-
-- Matched: 651 / 1390 (46.8%)
-- Missing: 739
-
-Interpretation:
-- The system can build reality-based playlists from the local library.
-- Parity with the full export is limited by local library coverage and match quality, not by fabricated recommendations.
-
-## 7) UI State (Current Direction)
-
-- Desktop renderer builds and tests pass.
-- Live backend data paths are active; fixture masking was removed for normal runtime in prior stabilization work.
-- Styling was moved away from retro-jukebox cues toward a more polished Winamp-successor direction while keeping the existing palette and UHD scaling support.
-- Recommendation surfaces are wired to live queue-backed/backend-backed data in normal mode.
-
-## 8) Documentation Truth Status
-
-Checked all tracked markdown files (`git ls-files "*.md"`):
-
-- Tracked markdown files: 14
-- Relative markdown link check: no broken relative links found
-- Historical file explicitly marked as old by design:
-  - `docs/MASTER_PLAN_EXPANDED_OLD.md`
-
-Docs with explicit current-state role:
-
-- `README.md`
-- `docs/MASTER_PLAN_EXPANDED.md`
-- `docs/MISSING_FEATURES_REGISTRY.md`
-- `docs/WORKLIST.md` (last updated: March 5, 2026)
-- `docs/REPO_STRUCTURE.md`
-
-## 9) Known Gaps / Not Fully Closed Yet
-
-- Live playback ingestion verification still depends on active foobar2000 + BeefWeb session confirmation.
-- Agent action responses are available but deeper app-side action execution remains partial.
-- Artist graph exists and is usable, but richer edge semantics are still pending for full discovery depth.
-- Runtime artifacts are still near source and should eventually move to a stricter runtime root model.
-- Spotify history to local-track matching quality can still improve for better export parity.
-
-## 10) What Is 100% Confirmed In This Audit
-
-- Core backend tests pass.
-- Renderer tests and production build pass.
-- Docker target services needed for acquisition stack are healthy.
-- API and desktop contract smoke passes across key routes.
-- LLM configuration is live and reachable with selected model.
-- Documentation link integrity for tracked markdown files is currently clean.
-
-## 11) Suggested Next Reality Pass (If Continuing Immediately)
-
-1. Run a live foobar2000 playback session and verify new `playback_history` inserts in real time.
-2. Improve Spotify export matching normalization/fuzzy logic and re-run playlist audit to raise match coverage.
-3. Continue moving mutable runtime outputs out of repo-root proximity to tighten source/runtime separation.
+1. Run packaged installer validation on a clean machine to confirm sidecar discovery/runtime.
+2. Run parity-hardening acceptance (4-hour soak + pause/seek/repeat/recovery across restart).
+3. Expand oracle action UX depth (chaos presets and richer outcome feedback).

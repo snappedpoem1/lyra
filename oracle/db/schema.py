@@ -338,6 +338,41 @@ def _apply_schema() -> bool:
 
     c.execute(
         """
+        CREATE TABLE IF NOT EXISTS player_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            status TEXT NOT NULL DEFAULT 'idle',
+            current_track_id TEXT,
+            current_queue_index INTEGER NOT NULL DEFAULT 0,
+            position_ms INTEGER NOT NULL DEFAULT 0,
+            duration_ms INTEGER NOT NULL DEFAULT 0,
+            volume REAL NOT NULL DEFAULT 0.82,
+            muted INTEGER NOT NULL DEFAULT 0,
+            shuffle INTEGER NOT NULL DEFAULT 0,
+            repeat_mode TEXT NOT NULL DEFAULT 'off',
+            updated_at REAL NOT NULL DEFAULT (strftime('%s', 'now'))
+        )
+        """
+    )
+    c.execute(
+        """
+        INSERT OR IGNORE INTO player_state
+        (id, status, current_track_id, current_queue_index, position_ms, duration_ms, volume, muted, shuffle, repeat_mode, updated_at)
+        VALUES (1, 'idle', NULL, 0, 0, 0, 0.82, 0, 0, 'off', strftime('%s', 'now'))
+        """
+    )
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS player_queue (
+            position INTEGER PRIMARY KEY,
+            track_id TEXT NOT NULL,
+            added_at REAL NOT NULL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (track_id) REFERENCES tracks(track_id)
+        )
+        """
+    )
+
+    c.execute(
+        """
         CREATE TABLE IF NOT EXISTS taste_profile (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             dimension TEXT NOT NULL UNIQUE,
@@ -362,6 +397,7 @@ def _apply_schema() -> bool:
         """
     )
     c.execute("CREATE INDEX IF NOT EXISTS idx_queue_position ON radio_queue(position)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_player_queue_track_id ON player_queue(track_id)")
 
     c.execute(
         """

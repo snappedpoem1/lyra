@@ -5,6 +5,7 @@ import {
   agentSuggestionSchema,
   artistShrineSchema,
   constellationSchema,
+  deepCutHuntSchema,
   doctorSchema,
   dossierSchema,
   healthSchema,
@@ -14,6 +15,7 @@ import {
   libraryArtistsSchema,
   libraryTracksSchema,
   playlistDetailSchema,
+  playlustGenerateSchema,
   queueSchema,
   radioResultsSchema,
   searchSchema,
@@ -209,6 +211,171 @@ export async function getOracleRecommendations(mode: OracleMode, seedTrackId?: s
     }
     throw error;
   }
+}
+
+export async function searchSemanticTracks(query: string, n = 20): Promise<TrackListItem[]> {
+  const safeQuery = query.trim();
+  if (!safeQuery) {
+    return [];
+  }
+  try {
+    const payload = await requestJson("/api/search", searchSchema, {
+      method: "POST",
+      body: JSON.stringify({ query: safeQuery, n, natural_language: true }),
+    });
+    return payload.results.map((row) => mapTrack(row));
+  } catch (error) {
+    if (fixtureModeEnabled()) {
+      return useFixtureFallback(error, searchResults.tracks);
+    }
+    throw error;
+  }
+}
+
+export interface DeepCutCandidate {
+  track: TrackListItem;
+  obscurityScore: number;
+  acclaimScore: number;
+  popularityPercentile: number;
+  tags: string[];
+}
+
+export async function huntDeepCut(options: {
+  genre?: string;
+  artist?: string;
+  minObscurity?: number;
+  maxObscurity?: number;
+  minAcclaim?: number;
+  limit?: number;
+} = {}): Promise<DeepCutCandidate[]> {
+  const payload = await requestJson("/api/deep-cut/hunt", deepCutHuntSchema, {
+    method: "POST",
+    body: JSON.stringify({
+      genre: options.genre,
+      artist: options.artist,
+      min_obscurity: options.minObscurity ?? 0.6,
+      max_obscurity: options.maxObscurity ?? 2.0,
+      min_acclaim: options.minAcclaim ?? 0.0,
+      limit: options.limit ?? 20,
+    }),
+  });
+  return payload.results.map((row) => ({
+    track: mapTrack(row),
+    obscurityScore: typeof row.obscurity_score === "number" ? row.obscurity_score : Number(row.obscurity_score ?? 0),
+    acclaimScore: typeof row.acclaim_score === "number" ? row.acclaim_score : Number(row.acclaim_score ?? 0),
+    popularityPercentile: typeof row.popularity_percentile === "number" ? row.popularity_percentile : Number(row.popularity_percentile ?? 0),
+    tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
+  }));
+}
+
+export interface PlaylustArc {
+  runUuid?: string;
+  narrative?: string;
+  tracks: TrackListItem[];
+  acts: Array<{
+    act: string;
+    tracks: TrackListItem[];
+  }>;
+}
+
+export async function generatePlaylustArc(options: {
+  mood?: string;
+  durationMinutes?: number;
+  name?: string;
+  useDeepcut?: boolean;
+} = {}): Promise<PlaylustArc> {
+  const payload = await requestJson("/api/playlust/generate", playlustGenerateSchema, {
+    method: "POST",
+    body: JSON.stringify({
+      mood: options.mood,
+      duration_minutes: options.durationMinutes ?? 60,
+      name: options.name,
+      use_deepcut: options.useDeepcut ?? true,
+    }),
+  });
+  return {
+    runUuid: payload.run_uuid,
+    narrative: payload.narrative,
+    tracks: Array.isArray(payload.tracks) ? payload.tracks.map((row) => mapTrack(row)) : [],
+    acts: Array.isArray(payload.acts)
+      ? payload.acts.map((act) => ({
+          act: act.act,
+          tracks: act.tracks.map((row) => mapTrack(row)),
+        }))
+      : [],
+  };
+}
+
+const oracleActionResponseSchema = z.object({
+  status: z.string().optional(),
+  action_type: z.string().optional(),
+}).passthrough();
+
+const acquisitionStatusSchema = z.object({
+  status: z.string().default("unknown"),
+  available_tiers: z.number().default(0),
+  total_tiers: z.number().default(0),
+  tiers: z.record(z.object({
+    available: z.boolean().optional(),
+    description: z.string().optional(),
+  }).passthrough()).default({}),
+  checked_at: z.number().nullable().optional(),
+  error: z.string().nullable().optional(),
+}).passthrough();
+
+const statusSchema = z.object({
+  status: z.string(),
+  acquisition: acquisitionStatusSchema.optional(),
+}).passthrough();
+
+export interface AcquisitionBootstrapStatus {
+  status: string;
+  availableTiers: number;
+  totalTiers: number;
+  checkedAt: number | null;
+  degradedTiers: string[];
+  error?: string;
+}
+
+export async function getAcquisitionBootstrapStatus(): Promise<AcquisitionBootstrapStatus> {
+  const payload = await requestJson("/api/status", statusSchema, undefined, 5000, 0);
+  const acquisition = payload.acquisition;
+  if (!acquisition) {
+    return {
+      status: "unavailable",
+      availableTiers: 0,
+      totalTiers: 0,
+      checkedAt: null,
+      degradedTiers: [],
+    };
+  }
+
+  const tiers = acquisition.tiers ?? {};
+  const degradedTiers = Object.entries(tiers)
+    .filter(([, value]) => !value.available)
+    .map(([key]) => key);
+
+  return {
+    status: acquisition.status ?? "unknown",
+    availableTiers: acquisition.available_tiers ?? 0,
+    totalTiers: acquisition.total_tiers ?? 0,
+    checkedAt: acquisition.checked_at ?? null,
+    degradedTiers,
+    error: acquisition.error ?? undefined,
+  };
+}
+
+export async function executeOracleAction(
+  actionType: string,
+  payload: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> {
+  return requestJson("/api/oracle/action/execute", oracleActionResponseSchema, {
+    method: "POST",
+    body: JSON.stringify({
+      action_type: actionType,
+      payload,
+    }),
+  }) as Promise<Record<string, unknown>>;
 }
 
 export async function getQueue(mode: OracleMode = "flow", seedTrackId?: string): Promise<QueueState> {

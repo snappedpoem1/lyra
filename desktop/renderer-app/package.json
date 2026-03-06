@@ -7,9 +7,13 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest --passWithNoTests"
+    "test": "vitest --passWithNoTests",
+    "backend:build": "powershell -ExecutionPolicy Bypass -File ..\\..\\scripts\\build_backend_sidecar.ps1",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "npm run backend:build && tauri build"
   },
   "dependencies": {
+    "@tauri-apps/api": "^1.6.0",
     "@tanstack/react-query": "^5.66.0",
     "@tanstack/react-router": "^1.111.10",
     "framer-motion": "^12.4.7",
@@ -19,6 +23,7 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^1.6.3",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.4.1",

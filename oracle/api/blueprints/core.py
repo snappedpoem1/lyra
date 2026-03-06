@@ -81,6 +81,23 @@ def _cors_config() -> dict:
     return {"allowed_origins": origins}
 
 
+def _acquisition_bootstrap_status() -> dict:
+    """Return startup tier availability snapshot (non-blocking, no Docker boot)."""
+    try:
+        from oracle.acquirers.bootstrap_status import get_snapshot
+
+        return get_snapshot()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "degraded",
+            "docker_required": False,
+            "error": str(exc),
+            "tiers": {},
+            "available_tiers": 0,
+            "total_tiers": 0,
+        }
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -124,6 +141,7 @@ def api_health():
             "database": db,
             "library": lib,
             "feature_flags": feature_flags,
+            "acquisition": _acquisition_bootstrap_status(),
             "llm": llm_status,
             "auth": auth,
             "cors": cors,
@@ -164,6 +182,7 @@ def api_status():
             "version": VERSION,
             "database": db,
             "library": lib,
+            "acquisition": _acquisition_bootstrap_status(),
             "llm": llm_info,
             "features": _feature_flags(),
         })

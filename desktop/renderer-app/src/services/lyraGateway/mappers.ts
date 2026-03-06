@@ -222,9 +222,17 @@ export function mapRadioQueue(payload: { queue: Array<Record<string, unknown>>; 
 export function mapDossier(payload: Record<string, unknown>): TrackDossier {
   const track = mapTrack(payload.track as Record<string, unknown>);
   const structurePayload = (payload.structure ?? null) as Record<string, unknown> | null;
+  const dimensionPayload = (payload.dimensions ?? null) as Record<string, unknown> | null;
   const scores = Object.fromEntries(
-    DIMENSIONS.map((key) => [key, track.scoreChips.find((chip) => chip.key === key)?.value ?? null]),
+    DIMENSIONS.map((key) => {
+      const fromPayload = dimensionPayload ? dimensionPayload[key] : undefined;
+      if (typeof fromPayload === "number") {
+        return [key, fromPayload];
+      }
+      return [key, track.scoreChips.find((chip) => chip.key === key)?.value ?? null];
+    }),
   ) as TrackDossier["scores"];
+  const lyricsPayload = (payload.lyrics ?? null) as Record<string, unknown> | null;
 
   return {
     track,
@@ -250,6 +258,18 @@ export function mapDossier(payload: Record<string, unknown>): TrackDossier {
       year: typeof row.original_year === "number" ? row.original_year : undefined,
       confidence: typeof row.confidence === "number" ? row.confidence : undefined,
     })) : [],
+    lyrics: lyricsPayload
+      ? {
+          provider: lyricsPayload.provider ? String(lyricsPayload.provider) : undefined,
+          state: lyricsPayload.lyrics_state ? String(lyricsPayload.lyrics_state) : undefined,
+          excerpt: lyricsPayload.lyrics_excerpt ? String(lyricsPayload.lyrics_excerpt) : undefined,
+          releaseDate: lyricsPayload.release_date ? String(lyricsPayload.release_date) : undefined,
+          annotationCount: typeof lyricsPayload.annotation_count === "number" ? lyricsPayload.annotation_count : undefined,
+          pageviews: typeof lyricsPayload.pageviews === "number" ? lyricsPayload.pageviews : undefined,
+          url: lyricsPayload.url ? String(lyricsPayload.url) : undefined,
+          artUrl: lyricsPayload.song_art_image_url ? String(lyricsPayload.song_art_image_url) : undefined,
+        }
+      : undefined,
     remixes: null,
     provenanceNotes: Array.isArray(payload.provenance_notes) ? payload.provenance_notes.map(String) : [],
     acquisitionNotes: Array.isArray(payload.acquisition_notes) ? payload.acquisition_notes.map(String) : [],

@@ -126,6 +126,16 @@ export interface TrackDossier {
   filepath?: string;
   fileType?: string;
   scores: Record<DimensionKey, number | null>;
+  lyrics?: {
+    provider?: string;
+    state?: string;
+    excerpt?: string;
+    releaseDate?: string;
+    annotationCount?: number;
+    pageviews?: number;
+    url?: string;
+    artUrl?: string;
+  };
   structure?: { bpm?: number; key?: string; hasDrop?: boolean; dropTimestamp?: number; energyProfile?: number[] };
   lineage?: Array<{ source: string; target: string; type: string; weight?: number }>;
   samples?: Array<{ artist: string; title: string; year?: number; confidence?: number }>;

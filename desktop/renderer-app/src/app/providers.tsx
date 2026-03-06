@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RouterProvider } from "@tanstack/react-router";
 import { useMemo } from "react";
-import { router } from "@/app/router";
+import { UnifiedWorkspace } from "@/app/UnifiedWorkspace";
 
 export function AppProviders() {
   const queryClient = useMemo(() => new QueryClient({
@@ -15,7 +14,7 @@ export function AppProviders() {
   }), []);
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <UnifiedWorkspace />
     </QueryClientProvider>
   );
 }

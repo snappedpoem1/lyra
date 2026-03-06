@@ -7,18 +7,17 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
-$python = Join-Path $repoRoot ".venv\Scripts\python.exe"
-if (-not (Test-Path $python)) {
-  $python = "python"
+$unifiedScript = Join-Path $repoRoot "scripts\start_lyra_unified.ps1"
+if (-not (Test-Path $unifiedScript)) {
+  throw "Unified launcher not found: $unifiedScript"
 }
 
 if ($DryRun) {
-  Write-Host "[dry-run] Would start API: $python lyra_api.py"
-  Write-Host "[dry-run] Would run: npm run dev (in desktop/)"
+  Write-Host "[dry-run] Deprecated wrapper. Would run unified launcher:"
+  Write-Host "[dry-run] powershell -ExecutionPolicy Bypass -File scripts\\start_lyra_unified.ps1 -Mode dev"
   exit 0
 }
 
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "& '$python' lyra_api.py"
-Start-Sleep -Seconds 2
-Set-Location (Join-Path $repoRoot "desktop")
-npm run dev
+Write-Warning "scripts/dev_desktop.ps1 is deprecated. Delegating to scripts/start_lyra_unified.ps1."
+powershell -ExecutionPolicy Bypass -File $unifiedScript -Mode dev
+exit $LASTEXITCODE

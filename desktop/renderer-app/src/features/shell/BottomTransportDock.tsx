@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { audioAnalyzer } from "@/services/audio/audioAnalyzer";
 import { audioEngine } from "@/services/audio/audioEngine";
+import { listenHostBootStatus, listenHostTransport } from "@/services/host/tauriHost";
 import { reportPlayback } from "@/services/audio/playbackReporter";
 import { getFactDrop } from "@/services/lyraGateway/queries";
 import { useAgentStore } from "@/stores/agentStore";
@@ -133,6 +134,60 @@ export function BottomTransportDock() {
       }
     });
 
+    let stopHostTransport: () => void = () => undefined;
+    let stopHostBoot: () => void = () => undefined;
+
+    const executeTransportAction = (action: string) => {
+      const playerState = usePlayerStore.getState();
+      const queueState = useQueueStore.getState();
+      const current = playerState.track ?? queueState.queue.items[queueState.queue.currentIndex] ?? null;
+
+      if (action === "play-pause") {
+        if (!current) return;
+        if (playerState.status === "playing") {
+          audioEngine.pause();
+          return;
+        }
+        if (playerState.status === "paused") {
+          void audioEngine.play();
+          return;
+        }
+        void audioEngine.playTrack(current);
+        return;
+      }
+
+      if (action === "next") {
+        if (!queueState.queue.items.length) return;
+        const next = Math.min(queueState.queue.items.length - 1, queueState.queue.currentIndex + 1);
+        queueState.setCurrentIndex(next);
+        void audioEngine.playTrack(queueState.queue.items[next]);
+        return;
+      }
+
+      if (action === "previous") {
+        if (!queueState.queue.items.length) return;
+        if (playerState.currentTimeSec > 5) {
+          audioEngine.element.currentTime = 0;
+          return;
+        }
+        const prev = Math.max(0, queueState.queue.currentIndex - 1);
+        queueState.setCurrentIndex(prev);
+        void audioEngine.playTrack(queueState.queue.items[prev]);
+      }
+    };
+
+    void (async () => {
+      stopHostTransport = await listenHostTransport((payload) => {
+        executeTransportAction(payload.action);
+      });
+
+      stopHostBoot = await listenHostBootStatus((payload) => {
+        if (payload.phase === "backend" && !payload.ready) {
+          usePlayerStore.getState().setError(payload.message);
+        }
+      });
+    })();
+
     let frame = 0;
     let animationId = 0;
     const loop = () => {
@@ -144,6 +199,8 @@ export function BottomTransportDock() {
     animationId = window.requestAnimationFrame(loop);
 
     return () => {
+      stopHostTransport();
+      stopHostBoot();
       unsubscribe();
       window.cancelAnimationFrame(animationId);
     };

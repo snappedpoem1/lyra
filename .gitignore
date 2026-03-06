@@ -40,6 +40,9 @@ scripts/.spotify_cache
 dist/
 build/
 node_modules/
+desktop/renderer-app/src-tauri/target/
+desktop/renderer-app/src-tauri/bin/*.exe
+desktop/renderer-app/src-tauri/gen/
 
 # Runtime Data (large / machine-generated / personal)
 chroma_storage/

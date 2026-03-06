@@ -140,6 +140,24 @@ export const radioResultsSchema = z.object({
   count: z.number(),
 });
 
+export const deepCutHuntSchema = z.object({
+  count: z.number(),
+  results: z.array(z.record(z.any())),
+});
+
+export const playlustGenerateSchema = z.object({
+  run_uuid: z.string().optional(),
+  track_count: z.number().optional(),
+  narrative: z.string().optional(),
+  acts: z.array(
+    z.object({
+      act: z.string(),
+      tracks: z.array(z.record(z.any())),
+    }),
+  ).optional(),
+  tracks: z.array(z.record(z.any())).optional(),
+});
+
 export const queueSchema = z.object({
   queue: z.array(z.record(z.any())),
   count: z.number(),
@@ -199,6 +217,17 @@ export const dossierSchema = z.object({
   structure: z.any().optional(),
   lineage: z.array(z.record(z.any())).optional(),
   samples: z.array(z.record(z.any())).optional(),
+  dimensions: z.record(z.number().nullable()).optional(),
+  lyrics: z.object({
+    provider: z.string().optional(),
+    lyrics_state: z.string().nullable().optional(),
+    lyrics_excerpt: z.string().nullable().optional(),
+    release_date: z.union([z.string(), z.number()]).nullable().optional(),
+    annotation_count: z.number().nullable().optional(),
+    pageviews: z.number().nullable().optional(),
+    url: z.string().nullable().optional(),
+    song_art_image_url: z.string().nullable().optional(),
+  }).optional(),
   fact: z.string().nullable().optional(),
   provenance_notes: z.array(z.string()),
   acquisition_notes: z.array(z.string()),

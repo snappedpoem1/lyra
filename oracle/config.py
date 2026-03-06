@@ -7,6 +7,7 @@ Every other module imports from here.
 
 import os
 import shutil
+import sys
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
@@ -20,7 +21,16 @@ from oracle.llm_config import load_llm_config, resolve_llm_config
 
 
 # â”€â”€ Resolve project root (wherever start.py lives) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+def _resolve_project_root() -> Path:
+    env_root = os.environ.get("LYRA_PROJECT_ROOT", "").strip()
+    if env_root:
+        return Path(env_root)
+    if getattr(sys, "frozen", False):
+        return Path.cwd()
+    return Path(__file__).resolve().parent.parent
+
+
+PROJECT_ROOT = _resolve_project_root()
 
 if load_dotenv:
     env_file = PROJECT_ROOT / ".env"

@@ -58,6 +58,12 @@ loguru
 flask
 flask-cors
 
+# Native backend audio playback
+miniaudio>=1.61
+
+# Packaging
+pyinstaller>=6.6
+
 # Sonic DNA / embeddings (optional — heavy, skip if you want lean install)
 # Uncomment these if you want ChromaDB + AI features (pinned for stability):
 # chromadb==1.5.0

@@ -69,6 +69,13 @@ def create_app() -> Flask:
     init_auth(app)
     register_blueprints(app)
     init_scheduler(app)
+    try:
+        # Bootstrap acquisition tier visibility without starting Docker/services.
+        from oracle.acquirers.bootstrap_status import start_background_refresh
+
+        start_background_refresh()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[acquisition-bootstrap] startup refresh failed: %s", exc)
     _maybe_start_clap_prewarm()
 
     return app
