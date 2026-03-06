@@ -8,7 +8,7 @@ This is the current repo/runtime snapshot verified from this workspace.
 
 - Branch: `main`
 - Working tree: dirty (active implementation session in progress)
-- Latest committed baseline before this audit: `22b6e34` (Docker demoted to optional legacy runtime)
+- Latest committed baseline before this audit: `b2bcde4` (bundled packaged acquisition runtime tools)
 
 ## 2) Architecture State (Current)
 
@@ -45,21 +45,26 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Runtime-service packaging policy now exposed at:
     - `GET /api/runtime/services`
   - Oracle action routing now performs concrete backend actions for:
-    `queue_tracks`, `start_vibe`, `start_playlust`, and `switch_chaos_intensity`
+    `queue_tracks`, `start_vibe`, `start_playlust`, `switch_chaos_intensity`, and `request_acquisition`
   - Recommendation broker contract now exposed at:
     - `POST /api/recommendations/oracle`
+    - `POST /api/recommendations/oracle/feedback`
   - Broker currently fuses:
     - local radio engine (`flow`, `chaos`, `discovery`)
     - Last.fm similar-track signals when API key is configured
     - ListenBrainz community top-recording signals
+  - Recommendation feedback is now persisted in SQLite and used as a lightweight ranking bias for future broker results.
   - Acquisition tooling runtime now supports bundled lookup for:
     - `streamrip` (`rip.exe` / `rip`) from `runtime/bin`, `runtime/tools`, or `runtime/acquisition-tools`
     - `spotdl` (`spotdl.exe` / `spotdl`) from the same bundled runtime locations
   - Bundled acquisition helper executables are now built and staged by:
     - `scripts/build_runtime_tools.ps1`
     - `scripts/build_packaged_runtime.ps1`
-  - Tauri packaged resources now receive runtime helpers under:
-    - `desktop/renderer-app/src-tauri/bin/runtime/bin`
+  - Generated packaged artifacts now stage under:
+    - `.lyra-build/bin`
+    - `.lyra-build/bin/runtime/bin`
+  - Tauri packaged resources now consume:
+    - `.lyra-build/bin`
   - Packaged backend startup now exports `LYRA_RUNTIME_ROOT` and prepends bundled runtime bins to backend `PATH`
   - Docker-class services are now explicitly classified as optional legacy/external layers rather than core runtime architecture
   - Broker responses include:
@@ -67,6 +72,9 @@ This is the current repo/runtime snapshot verified from this workspace.
     - provider availability/degradation messages
     - per-track provenance signals
     - acquisition leads for tracks not yet in the local library
+  - Unified Oracle UI now includes forward actions on broker output:
+    - recommendation actions: `Keep`, `Queue`, `Play`, `Skip`
+    - acquisition lead actions: `Acquire`, `Dismiss`
 
 ## 3) Runtime Metrics
 
@@ -84,11 +92,11 @@ From `python -m oracle status`:
 
 ## 4) Verification Results (This Audit)
 
-- `python -m pytest -q` -> `93 passed`
+- `python -m pytest -q` -> `96 passed`
 - `cd desktop\renderer-app; npm run test` -> `1 file / 3 tests passed`
 - `cd desktop\renderer-app; npm run build` -> success
-- `powershell -ExecutionPolicy Bypass -File scripts/build_backend_sidecar.ps1` -> success (`desktop/renderer-app/src-tauri/bin/lyra_backend.exe`)
-- `powershell -ExecutionPolicy Bypass -File scripts/build_runtime_tools.ps1` -> success (`runtime/bin/*.exe` plus staged Tauri runtime helpers)
+- `powershell -ExecutionPolicy Bypass -File scripts/build_backend_sidecar.ps1` -> success (`.lyra-build/bin/lyra_backend.exe`)
+- `powershell -ExecutionPolicy Bypass -File scripts/build_runtime_tools.ps1` -> success (`runtime/bin/*.exe` plus staged `.lyra-build/bin/runtime/bin` helpers)
 - `powershell -ExecutionPolicy Bypass -File scripts/build_packaged_runtime.ps1 -SkipLaunchCheck -SkipToolSmokeCheck` -> success
 - `powershell -ExecutionPolicy Bypass -File scripts/smoke_step1_step2.ps1 -StartupTimeoutSeconds 60 -SoakSeconds 20` -> success (full Step 1/2 path, including canonical player API + SSE checks)
 - `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SoakSeconds 10 -StartupTimeoutSeconds 60` -> success (smoke + forced restart recovery + SSE + stability soak)
@@ -110,15 +118,13 @@ From `python -m oracle status`:
 
 1. Clean-machine packaged installer validation for bundled `lyra_backend.exe`, `streamrip`, `spotdl`, `ffmpeg`, and `ffprobe`.
 2. Native audio (`miniaudio`) production soak validation across real devices/sessions.
-3. Recommendation outcome logging/feedback loop is not yet captured for broker acceptance, skips, and replays.
-4. Acquisition radar is visible in UI but not yet wired to one-click acquisition actions.
-5. Runtime/source separation policy is still partial.
-6. One successful packaged/runtime-backed tier-2 streamrip acquisition proof is still pending.
+3. Runtime/source separation policy is still partial beyond the new dedicated `.lyra-build` staging root.
+4. One successful packaged/runtime-backed tier-2 streamrip acquisition proof is still pending.
 
 ## 7) Immediate Next Pass
 
 1. Run packaged installer validation on a clean machine to confirm bundled sidecar + runtime-tool discovery.
 2. Run parity-hardening acceptance (4-hour soak + pause/seek/repeat/recovery across restart).
-3. Add broker feedback/event logging so recommendation quality can be measured by accepts/skips/replays.
-4. Turn acquisition radar leads into one-click forward actions from the Oracle surface.
-5. Validate one successful packaged/runtime-backed streamrip acquisition.
+3. Validate one successful packaged/runtime-backed streamrip acquisition.
+4. Continue runtime/source separation cleanup after installer proof.
+5. Continue graph/credits/structure depth passes once release-gate proof is complete.

@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+import sqlite3
+from pathlib import Path
 
 import lyra_api
 import oracle.api.blueprints.recommendations as recommendations_bp
@@ -47,6 +49,39 @@ def test_recommendations_api_contract(client: Any, monkeypatch: pytest.MonkeyPat
     assert payload["seed_track_id"] == "seed-1"
     assert payload["provider_status"]["local"]["available"] is True
     assert payload["candidates"][0]["track_id"] == "t-1"
+
+
+def test_recommendations_feedback_api_contract(client: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        recommendations_bp,
+        "record_feedback",
+        lambda **_: {
+            "status": "ok",
+            "feedback_id": 7,
+            "feedback_type": "accepted",
+            "track_id": "t-7",
+            "artist": "Artist",
+            "title": "Title",
+        },
+    )
+
+    response = client.post(
+        "/api/recommendations/oracle/feedback",
+        json={
+            "feedback_type": "accepted",
+            "track_id": "t-7",
+            "artist": "Artist",
+            "title": "Title",
+            "mode": "flow",
+            "novelty_band": "stretch",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["feedback_type"] == "accepted"
+    assert payload["track_id"] == "t-7"
 
 
 def test_recommendation_broker_merges_provider_signals(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,3 +161,122 @@ def test_recommendation_broker_merges_provider_signals(monkeypatch: pytest.Monke
     assert len(payload["candidates"][0]["provider_signals"]) == 2
     assert payload["candidates"][0]["broker_score"] == pytest.approx(0.52)
     assert payload["acquisition_candidates"][0]["provider"] == "listenbrainz"
+
+
+def test_recommendation_broker_feedback_bias_reorders_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "feedback.db"
+
+    def _connect(timeout: float = 5.0) -> sqlite3.Connection:
+        del timeout
+        return sqlite3.connect(db_path)
+
+    monkeypatch.setattr(broker, "get_connection", _connect)
+    monkeypatch.setattr(broker, "get_write_mode", lambda: "apply_allowed")
+
+    seed_track = {
+        "track_id": "seed-1",
+        "artist": "Seed Artist",
+        "title": "Seed Title",
+        "filepath": "C:/Music/seed.flac",
+        "file_exists": True,
+    }
+    track_a = {
+        "track_id": "track-a",
+        "artist": "Artist A",
+        "title": "Title A",
+        "filepath": "C:/Music/a.flac",
+        "file_exists": True,
+    }
+    track_b = {
+        "track_id": "track-b",
+        "artist": "Artist B",
+        "title": "Title B",
+        "filepath": "C:/Music/b.flac",
+        "file_exists": True,
+    }
+    track_map = {
+        "seed-1": seed_track,
+        "track-a": track_a,
+        "track-b": track_b,
+    }
+
+    monkeypatch.setattr(broker, "_load_latest_track_id", lambda: "seed-1")
+    monkeypatch.setattr(broker, "_load_track_from_library", lambda track_id: track_map.get(track_id))
+    monkeypatch.setattr(
+        broker,
+        "_recommend_from_local",
+        lambda **_: (
+            [
+                {
+                    "track": dict(track_a),
+                    "provider": "local",
+                    "label": "local-flow",
+                    "raw_score": 0.5,
+                    "weighted_score": 0.3,
+                    "reason": "Local picked A.",
+                },
+                {
+                    "track": dict(track_b),
+                    "provider": "local",
+                    "label": "local-flow",
+                    "raw_score": 0.5,
+                    "weighted_score": 0.3,
+                    "reason": "Local picked B.",
+                },
+            ],
+            {"available": True, "used": True, "weight": 0.6, "message": "ok", "matched_local_tracks": 2, "acquisition_candidates": 0},
+        ),
+    )
+    monkeypatch.setattr(
+        broker,
+        "_recommend_from_lastfm",
+        lambda **_: (
+            [],
+            [],
+            {"available": False, "used": False, "weight": 0.2, "message": "offline", "matched_local_tracks": 0, "acquisition_candidates": 0},
+        ),
+    )
+    monkeypatch.setattr(
+        broker,
+        "_recommend_from_listenbrainz",
+        lambda **_: (
+            [],
+            [],
+            {"available": False, "used": False, "weight": 0.2, "message": "offline", "matched_local_tracks": 0, "acquisition_candidates": 0},
+        ),
+    )
+
+    broker.record_feedback(
+        feedback_type="accepted",
+        track_id="track-a",
+        artist="Artist A",
+        title="Title A",
+        mode="flow",
+        novelty_band="stretch",
+        provider="local",
+    )
+    broker.record_feedback(
+        feedback_type="skipped",
+        track_id="track-b",
+        artist="Artist B",
+        title="Title B",
+        mode="flow",
+        novelty_band="stretch",
+        provider="local",
+    )
+
+    payload = broker.recommend_tracks(
+        seed_track_id="seed-1",
+        mode="flow",
+        novelty_band="stretch",
+        limit=6,
+        provider_weights={"local": 1.0, "lastfm": 0.0, "listenbrainz": 0.0},
+    )
+
+    assert payload["candidates"][0]["track_id"] == "track-a"
+    assert payload["candidates"][0]["feedback_bias"] > 0
+    assert payload["candidates"][1]["track_id"] == "track-b"
+    assert payload["candidates"][1]["feedback_bias"] < 0

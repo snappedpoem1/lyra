@@ -7,7 +7,7 @@ from typing import Any
 
 from flask import Blueprint, jsonify, request
 
-from oracle.db.schema import get_connection
+from oracle.db.schema import get_connection, get_write_mode
 from oracle.player.service import get_player_service
 from oracle.radio import Radio
 
@@ -141,6 +141,108 @@ def _queue_run_tracks(service: Any, run: Any) -> dict[str, Any]:
     queued["missing_paths"] = missing_paths
     queued["run_track_count"] = len(paths)
     return queued
+
+
+def _library_track_exists_for_artist_title(artist: str, title: str) -> str | None:
+    conn = get_connection(timeout=10.0)
+    try:
+        cursor = conn.cursor()
+        row = cursor.execute(
+            """
+            SELECT track_id
+            FROM tracks
+            WHERE status = 'active'
+              AND LOWER(artist) = LOWER(?)
+              AND LOWER(title) = LOWER(?)
+            ORDER BY COALESCE(updated_at, created_at, added_at, 0) DESC
+            LIMIT 1
+            """,
+            (artist.strip(), title.strip()),
+        ).fetchone()
+    finally:
+        conn.close()
+    return str(row[0]).strip() if row and row[0] else None
+
+
+def _request_acquisition_for_lead(payload_dict: dict[str, Any]) -> dict[str, Any]:
+    artist = str(payload_dict.get("artist") or "").strip()
+    title = str(payload_dict.get("title") or "").strip()
+    if not artist or not title:
+        raise ValueError("payload.artist and payload.title are required")
+
+    existing_track_id = _library_track_exists_for_artist_title(artist, title)
+    if existing_track_id:
+        return {
+            "status": "already_owned",
+            "action_type": "request_acquisition",
+            "artist": artist,
+            "title": title,
+            "track_id": existing_track_id,
+            "inserted": False,
+        }
+
+    provider = str(payload_dict.get("provider") or "oracle").strip() or "oracle"
+    reason = str(payload_dict.get("reason") or "").strip()
+    search_query = str(payload_dict.get("search_query") or f"{artist} {title}").strip()
+    try:
+        priority_score = float(payload_dict.get("score") or 0.0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("payload.score must be numeric when provided") from exc
+
+    if get_write_mode() != "apply_allowed":
+        return {
+            "status": "write_blocked",
+            "action_type": "request_acquisition",
+            "artist": artist,
+            "title": title,
+            "provider": provider,
+            "inserted": False,
+        }
+
+    conn = get_connection(timeout=10.0)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO acquisition_queue
+                (artist, title, priority_score, source, search_query, playlist_name, status, added_at)
+            SELECT ?, ?, ?, ?, ?, ?, 'pending', datetime('now')
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM acquisition_queue
+                WHERE LOWER(artist) = LOWER(?)
+                  AND LOWER(title) = LOWER(?)
+                  AND status != 'completed'
+            )
+            """,
+            (
+                artist,
+                title,
+                priority_score,
+                f"oracle_broker:{provider}",
+                search_query,
+                "oracle_broker",
+                artist,
+                title,
+            ),
+        )
+        inserted = cursor.rowcount > 0
+        queue_id = int(cursor.lastrowid or 0) if inserted else None
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "status": "queued" if inserted else "already_pending",
+        "action_type": "request_acquisition",
+        "artist": artist,
+        "title": title,
+        "provider": provider,
+        "queue_id": queue_id,
+        "inserted": inserted,
+        "search_query": search_query,
+        "reason": reason,
+    }
 
 
 def _execute_start_vibe(service: Any, payload_dict: dict[str, Any]) -> dict[str, Any]:
@@ -359,6 +461,9 @@ def api_oracle_action_execute() -> tuple[Any, int] | Any:
 
         if action_type == "start_playlust":
             return jsonify(_execute_start_playlust(service, payload_dict))
+
+        if action_type == "request_acquisition":
+            return jsonify(_request_acquisition_for_lead(payload_dict))
 
         return jsonify({"error": f"unsupported action_type: {action_type}"}), 400
     except KeyError:

@@ -5,11 +5,13 @@ from __future__ import annotations
 import logging
 import math
 import os
+import json
+import time
 from pathlib import Path
 from typing import Any
 
 from oracle.api.helpers import _load_track
-from oracle.db.schema import get_connection
+from oracle.db.schema import get_connection, get_write_mode
 from oracle.enrichers.lastfm import build_track_profile
 from oracle.integrations.listenbrainz import get_top_recordings_for_artist_name
 from oracle.radio import Radio
@@ -24,6 +26,45 @@ DEFAULT_PROVIDER_WEIGHTS: dict[str, float] = {
 DEFAULT_LIMIT = 12
 SUPPORTED_MODES = {"flow", "chaos", "discovery"}
 SUPPORTED_NOVELTY_BANDS = {"safe", "stretch", "chaos"}
+SUPPORTED_FEEDBACK_TYPES = {"accepted", "queued", "skipped", "replayed", "acquire_requested"}
+_FEEDBACK_LOOKBACK_SECONDS = 60 * 60 * 24 * 90
+_FEEDBACK_SCORE_WEIGHTS: dict[str, float] = {
+    "accepted": 0.18,
+    "queued": 0.12,
+    "replayed": 0.08,
+    "skipped": -0.2,
+}
+
+
+def _ensure_feedback_table(conn: Any) -> None:
+    """Create feedback storage lazily so the app can use it immediately."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            track_id TEXT,
+            artist TEXT NOT NULL DEFAULT '',
+            title TEXT NOT NULL DEFAULT '',
+            feedback_type TEXT NOT NULL,
+            seed_track_id TEXT,
+            mode TEXT,
+            novelty_band TEXT,
+            provider TEXT,
+            metadata_json TEXT,
+            created_at REAL DEFAULT (strftime('%s', 'now'))
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_track_created "
+        "ON recommendation_feedback(track_id, created_at DESC)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_feedback_created "
+        "ON recommendation_feedback(feedback_type, created_at DESC)"
+    )
+    conn.commit()
 
 
 def _clamp_score(value: Any, *, default: float = 0.0) -> float:
@@ -70,6 +111,164 @@ def _normalize_provider_weights(raw_weights: dict[str, Any] | None) -> dict[str,
         provider: round(weight / total, 4)
         for provider, weight in merged.items()
     }
+
+
+def _normalize_feedback_type(value: Any) -> str:
+    """Resolve arbitrary input into a supported feedback type."""
+    feedback_type = str(value or "").strip().lower()
+    if feedback_type not in SUPPORTED_FEEDBACK_TYPES:
+        raise ValueError(
+            "feedback_type must be one of accepted|queued|skipped|replayed|acquire_requested"
+        )
+    return feedback_type
+
+
+def record_feedback(
+    *,
+    feedback_type: Any,
+    track_id: str | None = None,
+    artist: str | None = None,
+    title: str | None = None,
+    seed_track_id: str | None = None,
+    mode: Any = None,
+    novelty_band: Any = None,
+    provider: Any = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Persist a recommendation or acquisition feedback event."""
+    resolved_feedback_type = _normalize_feedback_type(feedback_type)
+    resolved_track_id = str(track_id or "").strip() or None
+    resolved_artist = str(artist or "").strip()
+    resolved_title = str(title or "").strip()
+    if not resolved_track_id and (not resolved_artist or not resolved_title):
+        raise ValueError("track_id or artist/title is required")
+
+    if get_write_mode() != "apply_allowed":
+        return {
+            "status": "write_blocked",
+            "feedback_type": resolved_feedback_type,
+            "track_id": resolved_track_id,
+            "artist": resolved_artist,
+            "title": resolved_title,
+        }
+
+    payload = dict(metadata or {})
+    conn = get_connection(timeout=10.0)
+    try:
+        _ensure_feedback_table(conn)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO recommendation_feedback
+                (track_id, artist, title, feedback_type, seed_track_id, mode, novelty_band, provider, metadata_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+            """,
+            (
+                resolved_track_id,
+                resolved_artist,
+                resolved_title,
+                resolved_feedback_type,
+                str(seed_track_id or "").strip() or None,
+                _normalize_mode(mode) if mode is not None else None,
+                _normalize_novelty_band(novelty_band) if novelty_band is not None else None,
+                str(provider or "").strip() or None,
+                json.dumps(payload, separators=(",", ":"), sort_keys=True) if payload else None,
+            ),
+        )
+        conn.commit()
+        feedback_id = int(cursor.lastrowid or 0)
+    finally:
+        conn.close()
+
+    return {
+        "status": "ok",
+        "feedback_id": feedback_id,
+        "feedback_type": resolved_feedback_type,
+        "track_id": resolved_track_id,
+        "artist": resolved_artist,
+        "title": resolved_title,
+    }
+
+
+def _load_feedback_bias(track_ids: list[str]) -> dict[str, float]:
+    """Return small ranking adjustments derived from recent user feedback."""
+    normalized_track_ids = [str(track_id).strip() for track_id in track_ids if str(track_id or "").strip()]
+    if not normalized_track_ids:
+        return {}
+
+    placeholders = ", ".join(["?"] * len(normalized_track_ids))
+    conn = get_connection(timeout=10.0)
+    try:
+        _ensure_feedback_table(conn)
+        cursor = conn.cursor()
+        rows = cursor.execute(
+            f"""
+            SELECT track_id, feedback_type, COUNT(*)
+            FROM recommendation_feedback
+            WHERE track_id IN ({placeholders})
+              AND created_at >= ?
+            GROUP BY track_id, feedback_type
+            """,
+            (*normalized_track_ids, float(time.time() - _FEEDBACK_LOOKBACK_SECONDS)),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    tallies: dict[str, float] = {}
+    for track_id, feedback_type, count in rows:
+        key = str(track_id or "").strip()
+        event_type = str(feedback_type or "").strip().lower()
+        weight = _FEEDBACK_SCORE_WEIGHTS.get(event_type, 0.0)
+        if not key or weight == 0.0:
+            continue
+        tallies[key] = tallies.get(key, 0.0) + (weight * int(count or 0))
+
+    return {
+        track_id: round(max(-0.35, min(0.35, score)), 4)
+        for track_id, score in tallies.items()
+    }
+
+
+def _apply_feedback_bias(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Blend persisted recommendation outcomes into broker ranking."""
+    track_ids = [str(candidate.get("track_id") or "").strip() for candidate in candidates]
+    feedback_bias = _load_feedback_bias(track_ids)
+    if not feedback_bias:
+        return candidates
+
+    updated: list[dict[str, Any]] = []
+    for candidate in candidates:
+        track_id = str(candidate.get("track_id") or "").strip()
+        bias = feedback_bias.get(track_id, 0.0)
+        if bias == 0.0:
+            updated.append(candidate)
+            continue
+
+        adjusted = dict(candidate)
+        adjusted["feedback_bias"] = bias
+        adjusted["broker_score"] = round(float(candidate.get("broker_score") or 0.0) + bias, 4)
+        reasons = list(adjusted.get("reasons") or [])
+        reasons.append(
+            {
+                "type": "feedback",
+                "text": "Past accepts and replays reinforce this pick."
+                if bias > 0
+                else "Past skips are suppressing this pick.",
+                "score": bias,
+            }
+        )
+        adjusted["reasons"] = reasons
+        updated.append(adjusted)
+
+    return sorted(
+        updated,
+        key=lambda item: (
+            float(item.get("broker_score") or 0.0),
+            str(item.get("artist") or ""),
+            str(item.get("title") or ""),
+        ),
+        reverse=True,
+    )
 
 
 def _load_track_from_library(track_id: str) -> dict[str, Any] | None:
@@ -548,6 +747,7 @@ def recommend_tracks(
         provider_candidates,
         limit=resolved_limit,
     )
+    merged_candidates = _apply_feedback_bias(merged_candidates)
     acquisition_ranked = sorted(
         acquisition_candidates,
         key=lambda item: float(item.get("score") or 0.0),

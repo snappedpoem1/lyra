@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$sidecarExe = Join-Path $repoRoot "desktop\renderer-app\src-tauri\bin\lyra_backend.exe"
+$sidecarExe = Join-Path $repoRoot ".lyra-build\bin\lyra_backend.exe"
 $outLog = Join-Path $repoRoot ".tmp\sidecar_out.log"
 $errLog = Join-Path $repoRoot ".tmp\sidecar_err.log"
 

@@ -338,6 +338,32 @@ def _apply_schema() -> bool:
 
     c.execute(
         """
+        CREATE TABLE IF NOT EXISTS recommendation_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            track_id TEXT,
+            artist TEXT NOT NULL DEFAULT '',
+            title TEXT NOT NULL DEFAULT '',
+            feedback_type TEXT NOT NULL,
+            seed_track_id TEXT,
+            mode TEXT,
+            novelty_band TEXT,
+            provider TEXT,
+            metadata_json TEXT,
+            created_at REAL DEFAULT (strftime('%s', 'now'))
+        )
+        """
+    )
+    c.execute(
+        "CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_track_created "
+        "ON recommendation_feedback(track_id, created_at DESC)"
+    )
+    c.execute(
+        "CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_feedback_created "
+        "ON recommendation_feedback(feedback_type, created_at DESC)"
+    )
+
+    c.execute(
+        """
         CREATE TABLE IF NOT EXISTS player_state (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             status TEXT NOT NULL DEFAULT 'idle',

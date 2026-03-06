@@ -8,6 +8,7 @@ import {
   getTrackDossier,
   huntDeepCut,
   searchSemanticTracks,
+  submitRecommendationFeedback,
   type AcquisitionBootstrapStatus,
   type ArtistShrine,
   type DeepCutCandidate,
@@ -172,6 +173,23 @@ export function UnifiedWorkspace() {
     [providerStatus],
   );
 
+  const removeBrokerRecommendation = useCallback((trackId: string): void => {
+    setBrokerRecommendations((current) => current.filter((item) => item.track.trackId !== trackId));
+  }, []);
+
+  const removeAcquisitionLead = useCallback((lead: AcquisitionLead): void => {
+    setAcquisitionLeads((current) =>
+      current.filter(
+        (item) =>
+          !(
+            item.artist === lead.artist &&
+            item.title === lead.title &&
+            item.provider === lead.provider
+          ),
+      ),
+    );
+  }, []);
+
   const updateProviderWeight = useCallback((provider: string, nextValue: number): void => {
     setProviderWeights((current) => ({
       ...current,
@@ -219,6 +237,30 @@ export function UnifiedWorkspace() {
       await refreshBootstrap(false);
     },
     [refreshBootstrap],
+  );
+
+  const recordBrokerFeedback = useCallback(
+    async (payload: {
+      feedbackType: "accepted" | "queued" | "skipped" | "replayed" | "acquire_requested";
+      trackId?: string;
+      artist?: string;
+      title?: string;
+      provider?: string;
+      metadata?: Record<string, unknown>;
+    }): Promise<void> => {
+      await submitRecommendationFeedback({
+        feedbackType: payload.feedbackType,
+        trackId: payload.trackId,
+        artist: payload.artist,
+        title: payload.title,
+        provider: payload.provider,
+        metadata: payload.metadata,
+        seedTrackId: currentTrack?.trackId,
+        mode: oracleMode,
+        noveltyBand: oracleNoveltyBand,
+      });
+    },
+    [currentTrack?.trackId, oracleMode, oracleNoveltyBand],
   );
 
   useEffect(() => {
@@ -443,16 +485,29 @@ export function UnifiedWorkspace() {
         return;
       }
       const recommendations = await loadBrokerPreview();
+      const queuedRecommendations = recommendations.slice(0, 12);
       await queueTrackIds(
-        recommendations.slice(0, 12).map((item) => item.track.trackId),
+        queuedRecommendations.map((item) => item.track.trackId),
         "Oracle queued broker recommendations",
+      );
+      await Promise.all(
+        queuedRecommendations.map((item) =>
+          recordBrokerFeedback({
+            feedbackType: "queued",
+            trackId: item.track.trackId,
+            artist: item.track.artist,
+            title: item.track.title,
+            provider: item.providerSignals[0]?.provider ? String(item.providerSignals[0].provider) : "broker",
+            metadata: { brokerScore: item.brokerScore, source: "bulk_queue" },
+          }),
+        ),
       );
     } catch (error) {
       setOracleResultMessage(error instanceof Error ? error.message : "Oracle action failed");
     } finally {
       setOracleBusy(false);
     }
-  }, [chaosIntensity, currentTrack?.trackId, loadBrokerPreview, oracleBusy, oracleMode, queueTrackIds, refreshBootstrap, uiLocked]);
+  }, [chaosIntensity, loadBrokerPreview, oracleBusy, oracleMode, queueTrackIds, recordBrokerFeedback, refreshBootstrap, uiLocked]);
 
   const submitStartVibe = async (): Promise<void> => {
     if (uiLocked || oracleBusy) return;
@@ -484,6 +539,138 @@ export function UnifiedWorkspace() {
       await refreshBootstrap(false);
     } catch (error) {
       setOracleResultMessage(error instanceof Error ? error.message : "Playlust launch failed");
+    } finally {
+      setOracleBusy(false);
+    }
+  };
+
+  const keepBrokerRecommendation = async (item: BrokeredRecommendation): Promise<void> => {
+    if (uiLocked || oracleBusy) return;
+    setOracleBusy(true);
+    try {
+      await recordBrokerFeedback({
+        feedbackType: "accepted",
+        trackId: item.track.trackId,
+        artist: item.track.artist,
+        title: item.track.title,
+        provider: item.providerSignals[0]?.provider ? String(item.providerSignals[0].provider) : "broker",
+        metadata: { brokerScore: item.brokerScore, action: "keep" },
+      });
+      removeBrokerRecommendation(item.track.trackId);
+      setOracleResultMessage(`Stored ${item.track.artist} - ${item.track.title} as a strong oracle signal.`);
+    } catch (error) {
+      setOracleResultMessage(error instanceof Error ? error.message : "Failed to save recommendation feedback");
+    } finally {
+      setOracleBusy(false);
+    }
+  };
+
+  const skipBrokerRecommendation = async (item: BrokeredRecommendation): Promise<void> => {
+    if (uiLocked || oracleBusy) return;
+    setOracleBusy(true);
+    try {
+      await recordBrokerFeedback({
+        feedbackType: "skipped",
+        trackId: item.track.trackId,
+        artist: item.track.artist,
+        title: item.track.title,
+        provider: item.providerSignals[0]?.provider ? String(item.providerSignals[0].provider) : "broker",
+        metadata: { brokerScore: item.brokerScore, action: "skip" },
+      });
+      removeBrokerRecommendation(item.track.trackId);
+      setOracleResultMessage(`Skipped ${item.track.artist} - ${item.track.title}. Future picks will adapt.`);
+    } catch (error) {
+      setOracleResultMessage(error instanceof Error ? error.message : "Failed to save skip feedback");
+    } finally {
+      setOracleBusy(false);
+    }
+  };
+
+  const queueBrokerRecommendation = async (item: BrokeredRecommendation): Promise<void> => {
+    if (uiLocked || oracleBusy) return;
+    setOracleBusy(true);
+    try {
+      await queueTrackIds([item.track.trackId], "Broker track queued");
+      await recordBrokerFeedback({
+        feedbackType: "queued",
+        trackId: item.track.trackId,
+        artist: item.track.artist,
+        title: item.track.title,
+        provider: item.providerSignals[0]?.provider ? String(item.providerSignals[0].provider) : "broker",
+        metadata: { brokerScore: item.brokerScore, action: "queue" },
+      });
+      removeBrokerRecommendation(item.track.trackId);
+    } catch (error) {
+      setOracleResultMessage(error instanceof Error ? error.message : "Failed to queue broker recommendation");
+    } finally {
+      setOracleBusy(false);
+    }
+  };
+
+  const replayBrokerRecommendation = async (item: BrokeredRecommendation): Promise<void> => {
+    if (uiLocked || oracleBusy) return;
+    setOracleBusy(true);
+    try {
+      await playTrack(item.track);
+      await recordBrokerFeedback({
+        feedbackType: "replayed",
+        trackId: item.track.trackId,
+        artist: item.track.artist,
+        title: item.track.title,
+        provider: item.providerSignals[0]?.provider ? String(item.providerSignals[0].provider) : "broker",
+        metadata: { brokerScore: item.brokerScore, action: "replay" },
+      });
+      removeBrokerRecommendation(item.track.trackId);
+      setOracleResultMessage(`Replaying ${item.track.artist} - ${item.track.title}.`);
+    } catch (error) {
+      setOracleResultMessage(error instanceof Error ? error.message : "Failed to replay broker recommendation");
+    } finally {
+      setOracleBusy(false);
+    }
+  };
+
+  const requestAcquisitionLead = async (lead: AcquisitionLead): Promise<void> => {
+    if (uiLocked || oracleBusy) return;
+    setOracleBusy(true);
+    try {
+      const action = await executeOracleAction("request_acquisition", {
+        artist: lead.artist,
+        title: lead.title,
+        provider: lead.provider,
+        reason: lead.reason,
+        score: lead.score,
+      });
+      await recordBrokerFeedback({
+        feedbackType: "acquire_requested",
+        artist: lead.artist,
+        title: lead.title,
+        provider: String(lead.provider),
+        metadata: { score: lead.score, actionStatus: action.status ?? "queued" },
+      });
+      removeAcquisitionLead(lead);
+      setOracleResultMessage(`${lead.artist} - ${lead.title}: ${String(action.status ?? "queued")}.`);
+    } catch (error) {
+      setOracleResultMessage(error instanceof Error ? error.message : "Failed to request acquisition");
+    } finally {
+      setOracleBusy(false);
+    }
+  };
+
+  const dismissAcquisitionLead = async (lead: AcquisitionLead): Promise<void> => {
+    if (uiLocked || oracleBusy) return;
+    setOracleBusy(true);
+    try {
+      await recordBrokerFeedback({
+        feedbackType: "skipped",
+        artist: lead.artist,
+        title: lead.title,
+        provider: String(lead.provider),
+        metadata: { score: lead.score, action: "dismiss_lead" },
+      });
+      removeAcquisitionLead(lead);
+      setOracleResultMessage(`Dismissed acquisition lead for ${lead.artist} - ${lead.title}.`);
+    } catch (error) {
+      setOracleResultMessage(error instanceof Error ? error.message : "Failed to dismiss acquisition lead");
     } finally {
       setOracleBusy(false);
     }
@@ -813,8 +1000,10 @@ export function UnifiedWorkspace() {
                     </div>
                   </div>
                   <div className="oracle-track-actions">
-                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void queueTrackIds([item.track.trackId], "Broker track queued")}>Queue</button>
-                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void playTrack(item.track)}>Play</button>
+                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void keepBrokerRecommendation(item)}>Keep</button>
+                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void queueBrokerRecommendation(item)}>Queue</button>
+                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void replayBrokerRecommendation(item)}>Play</button>
+                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void skipBrokerRecommendation(item)}>Skip</button>
                   </div>
                 </div>
               ))}
@@ -826,9 +1015,15 @@ export function UnifiedWorkspace() {
                   <div className="pane-scroll">
                     {acquisitionLeads.map((lead) => (
                       <div key={`${lead.provider}-${lead.artist}-${lead.title}`} className="acquisition-row">
-                        <span className="list-title">{lead.title}</span>
-                        <span className="list-meta">{lead.artist}</span>
-                        <span className="oracle-track-reason">{lead.reason}</span>
+                        <div className="oracle-track-main">
+                          <span className="list-title">{lead.title}</span>
+                          <span className="list-meta">{lead.artist}</span>
+                          <span className="oracle-track-reason">{lead.reason}</span>
+                        </div>
+                        <div className="oracle-track-actions">
+                          <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void requestAcquisitionLead(lead)}>Acquire</button>
+                          <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void dismissAcquisitionLead(lead)}>Dismiss</button>
+                        </div>
                       </div>
                     ))}
                   </div>

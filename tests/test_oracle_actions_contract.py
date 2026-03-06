@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+import sqlite3
+from pathlib import Path
 
 import lyra_api
 import oracle.api.blueprints.oracle_actions as oracle_actions_bp
@@ -163,3 +165,80 @@ def test_oracle_action_switch_chaos_intensity_rejects_invalid(client: Any, monke
         json={"action_type": "switch_chaos_intensity", "payload": {"intensity": "warp"}},
     )
     assert response.status_code == 400
+
+
+def test_oracle_action_request_acquisition_queues_lead(
+    client: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "oracle-actions.db"
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE tracks (
+                track_id TEXT PRIMARY KEY,
+                artist TEXT,
+                title TEXT,
+                status TEXT,
+                updated_at REAL,
+                created_at REAL,
+                added_at REAL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE acquisition_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                artist TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                priority_score REAL DEFAULT 0.0,
+                source TEXT,
+                search_query TEXT,
+                playlist_name TEXT,
+                status TEXT DEFAULT 'pending',
+                added_at TEXT
+            )
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    monkeypatch.setattr(oracle_actions_bp, "get_player_service", lambda: _FakePlayerService())
+    monkeypatch.setattr(oracle_actions_bp, "get_write_mode", lambda: "apply_allowed")
+    monkeypatch.setattr(
+        oracle_actions_bp,
+        "get_connection",
+        lambda timeout=10.0: sqlite3.connect(db_path, timeout=timeout),
+    )
+
+    response = client.post(
+        "/api/oracle/action/execute",
+        json={
+            "action_type": "request_acquisition",
+            "payload": {
+                "artist": "Future Artist",
+                "title": "Future Song",
+                "provider": "listenbrainz",
+                "score": 0.42,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["status"] == "queued"
+    assert payload["inserted"] is True
+
+    verify = sqlite3.connect(db_path)
+    try:
+        row = verify.execute(
+            "SELECT artist, title, source, status FROM acquisition_queue"
+        ).fetchone()
+    finally:
+        verify.close()
+
+    assert row == ("Future Artist", "Future Song", "oracle_broker:listenbrainz", "pending")

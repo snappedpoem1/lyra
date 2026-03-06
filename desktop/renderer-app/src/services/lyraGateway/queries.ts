@@ -286,6 +286,33 @@ export async function getBrokeredRecommendations(options: {
   };
 }
 
+export async function submitRecommendationFeedback(payload: {
+  feedbackType: "accepted" | "queued" | "skipped" | "replayed" | "acquire_requested";
+  trackId?: string;
+  artist?: string;
+  title?: string;
+  seedTrackId?: string;
+  mode?: OracleMode;
+  noveltyBand?: RecommendationNoveltyBand;
+  provider?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  return requestJson("/api/recommendations/oracle/feedback", oracleActionResponseSchema, {
+    method: "POST",
+    body: JSON.stringify({
+      feedback_type: payload.feedbackType,
+      track_id: payload.trackId,
+      artist: payload.artist,
+      title: payload.title,
+      seed_track_id: payload.seedTrackId,
+      mode: payload.mode,
+      novelty_band: payload.noveltyBand,
+      provider: payload.provider,
+      metadata: payload.metadata,
+    }),
+  }) as Promise<Record<string, unknown>>;
+}
+
 export async function searchSemanticTracks(query: string, n = 20): Promise<TrackListItem[]> {
   const safeQuery = query.trim();
   if (!safeQuery) {

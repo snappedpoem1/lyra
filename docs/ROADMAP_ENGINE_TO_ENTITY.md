@@ -80,7 +80,7 @@ Core priority:
 1. Native audio production validation (`miniaudio`) on real devices/long sessions.
 2. Packaged sidecar certainty (`lyra_backend.exe`) on clean machine installer.
 3. Oracle action breadth beyond current contract stubs.
-4. Recommendation outcome logging and one-click acquisition actions.
+4. Packaged/runtime acquisition proof on bundled helpers.
 5. Transition DJ layer (future phase).
 
 ## 5) Phase Plan

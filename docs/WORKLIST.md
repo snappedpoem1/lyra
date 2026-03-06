@@ -37,13 +37,25 @@ This file tracks active execution work only.
   - `scripts/build_packaged_runtime.ps1` stages those tools plus `ffmpeg`/`ffprobe` and the backend sidecar
   - packaged startup now prepends bundled runtime bins to backend PATH
 - Codex helper install script added: `scripts/install_codex_helpers.ps1` (SQLite MCP + Playwright MCP for future sessions).
+- Recommendation feedback loop added:
+  - `POST /api/recommendations/oracle/feedback` persists accept/queue/skip/replay/acquire-request signals
+  - broker ranking now applies lightweight feedback bias from recent outcomes
+  - Oracle recommendation rows now emit explicit keep/queue/play/skip actions
+- Acquisition radar is now actionable:
+  - new oracle action `request_acquisition` writes broker leads into `acquisition_queue`
+  - Oracle acquisition leads now expose one-click `Acquire` and `Dismiss` actions
+- Tauri packaging artifacts now stage under dedicated build output:
+  - generated `lyra_backend.exe` now builds to `.lyra-build/bin`
+  - bundled runtime helpers now stage to `.lyra-build/bin/runtime/bin`
+  - Tauri bundle resources now consume `.lyra-build/bin` instead of `src-tauri/bin`
 
-## In Progress (Current Session S-20260306-08)
+## In Progress (Current Session S-20260306-09)
 
-- Architecture unification + forward-facing utility pass:
-  - Broker feedback/event logging
-  - Acquisition radar one-click actions
-  - Release-gate validation (packaged installer + native-audio soak)
+- Release-gate validation:
+  - packaged installer proof on a clean machine
+  - native-audio soak / parity acceptance
+- Runtime/source separation cleanup:
+  - generated packaged assets moved off source-adjacent `src-tauri/bin`
 
 ## Order Of Operation (Highest Result First)
 
@@ -53,18 +65,12 @@ This file tracks active execution work only.
 2. Parity hardening acceptance as release gate:
    - Run `scripts/parity_hardening_acceptance.ps1`
    - Confirm canonical player/SSE + forced-restart recovery + stability soak
-3. Recommendation feedback loop:
-   - Persist accepts/skips/replays from brokered picks
-   - Use feedback to rank future recommendations
-4. 4-hour gaming/listening soak:
+3. 4-hour gaming/listening soak:
    - Confirm no crashes/dropouts; tray/media keys responsive; no queue drift
-5. Acquisition radar actions:
-   - Turn brokered non-library leads into one-click acquisition actions
 
 ## Next Up
 
 1. Validate the packaged installer on a clean machine with bundled `streamrip`, `spotdl`, `ffmpeg`, and `ffprobe`.
 2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild`.
-3. Persist broker acceptance/skip/replay events and expose them in ranking.
-4. Turn acquisition radar leads into one-click acquisition actions.
-5. Continue runtime/source separation cleanup after installer proof.
+3. Validate one successful packaged/runtime-backed streamrip acquisition.
+4. Continue graph/credits/structure depth passes after release-gate proof.

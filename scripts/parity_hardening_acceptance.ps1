@@ -82,7 +82,7 @@ function Start-Sidecar {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
 
-$sidecarExe = Join-Path $repoRoot "desktop\renderer-app\src-tauri\bin\lyra_backend.exe"
+$sidecarExe = Join-Path $repoRoot ".lyra-build\bin\lyra_backend.exe"
 $startedProcess = $null
 $startedRootPid = $null
 $startedByThisScript = $false
