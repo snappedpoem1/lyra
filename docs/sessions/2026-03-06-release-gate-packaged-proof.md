@@ -43,8 +43,8 @@ Bullet list of completed work:
 
 | SHA (short) | Message |
 |---|---|
-| `pending` | `[S-20260306-12] feat: harden packaged release-gate proofs` |
-| `pending` | `[S-20260306-12] docs: record packaged release-gate state` |
+| `2437dc0` | `[S-20260306-12] feat: harden packaged release-gate proofs` |
+| `fe92728` | `[S-20260306-12] docs: record packaged release-gate state` |
 
 ---
 
@@ -92,9 +92,59 @@ The remaining release-gate work is now clearly external or credential-gated:
 
 ---
 
+## G-035 Installer Hardening Addendum (S-20260306-12 continuation 2)
+
+Work done while Codex handles parallel tasks:
+
+**`lyra_api.py` — frozen `PROJECT_ROOT` fix**
+- Changed `Path.cwd()` to `Path(sys.executable).parent` when `sys.frozen` is True
+- Sidecar now anchors its root paths to its own location regardless of the working directory set by the host
+
+**`oracle/api/app.py` — HuggingFace cache path frozen fix**
+- `hf_home` was derived from `Path(__file__).resolve().parent.parent.parent` which, in a PyInstaller frozen binary, resolves into the `_MEIPASS` temp directory
+- Fixed to use `oracle.config.PROJECT_ROOT` which correctly resolves to the sidecar's install location
+
+**`scripts/build_backend_sidecar.ps1` — expanded submodule collection**
+- Added `--collect-submodules` for: `oracle.player`, `oracle.acquirers`, `oracle.db`, `oracle.integrations`, `oracle.embedders`, `oracle.importers`, `oracle.enrichers`
+- Previously only `oracle.api.blueprints` was collected; dynamic imports in other subpackages would fail on a clean machine
+
+**`desktop/renderer-app/src-tauri/tauri.conf.json` — Windows installer metadata**
+- Added `shortDescription`, `longDescription`, `copyright`
+- Added `windows.nsis` block: `installMode: currentUser`, `languages: ["English"]`
+- Added `windows.wix` block: `language: en-US`
+
+**`scripts/validate_clean_machine_install.ps1` — simulated install layout check**
+- New section creates a temp directory mimicking the Tauri installed tree: `<install>/resources/lyra_backend.exe` + `<install>/resources/runtime/bin/rip.exe`
+- Verifies that `resolve_packaged_runtime_anchor` logic (as implemented in main.rs) would chain sidecar → `resources/` → `resources/runtime/bin` correctly
+- All 4 new assertions pass
+
+**Validation:** `validate_clean_machine_install.ps1` → all checks pass (including new section); `pytest -q` → 99 passed; `check_docs_state.ps1` → OK
+
+Command run:
+```
+powershell -ExecutionPolicy Bypass -File scripts\validate_packaged_streamrip.ps1 -LiveAcquire
+```
+
+Result: **PASS — all 6 checks passed**
+
+- rip.exe path: `C:\MusicOracle\runtime\bin\rip.exe` (35 MB, version 2.1.0)
+- Artist/track tested: Burial — Archangel
+- Downloaded file: `C:\Users\Admin\AppData\Local\Temp\lyra_streamrip_proof_u63t6zqk\02. Burial - Archangel.flac`
+- Source: streamrip (Qobuz)
+- Error: None
+
+**G-034 fully closed.**
+
+Docs updated:
+- `docs/MISSING_FEATURES_REGISTRY.md` — G-034 moved to `live`
+- `docs/PROJECT_STATE.md` — live acquisition proof run added to validated commands
+- `docs/WORKLIST.md` — live acquisition task marked done; Next Up updated
+- `docs/SESSION_INDEX.md` — S-20260306-12 result updated
+
+---
+
 ## Next Action
 
 What is the single most important thing to do next?
 
-Run one live packaged/runtime-backed streamrip acquisition with valid Qobuz credentials, then execute the blank-machine installer install-and-launch proof on a clean Windows VM.
-
+Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild` as a 4-hour soak, then execute blank-machine installer install-and-launch proof on a clean Windows VM.
