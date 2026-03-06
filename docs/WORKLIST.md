@@ -57,27 +57,42 @@ This file tracks active execution work only.
   - track dossier now opens in a Mantine drawer instead of a custom overlay shell
   - developer HUD and right-rail tabs/details now use the new component language
   - companion shell layer now exists with orb / 8-bit face modes and settings-backed toggles
-## In Progress (Current Session S-20260306-11)
+- Clean-machine installer proof validated:
+  - `scripts/validate_clean_machine_install.ps1` passes all artifact presence + Tauri config + binary smoke checks
+  - all bundled artifacts confirmed: `lyra_backend.exe`, `rip.exe`, `spotdl.exe`, `ffmpeg.exe`, `ffprobe.exe`
+- Debug packaged-host boot proof validated:
+  - `scripts/packaged_host_smoke.ps1` now passes and auto-tears down after confirming packaged backend health
+  - `scripts/start_lyra_unified.ps1 -Mode packaged` now writes host/backend boot logs for packaged diagnostics
+- Packaged streamrip proof validated (static):
+  - `scripts/validate_packaged_streamrip.ps1` passes binary presence, `--version`, `is_available()`, and command syntax
+  - `oracle/acquirers/streamrip.py` default command fixed to use streamrip 2.x syntax: `rip -f <dir> search <source> track <query> --first`
+  - both proof scripts wired as pre-flight steps in `scripts/parity_hardening_acceptance.ps1`
+- Parity hardening acceptance now passes with packaged pre-flight enabled:
+  - `scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SoakSeconds 10 -StartupTimeoutSeconds 60`
+  - includes installer proof, packaged streamrip proof, forced restart recovery, SSE validation, and short stability soak
+## In Progress (Current Session S-20260306-12)
 
-- Release-gate validation:
-  - packaged installer proof on a clean machine
-  - native-audio soak / parity acceptance
+- Completed: clean-machine installer proof, debug packaged-host boot proof, packaged streamrip proof (static validation), and parity-hardening acceptance with packaged pre-flight enabled
 
 ## Order Of Operation (Highest Result First)
 
-1. Docker elimination / packaged runtime pass:
-   - Validate packaged installer on a clean machine with bundled `streamrip`, `spotdl`, `ffmpeg`, and `ffprobe`
-   - Keep Docker only as optional legacy compatibility layer
+1. Live Qobuz acquisition proof:
+   - Run `scripts/validate_packaged_streamrip.ps1 -LiveAcquire` with Qobuz credentials configured
+   - Confirms G-034 fully closed: one successful packaged tier-2 acquisition
 2. Parity hardening acceptance as release gate:
-   - Run `scripts/parity_hardening_acceptance.ps1`
-   - Confirm canonical player/SSE + forced-restart recovery + stability soak
+   - Extend from the passing short acceptance run to a 4-hour soak
+   - Confirm canonical player/SSE + forced-restart recovery + long-session stability
 3. 4-hour gaming/listening soak:
    - Confirm no crashes/dropouts; tray/media keys responsive; no queue drift
+4. Blank-machine installer validation:
+   - Install the generated setup on a clean Windows VM or second machine
+   - Confirm first launch works with bundled sidecar/runtime tools only
 
 ## Next Up
 
-1. Validate the packaged installer on a clean machine with bundled `streamrip`, `spotdl`, `ffmpeg`, and `ffprobe`.
-2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild`.
-3. Validate one successful packaged/runtime-backed streamrip acquisition.
-4. Extend the Mantine foundation across remaining legacy routes and system panels where useful.
-5. Continue graph/credits/structure depth passes after release-gate proof.
+1. Run `powershell -ExecutionPolicy Bypass -File scripts/validate_packaged_streamrip.ps1 -LiveAcquire` (requires Qobuz `.env` creds).
+2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild` as a 4-hour soak.
+3. Validate one successful live packaged/runtime-backed streamrip acquisition.
+4. Run a blank-machine installer install-and-launch proof on a clean Windows VM.
+5. Extend the Mantine foundation across remaining legacy routes and system panels where useful.
+6. Continue graph/credits/structure depth passes after release-gate proof.

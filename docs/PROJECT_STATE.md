@@ -7,8 +7,8 @@ This is the current repo/runtime snapshot verified from this workspace.
 ## 1) Repository State
 
 - Branch: `main`
-- Working tree: clean
-- Latest committed baseline before this audit: `2e69a6f` (secondary shell surfaces and companion layer)
+- Working tree: clean after session `S-20260306-12` finalization
+- Latest committed baseline before this audit: `0a85175` (secondary shell surfaces docs/state stamp)
 
 ## 2) Architecture State (Current)
 
@@ -78,6 +78,14 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Bundled acquisition helper executables are now built and staged by:
     - `scripts/build_runtime_tools.ps1`
     - `scripts/build_packaged_runtime.ps1`
+  - Packaged installer proof scripts now active:
+    - `scripts/validate_clean_machine_install.ps1` — verifies all bundled artifacts, Tauri resource config, and binary smoke checks
+    - `scripts/validate_packaged_streamrip.ps1` — verifies bundled `rip.exe`, `is_available()` bundled resolution, and streamrip 2.x command syntax
+    - `scripts/packaged_host_smoke.ps1` — verifies the debug packaged host can boot the bundled backend to healthy state and tear down cleanly
+    - Both scripts are wired as pre-flight steps in `scripts/parity_hardening_acceptance.ps1`
+  - `oracle/acquirers/streamrip.py` default command now uses correct streamrip 2.x syntax:
+    `rip -f <output_dir> search <source> track <query> --first`
+    (override via `LYRA_STREAMRIP_CMD_TEMPLATE`; source defaulted by `LYRA_STREAMRIP_SOURCE`)
   - Generated packaged artifacts now stage under:
     - `.lyra-build/bin`
     - `.lyra-build/bin/runtime/bin`
@@ -110,17 +118,20 @@ From `python -m oracle status`:
 
 ## 4) Verification Results (This Audit)
 
-- `python -m pytest -q` -> `96 passed`
+- `python -m pytest -q` -> `99 passed`
 - `cd desktop\renderer-app; npm run test` -> `1 file / 3 tests passed`
 - `cd desktop\renderer-app; npm run build` -> success
 - `powershell -ExecutionPolicy Bypass -File scripts/build_backend_sidecar.ps1` -> success (`.lyra-build/bin/lyra_backend.exe`)
 - `powershell -ExecutionPolicy Bypass -File scripts/build_runtime_tools.ps1` -> success (`runtime/bin/*.exe` plus staged `.lyra-build/bin/runtime/bin` helpers)
 - `powershell -ExecutionPolicy Bypass -File scripts/build_packaged_runtime.ps1 -SkipLaunchCheck -SkipToolSmokeCheck` -> success
+- `powershell -ExecutionPolicy Bypass -File scripts/validate_clean_machine_install.ps1` -> success (all artifact presence + Tauri config + executable smoke checks)
+- `powershell -ExecutionPolicy Bypass -File scripts/validate_packaged_streamrip.ps1` -> success (binary presence + version + is_available() + command syntax)
+- `powershell -ExecutionPolicy Bypass -File scripts/packaged_host_smoke.ps1 -HealthTimeoutSeconds 45` -> success (debug packaged host boot reaches backend healthy state and auto-tears down)
 - `powershell -ExecutionPolicy Bypass -File scripts/smoke_step1_step2.ps1 -StartupTimeoutSeconds 60 -SoakSeconds 20` -> success (full Step 1/2 path, including canonical player API + SSE checks)
-- `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SoakSeconds 10 -StartupTimeoutSeconds 60` -> success (smoke + forced restart recovery + SSE + stability soak)
+- `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SoakSeconds 10 -StartupTimeoutSeconds 60` -> success (installer proof + packaged streamrip proof + smoke + forced restart recovery + SSE + stability soak)
 - `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev -HealthTimeoutSeconds 90 -LeaveRunning` -> success (cold start; backend + frontend active)
 - `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev -HealthTimeoutSeconds 30 -LeaveRunning` -> success (warm start; backend reused)
-- `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode packaged -SkipSidecarBuild` -> expected non-zero failure with clear error when packaged host binary is absent
+- `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode packaged -SkipSidecarBuild -HealthTimeoutSeconds 30` -> success (debug packaged host + bundled backend boot to healthy state)
 - `powershell -ExecutionPolicy Bypass -File scripts/check_docs_state.ps1` -> success
 - `python -m oracle doctor` -> success with bundled `streamrip` and `spotdl` detected
 - `python -m oracle status` -> success with healthy core metrics
@@ -134,17 +145,17 @@ From `python -m oracle status`:
 
 ## 6) Active Gaps
 
-1. Clean-machine packaged installer validation for bundled `lyra_backend.exe`, `streamrip`, `spotdl`, `ffmpeg`, and `ffprobe`.
+1. Blank-machine installer install-and-launch validation is still pending outside this workstation.
 2. Native audio (`miniaudio`) production soak validation across real devices/sessions.
 3. Runtime/source separation policy is still partial beyond the new dedicated `.lyra-build` staging root.
-4. One successful packaged/runtime-backed tier-2 streamrip acquisition proof is still pending.
+4. One successful live packaged/runtime-backed tier-2 streamrip acquisition proof is still pending.
 5. Mantine/Figma foundation is live across the main workspace plus key secondary surfaces, but not yet across every legacy route/panel.
 
 ## 7) Immediate Next Pass
 
-1. Run packaged installer validation on a clean machine to confirm bundled sidecar + runtime-tool discovery.
-2. Run parity-hardening acceptance (4-hour soak + pause/seek/repeat/recovery across restart).
-3. Validate one successful packaged/runtime-backed streamrip acquisition.
-4. Continue runtime/source separation cleanup after installer proof.
+1. Run a blank-machine installer install-and-launch validation to confirm bundled sidecar + runtime-tool discovery outside the dev box.
+2. Run one live packaged/runtime-backed streamrip acquisition with configured Qobuz credentials.
+3. Run parity-hardening acceptance as an extended 4-hour soak with pause/seek/repeat/recovery coverage.
+4. Continue runtime/source separation cleanup after the external installer proof.
 5. Extend the Mantine foundation into any remaining legacy routes and system panels that still rely on older primitives.
 6. Continue graph/credits/structure depth passes once release-gate proof is complete.
