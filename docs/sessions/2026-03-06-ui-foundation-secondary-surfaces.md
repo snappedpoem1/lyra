@@ -36,7 +36,8 @@ Bullet list of completed work:
 
 | SHA (short) | Message |
 |---|---|
-| `pending` | `[S-20260306-11] feat: extend secondary shell surfaces and add companion layer` |
+| `2e69a6f` | `[S-20260306-11] feat: extend secondary shell surfaces and add companion layer` |
+| `pending` | `[S-20260306-11] docs: finalize secondary-surface session state` |
 
 ---
 
