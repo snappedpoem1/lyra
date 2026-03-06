@@ -30,7 +30,7 @@ From `python -m oracle status`:
 - Embeddings: 2,454
 - Scored tracks: 2,454
 - Vibes: 9
-- Queue pending: 2,009
+- Queue pending: 2,036
 - Spotify history rows: 127,312
 - Spotify library rows: 4,026
 - Playback events: 30,680
@@ -43,7 +43,7 @@ From `scripts/ensure_workspace_docker.ps1` + `python -m oracle doctor` + desktop
 - Healthy target containers: `prowlarr`, `rdtclient`, `slskd`
 - Acquisition tiers:
   - Tier 1 Qobuz: OK
-  - Tier 2 Streamrip: stub module present (`oracle/acquirers/streamrip.py`), `is_available()` returns `False` — waterfall skips cleanly
+  - Tier 2 Streamrip: executable adapter implemented in `oracle/acquirers/streamrip.py`; currently unavailable on this machine because `rip` CLI is not installed/configured
   - Tier 3 slskd: OK
   - Tier 4 Real-Debrid: OK
   - Tier 5 SpotDL: OK
@@ -55,7 +55,7 @@ From `scripts/ensure_workspace_docker.ps1` + `python -m oracle doctor` + desktop
 
 ### Test and build
 
-- `python -m pytest -q` -> `66 passed`
+- `python -m pytest -q` -> `73 passed`
 - `npm run test` (`desktop/renderer-app`) -> `1 file / 3 tests passed`
 - `npm run build` (`desktop/renderer-app`) -> success (`vite` production bundle built)
 

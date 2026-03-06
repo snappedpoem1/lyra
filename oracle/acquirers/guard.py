@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from oracle.config import REJECTED_FOLDER
+from oracle.name_cleaner import clean_title_str
 
 logger = logging.getLogger(__name__)
 
@@ -250,32 +251,8 @@ def _check_record_label(artist: str) -> Optional[Tuple[str, str]]:
 
 
 def _clean_title(title: str) -> str:
-    """Remove YouTube/video cruft from title."""
-    if not title:
-        return ""
-    
-    original = title
-    
-    # Remove video markers
-    patterns = [
-        r'\s*[\(\[]official\s*(music\s*)?(video|audio|lyric\s*video|visualizer)[\)\]]',
-        r'\s*[\(\[]explicit[\)\]]',
-        r'\s*[\(\[]clean\s*(version)?[\)\]]',
-        r'\s*[\(\[]hd\s*\d*p?[\)\]]',
-        r'\s*[\(\[]4k[\)\]]',
-        r'\s*[\(\[]lyrics?[\)\]]',
-        r'\s*[\(\[]audio[\)\]]',
-        r'\s*[\(\[]video[\)\]]',
-        r'\s*[\(\[]remaster(ed)?[\)\]]',
-        r'\s*-\s*official\s*(music\s*)?(video|audio).*$',
-        r'\s*\|\s*[^|]+$',  # Remove " | Channel Name"
-        r'\s*[\(\[].*?(?:ft\.?|feat\.?).*?[\)\]]',  # Remove feat in parens
-    ]
-    
-    for pattern in patterns:
-        original = re.sub(pattern, '', original, flags=re.IGNORECASE)
-    
-    return original.strip()
+    """Normalize title via canonical name_cleaner logic."""
+    return clean_title_str(title)
 
 
 def _clean_artist(artist: str) -> str:

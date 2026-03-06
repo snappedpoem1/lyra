@@ -167,9 +167,16 @@ class Pipeline:
     def run(self, query_or_job_id: str) -> Dict[str, Any]:
         existing = self.get_job(query_or_job_id)
         if existing:
-            logger.warning("[DEPRECATED] Resuming existing job IDs is not implemented; rerunning query.")
             query = existing["query"]
             job_id = query_or_job_id
+            state = existing.get("state")
+            if state == PipelineState.COMPLETED:
+                logger.info("Pipeline job %s already completed; returning cached result", job_id)
+                return existing
+            if state == PipelineState.RUNNING:
+                logger.info("Pipeline job %s is already running; returning current status", job_id)
+                return existing
+            logger.info("Resuming pipeline job %s from state=%s", job_id, state)
         else:
             query = query_or_job_id
             job_id = self.create_job(query)

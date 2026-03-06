@@ -1,10 +1,10 @@
-"""Library scanner for Lyra Oracle."""
+﻿"""Library scanner for Lyra Oracle."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
-import re
+
 import shutil
 import time
 
@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from oracle.config import LIBRARY_BASE, QUARANTINE_PATH as CONFIG_QUARANTINE_PATH
 from oracle.db.schema import get_connection, get_content_hash_fast, get_track_id, get_write_mode
-from oracle.name_cleaner import clean_artist
+from oracle.name_cleaner import clean_artist, clean_title_str
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 QUARANTINE_PATH = CONFIG_QUARANTINE_PATH
@@ -58,33 +58,8 @@ def normalize_text(text: str) -> str:
 
 
 def _deep_clean_title(title: str) -> str:
-    if not title:
-        return ""
-
-    cleaned = title.strip()
-
-    patterns = [
-        r"\s*[\(\[]\s*(official\s+)?(audio|video|lyric\s*video|visualizer|music\s*video|mv)\s*[\)\]]",
-        r"\s*[\(\[]\s*(live|remastered|hd|hq|4k|8k|explicit|clean)\s*[\w\s-]*[\)\]]",
-        r"\s*[\(\[]\s*(at|@)\s+[^\)\]]+[\)\]]",
-        r"\s*[\(\[]\s*feat\.?\s+[^\)\]]+[\)\]]",
-        r"\s*[\(\[]\s*ft\.?\s+[^\)\]]+[\)\]]",
-        r"\s*[\(\[]\s*prod\.?\s+by\s+[^\)\]]+[\)\]]",
-        r"\s*[\(\[]\s*from\s+[^\)\]]+[\)\]]",
-        r"\s*[â€¢Â·]\s*",
-    ]
-
-    for pattern in patterns:
-        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
-
-    cleaned = re.sub(r"\s+feat\.?\s+.+$", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s+ft\.?\s+.+$", "", cleaned, flags=re.IGNORECASE)
-
-    cleaned = re.sub(r"\s*[-â€“â€”|:]\s*(official\s+)?(audio|video|lyrics?)$", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s{2,}", " ", cleaned)
-    cleaned = cleaned.strip(" -â€“â€”|:\t")
-
-    return cleaned or title.strip()
+    """Use canonical title normalization from name_cleaner."""
+    return clean_title_str(title)
 
 
 def get_default_metadata(file_path: Path) -> Dict[str, str]:
@@ -130,7 +105,7 @@ def extract_metadata(file_path: Path) -> Dict[str, str]:
     if "title" in meta:
         meta["title"] = _deep_clean_title(meta["title"])
 
-    # Strip feat. / ft. from artist tag — store only the primary artist
+    # Strip feat. / ft. from artist tag â€” store only the primary artist
     if "artist" in meta:
         meta["artist"], _ = clean_artist(meta["artist"])
 

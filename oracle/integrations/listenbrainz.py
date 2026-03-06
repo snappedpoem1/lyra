@@ -140,6 +140,47 @@ def _lb_rate_limit() -> None:
     _last_lb_req = time.time()
 
 
+def _parse_top_recordings_payload(payload: object, fallback_artist: str) -> List[Dict]:
+    """Normalize ListenBrainz top-recordings payload into canonical dicts.
+
+    ListenBrainz may return either:
+    - a raw list of recording dicts (current behavior), or
+    - an object with a ``recordings`` field (older/alternate behavior).
+    """
+    if isinstance(payload, list):
+        raw = payload
+    elif isinstance(payload, dict):
+        raw = payload.get("recordings", [])
+    else:
+        raw = []
+
+    parsed: List[Dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        title = (item.get("recording_name") or item.get("title") or "").strip()
+        if not title:
+            continue
+
+        artist = (item.get("artist_name") or fallback_artist).strip() or fallback_artist
+        listen_raw = item.get("total_listen_count", item.get("listen_count", 0))
+        try:
+            listen_count = int(listen_raw or 0)
+        except (TypeError, ValueError):
+            listen_count = 0
+
+        parsed.append(
+            {
+                "artist": artist,
+                "title": title,
+                "listen_count": listen_count,
+                "recording_mbid": item.get("recording_mbid", ""),
+            }
+        )
+
+    return parsed
+
+
 def _get_top_recordings(
     artist_mbid: str,
     artist_name: str,
@@ -163,7 +204,9 @@ def _get_top_recordings(
         row = c.fetchone()
         if row:
             import json as _json
-            return _json.loads(row[0]).get("recordings", [])
+            cached = _json.loads(row[0]).get("recordings", [])
+            parsed_cached = _parse_top_recordings_payload(cached, artist_name)
+            return parsed_cached[: max(1, int(count))]
     finally:
         conn.close()
 
@@ -178,21 +221,12 @@ def _get_top_recordings(
             logger.debug("[listenbrainz] top-recordings returned %d for %s", resp.status_code, artist_name)
             return []
         data = resp.json()
-        raw = data.get("recordings", [])
     except Exception as exc:
         logger.debug("[listenbrainz] top-recordings request failed for '%s': %s", artist_name, exc)
         return []
 
-    recordings = [
-        {
-            "artist": r.get("artist_name", artist_name),
-            "title": r.get("recording_name", ""),
-            "listen_count": int(r.get("total_listen_count", 0)),
-            "recording_mbid": r.get("recording_mbid", ""),
-        }
-        for r in raw
-        if r.get("recording_name")
-    ]
+    recordings = _parse_top_recordings_payload(data, artist_name)
+    recordings = recordings[: max(1, int(count))]
 
     import json as _json
     conn2 = get_connection()

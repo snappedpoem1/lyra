@@ -64,6 +64,12 @@ def clean_title(title: str) -> Tuple[str, List[str]]:
     return clean or "Unknown Title", featured
 
 
+def clean_title_str(title: str) -> str:
+    """Return only the normalized title string (no featured-artist list)."""
+    clean, _featured = clean_title(title)
+    return clean
+
+
 def to_folder_name(s: str, max_length: int = 100) -> str:
     """Convert a string to a Picard-compatible folder/file component.
 

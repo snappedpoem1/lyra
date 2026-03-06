@@ -1,6 +1,6 @@
 # Worklist
 
-Last updated: March 5, 2026 (updated after codebase-integrity-pass session)
+Last updated: March 5, 2026 (updated after gap-closure-sweep session)
 
 This file is the short operational list of what is done and what still needs work.
 
@@ -47,6 +47,11 @@ This file is the short operational list of what is done and what still needs wor
 - [x] Populate local-library similar edges from Last.fm in staged runs (`similar` edges: 0 -> 1,762)
 - [x] Run incremental MusicBrainz credit enrichment (`track_credits`: 1 -> 7)
 - [x] Verify structure analysis blocker (`librosa_not_installed` in current runtime)
+- [x] Implement pipeline resume behavior for existing job IDs (`oracle/pipeline.py`)
+- [x] Replace streamrip tier stub with executable CLI adapter path (`oracle/acquirers/streamrip.py`)
+- [x] Consolidate scanner/guard title cleaning through `name_cleaner.clean_title_str()`
+- [x] Fix ListenBrainz community discovery zero-yield parsing bug and validate non-zero queue inserts
+- [x] Validate structure analysis write path with live run: `track_structure` grew from 13 -> 61
 
 ## Next up
 
@@ -59,13 +64,15 @@ This file is the short operational list of what is done and what still needs wor
 
 ## Progress markers (easy -> hard)
 
-- [ ] P1: Install `librosa` in the active Python runtime; rerun `oracle structure analyze --limit 50` and confirm `track_structure` growth.
-- [ ] P2: Continue `oracle credits enrich` in bounded batches (20-50/run) until artist shrine credit coverage becomes useful.
-- [ ] P3: Continue staged `oracle graph similarity-edges` runs (`limit-artists=500` then full) to deepen cultural graph edges.
-- [ ] P4: Investigate why `oracle discover listenbrainz` returns `0` queued tracks; verify API payloads, duplicate filtering, and queue insert guards.
-- [ ] P5: Improve Spotify-history to local-track resolution with stronger normalization/fuzzy matching, then re-run playlist parity audit.
-- [ ] P6: Run an explicit live foobar2000 + BeefWeb verification session and confirm new playback rows are clearly attributable to live playback.
-- [ ] P7: Decide on Spotify export implementation scope (or explicit cancellation) and runtime-artifact separation policy.
+- [x] P1: Validate structure analysis runtime and row growth (`oracle structure analyze --limit 50`, `track_structure` now growing).
+- [x] P2: Fix ListenBrainz community zero-yield path and verify queue inserts are non-zero.
+- [x] P3: Consolidate title-clean entry points (`scanner` + `guard` now route through `name_cleaner`).
+- [ ] P4: Install/configure streamrip CLI and validate one successful T2 waterfall acquisition.
+- [ ] P5: Continue `oracle credits enrich` in bounded batches (20-50/run) until artist shrine credit coverage becomes useful.
+- [ ] P6: Continue staged `oracle graph similarity-edges` runs (`limit-artists=500` then full) to deepen cultural graph edges.
+- [ ] P7: Improve Spotify-history to local-track resolution with stronger normalization/fuzzy matching, then re-run playlist parity audit.
+- [ ] P8: Run an explicit live foobar2000 + BeefWeb verification session and confirm new playback rows are clearly attributable to live playback.
+- [ ] P9: Decide on Spotify export implementation scope (or explicit cancellation) and runtime-artifact separation policy.
 
 ## To Done
 
