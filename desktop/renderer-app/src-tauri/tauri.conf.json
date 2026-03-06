@@ -23,7 +23,7 @@
       "identifier": "com.lyra.oracle",
       "targets": "all",
       "resources": [
-        "../../.lyra-build/bin"
+        "../../../.lyra-build/bin"
       ],
       "icon": [
         "icons/icon.ico",

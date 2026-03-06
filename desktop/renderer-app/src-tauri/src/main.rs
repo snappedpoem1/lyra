@@ -1,6 +1,8 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::env;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -27,7 +29,28 @@ enum BackendLaunchMode {
     Packaged,
 }
 
+fn boot_log_path() -> PathBuf {
+    if let Ok(path) = env::var("LYRA_HOST_BOOT_LOG") {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+    env::temp_dir().join("lyra-host-boot.log")
+}
+
+fn write_boot_log(message: &str) {
+    let path = boot_log_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{message}");
+    }
+}
+
 fn emit_boot_status(app: &tauri::AppHandle, phase: &str, message: &str, ready: bool) {
+    write_boot_log(&format!("[boot-status] phase={phase} ready={ready} message={message}"));
     let payload = BootStatus {
         phase: phase.to_string(),
         message: message.to_string(),
@@ -103,6 +126,10 @@ fn resolve_project_root() -> Option<PathBuf> {
     if let Ok(root) = env::var("LYRA_PROJECT_ROOT") {
         let candidate = PathBuf::from(root);
         if candidate.join("lyra_api.py").exists() {
+            write_boot_log(&format!(
+                "[resolve-project-root] using LYRA_PROJECT_ROOT={}",
+                candidate.display()
+            ));
             return Some(candidate);
         }
     }
@@ -110,6 +137,10 @@ fn resolve_project_root() -> Option<PathBuf> {
     if let Ok(cwd) = env::current_dir() {
         for dir in cwd.ancestors() {
             if dir.join("lyra_api.py").exists() {
+                write_boot_log(&format!(
+                    "[resolve-project-root] discovered from cwd={}",
+                    dir.display()
+                ));
                 return Some(dir.to_path_buf());
             }
         }
@@ -123,6 +154,10 @@ fn resolve_packaged_backend_exe() -> Option<PathBuf> {
         if !path.trim().is_empty() {
             let candidate = PathBuf::from(path);
             if candidate.exists() {
+                write_boot_log(&format!(
+                    "[resolve-packaged-backend] using LYRA_BACKEND_EXE={}",
+                    candidate.display()
+                ));
                 return Some(candidate);
             }
         }
@@ -138,6 +173,10 @@ fn resolve_packaged_backend_exe() -> Option<PathBuf> {
             ];
             for candidate in candidates {
                 if candidate.exists() {
+                    write_boot_log(&format!(
+                        "[resolve-packaged-backend] using bundled candidate={}",
+                        candidate.display()
+                    ));
                     return Some(candidate);
                 }
             }
@@ -190,6 +229,11 @@ fn apply_runtime_environment(command: &mut Command, project_root: &Path) {
         "LYRA_RUNTIME_ROOT",
         runtime_root.to_string_lossy().to_string(),
     );
+    write_boot_log(&format!(
+        "[runtime-env] project_root={} runtime_root={}",
+        project_root.display(),
+        runtime_root.display()
+    ));
 
     let mut paths: Vec<PathBuf> = runtime_bin_dirs(project_root)
         .into_iter()
@@ -207,6 +251,11 @@ fn launch_dev_backend_process() -> Result<Child, String> {
     let project_root = resolve_project_root()
         .ok_or_else(|| "LYRA dev backend launch failed: project root was not found".to_string())?;
     let python_exe = resolve_python_exe(&project_root);
+    write_boot_log(&format!(
+        "[launch-dev-backend] python={} cwd={}",
+        python_exe,
+        project_root.display()
+    ));
     let mut command = Command::new(&python_exe);
     command
         .arg("lyra_api.py")
@@ -228,6 +277,11 @@ fn launch_packaged_backend_process() -> Result<Child, String> {
         .map(Path::to_path_buf)
         .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let runtime_root = resolve_project_root().unwrap_or(fallback_runtime_root);
+    write_boot_log(&format!(
+        "[launch-packaged-backend] exe={} cwd={}",
+        sidecar_exe.display(),
+        runtime_root.display()
+    ));
 
     let mut command = Command::new(sidecar_exe);
     command
@@ -264,6 +318,7 @@ fn launch_packaged_backend_process() -> Result<Child, String> {
 
 fn launch_backend_process() -> Result<Child, String> {
     let mode = parse_backend_launch_mode();
+    write_boot_log(&format!("[launch-backend] mode={mode:?}"));
     match mode {
         BackendLaunchMode::Dev => launch_dev_backend_process(),
         BackendLaunchMode::Packaged => launch_packaged_backend_process(),
@@ -287,6 +342,7 @@ fn launch_backend_process() -> Result<Child, String> {
 
 fn start_backend_sidecar(app: tauri::AppHandle) {
     let base_url = backend_base_url();
+    write_boot_log(&format!("[start-backend-sidecar] base_url={base_url}"));
     if health_ready(&base_url) {
         emit_boot_status(&app, "backend", "Backend already running", true);
         return;
@@ -434,6 +490,7 @@ fn stop_backend_process(app: &tauri::AppHandle) {
 }
 
 fn main() {
+    write_boot_log("[main] starting tauri host");
     let tray_menu = tauri::SystemTrayMenu::new()
         .add_item(tauri::CustomMenuItem::new("show", "Show / Hide"))
         .add_item(tauri::CustomMenuItem::new("play_pause", "Play / Pause"))
@@ -450,6 +507,7 @@ fn main() {
         .manage(state)
         .system_tray(tauri::SystemTray::new().with_menu(tray_menu))
         .setup(|app| {
+            write_boot_log("[main] setup entered");
             let app_handle = app.handle();
             start_backend_sidecar(app_handle.clone());
             register_media_shortcuts(&app_handle);
@@ -483,6 +541,7 @@ fn main() {
         .expect("error while running tauri application")
         .run(|app_handle, run_event| {
             if matches!(run_event, tauri::RunEvent::Exit) {
+                write_boot_log("[main] exit event received");
                 stop_backend_process(app_handle);
             }
         });

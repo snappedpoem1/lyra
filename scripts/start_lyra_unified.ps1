@@ -52,12 +52,29 @@ function Wait-HealthReady {
   return $false
 }
 
+function Test-IsRawTauriBuildHost {
+  param([string]$HostExe)
+
+  $normalized = [System.IO.Path]::GetFullPath($HostExe)
+  return $normalized -like "*\desktop\renderer-app\src-tauri\target\debug\*" -or `
+    $normalized -like "*\desktop\renderer-app\src-tauri\target\release\*"
+}
+
 function Resolve-PackagedHostExe {
   param([string]$RepoRoot)
 
+  $envOverride = $env:LYRA_PACKAGED_HOST_EXE
+  if ($envOverride -and (Test-Path $envOverride)) {
+    return (Resolve-Path $envOverride).Path
+  }
+
   $candidates = @(
+    (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\release\Lyra Oracle.exe"),
     (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\release\lyra_tauri.exe"),
-    (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\debug\lyra_tauri.exe")
+    (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\release\deps\lyra_tauri.exe"),
+    (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\debug\Lyra Oracle.exe"),
+    (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\debug\lyra_tauri.exe"),
+    (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\debug\deps\lyra_tauri.exe")
   )
 
   foreach ($candidate in $candidates) {
@@ -68,6 +85,37 @@ function Resolve-PackagedHostExe {
   return $null
 }
 
+function Set-PackagedHostEnvironment {
+  param(
+    [string]$RepoRoot,
+    [string]$HostExe
+  )
+
+  $logDir = Join-Path $RepoRoot "logs"
+  New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+  $bootLogPath = Join-Path $logDir "packaged-host-boot.log"
+  $backendLogPath = Join-Path $logDir "packaged-backend.log"
+
+  $env:LYRA_BACKEND_MODE = "packaged"
+  $env:LYRA_HOST_BOOT_LOG = $bootLogPath
+  $env:LYRA_BACKEND_LOG_PATH = $backendLogPath
+
+  if (Test-IsRawTauriBuildHost -HostExe $HostExe) {
+    $env:LYRA_PROJECT_ROOT = $RepoRoot
+    $env:LYRA_RUNTIME_ROOT = Join-Path $RepoRoot "runtime"
+    $hostDir = Split-Path -Parent $HostExe
+    $backendExe = Join-Path $hostDir "bin\lyra_backend.exe"
+    if (-not (Test-Path $backendExe)) {
+      $backendExe = Join-Path $RepoRoot ".lyra-build\bin\lyra_backend.exe"
+    }
+    if (Test-Path $backendExe) {
+      $env:LYRA_BACKEND_EXE = $backendExe
+    }
+  }
+
+  return $bootLogPath
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
 
@@ -75,6 +123,7 @@ $baseUrl = "http://127.0.0.1:5000"
 $desktopDir = Join-Path $repoRoot "desktop"
 $rendererDir = Join-Path $repoRoot "desktop\renderer-app"
 $hostProcess = $null
+$bootLogPath = $null
 
 if ($HealthTimeoutSeconds -lt 5) {
   throw "HealthTimeoutSeconds must be at least 5"
@@ -102,14 +151,27 @@ if ($Mode -eq "dev") {
   if (-not $hostExe) {
     throw "packaged host binary not found. Build once via: cd desktop\renderer-app; npm run tauri:build -- --debug"
   }
+  $bootLogPath = Set-PackagedHostEnvironment -RepoRoot $repoRoot -HostExe $hostExe
   Write-Step "starting packaged host: $hostExe"
-  $hostProcess = Start-Process -FilePath $hostExe -WorkingDirectory $rendererDir -PassThru
+  $hostProcess = Start-Process -FilePath $hostExe -WorkingDirectory $repoRoot -PassThru
 }
 
 Write-Step "waiting for backend health readiness"
-if (-not (Wait-HealthReady -BaseUrl $baseUrl -TimeoutSeconds $HealthTimeoutSeconds -HostProcess $hostProcess)) {
+try {
+  $ready = Wait-HealthReady -BaseUrl $baseUrl -TimeoutSeconds $HealthTimeoutSeconds -HostProcess $hostProcess
+} catch {
+  if ($Mode -eq "packaged" -and $bootLogPath -and (Test-Path $bootLogPath)) {
+    throw "$($_.Exception.Message). host boot log: $bootLogPath"
+  }
+  throw
+}
+
+if (-not $ready) {
   if ($hostProcess -and -not $hostProcess.HasExited) {
     Stop-Process -Id $hostProcess.Id -Force
+  }
+  if ($Mode -eq "packaged" -and $bootLogPath -and (Test-Path $bootLogPath)) {
+    throw "backend did not become healthy within ${HealthTimeoutSeconds}s. host boot log: $bootLogPath"
   }
   throw "backend did not become healthy within ${HealthTimeoutSeconds}s"
 }

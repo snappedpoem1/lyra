@@ -16,8 +16,27 @@ $entrypoint = Join-Path $repoRoot "lyra_api.py"
 $distDir = Join-Path $repoRoot ".lyra-build\bin"
 $tmpRoot = Join-Path $repoRoot ".tmp\pyinstaller"
 $runStamp = Get-Date -Format "yyyyMMddHHmmssfff"
+$buildDistDir = Join-Path $tmpRoot "dist\$runStamp"
 $workDir = Join-Path $tmpRoot "build\$runStamp"
 $specDir = Join-Path $tmpRoot "spec\$runStamp"
+
+function Copy-StagedExecutable {
+    param(
+        [string]$SourcePath,
+        [string]$DestinationPath
+    )
+
+    try {
+        Copy-Item -Path $SourcePath -Destination $DestinationPath -Force
+        return $true
+    } catch {
+        if (Test-Path $DestinationPath) {
+            Write-Warning "staged sidecar output is locked; keeping existing artifact at '$DestinationPath'"
+            return $false
+        }
+        throw
+    }
+}
 
 if (-not (Test-Path $pythonExe)) {
     throw "python executable not found at '$pythonExe'. Create and install .venv first."
@@ -27,6 +46,7 @@ if (-not (Test-Path $entrypoint)) {
 }
 
 New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+New-Item -ItemType Directory -Path $buildDistDir -Force | Out-Null
 New-Item -ItemType Directory -Path $workDir -Force | Out-Null
 New-Item -ItemType Directory -Path $specDir -Force | Out-Null
 
@@ -46,7 +66,7 @@ $excludeModules = @(
     --clean `
     --onefile `
     --name lyra_backend `
-    --distpath $distDir `
+    --distpath $buildDistDir `
     --workpath $workDir `
     --specpath $specDir `
     --exclude-module $excludeModules[0] `
@@ -56,10 +76,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller build failed with exit code $LASTEXITCODE"
 }
 
-$outputExe = Join-Path $distDir "lyra_backend.exe"
-if (-not (Test-Path $outputExe)) {
-    throw "expected output not found: $outputExe"
+$builtExe = Join-Path $buildDistDir "lyra_backend.exe"
+if (-not (Test-Path $builtExe)) {
+    throw "expected output not found: $builtExe"
 }
+
+$outputExe = Join-Path $distDir "lyra_backend.exe"
+[void](Copy-StagedExecutable -SourcePath $builtExe -DestinationPath $outputExe)
 
 Write-Step "built sidecar: $outputExe"
 

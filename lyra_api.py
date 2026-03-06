@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import logging
 import os
 import subprocess
 import sys
@@ -14,6 +15,26 @@ import sqlite3
 
 from dotenv import load_dotenv
 
+
+def _configure_runtime_logging() -> None:
+    """Configure a file logger for frozen/runtime builds."""
+    log_path_raw = os.getenv("LYRA_BACKEND_LOG_PATH", "").strip()
+    if not getattr(sys, "frozen", False) and not log_path_raw:
+        return
+
+    if log_path_raw:
+        log_path = Path(log_path_raw)
+    else:
+        log_path = PROJECT_ROOT / "logs" / "packaged-backend.log"
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        handlers=[logging.FileHandler(log_path, encoding="utf-8")],
+        force=True,
+    )
+
 def _resolve_project_root() -> Path:
     env_root = os.getenv("LYRA_PROJECT_ROOT", "").strip()
     if env_root:
@@ -24,6 +45,8 @@ def _resolve_project_root() -> Path:
 
 
 PROJECT_ROOT = _resolve_project_root()
+_configure_runtime_logging()
+logger = logging.getLogger(__name__)
 
 
 def _running_as_script() -> bool:
@@ -88,7 +111,9 @@ os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(Path(hf_home) / "hub"))
 from oracle.api import create_app, main  # noqa: E402
 
 # Background workers (APScheduler) are started inside create_app() via init_scheduler().
+logger.info("[lyra_api] project_root=%s frozen=%s", PROJECT_ROOT, getattr(sys, "frozen", False))
 app = create_app()
+logger.info("[lyra_api] routes=%s", app.url_map)
 
 if __name__ == "__main__":
     main()

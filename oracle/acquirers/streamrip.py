@@ -40,7 +40,12 @@ def _build_query(artist: str, title: str, album: Optional[str]) -> str:
 
 
 def _build_command(binary: str, query: str, output_dir: Path) -> list[str]:
-    """Build streamrip command from template or safe default."""
+    """Build streamrip command from template or safe default.
+
+    The default targets Qobuz track search using streamrip 2.x CLI syntax:
+      rip -f <output_dir> search qobuz track <query> --first
+    Override via LYRA_STREAMRIP_CMD_TEMPLATE with {binary}, {query}, {output_dir} slots.
+    """
     template = os.getenv("LYRA_STREAMRIP_CMD_TEMPLATE", "").strip()
     if template:
         rendered = template.format(
@@ -50,8 +55,9 @@ def _build_command(binary: str, query: str, output_dir: Path) -> list[str]:
         )
         return shlex.split(rendered, posix=False)
 
-    # Default command for common streamrip CLI usage.
-    return [binary, "search", query, "--max-items", "1", "--output", str(output_dir)]
+    # streamrip 2.x: `rip -f <dir> search <source> <media_type> <query> --first`
+    source = os.getenv("LYRA_STREAMRIP_SOURCE", "qobuz").strip() or "qobuz"
+    return [binary, "-f", str(output_dir), "search", source, "track", query, "--first"]
 
 
 def _find_new_audio_file(output_dir: Path, started_at: float) -> Optional[Path]:

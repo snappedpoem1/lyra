@@ -5,6 +5,7 @@ param(
   [int]$RecoverySeekMs = 15000,
   [int]$PositionToleranceMs = 2500,
   [switch]$SkipSidecarBuild,
+  [switch]$SkipInstallerProof,
   [switch]$LeaveBackendRunning
 )
 
@@ -81,6 +82,21 @@ function Start-Sidecar {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
+
+# ── Pre-flight: installer proof + packaged streamrip proof ─────────────────
+if (-not $SkipInstallerProof) {
+  Write-Step "running clean-machine installer proof"
+  powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\validate_clean_machine_install.ps1") -SkipToolSmokeCheck
+  if ($LASTEXITCODE -ne 0) {
+    throw "clean-machine installer proof failed (exit $LASTEXITCODE)"
+  }
+
+  Write-Step "running packaged streamrip proof"
+  powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\validate_packaged_streamrip.ps1")
+  if ($LASTEXITCODE -ne 0) {
+    throw "packaged streamrip proof failed (exit $LASTEXITCODE)"
+  }
+}
 
 $sidecarExe = Join-Path $repoRoot ".lyra-build\bin\lyra_backend.exe"
 $startedProcess = $null
