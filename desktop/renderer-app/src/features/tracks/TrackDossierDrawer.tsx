@@ -1,8 +1,7 @@
+import { Badge, Drawer, Group, Stack, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { getTrackDossier } from "@/services/lyraGateway/queries";
 import { useUiStore } from "@/stores/uiStore";
-import { LyraPanel } from "@/ui/LyraPanel";
-import { LyraPill } from "@/ui/LyraPill";
 
 export function TrackDossierDrawer() {
   const trackId = useUiStore((state) => state.dossierTrackId);
@@ -13,57 +12,68 @@ export function TrackDossierDrawer() {
     enabled: Boolean(trackId),
   });
 
-  if (!trackId || !data) {
-    return null;
-  }
-
   return (
-    <div className="drawer-shell" onClick={close}>
-      <LyraPanel className="dossier-drawer" onClick={(event) => event.stopPropagation()}>
-        <button className="drawer-close" onClick={close}>close</button>
-        <h2>{data.track.title}</h2>
-        <p>{data.track.artist} · {data.fileType}</p>
-        <p>{data.provenanceNotes[0]}</p>
-        <div className="dossier-score-chips">
-          {data.track.scoreChips.map((chip) => (
-            <LyraPill key={chip.key}>{chip.label} {chip.value != null ? Math.round(chip.value * 100) : "?"}</LyraPill>
-          ))}
-        </div>
-        {data.fact && (
-          <div className="dossier-fact-drop">
-            <span className="insight-kicker">Lyra intel</span>
-            <p>{data.fact}</p>
-          </div>
-        )}
-        <div className="dossier-grid">
+    <Drawer
+      opened={Boolean(trackId && data)}
+      onClose={close}
+      position="right"
+      size="lg"
+      classNames={{
+        content: "lyra-drawer-content",
+        header: "lyra-drawer-header",
+        body: "lyra-drawer-body",
+      }}
+      title={data ? `${data.track.title}` : "Track dossier"}
+    >
+      {!data ? null : (
+        <Stack gap="lg">
           <div>
-            <h3>Structure</h3>
-            <p>BPM {Math.round(data.structure?.bpm ?? 0)}</p>
-            <p>Key {data.structure?.key ?? "unknown"}</p>
-            {data.structure?.hasDrop && <p>Drop at {Math.round(data.structure.dropTimestamp ?? 0)}s</p>}
+            <Text className="pane-meta">{data.track.artist} | {data.fileType}</Text>
+            <Text className="oracle-track-reason">{data.provenanceNotes[0] ?? "No provenance notes loaded."}</Text>
           </div>
-          <div>
-            <h3>Lineage</h3>
-            {data.lineage?.length ? (
-              data.lineage.map((edge) => (
-                <p key={`${edge.source}-${edge.target}`}>{edge.source} → {edge.target} <span className="text-dim">({edge.type})</span></p>
-              ))
-            ) : (
-              <p className="text-dim">No live lineage thread loaded.</p>
-            )}
+          <Group gap={6}>
+            {data.track.scoreChips.map((chip) => (
+              <Badge key={chip.key} color="lyra" variant="light">
+                {chip.label} {chip.value != null ? Math.round(chip.value * 100) : "?"}
+              </Badge>
+            ))}
+          </Group>
+          {data.fact ? (
+            <div className="dossier-fact-drop">
+              <span className="insight-kicker">Lyra intel</span>
+              <p>{data.fact}</p>
+            </div>
+          ) : null}
+          <div className="dossier-grid">
+            <section className="inspector-block">
+              <Title order={4}>Structure</Title>
+              <Text>BPM {Math.round(data.structure?.bpm ?? 0)}</Text>
+              <Text>Key {data.structure?.key ?? "unknown"}</Text>
+              {data.structure?.hasDrop ? <Text>Drop at {Math.round(data.structure.dropTimestamp ?? 0)}s</Text> : null}
+            </section>
+            <section className="inspector-block">
+              <Title order={4}>Lineage</Title>
+              {data.lineage?.length ? (
+                data.lineage.map((edge) => (
+                  <Text key={`${edge.source}-${edge.target}`}>{`${edge.source} -> ${edge.target} `}<span className="text-dim">({edge.type})</span></Text>
+                ))
+              ) : (
+                <Text className="text-dim">No live lineage thread loaded.</Text>
+              )}
+            </section>
+            <section className="inspector-block">
+              <Title order={4}>Samples</Title>
+              {data.samples?.length ? (
+                data.samples.map((sample, index) => (
+                  <Text key={`${sample.artist}-${sample.title}-${index}`}>{sample.artist} - {sample.title} {sample.year ? `(${sample.year})` : ""}</Text>
+                ))
+              ) : (
+                <Text className="text-dim">No sample provenance detected.</Text>
+              )}
+            </section>
           </div>
-          <div>
-            <h3>Samples</h3>
-            {data.samples?.length ? (
-              data.samples.map((s, i) => (
-                <p key={i}>{s.artist} — {s.title} {s.year ? `(${s.year})` : ""}</p>
-              ))
-            ) : (
-              <p className="text-dim">No sample provenance detected.</p>
-            )}
-          </div>
-        </div>
-      </LyraPanel>
-    </div>
+        </Stack>
+      )}
+    </Drawer>
   );
 }

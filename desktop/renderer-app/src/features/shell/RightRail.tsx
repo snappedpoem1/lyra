@@ -1,3 +1,4 @@
+import { Badge, SegmentedControl } from "@mantine/core";
 import { useUiStore } from "@/stores/uiStore";
 import { LyraTabs } from "@/ui/LyraTabs";
 import { NowPlayingAltar } from "@/features/player/NowPlayingAltar";
@@ -56,9 +57,17 @@ export function RightRail() {
         )}
       </div>
       <LyraTabs>
-        <button className={`tab-button ${tab === "now-playing" ? "is-active" : ""}`} onClick={() => setTab("now-playing")}>Deck</button>
-        <button className={`tab-button ${tab === "queue" ? "is-active" : ""}`} onClick={() => setTab("queue")}>Playlist</button>
-        <button className={`tab-button ${tab === "details" ? "is-active" : ""}`} onClick={() => setTab("details")}>Info</button>
+        <SegmentedControl
+          fullWidth
+          size="xs"
+          value={tab}
+          onChange={(value) => setTab(value as typeof tab)}
+          data={[
+            { label: "Deck", value: "now-playing" },
+            { label: "Playlist", value: "queue" },
+            { label: "Info", value: "details" },
+          ]}
+        />
       </LyraTabs>
       <div className="rail-stack">
         {tab === "now-playing" && <NowPlayingAltar />}
@@ -71,7 +80,7 @@ export function RightRail() {
             </div>
             <p>{data?.track.artist ?? "Click a track to inspect it."}</p>
             <div className="chip-row">
-              {data?.track.scoreChips.slice(0, 4).map((chip) => <span key={chip.key} className="lyra-pill">{chip.label}</span>)}
+              {data?.track.scoreChips.slice(0, 4).map((chip) => <Badge key={chip.key} color="lyra">{chip.label}</Badge>)}
             </div>
             <div className="inspector-stack">
               <div className="inspector-block">

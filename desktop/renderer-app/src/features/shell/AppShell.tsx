@@ -7,6 +7,7 @@ import { LeftRail } from "@/features/shell/LeftRail";
 import { RightRail } from "@/features/shell/RightRail";
 import { SemanticSearchOverlay } from "@/features/shell/SemanticSearchOverlay";
 import { TopAtmosphereBar } from "@/features/shell/TopAtmosphereBar";
+import { LyraCompanion } from "@/features/companion/LyraCompanion";
 import { TrackDossierDrawer } from "@/features/tracks/TrackDossierDrawer";
 import { DeveloperHud } from "@/features/dev/DeveloperHud";
 import { audioEngine } from "@/services/audio/audioEngine";
@@ -193,6 +194,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <CommandPalette />
       <SemanticSearchOverlay />
       <TrackDossierDrawer />
+      <LyraCompanion />
       <DeveloperHud />
     </>
   );

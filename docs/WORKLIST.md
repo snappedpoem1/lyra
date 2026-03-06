@@ -52,10 +52,13 @@ This file tracks active execution work only.
   - Mantine provider/theme added for buttons, segmented controls, inputs, sliders, badges, and number fields
   - active unified workspace controls moved off pure hand-rolled primitives onto the new component foundation
   - Figma shell-base artifact created for Lyra workspace structure and future design iteration
-## In Progress (Current Session S-20260306-10)
+- Secondary UI surfaces now follow the same foundation:
+  - settings route moved onto Mantine-backed cards, text inputs, checkboxes, segmented controls, and badges
+  - track dossier now opens in a Mantine drawer instead of a custom overlay shell
+  - developer HUD and right-rail tabs/details now use the new component language
+  - companion shell layer now exists with orb / 8-bit face modes and settings-backed toggles
+## In Progress (Current Session S-20260306-11)
 
-- UI foundation / shell refinement:
-  - extend Mantine-backed primitives deeper into settings, drawers, and future companion surfaces
 - Release-gate validation:
   - packaged installer proof on a clean machine
   - native-audio soak / parity acceptance
@@ -76,5 +79,5 @@ This file tracks active execution work only.
 1. Validate the packaged installer on a clean machine with bundled `streamrip`, `spotdl`, `ffmpeg`, and `ffprobe`.
 2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild`.
 3. Validate one successful packaged/runtime-backed streamrip acquisition.
-4. Extend the new Mantine/Figma UI foundation into settings, drawers, and companion-ready surfaces.
+4. Extend the Mantine foundation across remaining legacy routes and system panels where useful.
 5. Continue graph/credits/structure depth passes after release-gate proof.

@@ -37,6 +37,11 @@ This is the current repo/runtime snapshot verified from this workspace.
     - text/number inputs
     - provider sliders
     - status/signal badges
+  - Secondary renderer surfaces now follow the same foundation for:
+    - settings route controls
+    - right-rail tab switching and detail badges
+    - track dossier drawer
+    - developer HUD shell card
   - Oracle queue action button now executes backend `/api/oracle/action/execute` routes
   - Oracle recommendation surface now uses brokered explainable picks instead of only fixed radio-mode fetches
   - Now Playing intelligence card uses dossier payload for:
@@ -44,6 +49,10 @@ This is the current repo/runtime snapshot verified from this workspace.
     - cached lyrics/context (Genius cache payload)
   - Figma base artifact created for shell planning:
     - Lyra Shell Foundation (FigJam)
+  - Companion shell layer is now live as a settings-backed floating surface with:
+    - `orb` mode
+    - `pixel` mode
+    - route-through to shell tuning in settings
 - Playback authority:
   - Canonical backend player domain in `oracle/player/*`
   - Persisted `player_state` and `player_queue` tables
@@ -129,7 +138,7 @@ From `python -m oracle status`:
 2. Native audio (`miniaudio`) production soak validation across real devices/sessions.
 3. Runtime/source separation policy is still partial beyond the new dedicated `.lyra-build` staging root.
 4. One successful packaged/runtime-backed tier-2 streamrip acquisition proof is still pending.
-5. UI foundation exists, but the Mantine/Figma layer is not yet extended across all secondary surfaces (settings, drawers, companion shell).
+5. Mantine/Figma foundation is live across the main workspace plus key secondary surfaces, but not yet across every legacy route/panel.
 
 ## 7) Immediate Next Pass
 
@@ -137,5 +146,5 @@ From `python -m oracle status`:
 2. Run parity-hardening acceptance (4-hour soak + pause/seek/repeat/recovery across restart).
 3. Validate one successful packaged/runtime-backed streamrip acquisition.
 4. Continue runtime/source separation cleanup after installer proof.
-5. Extend the new Mantine/Figma UI foundation into settings, drawers, and companion-ready surfaces.
+5. Extend the Mantine foundation into any remaining legacy routes and system panels that still rely on older primitives.
 6. Continue graph/credits/structure depth passes once release-gate proof is complete.

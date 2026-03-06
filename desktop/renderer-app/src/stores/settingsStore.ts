@@ -9,11 +9,21 @@ type SettingsSnapshot = {
   fixtureMode: boolean;
   developerHud: boolean;
   resumeSession: boolean;
+  companionEnabled: boolean;
+  companionStyle: "orb" | "pixel";
 };
 
 function loadInitial(): SettingsSnapshot {
   if (typeof window === "undefined") {
-    return { apiBaseUrl: DEFAULT_API_BASE, apiToken: "", fixtureMode: false, developerHud: false, resumeSession: true };
+    return {
+      apiBaseUrl: DEFAULT_API_BASE,
+      apiToken: "",
+      fixtureMode: false,
+      developerHud: false,
+      resumeSession: true,
+      companionEnabled: true,
+      companionStyle: "orb",
+    };
   }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -24,9 +34,19 @@ function loadInitial(): SettingsSnapshot {
       fixtureMode: Boolean(parsed.fixtureMode),
       developerHud: Boolean(parsed.developerHud),
       resumeSession: parsed.resumeSession !== false,
+      companionEnabled: parsed.companionEnabled !== false,
+      companionStyle: parsed.companionStyle === "pixel" ? "pixel" : "orb",
     };
   } catch {
-    return { apiBaseUrl: getEnvApiBase(), apiToken: getEnvApiToken(), fixtureMode: false, developerHud: false, resumeSession: true };
+    return {
+      apiBaseUrl: getEnvApiBase(),
+      apiToken: getEnvApiToken(),
+      fixtureMode: false,
+      developerHud: false,
+      resumeSession: true,
+      companionEnabled: true,
+      companionStyle: "orb",
+    };
   }
 }
 
@@ -41,6 +61,8 @@ interface SettingsStore extends SettingsSnapshot {
   setFixtureMode: (value: boolean) => void;
   setDeveloperHud: (value: boolean) => void;
   setResumeSession: (value: boolean) => void;
+  setCompanionEnabled: (value: boolean) => void;
+  setCompanionStyle: (value: "orb" | "pixel") => void;
 }
 
 const initial = loadInitial();
@@ -71,5 +93,15 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const next = { ...get(), resumeSession: value };
     persist(next);
     set({ resumeSession: value });
+  },
+  setCompanionEnabled: (value) => {
+    const next = { ...get(), companionEnabled: value };
+    persist(next);
+    set({ companionEnabled: value });
+  },
+  setCompanionStyle: (value) => {
+    const next = { ...get(), companionStyle: value };
+    persist(next);
+    set({ companionStyle: value });
   },
 }));
