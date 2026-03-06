@@ -19,6 +19,7 @@ This is the current repo/runtime snapshot verified from this workspace.
 - Desktop runtime:
   - Tauri host in `desktop/renderer-app/src-tauri/`
   - React/Vite renderer in `desktop/renderer-app/`
+  - Renderer component foundation now includes Mantine (`@mantine/core`, `@mantine/hooks`) with a Lyra-specific theme layer
   - Canonical launcher: `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev`
   - Packaged runtime builder: `powershell -ExecutionPolicy Bypass -File scripts/build_packaged_runtime.ps1`
   - Docker is not required and not auto-started in unified launch path
@@ -30,11 +31,19 @@ This is the current repo/runtime snapshot verified from this workspace.
     - provider weight sliders (`local`, `lastfm`, `listenbrainz`)
     - explicit chaos intensity presets (`low`, `medium`, `high`)
     - provider readiness/status chips
+  - Unified workspace shell controls now use the new Mantine-backed foundation for:
+    - mode switching via segmented controls
+    - action buttons
+    - text/number inputs
+    - provider sliders
+    - status/signal badges
   - Oracle queue action button now executes backend `/api/oracle/action/execute` routes
   - Oracle recommendation surface now uses brokered explainable picks instead of only fixed radio-mode fetches
   - Now Playing intelligence card uses dossier payload for:
     - 10-dimension track profile
     - cached lyrics/context (Genius cache payload)
+  - Figma base artifact created for shell planning:
+    - Lyra Shell Foundation (FigJam)
 - Playback authority:
   - Canonical backend player domain in `oracle/player/*`
   - Persisted `player_state` and `player_queue` tables
@@ -120,6 +129,7 @@ From `python -m oracle status`:
 2. Native audio (`miniaudio`) production soak validation across real devices/sessions.
 3. Runtime/source separation policy is still partial beyond the new dedicated `.lyra-build` staging root.
 4. One successful packaged/runtime-backed tier-2 streamrip acquisition proof is still pending.
+5. UI foundation exists, but the Mantine/Figma layer is not yet extended across all secondary surfaces (settings, drawers, companion shell).
 
 ## 7) Immediate Next Pass
 
@@ -127,4 +137,5 @@ From `python -m oracle status`:
 2. Run parity-hardening acceptance (4-hour soak + pause/seek/repeat/recovery across restart).
 3. Validate one successful packaged/runtime-backed streamrip acquisition.
 4. Continue runtime/source separation cleanup after installer proof.
-5. Continue graph/credits/structure depth passes once release-gate proof is complete.
+5. Extend the new Mantine/Figma UI foundation into settings, drawers, and companion-ready surfaces.
+6. Continue graph/credits/structure depth passes once release-gate proof is complete.

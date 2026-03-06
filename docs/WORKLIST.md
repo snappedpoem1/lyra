@@ -48,14 +48,17 @@ This file tracks active execution work only.
   - generated `lyra_backend.exe` now builds to `.lyra-build/bin`
   - bundled runtime helpers now stage to `.lyra-build/bin/runtime/bin`
   - Tauri bundle resources now consume `.lyra-build/bin` instead of `src-tauri/bin`
+- Renderer UI foundation now has a real component system:
+  - Mantine provider/theme added for buttons, segmented controls, inputs, sliders, badges, and number fields
+  - active unified workspace controls moved off pure hand-rolled primitives onto the new component foundation
+  - Figma shell-base artifact created for Lyra workspace structure and future design iteration
+## In Progress (Current Session S-20260306-10)
 
-## In Progress (Current Session S-20260306-09)
-
+- UI foundation / shell refinement:
+  - extend Mantine-backed primitives deeper into settings, drawers, and future companion surfaces
 - Release-gate validation:
   - packaged installer proof on a clean machine
   - native-audio soak / parity acceptance
-- Runtime/source separation cleanup:
-  - generated packaged assets moved off source-adjacent `src-tauri/bin`
 
 ## Order Of Operation (Highest Result First)
 
@@ -73,4 +76,5 @@ This file tracks active execution work only.
 1. Validate the packaged installer on a clean machine with bundled `streamrip`, `spotdl`, `ffmpeg`, and `ffprobe`.
 2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild`.
 3. Validate one successful packaged/runtime-backed streamrip acquisition.
-4. Continue graph/credits/structure depth passes after release-gate proof.
+4. Extend the new Mantine/Figma UI foundation into settings, drawers, and companion-ready surfaces.
+5. Continue graph/credits/structure depth passes after release-gate proof.

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { Badge, Button, Group, NumberInput, SegmentedControl, Slider, TextInput } from "@mantine/core";
 import {
   executeOracleAction,
   getAcquisitionBootstrapStatus,
@@ -54,6 +55,28 @@ const PROVIDER_LABELS: Record<string, string> = {
 const DEFAULT_LIBRARY_LIMIT = 64;
 
 type LibraryMode = "library" | "semantic" | "discover";
+
+const LIBRARY_MODE_OPTIONS: Array<{ label: string; value: LibraryMode }> = [
+  { label: "Library", value: "library" },
+  { label: "Semantic", value: "semantic" },
+  { label: "Deep Cut", value: "discover" },
+];
+
+const ORACLE_MODE_OPTIONS: Array<{ label: string; value: OracleMode }> = ORACLE_MODES.map((mode) => ({
+  label: mode[0].toUpperCase() + mode.slice(1),
+  value: mode,
+}));
+
+const NOVELTY_MODE_OPTIONS: Array<{ label: string; value: RecommendationNoveltyBand }> = NOVELTY_BANDS.map((band) => ({
+  label: band[0].toUpperCase() + band.slice(1),
+  value: band,
+}));
+
+const CHAOS_INTENSITY_OPTIONS: Array<{ label: string; value: "low" | "medium" | "high" }> = [
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High", value: "high" },
+];
 
 function fmtTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) {
@@ -686,9 +709,9 @@ export function UnifiedWorkspace() {
           <div className="unified-tag">music oracle entity</div>
         </div>
         <div className="header-actions">
-          <button className="lyra-button" disabled={uiLocked} onClick={() => setControlDeckOpen((open) => !open)}>
+          <Button variant="default" className="lyra-button" disabled={uiLocked} onClick={() => setControlDeckOpen((open) => !open)}>
             {controlDeckOpen ? "Hide Deck" : "Control Deck"}
-          </button>
+          </Button>
           <div className="unified-boot">{bootMessage}</div>
         </div>
       </header>
@@ -698,68 +721,80 @@ export function UnifiedWorkspace() {
           <div className="pane-head">
             <h2>Library</h2>
             {libraryMode === "library" && (
-              <input
+              <TextInput
                 className="pane-input"
                 placeholder="Search artist, title, album"
                 value={libraryQuery}
                 disabled={uiLocked}
                 onChange={(event) => setLibraryQuery(event.target.value)}
+                size="xs"
               />
             )}
           </div>
 
           <div className="unified-tabs">
-            <button className={`lyra-button ${libraryMode === "library" ? "lyra-button--accent" : ""}`} disabled={uiLocked} onClick={() => setLibraryMode("library")}>Library</button>
-            <button className={`lyra-button ${libraryMode === "semantic" ? "lyra-button--accent" : ""}`} disabled={uiLocked} onClick={() => setLibraryMode("semantic")}>Semantic</button>
-            <button className={`lyra-button ${libraryMode === "discover" ? "lyra-button--accent" : ""}`} disabled={uiLocked} onClick={() => setLibraryMode("discover")}>Deep Cut</button>
+            <SegmentedControl
+              fullWidth
+              data={LIBRARY_MODE_OPTIONS}
+              value={libraryMode}
+              onChange={(value) => setLibraryMode(value as LibraryMode)}
+              disabled={uiLocked}
+              size="xs"
+            />
           </div>
 
           {libraryMode === "semantic" && (
-            <div className="search-strip">
-              <input
+            <Group className="search-strip" align="end">
+              <TextInput
                 className="pane-input"
                 placeholder="late-night analog dub with tension"
                 value={semanticQuery}
                 disabled={uiLocked || searchBusy}
                 onChange={(event) => setSemanticQuery(event.target.value)}
+                size="xs"
+                styles={{ root: { flex: 1 } }}
               />
-              <button className="lyra-button lyra-button--accent" disabled={uiLocked || searchBusy} onClick={() => void runSemantic()}>
+              <Button variant="filled" color="lyra" className="lyra-button lyra-button--accent" disabled={uiLocked || searchBusy} onClick={() => void runSemantic()}>
                 {searchBusy ? "Searching..." : "Search"}
-              </button>
-              <button
+              </Button>
+              <Button
                 className="lyra-button"
                 disabled={uiLocked || semanticRows.length === 0}
                 onClick={() => {
                   void queueTrackIds(semanticRows.slice(0, 10).map((row) => row.trackId), "Semantic set queued");
                 }}
+                variant="default"
               >
                 Queue Top
-              </button>
-            </div>
+              </Button>
+            </Group>
           )}
 
           {libraryMode === "discover" && (
-            <div className="search-strip">
-              <input
+            <Group className="search-strip" align="end">
+              <TextInput
                 className="pane-input"
                 placeholder="genre (optional): shoegaze"
                 value={discoverGenre}
                 disabled={uiLocked || searchBusy}
                 onChange={(event) => setDiscoverGenre(event.target.value)}
+                size="xs"
+                styles={{ root: { flex: 1 } }}
               />
-              <button className="lyra-button lyra-button--accent" disabled={uiLocked || searchBusy} onClick={() => void runDeepCut()}>
+              <Button variant="filled" color="lyra" className="lyra-button lyra-button--accent" disabled={uiLocked || searchBusy} onClick={() => void runDeepCut()}>
                 {searchBusy ? "Hunting..." : "Hunt"}
-              </button>
-              <button
+              </Button>
+              <Button
                 className="lyra-button"
                 disabled={uiLocked || discoverRows.length === 0}
                 onClick={() => {
                   void queueTrackIds(discoverRows.slice(0, 10).map((row) => row.track.trackId), "Deep Cut set queued");
                 }}
+                variant="default"
               >
                 Queue Top
-              </button>
-            </div>
+              </Button>
+            </Group>
           )}
 
           <div className="pane-scroll">
@@ -792,7 +827,7 @@ export function UnifiedWorkspace() {
                   <span className="list-meta">{row.track.artist}</span>
                   <span className="discover-meta">Obscurity {row.obscurityScore.toFixed(2)} | Acclaim {row.acclaimScore.toFixed(2)}</span>
                 </button>
-                <button className="lyra-button" disabled={uiLocked} onClick={() => void queueTrackIds([row.track.trackId], "Deep Cut track queued")}>Queue</button>
+                <Button className="lyra-button" variant="default" disabled={uiLocked} onClick={() => void queueTrackIds([row.track.trackId], "Deep Cut track queued")}>Queue</Button>
               </div>
             ))}
           </div>
@@ -809,9 +844,9 @@ export function UnifiedWorkspace() {
             <div className="now-album">{currentTrack?.album ?? ""}</div>
           </div>
           <div className="transport-row">
-            <button className="lyra-button" disabled={uiLocked || transportBusy} onClick={() => void transportAction("previous")}>Previous</button>
-            <button className="lyra-button lyra-button--accent" disabled={uiLocked || transportBusy} onClick={() => void transportAction("play-pause")}>{player.status === "playing" ? "Pause" : "Play"}</button>
-            <button className="lyra-button" disabled={uiLocked || transportBusy} onClick={() => void transportAction("next")}>Next</button>
+            <Button className="lyra-button" variant="default" disabled={uiLocked || transportBusy} onClick={() => void transportAction("previous")}>Previous</Button>
+            <Button className="lyra-button lyra-button--accent" variant="filled" color="lyra" disabled={uiLocked || transportBusy} onClick={() => void transportAction("play-pause")}>{player.status === "playing" ? "Pause" : "Play"}</Button>
+            <Button className="lyra-button" variant="default" disabled={uiLocked || transportBusy} onClick={() => void transportAction("next")}>Next</Button>
           </div>
           <div className="seek-row">
             <span>{fmtTime(player.currentTimeSec)}</span>
@@ -819,10 +854,18 @@ export function UnifiedWorkspace() {
             <span>{fmtTime(safeDuration)}</span>
           </div>
           <div className="mode-row">
-            <button className={`lyra-button ${player.shuffle ? "lyra-button--accent" : ""}`} disabled={uiLocked} onClick={() => void setPlayerMode({ shuffle: !player.shuffle })}>Shuffle {player.shuffle ? "On" : "Off"}</button>
-            <button className={`lyra-button ${player.repeatMode === "off" ? "lyra-button--accent" : ""}`} disabled={uiLocked} onClick={() => void setPlayerMode({ repeat_mode: "off" })}>Repeat Off</button>
-            <button className={`lyra-button ${player.repeatMode === "one" ? "lyra-button--accent" : ""}`} disabled={uiLocked} onClick={() => void setPlayerMode({ repeat_mode: "one" })}>Repeat One</button>
-            <button className={`lyra-button ${player.repeatMode === "all" ? "lyra-button--accent" : ""}`} disabled={uiLocked} onClick={() => void setPlayerMode({ repeat_mode: "all" })}>Repeat All</button>
+            <Button className={`lyra-button ${player.shuffle ? "lyra-button--accent" : ""}`} variant={player.shuffle ? "filled" : "default"} color="lyra" disabled={uiLocked} onClick={() => void setPlayerMode({ shuffle: !player.shuffle })}>Shuffle {player.shuffle ? "On" : "Off"}</Button>
+            <SegmentedControl
+              data={[
+                { label: "Repeat Off", value: "off" },
+                { label: "Repeat One", value: "one" },
+                { label: "Repeat All", value: "all" },
+              ]}
+              value={player.repeatMode}
+              disabled={uiLocked}
+              onChange={(value) => void setPlayerMode({ repeat_mode: value as "off" | "one" | "all" })}
+              size="xs"
+            />
           </div>
 
           <div className="now-intel-grid">
@@ -859,9 +902,9 @@ export function UnifiedWorkspace() {
                   <span className="list-meta">{track.artist}</span>
                 </div>
                 <div className="queue-row-lite-actions">
-                  <button className="lyra-button" disabled={uiLocked} onClick={() => void moveQueueItem(index, -1)}>Up</button>
-                  <button className="lyra-button" disabled={uiLocked} onClick={() => void moveQueueItem(index, 1)}>Down</button>
-                  <button className="lyra-button" disabled={uiLocked} onClick={() => void playerPlay({ queue_index: index }).then((snapshot) => applyStateSnapshot(snapshot)).catch(() => {})}>Play</button>
+                  <Button className="lyra-button" variant="default" disabled={uiLocked} onClick={() => void moveQueueItem(index, -1)}>Up</Button>
+                  <Button className="lyra-button" variant="default" disabled={uiLocked} onClick={() => void moveQueueItem(index, 1)}>Down</Button>
+                  <Button className="lyra-button" variant="default" disabled={uiLocked} onClick={() => void playerPlay({ queue_index: index }).then((snapshot) => applyStateSnapshot(snapshot)).catch(() => {})}>Play</Button>
                 </div>
               </div>
             ))}
@@ -873,7 +916,7 @@ export function UnifiedWorkspace() {
               <div className="artist-sidebar-content">
                 <div className="artist-sidebar-name">{artistIntel.artist}</div>
                 {artistIntel.origin && <div className="pane-meta">Origin: {artistIntel.origin}</div>}
-                {artistIntel.genres.length > 0 && <div className="tag-row">{artistIntel.genres.slice(0, 6).map((genre) => <span key={genre} className="tag-chip">{genre}</span>)}</div>}
+                {artistIntel.genres.length > 0 && <div className="tag-row">{artistIntel.genres.slice(0, 6).map((genre) => <Badge key={genre} className="tag-chip" color="lyra">{genre}</Badge>)}</div>}
                 {artistIntel.bio && <p className="artist-bio-lite">{artistIntel.bio}</p>}
               </div>
             )}
@@ -885,10 +928,10 @@ export function UnifiedWorkspace() {
         <div className="pane-head">
           <h2>Oracle</h2>
           <div className="header-actions">
-            <button className="lyra-button" disabled={uiLocked} onClick={() => setControlDeckOpen((open) => !open)}>
+            <Button className="lyra-button" variant="default" disabled={uiLocked} onClick={() => setControlDeckOpen((open) => !open)}>
               {controlDeckOpen ? "Hide Deck" : "Control Deck"}
-            </button>
-            <button className="lyra-button" disabled={uiLocked} onClick={() => setOracleOpen((open) => !open)}>{oracleOpen ? "Collapse" : "Expand"}</button>
+            </Button>
+            <Button className="lyra-button" variant="default" disabled={uiLocked} onClick={() => setOracleOpen((open) => !open)}>{oracleOpen ? "Collapse" : "Expand"}</Button>
           </div>
         </div>
         {oracleOpen && (
@@ -897,60 +940,53 @@ export function UnifiedWorkspace() {
               <section className="control-deck">
                 <div className="control-deck-row">
                   <span className="pane-meta">Novelty Band</span>
-                  <div className="mode-row">
-                    {NOVELTY_BANDS.map((band) => (
-                      <button
-                        key={band}
-                        className={`lyra-button ${oracleNoveltyBand === band ? "lyra-button--accent" : ""}`}
-                        disabled={uiLocked || oracleBusy}
-                        onClick={() => setOracleNoveltyBand(band)}
-                      >
-                        {band}
-                      </button>
-                    ))}
-                  </div>
+                  <SegmentedControl
+                    data={NOVELTY_MODE_OPTIONS}
+                    value={oracleNoveltyBand}
+                    onChange={(value) => setOracleNoveltyBand(value as RecommendationNoveltyBand)}
+                    disabled={uiLocked || oracleBusy}
+                    size="xs"
+                    fullWidth
+                  />
                 </div>
                 <div className="control-deck-grid">
                   {Object.entries(providerWeights).map(([provider, weight]) => (
-                    <label key={provider} className="provider-slider">
+                    <div key={provider} className="provider-slider">
                       <span className="provider-slider-label">
                         <span>{PROVIDER_LABELS[provider] ?? provider}</span>
                         <span>{Math.round(weight * 100)}%</span>
                       </span>
-                      <input
-                        type="range"
+                      <Slider
                         min={0}
                         max={100}
                         value={Math.round(weight * 100)}
                         disabled={uiLocked || oracleBusy}
-                        onChange={(event) => updateProviderWeight(provider, Number(event.target.value) / 100)}
+                        onChange={(value) => updateProviderWeight(provider, Number(value) / 100)}
                       />
-                    </label>
+                    </div>
                   ))}
                 </div>
                 {oracleMode === "chaos" && (
                   <div className="control-deck-row">
                     <span className="pane-meta">Chaos Intensity</span>
-                    <div className="mode-row">
-                      {(["low", "medium", "high"] as const).map((intensity) => (
-                        <button
-                          key={intensity}
-                          className={`lyra-button ${chaosIntensity === intensity ? "lyra-button--accent" : ""}`}
-                          disabled={uiLocked || oracleBusy}
-                          onClick={() => setChaosIntensity(intensity)}
-                        >
-                          {intensity}
-                        </button>
-                      ))}
-                    </div>
+                    <SegmentedControl
+                      data={CHAOS_INTENSITY_OPTIONS}
+                      value={chaosIntensity}
+                      onChange={(value) => setChaosIntensity(value as "low" | "medium" | "high")}
+                      disabled={uiLocked || oracleBusy}
+                      size="xs"
+                      fullWidth
+                    />
                   </div>
                 )}
                 {providerStatusSummary.length > 0 && (
                   <div className="control-deck-status">
                     {providerStatusSummary.map((item) => (
                       <div key={item.key} className={`provider-status-chip ${item.status === "online" ? "is-online" : "is-offline"}`}>
-                        <span>{item.label}</span>
-                        <span>{item.weightPct}%</span>
+                        <Group justify="space-between" gap={6}>
+                          <span>{item.label}</span>
+                          <Badge color={item.status === "online" ? "lyra" : "red"}>{item.weightPct}%</Badge>
+                        </Group>
                         <span>{item.detail}</span>
                       </div>
                     ))}
@@ -959,26 +995,30 @@ export function UnifiedWorkspace() {
               </section>
             )}
             <div className="mode-row">
-              {ORACLE_MODES.map((mode) => (
-                <button key={mode} className={`lyra-button ${oracleMode === mode ? "lyra-button--accent" : ""}`} disabled={uiLocked} onClick={() => setOracleMode(mode)}>{mode}</button>
-              ))}
-              <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void revealOraclePicks()}>
+              <SegmentedControl
+                data={ORACLE_MODE_OPTIONS}
+                value={oracleMode}
+                onChange={(value) => setOracleMode(value as OracleMode)}
+                disabled={uiLocked}
+                size="xs"
+              />
+              <Button className="lyra-button" variant="default" disabled={uiLocked || oracleBusy} onClick={() => void revealOraclePicks()}>
                 {oracleBusy ? "Working..." : "Reveal Picks"}
-              </button>
-              <button className="lyra-button lyra-button--accent" disabled={uiLocked || oracleBusy} onClick={() => void submitOraclePicks()}>
+              </Button>
+              <Button className="lyra-button lyra-button--accent" variant="filled" color="lyra" disabled={uiLocked || oracleBusy} onClick={() => void submitOraclePicks()}>
                 {oracleBusy ? "Working..." : oracleMode === "chaos" ? "Queue Chaos" : "Queue Picks"}
-              </button>
+              </Button>
             </div>
             <div className="oracle-launchers">
-              <div className="oracle-launcher-row">
-                <input className="pane-input" placeholder="Vibe prompt: nocturnal jazz drift" value={vibePrompt} disabled={uiLocked || oracleBusy} onChange={(event) => setVibePrompt(event.target.value)} />
-                <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void submitStartVibe()}>Start Vibe</button>
-              </div>
-              <div className="oracle-launcher-row">
-                <input className="pane-input" placeholder="Playlust mood (optional)" value={playlustMood} disabled={uiLocked || oracleBusy} onChange={(event) => setPlaylustMood(event.target.value)} />
-                <input className="pane-input pane-input--short" type="number" min={10} max={240} value={playlustMinutes} disabled={uiLocked || oracleBusy} onChange={(event) => setPlaylustMinutes(Number(event.target.value))} />
-                <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void submitPlaylust()}>Start Playlust</button>
-              </div>
+              <Group className="oracle-launcher-row" align="end">
+                <TextInput className="pane-input" placeholder="Vibe prompt: nocturnal jazz drift" value={vibePrompt} disabled={uiLocked || oracleBusy} onChange={(event) => setVibePrompt(event.target.value)} size="xs" styles={{ root: { flex: 1 } }} />
+                <Button className="lyra-button" variant="default" disabled={uiLocked || oracleBusy} onClick={() => void submitStartVibe()}>Start Vibe</Button>
+              </Group>
+              <Group className="oracle-launcher-row" align="end">
+                <TextInput className="pane-input" placeholder="Playlust mood (optional)" value={playlustMood} disabled={uiLocked || oracleBusy} onChange={(event) => setPlaylustMood(event.target.value)} size="xs" styles={{ root: { flex: 1 } }} />
+                <NumberInput className="pane-input pane-input--short" min={10} max={240} value={playlustMinutes} disabled={uiLocked || oracleBusy} onChange={(value) => setPlaylustMinutes(typeof value === "number" ? value : 60)} size="xs" />
+                <Button className="lyra-button" variant="default" disabled={uiLocked || oracleBusy} onClick={() => void submitPlaylust()}>Start Playlust</Button>
+              </Group>
             </div>
             <div className="oracle-suggestions">
               {acquisitionSummary && <div className="pane-meta">{acquisitionSummary}</div>}
@@ -993,17 +1033,17 @@ export function UnifiedWorkspace() {
                     <span className="oracle-track-reason">{item.primaryReason}</span>
                     <div className="oracle-signal-row">
                       {item.providerSignals.map((signal) => (
-                        <span key={`${item.track.trackId}-${signal.label}`} className="oracle-signal-chip">
+                        <Badge key={`${item.track.trackId}-${signal.label}`} className="oracle-signal-chip" color="blue" variant="light">
                           {(PROVIDER_LABELS[String(signal.provider)] ?? signal.provider)} {Math.round(signal.score * 100)}%
-                        </span>
+                        </Badge>
                       ))}
                     </div>
                   </div>
                   <div className="oracle-track-actions">
-                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void keepBrokerRecommendation(item)}>Keep</button>
-                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void queueBrokerRecommendation(item)}>Queue</button>
-                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void replayBrokerRecommendation(item)}>Play</button>
-                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void skipBrokerRecommendation(item)}>Skip</button>
+                    <Button className="lyra-button" variant="default" disabled={uiLocked || oracleBusy} onClick={() => void keepBrokerRecommendation(item)}>Keep</Button>
+                    <Button className="lyra-button" variant="default" disabled={uiLocked || oracleBusy} onClick={() => void queueBrokerRecommendation(item)}>Queue</Button>
+                    <Button className="lyra-button" variant="default" disabled={uiLocked || oracleBusy} onClick={() => void replayBrokerRecommendation(item)}>Play</Button>
+                    <Button className="lyra-button" variant="default" disabled={uiLocked || oracleBusy} onClick={() => void skipBrokerRecommendation(item)}>Skip</Button>
                   </div>
                 </div>
               ))}
@@ -1021,8 +1061,8 @@ export function UnifiedWorkspace() {
                           <span className="oracle-track-reason">{lead.reason}</span>
                         </div>
                         <div className="oracle-track-actions">
-                          <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void requestAcquisitionLead(lead)}>Acquire</button>
-                          <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void dismissAcquisitionLead(lead)}>Dismiss</button>
+                          <Button className="lyra-button" variant="default" disabled={uiLocked || oracleBusy} onClick={() => void requestAcquisitionLead(lead)}>Acquire</Button>
+                          <Button className="lyra-button" variant="default" disabled={uiLocked || oracleBusy} onClick={() => void dismissAcquisitionLead(lead)}>Dismiss</Button>
                         </div>
                       </div>
                     ))}
@@ -1039,9 +1079,9 @@ export function UnifiedWorkspace() {
           <div className="unified-lock-card">
             <div className="unified-lock-title">Backend Not Ready</div>
             <div className="unified-lock-message">{bootMessage}</div>
-            <button className="lyra-button lyra-button--accent" disabled={bootRetryBusy} onClick={() => void refreshBootstrap(true)}>
+            <Button className="lyra-button lyra-button--accent" variant="filled" color="lyra" disabled={bootRetryBusy} onClick={() => void refreshBootstrap(true)}>
               {bootRetryBusy ? "Retrying..." : "Retry Connection"}
-            </button>
+            </Button>
           </div>
         </div>
       )}

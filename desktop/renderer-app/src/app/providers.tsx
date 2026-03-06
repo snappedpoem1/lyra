@@ -1,5 +1,7 @@
+import { MantineProvider } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { lyraTheme } from "@/app/lyraTheme";
 import { UnifiedWorkspace } from "@/app/UnifiedWorkspace";
 
 export function AppProviders() {
@@ -13,8 +15,10 @@ export function AppProviders() {
     },
   }), []);
   return (
-    <QueryClientProvider client={queryClient}>
-      <UnifiedWorkspace />
-    </QueryClientProvider>
+    <MantineProvider theme={lyraTheme}>
+      <QueryClientProvider client={queryClient}>
+        <UnifiedWorkspace />
+      </QueryClientProvider>
+    </MantineProvider>
   );
 }

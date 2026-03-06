@@ -13,9 +13,12 @@
     "tauri:build": "npm run backend:build && tauri build"
   },
   "dependencies": {
-    "@tauri-apps/api": "^1.6.0",
+    "@mantine/core": "^7.17.8",
+    "@mantine/hooks": "^7.17.8",
+    "@tabler/icons-react": "^3.39.0",
     "@tanstack/react-query": "^5.66.0",
     "@tanstack/react-router": "^1.111.10",
+    "@tauri-apps/api": "^1.6.0",
     "framer-motion": "^12.4.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
