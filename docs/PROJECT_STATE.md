@@ -8,7 +8,7 @@ This is the current repo/runtime snapshot verified from this workspace.
 
 - Branch: `main`
 - Working tree: clean
-- Latest committed baseline before this audit: `e127c13` (feedback loop, acquisition actions, dedicated packaged build staging)
+- Latest committed baseline before this audit: `1be1916` (Mantine UI foundation and Figma shell base)
 
 ## 2) Architecture State (Current)
 
