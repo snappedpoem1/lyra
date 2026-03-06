@@ -57,6 +57,7 @@ REPORTS_FOLDER = _env_path("REPORTS_FOLDER", PROJECT_ROOT / "Reports")
 PLAYLISTS_FOLDER = _env_path("PLAYLISTS_FOLDER", PROJECT_ROOT / "playlists")
 ACOUSTID_API_KEY = os.environ.get("ACOUSTID_API_KEY", "").strip()
 FPCALC_PATH = os.environ.get("FPCALC_PATH", "").strip()
+RUNTIME_ROOT = _env_path("LYRA_RUNTIME_ROOT", PROJECT_ROOT / "runtime")
 
 
 def guard_bypass_allowed() -> bool:
@@ -80,6 +81,26 @@ def get_llm_settings() -> dict:
     settings["fallback_model"] = config.fallback_model
     settings["timeout_seconds"] = config.timeout_seconds
     return settings
+
+
+def get_runtime_bin_dirs() -> list[Path]:
+    """Return candidate directories for bundled runtime executables."""
+    runtime_root = Path(RUNTIME_ROOT)
+    return [
+        runtime_root / "bin",
+        runtime_root / "tools",
+        runtime_root / "acquisition-tools",
+    ]
+
+
+def find_bundled_tool(*names: str) -> Optional[str]:
+    """Find a bundled executable or script in Lyra's runtime directories."""
+    for base_dir in get_runtime_bin_dirs():
+        for name in names:
+            candidate = base_dir / name
+            if candidate.exists():
+                return str(candidate)
+    return None
 
 
 def validate_required_env(required_keys: list[str]) -> None:

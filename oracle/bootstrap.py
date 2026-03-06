@@ -438,8 +438,22 @@ def ensure_docker_services(
         return {"ready": False, "started": False, "error": f"docker compose failed: {exc}"}
 
 
+def _should_bootstrap_legacy_services() -> bool:
+    """Return True only when legacy external-service bootstrap is explicitly enabled."""
+    return os.getenv("LYRA_BOOTSTRAP_LEGACY_SERVICES", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def bootstrap_runtime(timeout_seconds: int = 40) -> dict:
     """Best-effort bootstrap for dependencies before app starts."""
-    docker = ensure_docker_services(timeout_seconds=timeout_seconds)
+    if _should_bootstrap_legacy_services():
+        external_services = ensure_docker_services(timeout_seconds=timeout_seconds)
+    else:
+        external_services = {
+            "ready": False,
+            "started": False,
+            "skipped": True,
+            "legacy_layer": True,
+            "error": "Legacy external-service bootstrap disabled by architecture policy",
+        }
     llm = ensure_lmstudio(timeout_seconds=timeout_seconds)
-    return {"docker": docker, "llm": llm}
+    return {"external_services": external_services, "llm": llm}

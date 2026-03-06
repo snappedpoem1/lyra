@@ -21,6 +21,7 @@ This is the current repo/runtime snapshot verified from this workspace.
   - React/Vite renderer in `desktop/renderer-app/`
   - Canonical launcher: `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev`
   - Docker is not required and not auto-started in unified launch path
+  - Legacy external-service bootstrap is now opt-in only via `LYRA_BOOTSTRAP_LEGACY_SERVICES=1`
   - Unified runtime shell is active (Library, Semantic, Deep Cut, Now Playing, Queue, Artist Context, Oracle)
   - Unified Oracle pane shows acquisition tier readiness/degraded status from backend `/api/status`
   - Unified Control Deck is active inside the Oracle surface:
@@ -40,6 +41,8 @@ This is the current repo/runtime snapshot verified from this workspace.
   - `/ws/player` is SSE event stream
   - `/api/playback/record` retained as compatibility-only path
   - Acquisition bootstrap snapshot exposed in `/api/health` and `/api/status` without Docker boot
+  - Runtime-service packaging policy now exposed at:
+    - `GET /api/runtime/services`
   - Oracle action routing now performs concrete backend actions for:
     `queue_tracks`, `start_vibe`, `start_playlust`, and `switch_chaos_intensity`
   - Recommendation broker contract now exposed at:
@@ -48,6 +51,10 @@ This is the current repo/runtime snapshot verified from this workspace.
     - local radio engine (`flow`, `chaos`, `discovery`)
     - Last.fm similar-track signals when API key is configured
     - ListenBrainz community top-recording signals
+  - Acquisition tooling runtime now supports bundled lookup for:
+    - `streamrip` (`rip.exe` / `rip`) from `runtime/bin`, `runtime/tools`, or `runtime/acquisition-tools`
+    - `spotdl` (`spotdl.exe` / `spotdl`) from the same bundled runtime locations
+  - Docker-class services are now explicitly classified as optional legacy/external layers rather than core runtime architecture
   - Broker responses include:
     - provider weights
     - provider availability/degradation messages
@@ -93,15 +100,17 @@ From `python -m oracle status`:
 
 ## 6) Active Gaps
 
-1. Clean-machine packaged installer validation for `lyra_backend.exe` sidecar flow.
-2. Native audio (`miniaudio`) production soak validation across real devices/sessions.
-3. Recommendation outcome logging/feedback loop is not yet captured for broker acceptance, skips, and replays.
-4. Acquisition radar is visible in UI but not yet wired to one-click acquisition actions.
-5. Runtime/source separation policy is still partial.
+1. Package bundled acquisition tools (`streamrip`, `spotdl`) in the installer/runtime so they no longer rely on host-global installs.
+2. Clean-machine packaged installer validation for `lyra_backend.exe` sidecar flow.
+3. Native audio (`miniaudio`) production soak validation across real devices/sessions.
+4. Recommendation outcome logging/feedback loop is not yet captured for broker acceptance, skips, and replays.
+5. Acquisition radar is visible in UI but not yet wired to one-click acquisition actions.
+6. Runtime/source separation policy is still partial.
 
 ## 7) Immediate Next Pass
 
-1. Run packaged installer validation on a clean machine to confirm sidecar discovery/runtime.
-2. Run parity-hardening acceptance (4-hour soak + pause/seek/repeat/recovery across restart).
-3. Add broker feedback/event logging so recommendation quality can be measured by accepts/skips/replays.
-4. Turn acquisition radar leads into one-click forward actions from the Oracle surface.
+1. Package `streamrip` and `spotdl` into Lyra runtime/installer instead of relying on host installs.
+2. Run packaged installer validation on a clean machine to confirm sidecar discovery/runtime.
+3. Run parity-hardening acceptance (4-hour soak + pause/seek/repeat/recovery across restart).
+4. Add broker feedback/event logging so recommendation quality can be measured by accepts/skips/replays.
+5. Turn acquisition radar leads into one-click forward actions from the Oracle surface.

@@ -98,6 +98,25 @@ def _acquisition_bootstrap_status() -> dict:
         }
 
 
+def _runtime_services_status() -> dict:
+    """Return runtime packaging/service policy for the active architecture."""
+    try:
+        from oracle.runtime_services import get_packaging_summary, get_runtime_service_manifest
+
+        return {
+            "manifest": get_runtime_service_manifest(),
+            "packaging": get_packaging_summary(),
+            "core_requires_docker": False,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "manifest": {},
+            "packaging": {},
+            "core_requires_docker": False,
+            "error": str(exc),
+        }
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -142,6 +161,7 @@ def api_health():
             "library": lib,
             "feature_flags": feature_flags,
             "acquisition": _acquisition_bootstrap_status(),
+            "runtime_services": _runtime_services_status(),
             "llm": llm_status,
             "auth": auth,
             "cors": cors,
@@ -183,9 +203,19 @@ def api_status():
             "database": db,
             "library": lib,
             "acquisition": _acquisition_bootstrap_status(),
+            "runtime_services": _runtime_services_status(),
             "llm": llm_info,
             "features": _feature_flags(),
         })
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@bp.route("/api/runtime/services", methods=["GET"])
+def api_runtime_services():
+    """Return runtime-service packaging policy and active architecture manifest."""
+    try:
+        return jsonify(_runtime_services_status())
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 

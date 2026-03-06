@@ -13,7 +13,10 @@ import time
 from typing import List
 
 from dotenv import load_dotenv
+
+from oracle.config import find_bundled_tool
 from oracle.llm_config import diagnose_llm_config, load_llm_config
+from oracle.runtime_services import get_runtime_service_manifest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = PROJECT_ROOT / "lyra_registry.db"
@@ -29,18 +32,14 @@ REQUIRED_ENV_KEYS = [
 @dataclass
 class CheckResult:
     name: str
-    status: str  # PASS | WARNING | FAIL
+    status: str
     details: str
 
-
-# ---------------------------------------------------------------------------
-# Infrastructure checks
-# ---------------------------------------------------------------------------
 
 def _check_python() -> CheckResult:
     major, minor = sys.version_info[:2]
     if major != 3 or minor < 12:
-        return CheckResult("Python", "WARNING", f"Python {major}.{minor} â€” 3.12+ recommended")
+        return CheckResult("Python", "WARNING", f"Python {major}.{minor} - 3.12+ recommended")
     return CheckResult("Python", "PASS", f"Python {major}.{minor}")
 
 
@@ -67,10 +66,10 @@ def _check_db() -> CheckResult:
         return CheckResult("Database", "WARNING", f"Missing: {DB_PATH}")
     try:
         temp = PROJECT_ROOT / f".db_write_test_{int(time.time())}.tmp"
-        temp.write_text("test")
+        temp.write_text("test", encoding="utf-8")
         temp.unlink()
         return CheckResult("Database", "PASS", f"Writable: {DB_PATH}")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         return CheckResult("Database", "FAIL", f"Not writable: {exc}")
 
 
@@ -94,7 +93,7 @@ def _check_chroma_storage() -> CheckResult:
             "PASS",
             f"{count} embeddings indexed ({file_count} files on disk)",
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         if file_count == 0:
             return CheckResult("ChromaDB (local)", "WARNING", "chroma_storage is empty")
         return CheckResult(
@@ -111,53 +110,54 @@ def _check_env() -> CheckResult:
     return CheckResult("Env", "PASS", "Core env keys present")
 
 
-# ---------------------------------------------------------------------------
-# HTTP service checks
-# ---------------------------------------------------------------------------
-
 def _http_get(
     url: str,
     timeout: int = 4,
     headers: dict[str, str] | None = None,
 ) -> tuple[int, str]:
-    """Return (status_code, error_string). status_code=0 means connection failed."""
+    """Return ``(status_code, error_string)``."""
     try:
         import requests
-        r = requests.get(url, timeout=timeout, headers=headers)
-        return r.status_code, ""
-    except Exception as exc:
+
+        response = requests.get(url, timeout=timeout, headers=headers)
+        return response.status_code, ""
+    except Exception as exc:  # noqa: BLE001
         return 0, str(exc)
+
+
+def _optional_external_message(name: str, url: str) -> CheckResult:
+    return CheckResult(name, "WARNING", f"Optional external companion not reachable at {url}")
 
 
 def _check_prowlarr() -> CheckResult:
     url = os.getenv("PROWLARR_URL", "http://localhost:9696")
-    status, err = _http_get(f"{url}/health", timeout=4)
+    status, _ = _http_get(f"{url}/health", timeout=4)
     if status == 200:
         return CheckResult("Prowlarr (T1)", "PASS", f"Live at {url}")
     if status == 401:
         return CheckResult("Prowlarr (T1)", "WARNING", f"Running but API key missing/wrong ({url})")
     if status == 0:
-        return CheckResult("Prowlarr (T1)", "FAIL", f"Not reachable at {url} â€” run: docker-compose up -d")
+        return _optional_external_message("Prowlarr (T1)", url)
     return CheckResult("Prowlarr (T1)", "WARNING", f"HTTP {status} from {url}")
 
 
 def _check_rdtclient() -> CheckResult:
     url = "http://localhost:6500"
-    status, err = _http_get(url, timeout=4)
+    status, _ = _http_get(url, timeout=4)
     if status in (200, 301, 302, 303):
         return CheckResult("rdtclient (T1)", "PASS", f"Live at {url}")
     if status == 0:
-        return CheckResult("rdtclient (T1)", "FAIL", f"Not reachable at {url} â€” run: docker-compose up -d")
+        return _optional_external_message("rdtclient (T1)", url)
     return CheckResult("rdtclient (T1)", "PASS", f"HTTP {status} at {url} (OK)")
 
 
 def _check_slskd() -> CheckResult:
     url = os.getenv("LYRA_PROTOCOL_NODE_URL", "http://localhost:5030")
-    status, err = _http_get(f"{url}/api/v0/application", timeout=4)
+    status, _ = _http_get(f"{url}/api/v0/application", timeout=4)
     if status in (200, 401):
         return CheckResult("slskd (T2)", "PASS", f"Live at {url}")
     if status == 0:
-        return CheckResult("slskd (T2)", "FAIL", f"Not reachable at {url} â€” run: docker-compose up -d")
+        return _optional_external_message("slskd (T2)", url)
     return CheckResult("slskd (T2)", "WARNING", f"HTTP {status} from {url}")
 
 
@@ -176,26 +176,28 @@ def _check_llm() -> CheckResult:
         detail = f"{detail} | {actions[0]}"
     return CheckResult(provider_name, status, detail)
 
+
 def _check_realdebrid() -> CheckResult:
     key = os.getenv("REAL_DEBRID_KEY") or os.getenv("REALDEBRID_API_KEY", "")
     if not key:
         return CheckResult("Real-Debrid API", "FAIL", "No API key in .env (REAL_DEBRID_KEY)")
     try:
         import requests
-        r = requests.get(
+
+        response = requests.get(
             "https://api.real-debrid.com/rest/1.0/user",
             headers={"Authorization": f"Bearer {key}"},
             timeout=5,
         )
-        if r.status_code == 200:
-            data = r.json()
+        if response.status_code == 200:
+            data = response.json()
             points = data.get("points", "?")
-            expiry = data.get("expiration", "?")[:10]
-            return CheckResult("Real-Debrid API", "PASS", f"Active â€” {points} pts, expires {expiry}")
-        if r.status_code == 401:
-            return CheckResult("Real-Debrid API", "FAIL", "Invalid API key â€” update REAL_DEBRID_KEY in .env")
-        return CheckResult("Real-Debrid API", "WARNING", f"HTTP {r.status_code}")
-    except Exception as exc:
+            expiry = str(data.get("expiration", "?"))[:10]
+            return CheckResult("Real-Debrid API", "PASS", f"Active - {points} pts, expires {expiry}")
+        if response.status_code == 401:
+            return CheckResult("Real-Debrid API", "FAIL", "Invalid API key - update REAL_DEBRID_KEY in .env")
+        return CheckResult("Real-Debrid API", "WARNING", f"HTTP {response.status_code}")
+    except Exception as exc:  # noqa: BLE001
         return CheckResult("Real-Debrid API", "WARNING", f"Could not reach API: {exc}")
 
 
@@ -204,7 +206,7 @@ def _check_lidarr() -> CheckResult:
     key = os.getenv("LIDARR_API_KEY", "")
     if not key:
         return CheckResult("Lidarr (discovery)", "WARNING", "No API key (LIDARR_API_KEY)")
-    status, err = _http_get(
+    status, _ = _http_get(
         f"{url}/api/v1/system/status",
         timeout=4,
         headers={"X-Api-Key": key},
@@ -214,39 +216,49 @@ def _check_lidarr() -> CheckResult:
     if status in (401, 403):
         return CheckResult("Lidarr (discovery)", "WARNING", f"Running but API key invalid ({url})")
     if status == 0:
-        return CheckResult("Lidarr (discovery)", "FAIL", f"Not reachable at {url} -- run: docker-compose up -d")
+        return _optional_external_message("Lidarr (discovery)", url)
     return CheckResult("Lidarr (discovery)", "WARNING", f"HTTP {status} from {url}")
 
 
 def _check_spotdl() -> CheckResult:
+    bundled = find_bundled_tool("spotdl.exe", "spotdl")
+    if bundled:
+        return CheckResult("spotdl (T5)", "PASS", f"Bundled: {bundled}")
     if shutil.which("spotdl"):
-        return CheckResult("spotdl (T3)", "PASS", shutil.which("spotdl"))
+        return CheckResult("spotdl (T5)", "PASS", shutil.which("spotdl") or "")
     try:
         __import__("spotdl")
-        return CheckResult("spotdl (T3)", "PASS", "Available (Python package)")
+        return CheckResult("spotdl (T5)", "PASS", "Available (Python package)")
     except ImportError:
-        return CheckResult("spotdl (T3)", "WARNING", "Not installed â€” pip install spotdl")
+        return CheckResult("spotdl (T5)", "WARNING", "Not installed or bundled - package as a runtime tool")
+
+
+def _check_streamrip() -> CheckResult:
+    bundled = find_bundled_tool("rip.exe", "rip")
+    if bundled:
+        return CheckResult("streamrip (T2)", "PASS", f"Bundled: {bundled}")
+    found = shutil.which("rip")
+    if found:
+        return CheckResult("streamrip (T2)", "PASS", found)
+    return CheckResult("streamrip (T2)", "WARNING", "Not installed or bundled - package as a runtime tool")
 
 
 def _check_docker() -> CheckResult:
+    docker_payload = get_runtime_service_manifest().get("docker", {})
+    notes = str(docker_payload.get("notes") or "Optional legacy layer.")
     if not shutil.which("docker"):
-        return CheckResult("Docker", "WARNING", "docker CLI not found")
+        return CheckResult("Docker", "WARNING", f"docker CLI not found. {notes}")
     try:
-        import subprocess
-        r = subprocess.run(["docker", "ps"], capture_output=True, timeout=5)
-        if r.returncode == 0:
-            return CheckResult("Docker", "PASS", "Daemon running")
-        return CheckResult("Docker", "WARNING", "Docker CLI found but daemon not running â€” launch Docker Desktop")
-    except Exception as exc:
+        result = subprocess.run(["docker", "ps"], capture_output=True, timeout=5)
+        if result.returncode == 0:
+            return CheckResult("Docker", "PASS", f"Daemon running. {notes}")
+        return CheckResult("Docker", "WARNING", f"Docker CLI found but daemon not running. {notes}")
+    except Exception as exc:  # noqa: BLE001
         return CheckResult("Docker", "WARNING", f"Docker check failed: {exc}")
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
 def run_doctor() -> List[CheckResult]:
-    checks = [
+    return [
         _check_python(),
         _check_tool("FFmpeg", "ffmpeg", "choco install ffmpeg  OR  winget install ffmpeg"),
         _check_tool("fpcalc", "fpcalc", "Install Chromaprint: https://acoustid.org/chromaprint"),
@@ -255,20 +267,16 @@ def run_doctor() -> List[CheckResult]:
         _check_db(),
         _check_chroma_storage(),
         _check_env(),
-        # Docker
         _check_docker(),
-        # Acquisition tiers
         _check_realdebrid(),
         _check_prowlarr(),
         _check_rdtclient(),
         _check_slskd(),
+        _check_streamrip(),
         _check_spotdl(),
-        # Discovery
         _check_lidarr(),
-        # LLM
         _check_llm(),
     ]
-    return checks
 
 
 def _render(checks: List[CheckResult]) -> int:
@@ -295,4 +303,3 @@ def _render(checks: List[CheckResult]) -> int:
 if __name__ == "__main__":
     load_dotenv(override=True)
     sys.exit(_render(run_doctor()))
-

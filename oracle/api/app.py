@@ -88,11 +88,14 @@ def main() -> None:
             from oracle.bootstrap import bootstrap_runtime
 
             result = bootstrap_runtime(timeout_seconds=int(os.getenv("LYRA_BOOTSTRAP_TIMEOUT", "40")))
-            docker = result.get("docker", {})
+            external_services = result.get("external_services", {})
             llm = result.get("llm", {})
-            logger.info("[bootstrap] docker: %s", "ready" if docker.get("ready") else "not ready")
-            if docker.get("error"):
-                logger.warning("[bootstrap] docker detail: %s", docker.get("error"))
+            logger.info(
+                "[bootstrap] legacy external services: %s",
+                "ready" if external_services.get("ready") else "not ready",
+            )
+            if external_services.get("error"):
+                logger.warning("[bootstrap] legacy external detail: %s", external_services.get("error"))
             logger.info("[bootstrap] lm studio: %s", "ready" if llm.get("ready") else "not ready")
             if llm.get("error"):
                 logger.warning("[bootstrap] lm detail: %s", llm.get("error"))

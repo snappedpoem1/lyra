@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from oracle.config import STAGING_FOLDER
+from oracle.config import STAGING_FOLDER, find_bundled_tool
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,9 @@ _AUDIO_EXTS = {".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff"
 
 def _rip_binary() -> Optional[str]:
     """Return the configured streamrip binary path, if present."""
+    bundled = find_bundled_tool("rip.exe", "rip")
+    if bundled:
+        return bundled
     configured = os.getenv("LYRA_STREAMRIP_BINARY", "rip").strip() or "rip"
     return shutil.which(configured)
 

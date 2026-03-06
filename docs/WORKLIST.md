@@ -30,6 +30,8 @@ This file tracks active execution work only.
 - Recommendation broker API added (`/api/recommendations/oracle`) with provider provenance, weighting, novelty bands, and acquisition leads.
 - Unified Oracle surface now includes a Control Deck with provider weights, chaos presets, and broker status telemetry.
 - Oracle recommendations now reveal explainable brokered picks instead of only fixed radio-mode previews.
+- Legacy Docker/external-service bootstrap is now opt-in only; core app path no longer attempts to auto-start that layer.
+- Bundled runtime-tool lookup added for `streamrip` and `spotdl`, establishing the packaging path away from host-global installs.
 
 ## In Progress (Current Session S-20260306-08)
 
@@ -40,23 +42,26 @@ This file tracks active execution work only.
 
 ## Order Of Operation (Highest Result First)
 
-1. Parity hardening acceptance as release gate:
+1. Docker elimination / packaged runtime pass:
+   - Bundle `streamrip` and `spotdl` into Lyra runtime/installer
+   - Keep Docker only as optional legacy compatibility layer
+2. Parity hardening acceptance as release gate:
    - Run `scripts/parity_hardening_acceptance.ps1`
    - Confirm canonical player/SSE + forced-restart recovery + stability soak
-2. Clean-machine installer validation:
+3. Clean-machine installer validation:
    - Verify packaged Tauri + bundled `lyra_backend.exe` discovery/startup on fresh host
-3. 4-hour gaming/listening soak:
+4. 4-hour gaming/listening soak:
    - Confirm no crashes/dropouts; tray/media keys responsive; no queue drift
-4. Recommendation feedback loop:
+5. Recommendation feedback loop:
    - Persist accepts/skips/replays from brokered picks
    - Use feedback to rank future recommendations
-5. Acquisition radar actions:
+6. Acquisition radar actions:
    - Turn brokered non-library leads into one-click acquisition actions
 
 ## Next Up
 
-1. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild`.
-2. Validate packaged sidecar on clean machine installer.
-3. Run 4-hour listening/gaming soak on native backend audio path.
+1. Bundle `streamrip` and `spotdl` into runtime packaging and validate their packaged discovery paths.
+2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild`.
+3. Validate packaged sidecar on clean machine installer.
 4. Persist broker acceptance/skip/replay events and expose them in ranking.
 5. Turn acquisition radar leads into one-click acquisition actions.

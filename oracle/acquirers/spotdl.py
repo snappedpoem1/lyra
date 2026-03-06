@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from oracle.config import find_bundled_tool
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -44,6 +46,9 @@ _SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
 
 def _find_spotdl() -> Optional[str]:
     """Find spotdl executable."""
+    bundled = find_bundled_tool("spotdl.exe", "spotdl")
+    if bundled:
+        return bundled
     found = shutil.which("spotdl")
     if found:
         return found

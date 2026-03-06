@@ -737,28 +737,41 @@ def _log_acquisition(artist: str, title: str, result: AcquisitionResult) -> None
 
 def get_tier_status() -> Dict[str, Dict[str, Any]]:
     """Check availability of each acquisition tier."""
+    from oracle.runtime_services import get_runtime_service_manifest
+
+    services = get_runtime_service_manifest()
     return {
         "tier1_qobuz": {
             "available": _check_qobuz_available(),
             "description": "Qobuz hi-fi (FLAC up to 24-bit/96kHz)",
+            "packaging_mode": services.get("qobuz", {}).get("packaging_mode"),
+            "required_for_core_app": False,
         },
         "tier2_streamrip": {
             "available": _check_streamrip_available(),
             "description": "Streamrip hi-fi fallback",
+            "packaging_mode": services.get("streamrip", {}).get("packaging_mode"),
+            "required_for_core_app": False,
         },
         "tier3_slskd": {
             "available": _check_slskd_available(),
             "description": "Slskd peer-to-peer (FLAC)",
+            "packaging_mode": services.get("slskd", {}).get("packaging_mode"),
+            "required_for_core_app": False,
         },
         "tier4_realdebrid": {
             "available": _check_prowlarr_available() and _check_realdebrid_available(),
             "prowlarr": _check_prowlarr_available(),
             "realdebrid": _check_realdebrid_available(),
             "description": "Prowlarr + Real-Debrid (FLAC torrents)",
+            "packaging_mode": "hybrid_optional_external",
+            "required_for_core_app": False,
         },
         "tier5_spotdl": {
             "available": _check_spotdl_available(),
             "description": "SpotDL YouTube (320k MP3)",
+            "packaging_mode": services.get("spotdl", {}).get("packaging_mode"),
+            "required_for_core_app": False,
         },
     }
 

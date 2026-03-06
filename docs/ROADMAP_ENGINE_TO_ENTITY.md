@@ -22,6 +22,7 @@ Core priority:
 4. Unified modular workspace shell is the active UI runtime.
 5. Docker is optional acquisition support, not required for daily local playback.
 6. Ambient oracle behavior is default when oracle action layer is enabled.
+7. Docker is a legacy compatibility layer only; packaged/bundled runtime capabilities take priority over containerized dependencies.
 
 ## 3) Current Accomplishment
 
@@ -124,6 +125,7 @@ Gate:
 - No regressions to one-launch unified app behavior.
 - No backend side quests without listening UX impact.
 - No mandatory Docker dependency for daily playback.
+- No new runtime dependency should default to Docker when it can be bundled or internalized.
 - No forced oracle chatter while silent mode is selected.
 
 ## 7) North Star

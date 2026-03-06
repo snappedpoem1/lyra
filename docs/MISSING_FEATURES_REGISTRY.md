@@ -16,6 +16,7 @@ Closed items stay in git history and session logs.
 
 | ID | Area | Status | Evidence | What Needs To Happen |
 | --- | --- | --- | --- | --- |
+| G-039 | Docker elimination / packaged runtime | partial | core app no longer requires Docker and legacy-service bootstrap is opt-in only, but acquisition still depends on host-global tools or optional external services | Bundle `streamrip`/`spotdl`, continue internalizing acquisition capabilities, and keep Docker as optional legacy layer only |
 | G-009 | Spotify export | missing | no active export route/module | Explicitly decide ship vs cancel; implement only if in scope |
 | G-010 | Runtime/source separation | partial | runtime artifacts still near source root | Define runtime root policy and migrate in phases |
 | G-030 | Similarity coverage depth | partial | staged `similar` edge growth exists but incomplete full-library coverage | Continue bounded similarity runs and quality checks |
@@ -38,7 +39,7 @@ Closed items stay in git history and session logs.
 
 ## Execution Order (Easy -> Hard)
 
-1. Install/configure streamrip (`rip`) and validate tier-2 acquisition.
+1. Bundle `streamrip` and `spotdl` into Lyra runtime and validate packaged-tool acquisition.
 2. Complete sidecar build-and-bundle and clean-machine installer verification.
 3. Complete native audio soak and restart recovery validation.
 4. Add broker feedback logging and acquisition radar actions.
