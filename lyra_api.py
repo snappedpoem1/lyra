@@ -40,7 +40,10 @@ def _resolve_project_root() -> Path:
     if env_root:
         return Path(env_root)
     if getattr(sys, "frozen", False):
-        return Path.cwd()
+        # Use the directory containing the frozen executable so the sidecar
+        # always resolves its data paths correctly even when launched directly
+        # (not via main.rs which explicitly sets cwd).
+        return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
 
 

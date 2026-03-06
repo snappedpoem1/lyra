@@ -1,7 +1,8 @@
 param(
   [int]$HealthTimeoutSeconds = 120,
   [switch]$RebuildHost,
-  [switch]$KeepHostRunning
+  [switch]$KeepHostRunning,
+  [string]$HostExe
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,6 +25,11 @@ function Stop-ProcessTree {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
+
+if ($HostExe) {
+  $resolvedHostExe = (Resolve-Path $HostExe).Path
+  $env:LYRA_PACKAGED_HOST_EXE = $resolvedHostExe
+}
 
 if ($RebuildHost) {
   Write-Step "building packaged runtime helpers"

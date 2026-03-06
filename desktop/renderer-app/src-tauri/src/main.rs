@@ -214,6 +214,68 @@ fn resolve_runtime_root(project_root: &Path) -> PathBuf {
     }
 }
 
+fn resolve_packaged_runtime_anchor(sidecar_exe: &Path) -> PathBuf {
+    if let Ok(runtime_root) = env::var("LYRA_RUNTIME_ROOT") {
+        let trimmed = runtime_root.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+
+    let fallback = sidecar_exe
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(parent) = sidecar_exe.parent() {
+        candidates.push(parent.to_path_buf());
+        candidates.push(parent.join("runtime"));
+        if let Some(grandparent) = parent.parent() {
+            candidates.push(grandparent.to_path_buf());
+            candidates.push(grandparent.join("runtime"));
+            if let Some(great_grandparent) = grandparent.parent() {
+                candidates.push(great_grandparent.join("runtime"));
+            }
+        }
+    }
+
+    for candidate in candidates {
+        if candidate
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.eq_ignore_ascii_case("runtime"))
+            .unwrap_or(false)
+        {
+            if candidate.join("bin").exists() {
+                write_boot_log(&format!(
+                    "[resolve-runtime-anchor] using runtime root={}",
+                    candidate.display()
+                ));
+                return candidate;
+            }
+        } else if candidate.join("runtime").join("bin").exists() {
+            write_boot_log(&format!(
+                "[resolve-runtime-anchor] using app root={}",
+                candidate.display()
+            ));
+            return candidate;
+        } else if candidate.join("bin").exists() && candidate.join("lyra_backend.exe").exists() {
+            write_boot_log(&format!(
+                "[resolve-runtime-anchor] using sidecar parent root={}",
+                candidate.display()
+            ));
+            return candidate;
+        }
+    }
+
+    write_boot_log(&format!(
+        "[resolve-runtime-anchor] fallback={}",
+        fallback.display()
+    ));
+    fallback
+}
+
 fn runtime_bin_dirs(project_root: &Path) -> Vec<PathBuf> {
     let runtime_root = resolve_runtime_root(project_root);
     vec![
@@ -272,11 +334,8 @@ fn launch_packaged_backend_process() -> Result<Child, String> {
     let sidecar_exe = resolve_packaged_backend_exe().ok_or_else(|| {
         "LYRA packaged backend launch failed: lyra_backend.exe was not found".to_string()
     })?;
-    let fallback_runtime_root = sidecar_exe
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let runtime_root = resolve_project_root().unwrap_or(fallback_runtime_root);
+    let runtime_root = resolve_project_root()
+        .unwrap_or_else(|| resolve_packaged_runtime_anchor(&sidecar_exe));
     write_boot_log(&format!(
         "[launch-packaged-backend] exe={} cwd={}",
         sidecar_exe.display(),

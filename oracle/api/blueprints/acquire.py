@@ -391,3 +391,70 @@ def api_spotify_stats():
         return jsonify({"ok": True, **stats})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Spotify import trigger
+# ---------------------------------------------------------------------------
+
+_spotify_import_lock = threading.Lock()
+_spotify_import_state: dict = {"running": False, "last_result": None, "last_error": None, "started_at": None}
+
+
+def _run_spotify_import_background() -> None:
+    """Background thread: run the Spotify history import and update state."""
+    try:
+        from oracle.importers import run_spotify_history_import
+        result = run_spotify_history_import()
+        _spotify_import_state["last_result"] = result
+        _spotify_import_state["last_error"] = None
+        logger.info("[spotify-import] complete: %s", result)
+    except Exception as exc:
+        _spotify_import_state["last_error"] = str(exc)
+        _spotify_import_state["last_result"] = None
+        logger.exception("[spotify-import] failed: %s", exc)
+    finally:
+        _spotify_import_state["running"] = False
+
+
+@bp.route("/api/spotify/import", methods=["POST"])
+def api_spotify_import():
+    """Trigger a Spotify streaming-history import in the background.
+
+    Idempotent — uses INSERT OR IGNORE so re-runs are safe.
+    Returns 409 if an import is already in progress.
+    """
+    if _spotify_import_state["running"]:
+        return jsonify({"ok": False, "error": "import already in progress"}), 409
+
+    acquired = _spotify_import_lock.acquire(blocking=False)
+    if not acquired:
+        return jsonify({"ok": False, "error": "import already in progress"}), 409
+
+    try:
+        _spotify_import_state["running"] = True
+        _spotify_import_state["started_at"] = _time.time()
+        _spotify_import_state["last_result"] = None
+        _spotify_import_state["last_error"] = None
+    finally:
+        _spotify_import_lock.release()
+
+    thread = threading.Thread(
+        target=_run_spotify_import_background, name="spotify-import", daemon=True
+    )
+    thread.start()
+    return jsonify({"ok": True, "status": "started"})
+
+
+@bp.route("/api/spotify/import/status", methods=["GET"])
+def api_spotify_import_status():
+    """Return the current Spotify import status."""
+    state = _spotify_import_state
+    return jsonify({
+        "ok": True,
+        "running": state["running"],
+        "last_result": state["last_result"],
+        "last_error": state["last_error"],
+        "started_at": state["started_at"],
+    })
+

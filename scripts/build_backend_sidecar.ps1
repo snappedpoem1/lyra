@@ -61,6 +61,19 @@ $env:LYRA_SKIP_VENV_REEXEC = "1"
 $excludeModules = @(
     "nltk"
 )
+# Collect all oracle subpackages so dynamic blueprint/player/acquirer imports
+# are always available in the frozen binary on a clean install (no venv).
+$collectSubmodules = @(
+    "oracle.api.blueprints",
+    "oracle.player",
+    "oracle.acquirers",
+    "oracle.db",
+    "oracle.integrations",
+    "oracle.embedders",
+    "oracle.importers",
+    "oracle.enrichers"
+)
+$collectArgs = $collectSubmodules | ForEach-Object { "--collect-submodules", $_ }
 & $pythonExe -m PyInstaller `
     --noconfirm `
     --clean `
@@ -70,7 +83,7 @@ $excludeModules = @(
     --workpath $workDir `
     --specpath $specDir `
     --exclude-module $excludeModules[0] `
-    --collect-submodules oracle.api.blueprints `
+    @collectArgs `
     $entrypoint
 if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller build failed with exit code $LASTEXITCODE"

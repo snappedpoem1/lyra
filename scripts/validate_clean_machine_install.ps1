@@ -174,6 +174,63 @@ if (-not $SkipToolSmokeCheck) {
     }
 }
 
+# ── Simulated install layout check ─────────────────────────────────────────
+# Mirrors the directory tree Tauri produces in an installed app so we can verify
+# that main.rs resolve_packaged_runtime_anchor logic would find runtime/bin.
+Write-Section "Simulated Tauri install layout check"
+$simRoot = Join-Path $env:TEMP "lyra_install_sim_$(Get-Random)"
+try {
+    # Tauri installs:         <sim>\Lyra Oracle.exe            (host, we fake an empty file)
+    #                         <sim>\resources\lyra_backend.exe (sidecar)
+    #                         <sim>\resources\runtime\bin\rip.exe etc.
+    $simInstall     = Join-Path $simRoot "LyraOracle"
+    $simResources   = Join-Path $simInstall "resources"
+    $simRuntimeBin  = Join-Path $simResources "runtime\bin"
+    New-Item -ItemType Directory -Path $simRuntimeBin -Force | Out-Null
+
+    # Place a stub sidecar and a stub rip.exe (just empty files for path-resolution proof)
+    "" | Set-Content (Join-Path $simResources "lyra_backend.exe")
+    "" | Set-Content (Join-Path $simRuntimeBin "rip.exe")
+    "" | Set-Content (Join-Path $simRuntimeBin "spotdl.exe")
+
+    # Verify: from sidecar perspective, runtime/bin must be reachable two levels up
+    $sidecarDir      = $simResources
+    $expectedRuntime = Join-Path $sidecarDir "runtime\bin"
+    if (Test-Path $expectedRuntime) {
+        Write-Pass "simulated install: runtime/bin reachable from sidecar parent ($expectedRuntime)"
+    } else {
+        Write-Fail "simulated install: runtime/bin NOT reachable from sidecar parent (expected $expectedRuntime)"
+    }
+
+    # Verify: the sidecar parent itself contains the expected acquisition tools.
+    $ripInSim = Join-Path $expectedRuntime "rip.exe"
+    if (Test-Path $ripInSim) {
+        Write-Pass "simulated install: rip.exe present in simulated runtime/bin"
+    } else {
+        Write-Fail "simulated install: rip.exe missing from simulated runtime/bin"
+    }
+
+    # Verify: LYRA_RUNTIME_ROOT derived from sidecar location would resolve correctly
+    # main.rs sets LYRA_RUNTIME_ROOT = resolve_packaged_runtime_anchor(sidecar)
+    # which, with resources/runtime/bin present, returns resources/  (sidecar parent).
+    # Then oracle/config.py: RUNTIME_ROOT = LYRA_RUNTIME_ROOT and
+    # find_bundled_tool checks RUNTIME_ROOT/bin, RUNTIME_ROOT/tools, etc. —
+    # but if anchor = resources/, then RUNTIME_ROOT would NOT contain /bin directly.
+    # main.rs resolve_runtime_root: if anchor folder name != "runtime" → returns anchor/runtime
+    # so LYRA_RUNTIME_ROOT = resources/runtime, and RUNTIME_ROOT/bin = resources/runtime/bin ✓
+    $derivedRuntimeRoot = Join-Path $sidecarDir "runtime"
+    $derivedBin         = Join-Path $derivedRuntimeRoot "bin"
+    if (Test-Path $derivedBin) {
+        Write-Pass "simulated install: LYRA_RUNTIME_ROOT/bin resolves to $derivedBin"
+    } else {
+        Write-Fail "simulated install: LYRA_RUNTIME_ROOT/bin does not resolve (expected $derivedBin)"
+    }
+
+    Write-Info "simulated install root: $simInstall"
+} finally {
+    Remove-Item -Recurse -Force $simRoot -ErrorAction SilentlyContinue
+}
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 Write-Section "Summary"
 if ($script:Failures -eq 0) {

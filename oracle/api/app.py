@@ -53,8 +53,11 @@ def create_app() -> Flask:
 
     # Point HuggingFace cache at the project-local directory so models are
     # never downloaded to a user home directory on a shared machine.
-    project_root = Path(__file__).resolve().parent.parent.parent
-    hf_home = str(project_root / "hf_cache")
+    # Use oracle.config.PROJECT_ROOT so the path is correct in both dev and
+    # frozen-binary (PyInstaller) modes — Path(__file__) inside a frozen binary
+    # resolves into the PyInstaller _MEIPASS temp directory, not the project root.
+    import oracle.config as _cfg
+    hf_home = str(_cfg.PROJECT_ROOT / "hf_cache")
     os.environ.setdefault("HF_HOME", hf_home)
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(Path(hf_home) / "hub"))
 

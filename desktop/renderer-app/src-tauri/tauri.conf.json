@@ -22,13 +22,26 @@
       "active": true,
       "identifier": "com.lyra.oracle",
       "targets": "all",
+      "shortDescription": "Local-first music intelligence system",
+      "longDescription": "Lyra Oracle is a local-first music intelligence system for personally owned libraries. Discover, score, and acquire music through a unified desktop interface backed by a bundled Python engine.",
+      "copyright": "Lyra Oracle contributors",
       "resources": [
         "../../../.lyra-build/bin"
       ],
       "icon": [
         "icons/icon.ico",
         "icons/icon.png"
-      ]
+      ],
+      "windows": {
+        "nsis": {
+          "installMode": "currentUser",
+          "languages": ["English"],
+          "displayLanguageSelector": false
+        },
+        "wix": {
+          "language": "en-US"
+        }
+      }
     },
     "systemTray": {
       "iconPath": "icons/icon.ico",
