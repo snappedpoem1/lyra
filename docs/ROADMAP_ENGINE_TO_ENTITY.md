@@ -63,12 +63,24 @@ Core priority:
 - `POST /api/oracle/action/execute`
 - `GET /api/oracle/context`
 
+### Recommendation orchestration
+
+- `POST /api/recommendations/oracle` broker implemented.
+- Broker fuses local radio, Last.fm similar-track signals, and ListenBrainz community popularity.
+- Unified Oracle surface now exposes:
+  - novelty bands
+  - provider weighting
+  - explicit chaos presets
+  - explainable recommendation provenance
+  - acquisition radar leads
+
 ## 4) Open Gaps
 
 1. Native audio production validation (`miniaudio`) on real devices/long sessions.
 2. Packaged sidecar certainty (`lyra_backend.exe`) on clean machine installer.
 3. Oracle action breadth beyond current contract stubs.
-4. Transition DJ layer (future phase).
+4. Recommendation outcome logging and one-click acquisition actions.
+5. Transition DJ layer (future phase).
 
 ## 5) Phase Plan
 

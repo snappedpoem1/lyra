@@ -448,3 +448,27 @@ def discover_community_tracks(
         total_added, len(artist_pool),
     )
     return total_added
+
+
+def get_top_recordings_for_artist_name(artist_name: str, count: int = 8) -> List[Dict]:
+    """Return ListenBrainz top recordings for a single artist name.
+
+    Args:
+        artist_name: Artist name to resolve.
+        count: Maximum recording count to return.
+
+    Returns:
+        Normalized recording rows with ``artist``, ``title``, ``listen_count``,
+        and ``recording_mbid`` keys.
+    """
+    artist = artist_name.strip()
+    if not artist:
+        return []
+
+    safe_count = max(1, min(int(count), 20))
+    sess = _session()
+    mbid = _get_mbid(artist, sess)
+    if not mbid:
+        logger.debug("[listenbrainz] no MBID available for artist '%s'", artist)
+        return []
+    return _get_top_recordings(mbid, artist, safe_count, sess)

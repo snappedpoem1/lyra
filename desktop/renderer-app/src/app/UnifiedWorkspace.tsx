@@ -3,8 +3,8 @@ import {
   executeOracleAction,
   getAcquisitionBootstrapStatus,
   getArtistShrine,
+  getBrokeredRecommendations,
   getLibraryTracks,
-  getOracleRecommendations,
   getTrackDossier,
   huntDeepCut,
   searchSemanticTracks,
@@ -33,9 +33,23 @@ import {
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
 import { DIMENSIONS } from "@/types/dimensions";
-import type { OracleMode, TrackDossier, TrackListItem } from "@/types/domain";
+import type {
+  AcquisitionLead,
+  BrokeredRecommendation,
+  OracleMode,
+  RecommendationNoveltyBand,
+  RecommendationProviderStatus,
+  TrackDossier,
+  TrackListItem,
+} from "@/types/domain";
 
 const ORACLE_MODES: OracleMode[] = ["flow", "chaos", "discovery"];
+const NOVELTY_BANDS: RecommendationNoveltyBand[] = ["safe", "stretch", "chaos"];
+const PROVIDER_LABELS: Record<string, string> = {
+  local: "Local",
+  lastfm: "Last.fm",
+  listenbrainz: "ListenBrainz",
+};
 const DEFAULT_LIBRARY_LIMIT = 64;
 
 type LibraryMode = "library" | "semantic" | "discover";
@@ -112,8 +126,18 @@ export function UnifiedWorkspace() {
   const [transportBusy, setTransportBusy] = useState<boolean>(false);
   const [oracleBusy, setOracleBusy] = useState<boolean>(false);
   const [oracleOpen, setOracleOpen] = useState<boolean>(true);
+  const [controlDeckOpen, setControlDeckOpen] = useState<boolean>(false);
   const [oracleMode, setOracleMode] = useState<OracleMode>("flow");
-  const [oracleSuggestions, setOracleSuggestions] = useState<TrackListItem[]>([]);
+  const [oracleNoveltyBand, setOracleNoveltyBand] = useState<RecommendationNoveltyBand>("stretch");
+  const [chaosIntensity, setChaosIntensity] = useState<"low" | "medium" | "high">("medium");
+  const [providerWeights, setProviderWeights] = useState<Record<string, number>>({
+    local: 0.55,
+    lastfm: 0.2,
+    listenbrainz: 0.25,
+  });
+  const [brokerRecommendations, setBrokerRecommendations] = useState<BrokeredRecommendation[]>([]);
+  const [acquisitionLeads, setAcquisitionLeads] = useState<AcquisitionLead[]>([]);
+  const [providerStatus, setProviderStatus] = useState<Record<string, RecommendationProviderStatus>>({});
   const [oracleResultMessage, setOracleResultMessage] = useState<string>("");
   const [vibePrompt, setVibePrompt] = useState<string>("");
   const [playlustMood, setPlaylustMood] = useState<string>("");
@@ -136,6 +160,24 @@ export function UnifiedWorkspace() {
     }
     return base;
   }, [acquisitionStatus]);
+  const providerStatusSummary = useMemo(
+    () =>
+      Object.entries(providerStatus).map(([key, value]) => ({
+        key,
+        label: PROVIDER_LABELS[key] ?? key,
+        status: value.available ? "online" : "offline",
+        detail: value.message,
+        weightPct: Math.round(value.weight * 100),
+      })),
+    [providerStatus],
+  );
+
+  const updateProviderWeight = useCallback((provider: string, nextValue: number): void => {
+    setProviderWeights((current) => ({
+      ...current,
+      [provider]: Math.max(0, Math.min(1, nextValue)),
+    }));
+  }, []);
 
   const refreshBootstrap = useCallback(async (interactiveRetry = false): Promise<void> => {
     if (interactiveRetry) {
@@ -357,26 +399,60 @@ export function UnifiedWorkspace() {
     }
   };
 
-  const submitOraclePicks = async (): Promise<void> => {
+  const loadBrokerPreview = useCallback(async (): Promise<BrokeredRecommendation[]> => {
+    const broker = await getBrokeredRecommendations({
+      mode: oracleMode,
+      seedTrackId: currentTrack?.trackId,
+      noveltyBand: oracleNoveltyBand,
+      limit: 12,
+      providerWeights,
+    });
+    setBrokerRecommendations(broker.recommendations);
+    setAcquisitionLeads(broker.acquisitionLeads);
+    setProviderStatus(broker.providerStatus);
+    if (broker.recommendations.length > 0) {
+      setOracleResultMessage(`Broker revealed ${broker.recommendations.length} local recommendations.`);
+    } else if (broker.acquisitionLeads.length > 0) {
+      setOracleResultMessage(`No local matches yet. ${broker.acquisitionLeads.length} acquisition leads are ready.`);
+    } else {
+      setOracleResultMessage("No brokered recommendations were available for this thread.");
+    }
+    return broker.recommendations;
+  }, [currentTrack?.trackId, oracleMode, oracleNoveltyBand, providerWeights]);
+
+  const revealOraclePicks = async (): Promise<void> => {
+    if (uiLocked || oracleBusy) return;
+    setOracleBusy(true);
+    try {
+      await loadBrokerPreview();
+    } catch (error) {
+      setOracleResultMessage(error instanceof Error ? error.message : "Broker preview failed");
+    } finally {
+      setOracleBusy(false);
+    }
+  };
+
+  const submitOraclePicks = useCallback(async (): Promise<void> => {
     if (uiLocked || oracleBusy) return;
     setOracleBusy(true);
     try {
       if (oracleMode === "chaos") {
-        const action = await executeOracleAction("switch_chaos_intensity", { intensity: "medium", queue_now: true });
+        const action = await executeOracleAction("switch_chaos_intensity", { intensity: chaosIntensity, queue_now: true });
         setOracleResultMessage(`Chaos queued ${Number(action["queued_count"] ?? 0)} tracks.`);
         await refreshBootstrap(false);
         return;
       }
-      const recommendations = await getOracleRecommendations(oracleMode, currentTrack?.trackId);
-      const tracks = recommendations.flatMap((item) => item.previewTracks).slice(0, 12);
-      setOracleSuggestions(tracks);
-      await queueTrackIds(tracks.map((track) => track.trackId), "Oracle queued recommendations");
+      const recommendations = await loadBrokerPreview();
+      await queueTrackIds(
+        recommendations.slice(0, 12).map((item) => item.track.trackId),
+        "Oracle queued broker recommendations",
+      );
     } catch (error) {
       setOracleResultMessage(error instanceof Error ? error.message : "Oracle action failed");
     } finally {
       setOracleBusy(false);
     }
-  };
+  }, [chaosIntensity, currentTrack?.trackId, loadBrokerPreview, oracleBusy, oracleMode, queueTrackIds, refreshBootstrap, uiLocked]);
 
   const submitStartVibe = async (): Promise<void> => {
     if (uiLocked || oracleBusy) return;
@@ -422,7 +498,12 @@ export function UnifiedWorkspace() {
           <div className="unified-brand">Lyra</div>
           <div className="unified-tag">music oracle entity</div>
         </div>
-        <div className="unified-boot">{bootMessage}</div>
+        <div className="header-actions">
+          <button className="lyra-button" disabled={uiLocked} onClick={() => setControlDeckOpen((open) => !open)}>
+            {controlDeckOpen ? "Hide Deck" : "Control Deck"}
+          </button>
+          <div className="unified-boot">{bootMessage}</div>
+        </div>
       </header>
 
       <section className="unified-grid" aria-busy={uiLocked}>
@@ -616,15 +697,90 @@ export function UnifiedWorkspace() {
       <section className={`oracle-pane ${oracleOpen ? "is-open" : "is-collapsed"}`}>
         <div className="pane-head">
           <h2>Oracle</h2>
-          <button className="lyra-button" disabled={uiLocked} onClick={() => setOracleOpen((open) => !open)}>{oracleOpen ? "Collapse" : "Expand"}</button>
+          <div className="header-actions">
+            <button className="lyra-button" disabled={uiLocked} onClick={() => setControlDeckOpen((open) => !open)}>
+              {controlDeckOpen ? "Hide Deck" : "Control Deck"}
+            </button>
+            <button className="lyra-button" disabled={uiLocked} onClick={() => setOracleOpen((open) => !open)}>{oracleOpen ? "Collapse" : "Expand"}</button>
+          </div>
         </div>
         {oracleOpen && (
           <>
+            {controlDeckOpen && (
+              <section className="control-deck">
+                <div className="control-deck-row">
+                  <span className="pane-meta">Novelty Band</span>
+                  <div className="mode-row">
+                    {NOVELTY_BANDS.map((band) => (
+                      <button
+                        key={band}
+                        className={`lyra-button ${oracleNoveltyBand === band ? "lyra-button--accent" : ""}`}
+                        disabled={uiLocked || oracleBusy}
+                        onClick={() => setOracleNoveltyBand(band)}
+                      >
+                        {band}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="control-deck-grid">
+                  {Object.entries(providerWeights).map(([provider, weight]) => (
+                    <label key={provider} className="provider-slider">
+                      <span className="provider-slider-label">
+                        <span>{PROVIDER_LABELS[provider] ?? provider}</span>
+                        <span>{Math.round(weight * 100)}%</span>
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={Math.round(weight * 100)}
+                        disabled={uiLocked || oracleBusy}
+                        onChange={(event) => updateProviderWeight(provider, Number(event.target.value) / 100)}
+                      />
+                    </label>
+                  ))}
+                </div>
+                {oracleMode === "chaos" && (
+                  <div className="control-deck-row">
+                    <span className="pane-meta">Chaos Intensity</span>
+                    <div className="mode-row">
+                      {(["low", "medium", "high"] as const).map((intensity) => (
+                        <button
+                          key={intensity}
+                          className={`lyra-button ${chaosIntensity === intensity ? "lyra-button--accent" : ""}`}
+                          disabled={uiLocked || oracleBusy}
+                          onClick={() => setChaosIntensity(intensity)}
+                        >
+                          {intensity}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {providerStatusSummary.length > 0 && (
+                  <div className="control-deck-status">
+                    {providerStatusSummary.map((item) => (
+                      <div key={item.key} className={`provider-status-chip ${item.status === "online" ? "is-online" : "is-offline"}`}>
+                        <span>{item.label}</span>
+                        <span>{item.weightPct}%</span>
+                        <span>{item.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
             <div className="mode-row">
               {ORACLE_MODES.map((mode) => (
                 <button key={mode} className={`lyra-button ${oracleMode === mode ? "lyra-button--accent" : ""}`} disabled={uiLocked} onClick={() => setOracleMode(mode)}>{mode}</button>
               ))}
-              <button className="lyra-button lyra-button--accent" disabled={uiLocked || oracleBusy} onClick={() => void submitOraclePicks()}>{oracleBusy ? "Building..." : "Queue Oracle Picks"}</button>
+              <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void revealOraclePicks()}>
+                {oracleBusy ? "Working..." : "Reveal Picks"}
+              </button>
+              <button className="lyra-button lyra-button--accent" disabled={uiLocked || oracleBusy} onClick={() => void submitOraclePicks()}>
+                {oracleBusy ? "Working..." : oracleMode === "chaos" ? "Queue Chaos" : "Queue Picks"}
+              </button>
             </div>
             <div className="oracle-launchers">
               <div className="oracle-launcher-row">
@@ -641,13 +797,43 @@ export function UnifiedWorkspace() {
               {acquisitionSummary && <div className="pane-meta">{acquisitionSummary}</div>}
               {acquisitionStatus?.error && <div className="pane-error">{acquisitionStatus.error}</div>}
               {oracleResultMessage && <div className="pane-meta">{oracleResultMessage}</div>}
-              {oracleSuggestions.length === 0 && <div className="pane-meta">No oracle suggestions queued yet.</div>}
-              {oracleSuggestions.map((track) => (
-                <div key={track.trackId} className="oracle-track-row">
-                  <span className="list-title">{track.title}</span>
-                  <span className="list-meta">{track.artist}</span>
+              {brokerRecommendations.length === 0 && acquisitionLeads.length === 0 && <div className="pane-meta">No brokered suggestions revealed yet.</div>}
+              {brokerRecommendations.map((item) => (
+                <div key={item.track.trackId} className="oracle-track-row">
+                  <div className="oracle-track-main">
+                    <span className="list-title">{item.track.title}</span>
+                    <span className="list-meta">{item.track.artist}</span>
+                    <span className="oracle-track-reason">{item.primaryReason}</span>
+                    <div className="oracle-signal-row">
+                      {item.providerSignals.map((signal) => (
+                        <span key={`${item.track.trackId}-${signal.label}`} className="oracle-signal-chip">
+                          {(PROVIDER_LABELS[String(signal.provider)] ?? signal.provider)} {Math.round(signal.score * 100)}%
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="oracle-track-actions">
+                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void queueTrackIds([item.track.trackId], "Broker track queued")}>Queue</button>
+                    <button className="lyra-button" disabled={uiLocked || oracleBusy} onClick={() => void playTrack(item.track)}>Play</button>
+                  </div>
                 </div>
               ))}
+              {acquisitionLeads.length > 0 && (
+                <section className="acquisition-radar">
+                  <div className="pane-head">
+                    <h2>Acquisition Radar</h2>
+                  </div>
+                  <div className="pane-scroll">
+                    {acquisitionLeads.map((lead) => (
+                      <div key={`${lead.provider}-${lead.artist}-${lead.title}`} className="acquisition-row">
+                        <span className="list-title">{lead.title}</span>
+                        <span className="list-meta">{lead.artist}</span>
+                        <span className="oracle-track-reason">{lead.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
           </>
         )}

@@ -18,6 +18,7 @@ import {
   playlustGenerateSchema,
   queueSchema,
   radioResultsSchema,
+  recommendationBrokerSchema,
   searchSchema,
   tasteProfileSchema,
   vibeCreateSchema,
@@ -39,6 +40,9 @@ import type {
   OracleRecommendation,
   PlaylistDetail,
   PlaylistSummary,
+  RecommendationBrokerResponse,
+  RecommendationNoveltyBand,
+  RecommendationProviderStatus,
   QueueState,
   SearchResultGroup,
   TrackDossier,
@@ -211,6 +215,75 @@ export async function getOracleRecommendations(mode: OracleMode, seedTrackId?: s
     }
     throw error;
   }
+}
+
+export async function getBrokeredRecommendations(options: {
+  mode: OracleMode;
+  seedTrackId?: string;
+  noveltyBand?: RecommendationNoveltyBand;
+  limit?: number;
+  providerWeights?: Record<string, number>;
+}): Promise<RecommendationBrokerResponse> {
+  const payload = await requestJson("/api/recommendations/oracle", recommendationBrokerSchema, {
+    method: "POST",
+    body: JSON.stringify({
+      mode: options.mode,
+      seed_track_id: options.seedTrackId,
+      novelty_band: options.noveltyBand ?? "stretch",
+      limit: options.limit ?? 12,
+      provider_weights: options.providerWeights ?? undefined,
+    }),
+  });
+
+  const providerStatus = Object.fromEntries(
+    Object.entries(payload.provider_status).map(([key, value]) => [
+      key,
+      {
+        available: value.available,
+        used: value.used,
+        weight: value.weight,
+        message: value.message,
+        matchedLocalTracks: value.matched_local_tracks ?? 0,
+        acquisitionCandidates: value.acquisition_candidates ?? 0,
+      } satisfies RecommendationProviderStatus,
+    ]),
+  );
+
+  return {
+    schemaVersion: payload.schema_version,
+    mode: payload.mode,
+    noveltyBand: payload.novelty_band,
+    seedTrackId: payload.seed_track_id ?? undefined,
+    seedTrack: payload.seed_track ? mapTrack(payload.seed_track) : null,
+    providerWeights: payload.provider_weights,
+    providerStatus,
+    recommendations: payload.candidates.map((row) => ({
+      track: mapTrack(row),
+      brokerScore: typeof row.broker_score === "number" ? row.broker_score : Number(row.broker_score ?? 0),
+      primaryReason: typeof row.reason === "string" ? row.reason : "Brokered recommendation",
+      providerSignals: Array.isArray(row.provider_signals)
+        ? row.provider_signals.flatMap((signal) => {
+            if (!signal || typeof signal !== "object") {
+              return [];
+            }
+            return [{
+              provider: String(signal.provider ?? "unknown"),
+              label: String(signal.label ?? "signal"),
+              score: typeof signal.score === "number" ? signal.score : Number(signal.score ?? 0),
+              rawScore: typeof signal.raw_score === "number" ? signal.raw_score : Number(signal.raw_score ?? 0),
+              reason: String(signal.reason ?? ""),
+            }];
+          })
+        : [],
+    })),
+    acquisitionLeads: payload.acquisition_candidates.map((row) => ({
+      artist: row.artist,
+      title: row.title,
+      provider: row.provider,
+      reason: row.reason,
+      score: row.score,
+    })),
+  };
 }
 
 export async function searchSemanticTracks(query: string, n = 20): Promise<TrackListItem[]> {

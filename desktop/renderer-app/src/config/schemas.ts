@@ -140,6 +140,35 @@ export const radioResultsSchema = z.object({
   count: z.number(),
 });
 
+export const recommendationBrokerSchema = z.object({
+  schema_version: z.string(),
+  mode: z.string(),
+  novelty_band: z.enum(["safe", "stretch", "chaos"]),
+  seed_track_id: z.string().nullable().optional(),
+  seed_track: z.record(z.any()).nullable().optional(),
+  provider_weights: z.record(z.number()),
+  provider_status: z.record(
+    z.object({
+      available: z.boolean(),
+      used: z.boolean(),
+      weight: z.number(),
+      message: z.string(),
+      matched_local_tracks: z.number().optional(),
+      acquisition_candidates: z.number().optional(),
+    }).passthrough(),
+  ),
+  candidates: z.array(z.record(z.any())),
+  acquisition_candidates: z.array(
+    z.object({
+      artist: z.string(),
+      title: z.string(),
+      provider: z.string(),
+      reason: z.string(),
+      score: z.number(),
+    }).passthrough(),
+  ),
+});
+
 export const deepCutHuntSchema = z.object({
   count: z.number(),
   results: z.array(z.record(z.any())),

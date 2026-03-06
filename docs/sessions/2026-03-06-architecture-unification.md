@@ -29,6 +29,19 @@ Bullet list of completed work:
   - `npm run build`
   - `powershell -ExecutionPolicy Bypass -File scripts/check_docs_state.ps1`
 - [x] Prepared checkpoint commit context for the validated unified-app baseline.
+- [x] Pushed baseline checkpoint after removing generated Tauri build artifacts from source control boundaries.
+- [x] Implemented recommendation-broker architecture with:
+  - backend broker module (`oracle/recommendation_broker.py`)
+  - broker API route (`POST /api/recommendations/oracle`)
+  - public ListenBrainz artist-top-recordings helper for broker use
+  - broker contract tests
+- [x] Reworked the active Oracle surface into a forward-facing control deck with:
+  - novelty band controls
+  - provider weighting
+  - explicit chaos intensity presets
+  - explainable recommendation rows
+  - acquisition radar leads
+- [x] Updated roadmap/state/worklist/gap docs to reflect the broker/control-deck architecture shift.
 
 ---
 
@@ -36,7 +49,8 @@ Bullet list of completed work:
 
 | SHA (short) | Message |
 |---|---|
-| `pending` | `[S-20260306-08] chore: checkpoint validated unified app baseline` |
+| `f3e0c0f` | `[S-20260306-08] chore: checkpoint validated unified app baseline` |
+| `pending` | `[S-20260306-08] feat: add brokered recommendation control deck` |
 
 ---
 
@@ -44,6 +58,10 @@ Bullet list of completed work:
 
 - `docs/sessions/2026-03-06-architecture-unification.md` - recorded the validation-first checkpoint and next execution target.
 - Existing working-tree changes across `oracle/api/*`, `oracle/player/*`, `desktop/renderer-app/*`, `scripts/*`, and active docs were validated for commit readiness.
+- `oracle/recommendation_broker.py` - added explainable multi-provider recommendation orchestration.
+- `oracle/api/blueprints/recommendations.py` - exposed brokered recommendations to the active app surface.
+- `desktop/renderer-app/src/app/UnifiedWorkspace.tsx` - added the Oracle Control Deck and broker-driven recommendation UI.
+- `docs/PROJECT_STATE.md` - updated architecture truth for the broker/control-deck pass.
 
 ---
 
@@ -52,14 +70,15 @@ Bullet list of completed work:
 Did the session accomplish its goal? What is now true that was not true before?
 
 - The large unified-app cutover in the working tree is now verified as test/build/docs-clean and ready to be checkpointed before further architecture expansion.
+- Lyra now has a visible recommendation-orchestration layer instead of fixed discovery calls: brokered picks, provider status, novelty controls, chaos presets, and acquisition leads all live in the active app surface.
 
 ---
 
 ## State Updates Made
 
-- [ ] `docs/PROJECT_STATE.md` updated
-- [ ] `docs/WORKLIST.md` updated
-- [ ] `docs/MISSING_FEATURES_REGISTRY.md` updated (if applicable)
+- [x] `docs/PROJECT_STATE.md` updated
+- [x] `docs/WORKLIST.md` updated
+- [x] `docs/MISSING_FEATURES_REGISTRY.md` updated (if applicable)
 - [x] `docs/SESSION_INDEX.md` row added
 - [x] Tests pass: `python -m pytest -q`
 
@@ -69,5 +88,5 @@ Did the session accomplish its goal? What is now true that was not true before?
 
 What is the single most important thing to do next?
 
-- Commit and push the validated baseline, then implement the next architecture-unification slice around recommendation orchestration and forward-facing control surfaces.
+- Commit and push the broker/control-deck pass, then wire recommendation outcomes and acquisition radar actions into the next loop.
 

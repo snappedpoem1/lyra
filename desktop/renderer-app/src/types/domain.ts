@@ -5,6 +5,8 @@ export type PlaybackStatus = "idle" | "loading" | "playing" | "paused" | "ended"
 export type RightRailTab = "now-playing" | "queue" | "details";
 export type OracleMode = "flow" | "chaos" | "discovery" | "constellation";
 export type ConnectionState = "LIVE" | "DEGRADED" | "FIXTURE";
+export type RecommendationNoveltyBand = "safe" | "stretch" | "chaos";
+export type RecommendationProvider = "local" | "lastfm" | "listenbrainz";
 
 export interface ScoreChip {
   key: DimensionKey;
@@ -59,6 +61,50 @@ export interface OracleRecommendation {
   seedLabel?: string;
   previewTracks: TrackListItem[];
   actions: Array<"play-now" | "replace-queue" | "append-queue" | "save-playlist" | "open-constellation">;
+}
+
+export interface RecommendationProviderSignal {
+  provider: RecommendationProvider | string;
+  label: string;
+  score: number;
+  rawScore: number;
+  reason: string;
+}
+
+export interface RecommendationProviderStatus {
+  available: boolean;
+  used: boolean;
+  weight: number;
+  message: string;
+  matchedLocalTracks: number;
+  acquisitionCandidates: number;
+}
+
+export interface AcquisitionLead {
+  artist: string;
+  title: string;
+  provider: RecommendationProvider | string;
+  reason: string;
+  score: number;
+}
+
+export interface BrokeredRecommendation {
+  track: TrackListItem;
+  brokerScore: number;
+  primaryReason: string;
+  providerSignals: RecommendationProviderSignal[];
+}
+
+export interface RecommendationBrokerResponse {
+  schemaVersion: string;
+  mode: string;
+  noveltyBand: RecommendationNoveltyBand;
+  seedTrackId?: string;
+  seedTrack?: TrackListItem | null;
+  providerWeights: Record<string, number>;
+  providerStatus: Record<string, RecommendationProviderStatus>;
+  recommendations: BrokeredRecommendation[];
+  acquisitionLeads: AcquisitionLead[];
 }
 
 export interface PlaylistDetail {

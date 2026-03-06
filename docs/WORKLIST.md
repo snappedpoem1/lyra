@@ -27,12 +27,16 @@ This file tracks active execution work only.
 - Deprecated launcher path `scripts/dev_desktop.ps1` now delegates to unified launcher.
 - Backend health/status now includes acquisition bootstrap snapshot (tier availability, non-blocking).
 - Unified UI now surfaces acquisition tier readiness/degraded state from backend status.
+- Recommendation broker API added (`/api/recommendations/oracle`) with provider provenance, weighting, novelty bands, and acquisition leads.
+- Unified Oracle surface now includes a Control Deck with provider weights, chaos presets, and broker status telemetry.
+- Oracle recommendations now reveal explainable brokered picks instead of only fixed radio-mode previews.
 
-## In Progress (Current Session S-20260306-07)
+## In Progress (Current Session S-20260306-08)
 
-- Phase A parity hardening + launcher cutover:
-  - Clean-machine packaged installer validation (sidecar bundle discovery/runtime)
-  - 4-hour native audio soak + restart recovery checks
+- Architecture unification + forward-facing utility pass:
+  - Broker feedback/event logging
+  - Acquisition radar one-click actions
+  - Release-gate validation (packaged installer + native-audio soak)
 
 ## Order Of Operation (Highest Result First)
 
@@ -43,15 +47,16 @@ This file tracks active execution work only.
    - Verify packaged Tauri + bundled `lyra_backend.exe` discovery/startup on fresh host
 3. 4-hour gaming/listening soak:
    - Confirm no crashes/dropouts; tray/media keys responsive; no queue drift
-4. Oracle action UX depth:
-   - Add explicit chaos intensity preset controls and richer action outcome messaging
-5. Discovery quality iteration:
-   - Improve Spotify-history-to-local fuzzy matching and re-check recommendation precision
+4. Recommendation feedback loop:
+   - Persist accepts/skips/replays from brokered picks
+   - Use feedback to rank future recommendations
+5. Acquisition radar actions:
+   - Turn brokered non-library leads into one-click acquisition actions
 
 ## Next Up
 
 1. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild`.
 2. Validate packaged sidecar on clean machine installer.
 3. Run 4-hour listening/gaming soak on native backend audio path.
-4. Expand Oracle action controls to include explicit chaos intensity presets in UI.
-5. Improve Spotify-history-to-local-track fuzzy matching quality.
+4. Persist broker acceptance/skip/replay events and expose them in ranking.
+5. Turn acquisition radar leads into one-click acquisition actions.

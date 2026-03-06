@@ -8,7 +8,7 @@ This is the current repo/runtime snapshot verified from this workspace.
 
 - Branch: `main`
 - Working tree: dirty (active implementation session in progress)
-- Head commit: `20e0362`
+- Head commit: `f3e0c0f` (validated unified-app checkpoint before current broker pass)
 
 ## 2) Architecture State (Current)
 
@@ -23,7 +23,13 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Docker is not required and not auto-started in unified launch path
   - Unified runtime shell is active (Library, Semantic, Deep Cut, Now Playing, Queue, Artist Context, Oracle)
   - Unified Oracle pane shows acquisition tier readiness/degraded status from backend `/api/status`
+  - Unified Control Deck is active inside the Oracle surface:
+    - novelty band controls (`safe`, `stretch`, `chaos`)
+    - provider weight sliders (`local`, `lastfm`, `listenbrainz`)
+    - explicit chaos intensity presets (`low`, `medium`, `high`)
+    - provider readiness/status chips
   - Oracle queue action button now executes backend `/api/oracle/action/execute` routes
+  - Oracle recommendation surface now uses brokered explainable picks instead of only fixed radio-mode fetches
   - Now Playing intelligence card uses dossier payload for:
     - 10-dimension track profile
     - cached lyrics/context (Genius cache payload)
@@ -36,6 +42,17 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Acquisition bootstrap snapshot exposed in `/api/health` and `/api/status` without Docker boot
   - Oracle action routing now performs concrete backend actions for:
     `queue_tracks`, `start_vibe`, `start_playlust`, and `switch_chaos_intensity`
+  - Recommendation broker contract now exposed at:
+    - `POST /api/recommendations/oracle`
+  - Broker currently fuses:
+    - local radio engine (`flow`, `chaos`, `discovery`)
+    - Last.fm similar-track signals when API key is configured
+    - ListenBrainz community top-recording signals
+  - Broker responses include:
+    - provider weights
+    - provider availability/degradation messages
+    - per-track provenance signals
+    - acquisition leads for tracks not yet in the local library
 
 ## 3) Runtime Metrics
 
@@ -54,6 +71,7 @@ From `python -m oracle status`:
 ## 4) Verification Results (This Audit)
 
 - `python -m pytest -q` -> `88 passed`
+- `python -m pytest -q tests/test_recommendation_broker_contract.py tests/test_oracle_actions_contract.py tests/test_player_api_contract.py tests/test_player_service.py` -> `17 passed`
 - `cd desktop\renderer-app; npm run test` -> `1 file / 3 tests passed`
 - `cd desktop\renderer-app; npm run build` -> success
 - `cd desktop\renderer-app; npm run tauri:build -- --debug` -> success (MSI + NSIS debug bundles)
@@ -77,11 +95,13 @@ From `python -m oracle status`:
 
 1. Clean-machine packaged installer validation for `lyra_backend.exe` sidecar flow.
 2. Native audio (`miniaudio`) production soak validation across real devices/sessions.
-3. Oracle action UX depth (chaos intensity presets + richer action outcome details).
-4. Runtime/source separation policy is still partial.
+3. Recommendation outcome logging/feedback loop is not yet captured for broker acceptance, skips, and replays.
+4. Acquisition radar is visible in UI but not yet wired to one-click acquisition actions.
+5. Runtime/source separation policy is still partial.
 
 ## 7) Immediate Next Pass
 
 1. Run packaged installer validation on a clean machine to confirm sidecar discovery/runtime.
 2. Run parity-hardening acceptance (4-hour soak + pause/seek/repeat/recovery across restart).
-3. Expand oracle action UX depth (chaos presets and richer outcome feedback).
+3. Add broker feedback/event logging so recommendation quality can be measured by accepts/skips/replays.
+4. Turn acquisition radar leads into one-click forward actions from the Oracle surface.
