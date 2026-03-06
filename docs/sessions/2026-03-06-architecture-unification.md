@@ -47,6 +47,13 @@ Bullet list of completed work:
   - runtime-service manifest added
   - bundled tool lookup added for `streamrip` and `spotdl`
   - doctor/runtime status now reflect Docker as optional legacy infrastructure
+- [x] Implemented bundled acquisition-runtime packaging:
+  - added standalone runtime entrypoints for `spotdl` and `streamrip`
+  - added `scripts/build_runtime_tools.ps1` to build/stage packaged helpers
+  - added `scripts/build_packaged_runtime.ps1` to stage helpers plus sidecar in one pass
+  - staged `ffmpeg` and `ffprobe` into runtime bins when present on host
+  - patched packaged backend startup to export `LYRA_RUNTIME_ROOT` and prepend bundled runtime bins to PATH
+- [x] Added local Codex helper bootstrap script (`scripts/install_codex_helpers.ps1`) and registered SQLite + Playwright MCP servers for future sessions.
 
 ---
 
@@ -55,8 +62,9 @@ Bullet list of completed work:
 | SHA (short) | Message |
 |---|---|
 | `f3e0c0f` | `[S-20260306-08] chore: checkpoint validated unified app baseline` |
-| `pending` | `[S-20260306-08] feat: add brokered recommendation control deck` |
-| `pending` | `[S-20260306-08] refactor: demote docker to optional legacy runtime` |
+| `a60aaf6` | `[S-20260306-08] feat: add brokered recommendation control deck` |
+| `22b6e34` | `[S-20260306-08] refactor: demote docker to optional legacy runtime` |
+| `[S-20260306-08]` | packaged runtime tooling + Codex helper install pass |
 
 ---
 
@@ -71,6 +79,10 @@ Bullet list of completed work:
 - `oracle/runtime_services.py` - added runtime packaging/service manifest to drive non-Docker architecture policy.
 - `oracle/bootstrap.py` - stopped legacy external-service bootstrap from running by default.
 - `oracle/config.py` - added bundled runtime-tool discovery for packaged acquisition helpers.
+- `scripts/build_runtime_tools.ps1` - builds standalone `spotdl.exe` and `rip.exe`, then stages them into runtime and Tauri bundle paths.
+- `scripts/build_packaged_runtime.ps1` - one-pass packaged runtime builder for acquisition helpers plus backend sidecar.
+- `desktop/renderer-app/src-tauri/src/main.rs` - exports `LYRA_RUNTIME_ROOT` and prepends bundled runtime bins to backend PATH.
+- `scripts/install_codex_helpers.ps1` - reproducible MCP helper registration for future Codex sessions.
 
 ---
 
@@ -81,6 +93,7 @@ Did the session accomplish its goal? What is now true that was not true before?
 - The large unified-app cutover in the working tree is now verified as test/build/docs-clean and ready to be checkpointed before further architecture expansion.
 - Lyra now has a visible recommendation-orchestration layer instead of fixed discovery calls: brokered picks, provider status, novelty controls, chaos presets, and acquisition leads all live in the active app surface.
 - Lyra now explicitly treats Docker as an optional legacy layer in code and docs, with the packaged runtime path moved to the top priority.
+- Lyra now builds bundled acquisition helpers (`spotdl`, `streamrip`, `ffmpeg`, `ffprobe`) into runtime and Tauri bundle paths, and packaged backend launch now exposes those tools without requiring host-global installs.
 
 ---
 
@@ -98,5 +111,5 @@ Did the session accomplish its goal? What is now true that was not true before?
 
 What is the single most important thing to do next?
 
-- Commit and push the runtime-policy pass, then package `streamrip` and `spotdl` into the app runtime and continue the feedback/acquisition loop.
+- Commit and push the packaged-runtime pass, then validate the clean-machine installer and continue the feedback/acquisition loop.
 

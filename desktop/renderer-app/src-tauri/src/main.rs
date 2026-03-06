@@ -162,15 +162,59 @@ fn resolve_python_exe(project_root: &Path) -> String {
     "python".to_string()
 }
 
+fn resolve_runtime_root(project_root: &Path) -> PathBuf {
+    if project_root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.eq_ignore_ascii_case("runtime"))
+        .unwrap_or(false)
+    {
+        project_root.to_path_buf()
+    } else {
+        project_root.join("runtime")
+    }
+}
+
+fn runtime_bin_dirs(project_root: &Path) -> Vec<PathBuf> {
+    let runtime_root = resolve_runtime_root(project_root);
+    vec![
+        runtime_root.join("bin"),
+        runtime_root.join("tools"),
+        runtime_root.join("acquisition-tools"),
+    ]
+}
+
+fn apply_runtime_environment(command: &mut Command, project_root: &Path) {
+    let runtime_root = resolve_runtime_root(project_root);
+    command.env(
+        "LYRA_RUNTIME_ROOT",
+        runtime_root.to_string_lossy().to_string(),
+    );
+
+    let mut paths: Vec<PathBuf> = runtime_bin_dirs(project_root)
+        .into_iter()
+        .filter(|path| path.exists())
+        .collect();
+    if let Some(existing_path) = env::var_os("PATH") {
+        paths.extend(env::split_paths(&existing_path));
+    }
+    if let Ok(joined_path) = env::join_paths(paths) {
+        command.env("PATH", joined_path);
+    }
+}
+
 fn launch_dev_backend_process() -> Result<Child, String> {
     let project_root = resolve_project_root()
         .ok_or_else(|| "LYRA dev backend launch failed: project root was not found".to_string())?;
     let python_exe = resolve_python_exe(&project_root);
-    Command::new(&python_exe)
+    let mut command = Command::new(&python_exe);
+    command
         .arg("lyra_api.py")
         .current_dir(&project_root)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    apply_runtime_environment(&mut command, &project_root);
+    command
         .spawn()
         .map_err(|error| format!("LYRA dev backend launch failed: {error}"))
 }
@@ -190,6 +234,7 @@ fn launch_packaged_backend_process() -> Result<Child, String> {
         .current_dir(&runtime_root)
         .env("LYRA_SKIP_VENV_REEXEC", "1")
         .env("LYRA_PROJECT_ROOT", runtime_root.to_string_lossy().to_string());
+    apply_runtime_environment(&mut command, &runtime_root);
 
     if env::var("LYRA_DB_PATH").ok().map(|value| value.trim().is_empty()).unwrap_or(true) {
         command.env(

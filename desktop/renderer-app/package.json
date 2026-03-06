@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest --passWithNoTests",
-    "backend:build": "powershell -ExecutionPolicy Bypass -File ..\\..\\scripts\\build_backend_sidecar.ps1",
+    "backend:build": "powershell -ExecutionPolicy Bypass -File ..\\..\\scripts\\build_packaged_runtime.ps1",
     "tauri:dev": "tauri dev",
     "tauri:build": "npm run backend:build && tauri build"
   },

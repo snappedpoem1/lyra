@@ -15,8 +15,9 @@ $pythonExe = Join-Path $repoRoot ".venv\Scripts\python.exe"
 $entrypoint = Join-Path $repoRoot "lyra_api.py"
 $distDir = Join-Path $repoRoot "desktop\renderer-app\src-tauri\bin"
 $tmpRoot = Join-Path $repoRoot ".tmp\pyinstaller"
-$workDir = Join-Path $tmpRoot "build"
-$specDir = Join-Path $tmpRoot "spec"
+$runStamp = Get-Date -Format "yyyyMMddHHmmssfff"
+$workDir = Join-Path $tmpRoot "build\$runStamp"
+$specDir = Join-Path $tmpRoot "spec\$runStamp"
 
 if (-not (Test-Path $pythonExe)) {
     throw "python executable not found at '$pythonExe'. Create and install .venv first."

@@ -85,8 +85,8 @@ if ($SkipSidecarBuild -and $Mode -ne "packaged") {
 }
 
 if ($Mode -eq "packaged" -and -not $SkipSidecarBuild) {
-  Write-Step "building backend sidecar for packaged launch"
-  powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\build_backend_sidecar.ps1")
+  Write-Step "building packaged runtime (sidecar + bundled acquisition tools)"
+  powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\build_packaged_runtime.ps1")
 }
 
 if ($Mode -eq "dev") {

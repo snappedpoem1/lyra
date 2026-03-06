@@ -32,6 +32,11 @@ This file tracks active execution work only.
 - Oracle recommendations now reveal explainable brokered picks instead of only fixed radio-mode previews.
 - Legacy Docker/external-service bootstrap is now opt-in only; core app path no longer attempts to auto-start that layer.
 - Bundled runtime-tool lookup added for `streamrip` and `spotdl`, establishing the packaging path away from host-global installs.
+- Bundled acquisition-runtime build pipeline added:
+  - `scripts/build_runtime_tools.ps1` builds standalone `spotdl.exe` and `rip.exe`
+  - `scripts/build_packaged_runtime.ps1` stages those tools plus `ffmpeg`/`ffprobe` and the backend sidecar
+  - packaged startup now prepends bundled runtime bins to backend PATH
+- Codex helper install script added: `scripts/install_codex_helpers.ps1` (SQLite MCP + Playwright MCP for future sessions).
 
 ## In Progress (Current Session S-20260306-08)
 
@@ -43,25 +48,23 @@ This file tracks active execution work only.
 ## Order Of Operation (Highest Result First)
 
 1. Docker elimination / packaged runtime pass:
-   - Bundle `streamrip` and `spotdl` into Lyra runtime/installer
+   - Validate packaged installer on a clean machine with bundled `streamrip`, `spotdl`, `ffmpeg`, and `ffprobe`
    - Keep Docker only as optional legacy compatibility layer
 2. Parity hardening acceptance as release gate:
    - Run `scripts/parity_hardening_acceptance.ps1`
    - Confirm canonical player/SSE + forced-restart recovery + stability soak
-3. Clean-machine installer validation:
-   - Verify packaged Tauri + bundled `lyra_backend.exe` discovery/startup on fresh host
-4. 4-hour gaming/listening soak:
-   - Confirm no crashes/dropouts; tray/media keys responsive; no queue drift
-5. Recommendation feedback loop:
+3. Recommendation feedback loop:
    - Persist accepts/skips/replays from brokered picks
    - Use feedback to rank future recommendations
-6. Acquisition radar actions:
+4. 4-hour gaming/listening soak:
+   - Confirm no crashes/dropouts; tray/media keys responsive; no queue drift
+5. Acquisition radar actions:
    - Turn brokered non-library leads into one-click acquisition actions
 
 ## Next Up
 
-1. Bundle `streamrip` and `spotdl` into runtime packaging and validate their packaged discovery paths.
+1. Validate the packaged installer on a clean machine with bundled `streamrip`, `spotdl`, `ffmpeg`, and `ffprobe`.
 2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild`.
-3. Validate packaged sidecar on clean machine installer.
-4. Persist broker acceptance/skip/replay events and expose them in ranking.
-5. Turn acquisition radar leads into one-click acquisition actions.
+3. Persist broker acceptance/skip/replay events and expose them in ranking.
+4. Turn acquisition radar leads into one-click acquisition actions.
+5. Continue runtime/source separation cleanup after installer proof.

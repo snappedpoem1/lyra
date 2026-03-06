@@ -110,12 +110,10 @@ def _check_realdebrid_available() -> bool:
 
 def _check_spotdl_available() -> bool:
     """Check if spotdl is installed."""
-    import shutil
-    if shutil.which("spotdl"):
-        return True
     try:
-        __import__("spotdl")
-        return True
+        from oracle.acquirers.spotdl import is_available
+
+        return is_available()
     except ImportError:
         return False
 
@@ -465,7 +463,7 @@ def _try_tier5_spotdl(artist: str, title: str, spotify_uri: Optional[str] = None
                 success=False,
                 tier=5,
                 source="spotdl",
-                error="spotdl not installed (pip install spotdl)",
+                error="spotdl not installed or bundled",
                 elapsed=time.perf_counter() - start,
             )
 

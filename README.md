@@ -14,6 +14,7 @@ Tagline:
 - UI transport controls call `/api/player/*`.
 - `/ws/player` is an SSE event stream contract.
 - Docker services are optional acquisition support, not required for daily local playback.
+- Packaged builds now stage bundled acquisition helpers (`streamrip`, `spotdl`, `ffmpeg`, `ffprobe`) alongside the backend sidecar.
 
 ## Current Verified Local Snapshot (March 6, 2026)
 
@@ -66,6 +67,7 @@ npm run tauri:dev
 - Tauri dev host (frontend runtime)
 - Backend sidecar/API (health-gated via `/api/health`)
 - Acquisition tier availability snapshot (best-effort, non-blocking)
+- Packaged runtime builder (`scripts\build_packaged_runtime.ps1`) for sidecar + acquisition helper staging
 
 ### Runbook: What does not start
 

@@ -40,8 +40,11 @@ scripts/.spotify_cache
 dist/
 build/
 node_modules/
+runtime/bin/*.exe
+.tmp/pyinstaller-runtime/
 desktop/renderer-app/src-tauri/target/
 desktop/renderer-app/src-tauri/bin/*.exe
+desktop/renderer-app/src-tauri/bin/runtime/bin/*.exe
 desktop/renderer-app/src-tauri/gen/
 
 # Runtime Data (large / machine-generated / personal)

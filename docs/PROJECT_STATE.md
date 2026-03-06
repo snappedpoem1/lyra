@@ -8,7 +8,7 @@ This is the current repo/runtime snapshot verified from this workspace.
 
 - Branch: `main`
 - Working tree: dirty (active implementation session in progress)
-- Head commit: `f3e0c0f` (validated unified-app checkpoint before current broker pass)
+- Latest committed baseline before this audit: `22b6e34` (Docker demoted to optional legacy runtime)
 
 ## 2) Architecture State (Current)
 
@@ -20,6 +20,7 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Tauri host in `desktop/renderer-app/src-tauri/`
   - React/Vite renderer in `desktop/renderer-app/`
   - Canonical launcher: `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev`
+  - Packaged runtime builder: `powershell -ExecutionPolicy Bypass -File scripts/build_packaged_runtime.ps1`
   - Docker is not required and not auto-started in unified launch path
   - Legacy external-service bootstrap is now opt-in only via `LYRA_BOOTSTRAP_LEGACY_SERVICES=1`
   - Unified runtime shell is active (Library, Semantic, Deep Cut, Now Playing, Queue, Artist Context, Oracle)
@@ -54,6 +55,12 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Acquisition tooling runtime now supports bundled lookup for:
     - `streamrip` (`rip.exe` / `rip`) from `runtime/bin`, `runtime/tools`, or `runtime/acquisition-tools`
     - `spotdl` (`spotdl.exe` / `spotdl`) from the same bundled runtime locations
+  - Bundled acquisition helper executables are now built and staged by:
+    - `scripts/build_runtime_tools.ps1`
+    - `scripts/build_packaged_runtime.ps1`
+  - Tauri packaged resources now receive runtime helpers under:
+    - `desktop/renderer-app/src-tauri/bin/runtime/bin`
+  - Packaged backend startup now exports `LYRA_RUNTIME_ROOT` and prepends bundled runtime bins to backend `PATH`
   - Docker-class services are now explicitly classified as optional legacy/external layers rather than core runtime architecture
   - Broker responses include:
     - provider weights
@@ -77,18 +84,19 @@ From `python -m oracle status`:
 
 ## 4) Verification Results (This Audit)
 
-- `python -m pytest -q` -> `88 passed`
-- `python -m pytest -q tests/test_recommendation_broker_contract.py tests/test_oracle_actions_contract.py tests/test_player_api_contract.py tests/test_player_service.py` -> `17 passed`
+- `python -m pytest -q` -> `93 passed`
 - `cd desktop\renderer-app; npm run test` -> `1 file / 3 tests passed`
 - `cd desktop\renderer-app; npm run build` -> success
-- `cd desktop\renderer-app; npm run tauri:build -- --debug` -> success (MSI + NSIS debug bundles)
 - `powershell -ExecutionPolicy Bypass -File scripts/build_backend_sidecar.ps1` -> success (`desktop/renderer-app/src-tauri/bin/lyra_backend.exe`)
+- `powershell -ExecutionPolicy Bypass -File scripts/build_runtime_tools.ps1` -> success (`runtime/bin/*.exe` plus staged Tauri runtime helpers)
+- `powershell -ExecutionPolicy Bypass -File scripts/build_packaged_runtime.ps1 -SkipLaunchCheck -SkipToolSmokeCheck` -> success
 - `powershell -ExecutionPolicy Bypass -File scripts/smoke_step1_step2.ps1 -StartupTimeoutSeconds 60 -SoakSeconds 20` -> success (full Step 1/2 path, including canonical player API + SSE checks)
 - `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SoakSeconds 10 -StartupTimeoutSeconds 60` -> success (smoke + forced restart recovery + SSE + stability soak)
 - `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev -HealthTimeoutSeconds 90 -LeaveRunning` -> success (cold start; backend + frontend active)
 - `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev -HealthTimeoutSeconds 30 -LeaveRunning` -> success (warm start; backend reused)
 - `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode packaged -SkipSidecarBuild` -> expected non-zero failure with clear error when packaged host binary is absent
 - `powershell -ExecutionPolicy Bypass -File scripts/check_docs_state.ps1` -> success
+- `python -m oracle doctor` -> success with bundled `streamrip` and `spotdl` detected
 - `python -m oracle status` -> success with healthy core metrics
 
 ## 5) Documentation Truth Status
@@ -100,17 +108,17 @@ From `python -m oracle status`:
 
 ## 6) Active Gaps
 
-1. Package bundled acquisition tools (`streamrip`, `spotdl`) in the installer/runtime so they no longer rely on host-global installs.
-2. Clean-machine packaged installer validation for `lyra_backend.exe` sidecar flow.
-3. Native audio (`miniaudio`) production soak validation across real devices/sessions.
-4. Recommendation outcome logging/feedback loop is not yet captured for broker acceptance, skips, and replays.
-5. Acquisition radar is visible in UI but not yet wired to one-click acquisition actions.
-6. Runtime/source separation policy is still partial.
+1. Clean-machine packaged installer validation for bundled `lyra_backend.exe`, `streamrip`, `spotdl`, `ffmpeg`, and `ffprobe`.
+2. Native audio (`miniaudio`) production soak validation across real devices/sessions.
+3. Recommendation outcome logging/feedback loop is not yet captured for broker acceptance, skips, and replays.
+4. Acquisition radar is visible in UI but not yet wired to one-click acquisition actions.
+5. Runtime/source separation policy is still partial.
+6. One successful packaged/runtime-backed tier-2 streamrip acquisition proof is still pending.
 
 ## 7) Immediate Next Pass
 
-1. Package `streamrip` and `spotdl` into Lyra runtime/installer instead of relying on host installs.
-2. Run packaged installer validation on a clean machine to confirm sidecar discovery/runtime.
-3. Run parity-hardening acceptance (4-hour soak + pause/seek/repeat/recovery across restart).
-4. Add broker feedback/event logging so recommendation quality can be measured by accepts/skips/replays.
-5. Turn acquisition radar leads into one-click forward actions from the Oracle surface.
+1. Run packaged installer validation on a clean machine to confirm bundled sidecar + runtime-tool discovery.
+2. Run parity-hardening acceptance (4-hour soak + pause/seek/repeat/recovery across restart).
+3. Add broker feedback/event logging so recommendation quality can be measured by accepts/skips/replays.
+4. Turn acquisition radar leads into one-click forward actions from the Oracle surface.
+5. Validate one successful packaged/runtime-backed streamrip acquisition.
