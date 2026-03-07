@@ -1,11 +1,11 @@
-﻿import { useParams, useNavigate } from "@tanstack/react-router";
+﻿import { Avatar, Badge, Button, Group, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { useParams, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { audioEngine } from "@/services/audio/audioEngine";
 import { getLibraryArtistDetail, getArtistShrine } from "@/services/lyraGateway/queries";
 import { useQueueStore } from "@/stores/queueStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { Icon } from "@/ui/Icon";
-import { LyraButton } from "@/ui/LyraButton";
 import type { TrackListItem } from "@/types/domain";
 
 /** Hue derived from artist name â€” consistent per-artist color */
@@ -18,31 +18,22 @@ function artistHue(name: string): number {
 function ArtistAvatar({ name, thumbnail, size = 90 }: { name: string; thumbnail?: string; size?: number }) {
   const hue = artistHue(name);
   const letter = name.trim()[0]?.toUpperCase() ?? "?";
-  if (thumbnail) {
-    return (
-      <img
-        src={thumbnail}
-        alt={name}
-        className="artist-avatar artist-avatar--photo"
-        style={{ width: size, height: size, objectFit: "cover", borderRadius: "50%", border: `2px solid hsl(${hue},30%,35%)` }}
-      />
-    );
-  }
   return (
-    <div
+    <Avatar
+      src={thumbnail}
+      alt={name}
+      radius="xl"
+      size={size}
       className="artist-avatar"
       style={{
-        width: size,
-        height: size,
         background: `linear-gradient(145deg, hsl(${hue},38%,20%), hsl(${(hue + 50) % 360},46%,32%))`,
         color: `hsl(${hue},55%,82%)`,
         border: `2px solid hsl(${hue},30%,35%)`,
         boxShadow: `0 0 32px hsl(${hue},38%,20%)`,
       }}
-      aria-hidden="true"
     >
       {letter}
-    </div>
+    </Avatar>
   );
 }
 
@@ -134,9 +125,9 @@ export function ArtistRoute() {
   if (isLoading) {
     return (
       <div className="route-stack">
-        <section className="lyra-panel empty-state-panel" style={{ padding: "28px" }}>
-          Loading artistâ€¦
-        </section>
+        <Paper className="lyra-panel empty-state-panel" p="xl">
+          <Text>Loading artist...</Text>
+        </Paper>
       </div>
     );
   }
@@ -144,13 +135,17 @@ export function ArtistRoute() {
   if (!detail) {
     return (
       <div className="route-stack">
-        <section className="lyra-panel empty-state-panel" style={{ padding: "28px" }}>
-          <h2>Artist not found</h2>
-          <p>"{name}" has no tracks in the library.</p>
-          <LyraButton onClick={() => void navigate({ to: "/library" })}>
-            Back to Library
-          </LyraButton>
-        </section>
+        <Paper className="lyra-panel empty-state-panel" p="xl">
+          <Stack gap="sm">
+            <Title order={2}>Artist not found</Title>
+            <Text>"{name}" has no tracks in the library.</Text>
+            <Group>
+              <Button color="lyra" variant="light" onClick={() => void navigate({ to: "/library" })}>
+                Back to Library
+              </Button>
+            </Group>
+          </Stack>
+        </Paper>
       </div>
     );
   }
@@ -187,28 +182,20 @@ export function ArtistRoute() {
 
           {/* Genres */}
           {(shrine?.genres ?? []).length > 0 && (
-            <div className="artist-genre-chips">
+            <Group gap="xs" className="artist-genre-chips">
               {(shrine?.genres ?? []).slice(0, 8).map((g) => (
-                <span
-                  key={g}
-                  className="artist-genre-chip"
-                  style={{
-                    background: `hsl(${hue},20%,18%)`,
-                    border: `1px solid hsl(${hue},25%,30%)`,
-                    color: `hsl(${hue},50%,72%)`,
-                  }}
-                >
+                <Badge key={g} className="artist-genre-chip" variant="light" color="lyra">
                   {g}
-                </span>
+                </Badge>
               ))}
-            </div>
+            </Group>
           )}
 
           {shrine?.bio && (
             <p className="artist-bio">{shrine.bio}</p>
           )}
 
-          <div className="artist-stats-row">
+          <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="md" className="artist-stats-row">
             <div className="artist-stat">
               <span className="artist-stat-value">{detail.trackCount}</span>
               <span className="artist-stat-label">Tracks</span>
@@ -241,26 +228,29 @@ export function ArtistRoute() {
                 <span className="artist-stat-label">Listeners</span>
               </div>
             )}
-          </div>
+          </SimpleGrid>
 
-          <div className="artist-actions">
-            <LyraButton onClick={() => void playAll()} disabled={!tracks.length}>
+          <Group gap="md" className="artist-actions">
+            <Button color="lyra" variant="light" onClick={() => void playAll()} disabled={!tracks.length}>
               <Icon name="play" className="inline-icon" /> Play All
-            </LyraButton>
-            <LyraButton onClick={() => void navigate({ to: "/library" })}>
+            </Button>
+            <Button color="lyra" variant="default" onClick={() => void navigate({ to: "/library" })}>
               Library
-            </LyraButton>
+            </Button>
             {shrine?.wikiUrl && (
-              <a
+              <Button
+                component="a"
                 href={shrine.wikiUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                variant="subtle"
+                color="gray"
                 className="artist-wiki-link"
               >
                 Wikipedia ↗
-              </a>
+              </Button>
             )}
-          </div>
+          </Group>
         </div>
       </section>
 
@@ -268,18 +258,20 @@ export function ArtistRoute() {
       {(shrine?.relatedArtists ?? []).length > 0 && (
         <section className="lyra-panel artist-section">
           <h3 className="artist-section-header">Related Artists</h3>
-          <div className="artist-related-chips">
+          <Group gap="sm" className="artist-related-chips">
             {(shrine?.relatedArtists ?? []).slice(0, 12).map((rel) => (
-              <button
+              <Button
                 key={rel.target}
                 className="artist-related-chip"
+                variant="default"
+                color="gray"
                 onClick={() => void navigate({ to: "/artist/$name", params: { name: rel.target } })}
                 title={rel.type}
               >
                 {rel.target}
-              </button>
+              </Button>
             ))}
-          </div>
+          </Group>
         </section>
       )}
 
@@ -290,8 +282,8 @@ export function ArtistRoute() {
           <div className="artist-credits-list">
             {Object.entries(creditsByRole).map(([role, people]) => (
               <div key={role} className="artist-credit-row">
-                <span className="artist-credit-role">{role}</span>
-                <span className="artist-credit-names">{people.map((p) => p.name).join(", ")}</span>
+                <Badge variant="light" color="lyra" className="artist-credit-role">{role}</Badge>
+                <Text className="artist-credit-names">{people.map((p) => p.name).join(", ")}</Text>
               </div>
             ))}
           </div>

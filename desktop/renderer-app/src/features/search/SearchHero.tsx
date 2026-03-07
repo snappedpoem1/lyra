@@ -1,3 +1,4 @@
+import { Button, TextInput } from "@mantine/core";
 import { Icon } from "@/ui/Icon";
 
 export function SearchHero({
@@ -19,37 +20,31 @@ export function SearchHero({
           <h1 className="search-hero-headline">What do you want to feel?</h1>
         </div>
         <div className="search-form-row">
-          <div className="search-input-wrap">
-            <Icon name="search" className="search-input-icon" />
-            <input
-              className="hero-input search-input-padded"
-              value={query}
-              onChange={(event) => onQueryChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  onSubmit();
-                }
-              }}
-              placeholder="dark ambient with deep bass and analog warmth…"
-              autoFocus
-            />
-          </div>
-          <button
+          <TextInput
+            className="search-input-wrap"
+            value={query}
+            onChange={(event) => onQueryChange(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onSubmit();
+              }
+            }}
+            leftSection={<Icon name="search" className="search-input-icon" />}
+            classNames={{ input: "hero-input search-input-padded" }}
+            placeholder="dark ambient with deep bass and analog warmth…"
+            autoFocus
+          />
+          <Button
             className="search-go-btn"
             onClick={onSubmit}
             disabled={!query.trim() || loading}
             aria-label="Search"
+            loading={loading}
+            leftSection={loading ? undefined : <Icon name="spark" className="search-btn-icon" />}
           >
-            {loading ? (
-              <span className="search-btn-label">Searching…</span>
-            ) : (
-              <>
-                <Icon name="spark" className="search-btn-icon" />
-                <span className="search-btn-label">Find</span>
-              </>
-            )}
-          </button>
+            <span className="search-btn-label">{loading ? "Searching..." : "Find"}</span>
+          </Button>
         </div>
       </div>
     </section>

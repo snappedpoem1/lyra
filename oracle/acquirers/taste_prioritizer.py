@@ -177,7 +177,7 @@ def prioritize_queue(limit: int = 0) -> Dict[str, Any]:
 
         new_priority = _compute_priority(taste, scores)
         cursor.execute(
-            "UPDATE acquisition_queue SET priority=? WHERE id=?",
+            "UPDATE acquisition_queue SET priority_score=? WHERE id=?",
             (new_priority, item_id),
         )
         updated += 1
@@ -199,16 +199,16 @@ def get_next_priority_batch(
         status: Queue status to filter on.
 
     Returns:
-        List of dicts with id, artist, title, album, priority.
+        List of dicts with id, artist, title, album, priority_score.
     """
     conn = get_connection(timeout=10.0)
     cursor = conn.cursor()
     cursor.execute(
         """
-        SELECT id, artist, title, album, priority
+        SELECT id, artist, title, album, priority_score
         FROM acquisition_queue
         WHERE status = ?
-        ORDER BY priority DESC, id ASC
+        ORDER BY priority_score DESC, id ASC
         LIMIT ?
         """,
         (status, limit),
@@ -216,6 +216,6 @@ def get_next_priority_batch(
     rows = cursor.fetchall()
     conn.close()
     return [
-        {"id": r[0], "artist": r[1], "title": r[2], "album": r[3], "priority": r[4]}
+        {"id": r[0], "artist": r[1], "title": r[2], "album": r[3], "priority_score": r[4]}
         for r in rows
     ]

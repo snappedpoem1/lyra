@@ -1,3 +1,4 @@
+import { SegmentedControl } from "@mantine/core";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TrackListItem } from "@/types/domain";
@@ -70,70 +71,62 @@ export function SearchRoute() {
 
   return (
     <div className="route-stack">
-      {/* Mode toggle */}
-      <div className="search-mode-toggle">
-        <button
-          className={`search-mode-btn${searchMode === "text" ? " active" : ""}`}
-          onClick={() => setSearchMode("text")}
-        >
-          Text Search
-        </button>
-        <button
-          className={`search-mode-btn${searchMode === "dimensional" ? " active" : ""}`}
-          onClick={() => setSearchMode("dimensional")}
-        >
-          Dimensional
-        </button>
-      </div>
+      <SegmentedControl
+        className="search-mode-toggle"
+        value={searchMode}
+        onChange={(value) => setSearchMode(value as SearchMode)}
+        data={[
+          { label: "Text Search", value: "text" },
+          { label: "Dimensional", value: "dimensional" },
+        ]}
+      />
 
-      {/* Dimensional mode */}
       {searchMode === "dimensional" && (
         <DimensionalSearchPanel onTrackSelect={handleDimTrackSelect} />
       )}
 
-      {/* Text mode */}
       {searchMode === "text" && (
         <>
-      <SearchHero
-        query={draftQuery}
-        onQueryChange={setDraftQuery}
-        onSubmit={() => setQuery(draftQuery.trim())}
-        loading={isFetching}
-      />
-      {!query.trim() && <section className="lyra-panel empty-state-panel">Enter a query to search the live library.</section>}
-      {isError && (
-        <section className="lyra-panel empty-state-panel">
-          <h2>Search unavailable</h2>
-          <p>{error instanceof Error ? error.message : "The backend returned an error."}</p>
-          <LyraButton onClick={() => setQuery(draftQuery.trim())} disabled={!draftQuery.trim()}>Retry search</LyraButton>
-        </section>
-      )}
-      {saveMutation.isError && (
-        <section className="lyra-panel empty-state-panel">
-          <h2>Save failed</h2>
-          <p>{saveMutation.error instanceof Error ? saveMutation.error.message : "The vibe could not be saved."}</p>
-        </section>
-      )}
-      {query.trim() && !data && !isError && <section className="lyra-panel empty-state-panel">Searching the backend...</section>}
-      {results && (
-        <SearchResultStack
-          results={results}
-          onSaveVibe={handleSaveVibe}
-          savePending={saveMutation.isPending}
-          saveDisabled={!results.tracks.length}
-          saveLabel={saveMutation.isSuccess ? "Saved" : "Save to Library"}
-          onPlayTrack={(track) => {
-            replaceQueue({
-              queueId: `search-${track.trackId}`,
-              origin: "search",
-              reorderable: true,
-              currentIndex: 0,
-              items: [track],
-            });
-            void audioEngine.playTrack(track);
-          }}
-        />
-      )}
+          <SearchHero
+            query={draftQuery}
+            onQueryChange={setDraftQuery}
+            onSubmit={() => setQuery(draftQuery.trim())}
+            loading={isFetching}
+          />
+          {!query.trim() && <section className="lyra-panel empty-state-panel">Enter a query to search the live library.</section>}
+          {isError && (
+            <section className="lyra-panel empty-state-panel">
+              <h2>Search unavailable</h2>
+              <p>{error instanceof Error ? error.message : "The backend returned an error."}</p>
+              <LyraButton onClick={() => setQuery(draftQuery.trim())} disabled={!draftQuery.trim()}>Retry search</LyraButton>
+            </section>
+          )}
+          {saveMutation.isError && (
+            <section className="lyra-panel empty-state-panel">
+              <h2>Save failed</h2>
+              <p>{saveMutation.error instanceof Error ? saveMutation.error.message : "The vibe could not be saved."}</p>
+            </section>
+          )}
+          {query.trim() && !data && !isError && <section className="lyra-panel empty-state-panel">Searching the backend...</section>}
+          {results && (
+            <SearchResultStack
+              results={results}
+              onSaveVibe={handleSaveVibe}
+              savePending={saveMutation.isPending}
+              saveDisabled={!results.tracks.length}
+              saveLabel={saveMutation.isSuccess ? "Saved" : "Save to Library"}
+              onPlayTrack={(track) => {
+                replaceQueue({
+                  queueId: `search-${track.trackId}`,
+                  origin: "search",
+                  reorderable: true,
+                  currentIndex: 0,
+                  items: [track],
+                });
+                void audioEngine.playTrack(track);
+              }}
+            />
+          )}
         </>
       )}
     </div>
