@@ -54,6 +54,10 @@ This file tracks active execution work only.
   - ListenBrainz discovery added 136 queue candidates
   - bounded structure analysis increased `track_structure` coverage (`159 -> 172`)
   - tiny queue drain produced 1 successful streamrip ingest and 1 retried failure
+- Tier 1 Qobuz runtime path is fixed again:
+  - `oracle/acquirers/qobuz.py` no longer references undefined `QOBUZ_SERVICE_URL`
+  - second tiny drain proved T1 success (`Bear Hands - Agora`)
+  - current follow-up issue is duplicate-aware queue resolution after successful acquisition
 
 ## In Progress (Current Session S-20260306-14)
 
