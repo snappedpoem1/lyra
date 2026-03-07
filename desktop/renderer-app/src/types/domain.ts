@@ -1,6 +1,6 @@
 import type { DimensionKey } from "@/types/dimensions";
 
-export type PlaylistKind = "vibe" | "oracle_queue" | "ritual" | "manual";
+export type PlaylistKind = "vibe" | "oracle_queue" | "ritual" | "manual" | "saved";
 export type PlaybackStatus = "idle" | "loading" | "playing" | "paused" | "ended" | "error";
 export type RightRailTab = "now-playing" | "queue" | "details";
 export type OracleMode = "flow" | "chaos" | "discovery" | "constellation";

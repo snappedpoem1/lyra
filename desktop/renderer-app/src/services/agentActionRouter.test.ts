@@ -98,4 +98,33 @@ describe("routeAgentAction", () => {
   it("does not throw for unknown action values", () => {
     expect(() => routeAgentAction(makeResponse("unrecognised_action"))).not.toThrow();
   });
+
+  it("posts create_playlist and navigates to /playlists", () => {
+    routeAgentAction(makeResponse("create_playlist", { name: "Night drive", description: "4am headspace" }));
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:5000/api/oracle/action/execute",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(navigatedTo).toBe("/playlists");
+  });
+
+  it("posts add_to_playlist without navigating", () => {
+    routeAgentAction(makeResponse("add_to_playlist", { playlist_id: "abc", track_ids: ["t1", "t2"] }));
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://localhost:5000/api/oracle/action/execute",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(navigatedTo).toBeNull();
+  });
+
+  it("posts play_playlist and navigates to /queue", () => {
+    routeAgentAction(makeResponse("play_playlist", { playlist_id: "abc" }));
+    expect(mockFetch).toHaveBeenCalled();
+    expect(navigatedTo).toBe("/queue");
+  });
+
+  it("navigates to /playlists for list_playlists", () => {
+    routeAgentAction(makeResponse("list_playlists"));
+    expect(navigatedTo).toBe("/playlists");
+  });
 });

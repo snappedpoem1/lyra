@@ -228,6 +228,8 @@ From `.venv\Scripts\python.exe -m oracle.status` after the Wave 3 cutover on thi
 - `cd desktop\renderer-app; npm run build` -> success after Wave 12 agentActionRouter additions
 - `.venv\Scripts\python.exe -m pytest -q` -> success (`241 passed`) after Wave 13 Playlist Intelligence: `saved_playlists` + `saved_playlist_tracks` schema tables, `oracle/api/blueprints/playlists.py` (7 endpoints), 4 new oracle execute actions (`create_playlist`, `add_to_playlist`, `play_playlist`, `list_playlists`), agentActionRouter 4 new cases, 6 gateway mutation helpers, 15 new contract tests
 - `cd desktop\renderer-app; npm run build` -> success after Wave 13 playlist query additions
+- `cd desktop\renderer-app; npx vitest run` -> success (`34 passed`) after Wave 14 Saved Playlist UI: `SavedPlaylistsSection`, `CreatePlaylistModal`, mapper shape fix, 4 new mapper tests, 4 new agentActionRouter tests
+- `cd desktop\renderer-app; npm run build` -> success after Wave 14 saved playlist UI additions
 - `cd desktop\renderer-app; npm run build` -> success after Wave 6 provenance surfaces
 - `powershell -ExecutionPolicy Bypass -File scripts/packaged_host_smoke.ps1 -HealthTimeoutSeconds 45` -> success (Wave 7 baseline smoke)
 - `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SkipInstallerProof -UseLegacyDataRoot -SoakSeconds 60 -StartupTimeoutSeconds 90` -> success (Wave 7 60-second parity soak: sidecar rebuilt with Wave 5+6 modules, Step 1+2 smoke, restart recovery, sustained stability soak with pause/resume and seek mutations)

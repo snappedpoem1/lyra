@@ -2,6 +2,7 @@ import { Badge, Group, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { getPlaylists } from "@/services/lyraGateway/queries";
 import { PlaylistGrid } from "@/features/playlists/PlaylistGrid";
+import { SavedPlaylistsSection } from "@/features/playlists/SavedPlaylistsSection";
 import { LyraPanel } from "@/ui/LyraPanel";
 
 export function PlaylistsRoute() {
@@ -32,6 +33,7 @@ export function PlaylistsRoute() {
           Backend unavailable. Playlists are not live right now.
         </LyraPanel>
       )}
+      <SavedPlaylistsSection />
       <PlaylistGrid playlists={playlists} />
     </div>
   );

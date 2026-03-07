@@ -87,6 +87,32 @@ export function mapPlaylists(payload: { vibes: Array<Record<string, unknown>> })
 }
 
 export function mapPlaylistDetail(payload: Record<string, unknown>): PlaylistDetail {
+  // Saved playlist shape: { playlist: {id, name, description, track_count, ...}, tracks: [...] }
+  if (payload.playlist && typeof payload.playlist === "object") {
+    const pl = payload.playlist as Record<string, unknown>;
+    const summary: PlaylistSummary = {
+      id: String(pl.id),
+      kind: "saved",
+      title: String(pl.name ?? pl.id),
+      subtitle: String(pl.description ?? ""),
+      narrative: String(pl.description ?? "User-created playlist"),
+      trackCount: Number(pl.track_count ?? 0),
+      freshnessLabel: "Saved",
+      coverMosaic: [monogram(String(pl.name ?? "P"))],
+      emotionalSignature: [],
+      lastTouchedLabel: pl.updated_at ? new Date(Number(pl.updated_at) * 1000).toLocaleString() : "Saved",
+    };
+    return {
+      summary,
+      arc: [],
+      tracks: Array.isArray(payload.tracks) ? payload.tracks.map((row) => mapTrack(row as Record<string, unknown>)) : [],
+      storyBeats: [],
+      oraclePivots: [],
+      relatedPlaylists: [],
+    };
+  }
+
+  // Vibe / legacy-detail shape: top-level title, narrative, tracks, arc, etc.
   const summary: PlaylistSummary = {
     id: String(payload.id),
     kind: "vibe",

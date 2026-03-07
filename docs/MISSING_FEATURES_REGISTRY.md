@@ -27,6 +27,7 @@ Closed items stay in git history and session logs.
 | G-037 | Oracle action breadth | **closed** | Wave 12: 17 execute action types now wired (`queue_tracks`, `start_vibe`, `start_playlust`, `switch_chaos_intensity`, `request_acquisition`, `resume`, `set_volume`, `set_shuffle`, `set_repeat`, `clear_queue`, `play_artist`, `play_album`, `play_similar` + `play`/`pause`/`next`/`previous`); agentActionRouter extended accordingly; 11 new contract tests; closed S-20260307-14 |
 | G-038 | Recommendation feedback loop | live | brokered recommendations persist accept/queue/skip/replay/acquire-request outcomes and apply that data as a ranking bias | Expand feedback sophistication later if passive playback-derived reinforcement is needed |
 | G-040 | Named playlist intelligence | **closed** | Wave 13: `saved_playlists` + `saved_playlist_tracks` SQLite tables; `playlists.py` blueprint with 7 CRUD+play endpoints; 4 oracle execute actions (`create_playlist`, `add_to_playlist`, `play_playlist`, `list_playlists`); agentActionRouter + 6 query helpers; 15 new contract tests; 241 Python tests passing; closed S-20260307-16 |
+| G-041 | Saved playlist UI surface | **closed** | Wave 14: `SavedPlaylistsSection` + `CreatePlaylistModal` wired into `PlaylistsRoute`; `mapPlaylistDetail` handles both saved and vibe shapes; `"saved"` kind added to `PlaylistKind`; 34 frontend tests passing; closed S-20260307-18 |
 
 ## Explicitly Not Cancelled
 
