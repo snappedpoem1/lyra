@@ -1,9 +1,11 @@
 # Lyra: Engine to Entity - Unified Master Plan
 
-Last updated: March 6, 2026
+Last updated: March 7, 2026
 
 This file is the single forward-plan authority for Lyra.
 It merges the original Engine-to-Entity vision with the Unified App Cutover execution track.
+
+Execution sequencing, iteration order, owner splits, and handoff rules for the remaining waves live in `docs/PHASE_EXECUTION_COMPANION.md`.
 
 ## 1) Mission Lock
 
@@ -88,13 +90,9 @@ This sequence intentionally fronts governance first so parallel agents do not dr
 
 ## 5) Open Gaps
 
-1. Runtime/data-root authority is still incomplete:
-   - generated paths are improved through `.lyra-build`
-   - repo-root mutable data assumptions still remain
-   - `LYRA_DATA_ROOT` cutover is not implemented yet
+1. Blank-machine installer proof against the finalized packaged/runtime contract is still pending.
 2. Native audio production validation (`miniaudio`) on real devices/long sessions is still pending.
-3. Packaged sidecar certainty (`lyra_backend.exe`) on a true blank-machine installer is still pending.
-4. Oracle action breadth, metadata depth, and product explainability are still expandable after governance and build/runtime foundations are aligned.
+3. Oracle action breadth, metadata depth, and product explainability are still expandable after governance and build/runtime foundations are aligned.
 
 ## 6) Wave Plan
 
@@ -120,7 +118,7 @@ Deliverables:
 - reproducible build/toolchain guidance
 - build manifest generation for packaged Windows artifacts
 
-### Wave 3 - Runtime and Data-Root Hard Cutover
+### Wave 3 - Runtime and Data-Root Hard Cutover (landed locally)
 
 Gate:
 - build/release governance is established and the runtime contract is documented
@@ -129,8 +127,9 @@ Deliverables:
 - `LYRA_DATA_ROOT` as mutable-data authority
 - removal of repo-root mutable-data defaults
 - migration and compatibility strategy for legacy layouts
+ - explicit migrate-now/defer flow through CLI and runtime API
 
-### Wave 4 - Desktop Stack Modernization
+### Wave 4 - Desktop Stack Modernization (landed locally)
 
 Gate:
 - runtime/data-root contract is stable enough to carry forward into host/runtime validation
@@ -168,6 +167,9 @@ Deliverables:
 - blank-machine installer validation
 - full parity/audio soak
 - final gap closure or restatement
+
+Execution companion:
+- `docs/PHASE_EXECUTION_COMPANION.md` extends the committed phase track beyond Wave 7 and defines iteration-level execution for Waves 3 through 11.
 
 ## 7) Non-Negotiables
 

@@ -16,6 +16,7 @@ import time
 from dotenv import load_dotenv
 
 from oracle.chroma_store import LyraChromaStore
+from oracle.config import CHROMA_PATH
 from oracle.db.schema import get_connection, get_write_mode
 from oracle.perf import auto_workers
 from oracle.runtime_state import wait_if_paused, get_profile
@@ -173,7 +174,7 @@ def _index_rows(
 ) -> Dict[str, int]:
     try:
         embedder = _build_embedder()
-        store = LyraChromaStore(persist_dir="./chroma_storage")
+        store = LyraChromaStore(persist_dir=CHROMA_PATH)
     except Exception as exc:
         logger.warning("Indexing dependencies unavailable: %s", exc)
         return {

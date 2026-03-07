@@ -65,16 +65,19 @@ def _load_track_dimensions(track_id: str) -> dict[str, float | None]:
     conn = get_connection(timeout=10.0)
     try:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia
-            FROM track_scores
-            WHERE track_id = ?
-            """,
-            (track_id,),
-        )
-        row = cursor.fetchone()
-        if not row:
+        try:
+            cursor.execute(
+                """
+                SELECT energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia
+                FROM track_scores
+                WHERE track_id = ?
+                """,
+                (track_id,),
+            )
+            row = cursor.fetchone()
+        except Exception:
+            row = None
+        if row is None:
             return {dimension: None for dimension in DIMENSIONS}
         return {
             DIMENSIONS[index]: (float(value) if value is not None else None)
@@ -88,16 +91,19 @@ def _load_cached_genius_context(track_id: str) -> dict[str, object]:
     conn = get_connection(timeout=10.0)
     try:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT payload_json
-            FROM enrich_cache
-            WHERE provider = ? AND lookup_key = ?
-            LIMIT 1
-            """,
-            ("genius", f"genius:{track_id}"),
-        )
-        row = cursor.fetchone()
+        try:
+            cursor.execute(
+                """
+                SELECT payload_json
+                FROM enrich_cache
+                WHERE provider = ? AND lookup_key = ?
+                LIMIT 1
+                """,
+                ("genius", f"genius:{track_id}"),
+            )
+            row = cursor.fetchone()
+        except Exception:
+            row = None
         if not row:
             return {}
         payload_raw = row[0]

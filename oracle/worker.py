@@ -30,9 +30,9 @@ import os
 import signal
 import sys
 import time
-from pathlib import Path
 
 from dotenv import load_dotenv
+from oracle.config import MODEL_CACHE_HUB_ROOT, MODEL_CACHE_ROOT, ensure_generated_dirs
 
 # Load env at module import so all job functions see credentials
 load_dotenv(override=False)
@@ -343,9 +343,9 @@ def start() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    # Point HuggingFace cache at project root
-    project_root = Path(__file__).resolve().parent.parent
-    os.environ.setdefault("HF_HOME", str(project_root / "hf_cache"))
+    ensure_generated_dirs()
+    os.environ.setdefault("HF_HOME", str(MODEL_CACHE_ROOT))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(MODEL_CACHE_HUB_ROOT))
 
     scheduler = build_scheduler()
 

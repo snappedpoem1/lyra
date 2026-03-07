@@ -3,7 +3,9 @@ param(
   [string]$Mode = "dev",
   [int]$HealthTimeoutSeconds = 120,
   [switch]$LeaveRunning,
-  [switch]$SkipSidecarBuild
+  [switch]$SkipSidecarBuild,
+  [switch]$UseInstalledDataRootContract,
+  [string]$LocalAppDataRoot
 )
 
 $ErrorActionPreference = "Stop"
@@ -88,17 +90,52 @@ function Resolve-PackagedHostExe {
 function Set-PackagedHostEnvironment {
   param(
     [string]$RepoRoot,
-    [string]$HostExe
+    [string]$HostExe,
+    [switch]$UseInstalledDataRootContract,
+    [string]$LocalAppDataRoot
   )
 
-  $logDir = Join-Path $RepoRoot "logs"
+  $buildRoot = Join-Path $RepoRoot ".lyra-build"
+  $logDir = Join-Path $buildRoot "logs\runtime"
   New-Item -ItemType Directory -Path $logDir -Force | Out-Null
   $bootLogPath = Join-Path $logDir "packaged-host-boot.log"
-  $backendLogPath = Join-Path $logDir "packaged-backend.log"
 
+  $env:LYRA_BUILD_ROOT = $buildRoot
   $env:LYRA_BACKEND_MODE = "packaged"
   $env:LYRA_HOST_BOOT_LOG = $bootLogPath
-  $env:LYRA_BACKEND_LOG_PATH = $backendLogPath
+  if ($LocalAppDataRoot) {
+    New-Item -ItemType Directory -Path $LocalAppDataRoot -Force | Out-Null
+    $env:LOCALAPPDATA = $LocalAppDataRoot
+  }
+
+  foreach ($key in @(
+    "LYRA_DATA_ROOT",
+    "LYRA_LOG_ROOT",
+    "LYRA_TEMP_ROOT",
+    "LYRA_STATE_ROOT",
+    "LYRA_MODEL_CACHE_ROOT",
+    "LYRA_BACKEND_LOG_PATH"
+  )) {
+    [Environment]::SetEnvironmentVariable($key, $null, "Process")
+  }
+
+  if (-not $UseInstalledDataRootContract) {
+    $dataRoot = Join-Path $buildRoot "data\packaged-smoke"
+    $tempRoot = Join-Path $buildRoot "tmp"
+    $stateRoot = Join-Path $buildRoot "state"
+    $modelCacheRoot = Join-Path $buildRoot "cache\hf"
+    $backendLogPath = Join-Path $logDir "packaged-backend.log"
+    New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $stateRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $modelCacheRoot -Force | Out-Null
+    $env:LYRA_DATA_ROOT = $dataRoot
+    $env:LYRA_LOG_ROOT = $logDir
+    $env:LYRA_TEMP_ROOT = $tempRoot
+    $env:LYRA_STATE_ROOT = $stateRoot
+    $env:LYRA_MODEL_CACHE_ROOT = $modelCacheRoot
+    $env:LYRA_BACKEND_LOG_PATH = $backendLogPath
+  }
 
   if (Test-IsRawTauriBuildHost -HostExe $HostExe) {
     $env:LYRA_PROJECT_ROOT = $RepoRoot
@@ -151,7 +188,11 @@ if ($Mode -eq "dev") {
   if (-not $hostExe) {
     throw "packaged host binary not found. Build once via: cd desktop\renderer-app; npm run tauri:build -- --debug"
   }
-  $bootLogPath = Set-PackagedHostEnvironment -RepoRoot $repoRoot -HostExe $hostExe
+  $bootLogPath = Set-PackagedHostEnvironment `
+    -RepoRoot $repoRoot `
+    -HostExe $hostExe `
+    -UseInstalledDataRootContract:$UseInstalledDataRootContract `
+    -LocalAppDataRoot $LocalAppDataRoot
   Write-Step "starting packaged host: $hostExe"
   $hostProcess = Start-Process -FilePath $hostExe -WorkingDirectory $repoRoot -PassThru
 }

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from oracle.config import LIBRARY_BASE
+from oracle.config import DOWNLOADS_FOLDER, LIBRARY_BASE, REPORTS_FOLDER
 from oracle.db.schema import migrate, get_write_mode
 
 
@@ -38,6 +38,14 @@ def main() -> None:
     subparsers.add_parser("doctor", help="Run system diagnostics")
     subparsers.add_parser("audit", help="Run database audit â€” row counts and health check")
     subparsers.add_parser("status", help="Quick status check â€” row counts and system state")
+
+    data_root_parser = subparsers.add_parser("data-root", help="Inspect or migrate the LYRA_DATA_ROOT contract")
+    data_root_sub = data_root_parser.add_subparsers(dest="data_root_command")
+    data_root_sub.add_parser("status", help="Show the current data-root and legacy-data state")
+    data_root_migrate = data_root_sub.add_parser("migrate", help="Copy legacy repo-root runtime data into LYRA_DATA_ROOT")
+    data_root_migrate.add_argument("--yes", action="store_true", help="Skip the interactive confirmation prompt")
+    data_root_migrate.add_argument("--overwrite", action="store_true", help="Replace non-empty targets under LYRA_DATA_ROOT")
+    data_root_sub.add_parser("defer", help="Show the explicit legacy-override instructions")
 
     ops_parser = subparsers.add_parser("ops", help="Operational run sequence + markdown report")
     ops_sub = ops_parser.add_subparsers(dest="ops_command")
@@ -121,7 +129,7 @@ def main() -> None:
     curate_plan = curate_sub.add_parser("plan", help="Generate curation plan")
     curate_plan.add_argument("--preset", default="artist_album", help="Organization preset")
     curate_plan.add_argument("--limit", type=int, default=0, help="Limit tracks")
-    curate_plan.add_argument("--out", default="Reports", help="Output directory")
+    curate_plan.add_argument("--out", default=str(REPORTS_FOLDER), help="Output directory")
     curate_plan.add_argument("--classify-first", action="store_true", help="Run classifier first")
     
     curate_apply = curate_sub.add_parser("apply", help="Apply curation plan")
@@ -335,10 +343,10 @@ def main() -> None:
     guard_test.add_argument('--title', required=True, help='Track title')
     
     guard_scan = guard_sub.add_parser('scan', help='Scan folder for junk')
-    guard_scan.add_argument('--folder', default='downloads', help='Folder to scan')
+    guard_scan.add_argument('--folder', default=str(DOWNLOADS_FOLDER), help='Folder to scan')
     
     guard_import = guard_sub.add_parser('import', help='Import downloads with guard protection')
-    guard_import.add_argument('--downloads', default='downloads', help='Downloads folder')
+    guard_import.add_argument('--downloads', default=str(DOWNLOADS_FOLDER), help='Downloads folder')
     guard_import.add_argument('--library', help='Library folder (default: LIBRARY_BASE)')
     guard_import.add_argument('--dry-run', action='store_true', help='Preview only')
     guard_import.add_argument('--delete-rejected', action='store_true', help='Delete rejected files')
@@ -474,6 +482,68 @@ def main() -> None:
         run_audit()
         return
 
+    if args.command == "data-root":
+        from oracle.data_root_migration import build_data_root_report, get_defer_payload, migrate_legacy_data
+
+        if args.data_root_command in {None, "status"}:
+            payload = build_data_root_report()
+            print("\n" + "=" * 60)
+            print("LYRA DATA ROOT")
+            print("=" * 60)
+            print(f"Data root: {payload['data_root']}")
+            print(f"Build root: {payload['build_root']}")
+            print(f"Legacy override: {'on' if payload['legacy_override'] else 'off'}")
+            print(f"Has data-root state: {'yes' if payload['has_data_root_state'] else 'no'}")
+            print(f"Migration required: {'yes' if payload['migration_required'] else 'no'}")
+            legacy_paths = payload["legacy_paths"]
+            if legacy_paths:
+                print("\nLegacy paths:")
+                for label, path in legacy_paths.items():
+                    print(f"  - {label}: {path}")
+            actions = payload["recommended_actions"]
+            print("\nNext actions:")
+            print(f"  - migrate now: {actions['migrate_now']}")
+            print(f"  - defer temporarily: {actions['defer_temporarily']}")
+            print("=" * 60 + "\n")
+            return
+
+        if args.data_root_command == "defer":
+            payload = get_defer_payload()
+            print("\n" + "=" * 60)
+            print("LYRA DATA ROOT DEFER")
+            print("=" * 60)
+            print("Explicit legacy override is required to keep using repo-root mutable data.")
+            print(f"PowerShell: {payload['powershell']}")
+            print(f"Env var: {payload['env_var']}={payload['value']}")
+            print(payload["note"])
+            print("=" * 60 + "\n")
+            return
+
+        if args.data_root_command == "migrate":
+            if not bool(args.yes):
+                prompt = input("Type MIGRATE to copy legacy runtime data into LYRA_DATA_ROOT: ").strip()
+                if prompt != "MIGRATE":
+                    print("Migration cancelled.")
+                    return
+            payload = migrate_legacy_data(overwrite=bool(args.overwrite))
+            print("\n" + "=" * 60)
+            print("LYRA DATA ROOT MIGRATION")
+            print("=" * 60)
+            print(f"Data root: {payload['data_root']}")
+            print(f"Migration required after run: {'yes' if payload['migration_required'] else 'no'}")
+            actions = payload.get("actions") or []
+            if actions:
+                print("\nActions:")
+                for action in actions:
+                    verification = "verified" if action["verified"] else action["verify_detail"]
+                    print(f"  - {action['label']}: {action['result']} -> {action['target']} ({verification})")
+            else:
+                print("\nActions: no legacy runtime paths were present to migrate.")
+            print("=" * 60 + "\n")
+            if int(payload.get("failures", 0) or 0) > 0:
+                sys.exit(2)
+            return
+
     if args.command == "ops" and args.ops_command == "iterate":
         from oracle.ops import run_iteration
 
@@ -496,9 +566,12 @@ def main() -> None:
         return
 
     if args.command == "status":
+        from oracle.data_root_migration import build_data_root_report
         from oracle.db.schema import get_connection
-        conn = get_connection(timeout=10.0)
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
+        data_root_report = build_data_root_report()
+        migration_required = bool(data_root_report["migration_required"])
         
         print("\n" + "="*60)
         print("LYRA ORACLE STATUS")
@@ -510,7 +583,17 @@ def main() -> None:
             print(f"Profile: {get_profile()} | Paused: {'yes' if paused else 'no'}")
         except Exception:
             pass
+        print(f"Data root: {data_root_report['data_root']}")
+        if migration_required:
+            legacy_keys = ", ".join(sorted((data_root_report.get("legacy_paths") or {}).keys()))
+            print(f"Migration required from legacy data: {legacy_keys}")
+            print(f"Migrate now: {data_root_report['recommended_actions']['migrate_now']}")
+            print(f"Defer temporarily: {data_root_report['recommended_actions']['defer_temporarily']}")
         print()
+
+        if not migration_required:
+            conn = get_connection(timeout=10.0)
+            cursor = conn.cursor()
         
         # Row counts
         count_queries = [
@@ -528,6 +611,8 @@ def main() -> None:
         print("Database:")
         for sql, label in count_queries:
             try:
+                if cursor is None:
+                    raise RuntimeError("migration_required")
                 cursor.execute(sql)
                 count = cursor.fetchone()[0]
                 print(f"   {label}: {count:,}")
@@ -581,7 +666,8 @@ def main() -> None:
                 label = "offline"
             print(f"   {icon} {svc_name}: {label}")
 
-        conn.close()
+        if conn is not None:
+            conn.close()
         print("=" * 60 + "\n")
         return
 
@@ -1957,10 +2043,13 @@ def main() -> None:
         from pathlib import Path as _Path
         _logging.basicConfig(level=_logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
         from oracle.integrations.beets_import import beets_import_and_ingest
-        from oracle.config import STAGING_FOLDER, DOWNLOADS_FOLDER
+        from oracle.config import (
+            DOWNLOADS_FOLDER as CONFIG_DOWNLOADS_FOLDER,
+            STAGING_FOLDER as CONFIG_STAGING_FOLDER,
+        )
         source_map = {
-            "staging": STAGING_FOLDER,
-            "downloads": DOWNLOADS_FOLDER,
+            "staging": CONFIG_STAGING_FOLDER,
+            "downloads": CONFIG_DOWNLOADS_FOLDER,
         }
         source = source_map.get(args.source, _Path(args.source))
         result = beets_import_and_ingest(

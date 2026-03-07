@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from oracle.anchors import ANCHORS
 from oracle.chroma_store import LyraChromaStore
+from oracle.config import CHROMA_PATH
 from oracle.db.schema import get_connection, get_write_mode
 from oracle.embedders.clap_embedder import CLAPEmbedder
 from oracle.runtime_state import wait_if_paused
@@ -149,7 +150,7 @@ def _get_store() -> LyraChromaStore:
     # Keep one store per worker thread to avoid cross-thread tenant/client errors.
     store = getattr(_THREAD_LOCAL, "chroma_store", None)
     if store is None:
-        store = LyraChromaStore(persist_dir="./chroma_storage")
+        store = LyraChromaStore(persist_dir=CHROMA_PATH)
         _THREAD_LOCAL.chroma_store = store
     return store
 

@@ -11,8 +11,13 @@ from flask import Blueprint, jsonify, request
 
 from oracle.api import VERSION
 from oracle.config import LIBRARY_BASE
+from oracle.data_root_migration import (
+    build_data_root_report,
+    get_defer_payload,
+    migrate_legacy_data,
+)
 from oracle.db.schema import get_connection, get_write_mode
-from oracle.validation import sanitize_integer
+from oracle.validation import sanitize_integer, validate_boolean
 
 bp = Blueprint("core", __name__)
 
@@ -162,6 +167,7 @@ def api_health():
             "feature_flags": feature_flags,
             "acquisition": _acquisition_bootstrap_status(),
             "runtime_services": _runtime_services_status(),
+            "data_root": build_data_root_report(),
             "llm": llm_status,
             "auth": auth,
             "cors": cors,
@@ -204,6 +210,7 @@ def api_status():
             "library": lib,
             "acquisition": _acquisition_bootstrap_status(),
             "runtime_services": _runtime_services_status(),
+            "data_root": build_data_root_report(),
             "llm": llm_info,
             "features": _feature_flags(),
         })
@@ -216,6 +223,39 @@ def api_runtime_services():
     """Return runtime-service packaging policy and active architecture manifest."""
     try:
         return jsonify(_runtime_services_status())
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@bp.route("/api/runtime/data-root", methods=["GET"])
+def api_runtime_data_root():
+    """Return the active data-root contract state and migration guidance."""
+    try:
+        return jsonify(build_data_root_report())
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@bp.route("/api/runtime/data-root/migrate", methods=["POST"])
+def api_runtime_data_root_migrate():
+    """Copy detected legacy runtime data into the active data root."""
+    try:
+        body = request.get_json(silent=True) or {}
+        valid, error, overwrite = validate_boolean(body.get("overwrite", False), "overwrite")
+        if not valid:
+            return jsonify({"error": error}), 400
+        return jsonify(migrate_legacy_data(overwrite=bool(overwrite)))
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@bp.route("/api/runtime/data-root/defer", methods=["POST"])
+def api_runtime_data_root_defer():
+    """Return the explicit temporary legacy-override instructions."""
+    try:
+        payload = get_defer_payload()
+        payload["data_root"] = build_data_root_report()
+        return jsonify(payload)
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 

@@ -23,6 +23,7 @@ def get_write_mode() -> str:
 
 
 def get_connection(timeout: float = 10.0) -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH), timeout=timeout)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA cache_size=-65536")        # 64 MB page cache

@@ -8,8 +8,10 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
-use tauri::GlobalShortcutManager;
-use tauri::Manager;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 #[derive(Clone, Serialize)]
 struct BootStatus {
@@ -49,14 +51,14 @@ fn write_boot_log(message: &str) {
     }
 }
 
-fn emit_boot_status(app: &tauri::AppHandle, phase: &str, message: &str, ready: bool) {
+fn emit_boot_status(app: &AppHandle, phase: &str, message: &str, ready: bool) {
     write_boot_log(&format!("[boot-status] phase={phase} ready={ready} message={message}"));
     let payload = BootStatus {
         phase: phase.to_string(),
         message: message.to_string(),
         ready,
     };
-    let _ = app.emit_all("lyra://boot-status", payload);
+    let _ = app.emit("lyra://boot-status", payload);
 }
 
 fn backend_base_url() -> String {
@@ -399,7 +401,7 @@ fn launch_backend_process() -> Result<Child, String> {
     }
 }
 
-fn start_backend_sidecar(app: tauri::AppHandle) {
+fn start_backend_sidecar(app: AppHandle) {
     let base_url = backend_base_url();
     write_boot_log(&format!("[start-backend-sidecar] base_url={base_url}"));
     if health_ready(&base_url) {
@@ -492,7 +494,7 @@ fn get_player_status(base_url: &str) -> Result<String, String> {
         .to_string())
 }
 
-fn dispatch_transport_to_backend(app: &tauri::AppHandle, action: &str) {
+fn dispatch_transport_to_backend(app: &AppHandle, action: &str) {
     let base_url = backend_base_url();
     if !health_ready(&base_url) {
         emit_boot_status(app, "backend", "Backend unavailable for transport command", false);
@@ -523,9 +525,18 @@ fn dispatch_transport_to_backend(app: &tauri::AppHandle, action: &str) {
     }
 }
 
-fn register_media_shortcuts(app: &tauri::AppHandle) {
-    let mut manager = app.global_shortcut_manager();
+fn toggle_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_visible().unwrap_or(true) {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
 
+fn register_media_shortcuts(app: &AppHandle) {
     let shortcuts = [
         ("MediaPlayPause", "play-pause"),
         ("MediaNextTrack", "next"),
@@ -534,13 +545,68 @@ fn register_media_shortcuts(app: &tauri::AppHandle) {
 
     for (accelerator, action) in shortcuts {
         let app_handle = app.clone();
-        let _ = manager.register(accelerator, move || {
-            dispatch_transport_to_backend(&app_handle, action);
-        });
+        let result = app.global_shortcut().on_shortcut(
+            accelerator,
+            move |shortcut_app, _shortcut, event| {
+                if event.state() == ShortcutState::Pressed {
+                    dispatch_transport_to_backend(shortcut_app, action);
+                }
+            },
+        );
+
+        if let Err(error) = result {
+            emit_boot_status(
+                &app_handle,
+                "shortcuts",
+                &format!("Could not register media shortcut {accelerator}: {error}"),
+                false,
+            );
+        }
     }
 }
 
-fn stop_backend_process(app: &tauri::AppHandle) {
+fn create_tray_icon(app: &AppHandle) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, "show", "Show / Hide", true, None::<&str>)?;
+    let play_pause = MenuItem::with_id(app, "play_pause", "Play / Pause", true, None::<&str>)?;
+    let previous = MenuItem::with_id(app, "previous", "Previous", true, None::<&str>)?;
+    let next = MenuItem::with_id(app, "next", "Next", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let tray_menu = Menu::with_items(app, &[&show, &play_pause, &previous, &next, &separator, &quit])?;
+    let icon = app.default_window_icon().cloned();
+
+    let mut builder = TrayIconBuilder::with_id("lyra-tray").menu(&tray_menu);
+    if let Some(icon) = icon {
+        builder = builder.icon(icon);
+    }
+
+    let _tray = builder
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show" => toggle_main_window(app),
+            "play_pause" => dispatch_transport_to_backend(app, "play-pause"),
+            "previous" => dispatch_transport_to_backend(app, "previous"),
+            "next" => dispatch_transport_to_backend(app, "next"),
+            "quit" => {
+                stop_backend_process(app);
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button, button_state, .. } = event {
+                if button == tauri::tray::MouseButton::Left
+                    && button_state == tauri::tray::MouseButtonState::Up
+                {
+                    toggle_main_window(tray.app_handle());
+                }
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
+fn stop_backend_process(app: &AppHandle) {
     if let Ok(mut guard) = app.state::<AppState>().backend_process.lock() {
         if let Some(mut child) = guard.take() {
             let _ = child.kill();
@@ -550,56 +616,24 @@ fn stop_backend_process(app: &tauri::AppHandle) {
 
 fn main() {
     write_boot_log("[main] starting tauri host");
-    let tray_menu = tauri::SystemTrayMenu::new()
-        .add_item(tauri::CustomMenuItem::new("show", "Show / Hide"))
-        .add_item(tauri::CustomMenuItem::new("play_pause", "Play / Pause"))
-        .add_item(tauri::CustomMenuItem::new("previous", "Previous"))
-        .add_item(tauri::CustomMenuItem::new("next", "Next"))
-        .add_native_item(tauri::SystemTrayMenuItem::Separator)
-        .add_item(tauri::CustomMenuItem::new("quit", "Quit"));
-
     let state = AppState {
         backend_process: Mutex::new(None),
     };
 
     tauri::Builder::default()
         .manage(state)
-        .system_tray(tauri::SystemTray::new().with_menu(tray_menu))
         .setup(|app| {
             write_boot_log("[main] setup entered");
             let app_handle = app.handle();
             start_backend_sidecar(app_handle.clone());
             register_media_shortcuts(&app_handle);
+            create_tray_icon(&app_handle)?;
             Ok(())
-        })
-        .on_system_tray_event(|app, event| {
-            if let tauri::SystemTrayEvent::MenuItemClick { id, .. } = event {
-                match id.as_str() {
-                    "show" => {
-                        if let Some(window) = app.get_window("main") {
-                            if window.is_visible().unwrap_or(true) {
-                                let _ = window.hide();
-                            } else {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                    }
-                    "play_pause" => dispatch_transport_to_backend(app, "play-pause"),
-                    "previous" => dispatch_transport_to_backend(app, "previous"),
-                    "next" => dispatch_transport_to_backend(app, "next"),
-                    "quit" => {
-                        stop_backend_process(app);
-                        std::process::exit(0);
-                    }
-                    _ => {}
-                }
-            }
         })
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|app_handle, run_event| {
-            if matches!(run_event, tauri::RunEvent::Exit) {
+            if matches!(run_event, tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }) {
                 write_boot_log("[main] exit event received");
                 stop_backend_process(app_handle);
             }

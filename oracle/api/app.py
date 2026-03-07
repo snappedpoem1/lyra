@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 import threading
 import time
 
@@ -57,9 +56,11 @@ def create_app() -> Flask:
     # frozen-binary (PyInstaller) modes — Path(__file__) inside a frozen binary
     # resolves into the PyInstaller _MEIPASS temp directory, not the project root.
     import oracle.config as _cfg
-    hf_home = str(_cfg.PROJECT_ROOT / "hf_cache")
+    _cfg.ensure_generated_dirs()
+    _cfg.log_legacy_data_warning()
+    hf_home = str(_cfg.MODEL_CACHE_ROOT)
     os.environ.setdefault("HF_HOME", hf_home)
-    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(Path(hf_home) / "hub"))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(_cfg.MODEL_CACHE_HUB_ROOT))
 
     app = Flask(__name__)
 

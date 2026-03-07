@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 import os
@@ -20,9 +20,7 @@ except Exception:  # pragma: no cover - fallbacks for missing package
     chromadb = None  # type: ignore
 
 from dotenv import load_dotenv
-from oracle.config import CHROMA_COLLECTION
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from oracle.config import CHROMA_COLLECTION, CHROMA_PATH, PROJECT_ROOT
 DEFAULT_COLLECTION = CHROMA_COLLECTION or "clap_embeddings"
 LEGACY_COLLECTIONS = ("clap_embeddings", "lyra_clap_v1")
 
@@ -71,7 +69,7 @@ def _safe_get_list(value: Any) -> List:
 
 @dataclass
 class LyraChromaStore:
-    persist_dir: Path = Path("./chroma_storage")
+    persist_dir: Path = field(default_factory=lambda: CHROMA_PATH)
     collection_name: str = DEFAULT_COLLECTION
     allow_reset: bool = False
 

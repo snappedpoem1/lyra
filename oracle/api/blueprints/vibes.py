@@ -11,6 +11,7 @@ from oracle.api.helpers import (
     _load_vibe_detail,
     _playlist_run_to_dict,
 )
+from oracle.config import REPORTS_FOLDER
 from oracle.db.schema import get_connection
 from oracle.validation import (
     sanitize_integer,
@@ -404,7 +405,7 @@ def api_curate_plan():
             preset=data.get("preset", "artist_album"),
             classify_first=data.get("classify_first", False),
             limit=data.get("limit", 0),
-            output_dir="Reports",
+            output_dir=str(REPORTS_FOLDER),
         )
         return jsonify({"result": result})
     except Exception as e:

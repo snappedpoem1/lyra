@@ -14,13 +14,21 @@ from typing import List
 
 from dotenv import load_dotenv
 
-from oracle.config import find_bundled_tool
+from oracle.config import (
+    CHROMA_PATH,
+    DATA_ROOT,
+    LYRA_DB_PATH,
+    TEMP_ROOT,
+    detect_legacy_data_paths,
+    ensure_generated_dirs,
+    find_bundled_tool,
+    legacy_data_migration_required,
+)
+from oracle.data_root_migration import build_data_root_report
 from oracle.llm_config import diagnose_llm_config, load_llm_config
 from oracle.runtime_services import get_runtime_service_manifest
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = PROJECT_ROOT / "lyra_registry.db"
-CHROMA_PATH = PROJECT_ROOT / "chroma_storage"
+DB_PATH = LYRA_DB_PATH
 
 REQUIRED_ENV_KEYS = [
     "MB_APP_NAME",
@@ -63,9 +71,19 @@ def _check_disk(path: Path, min_gb: int) -> CheckResult:
 
 def _check_db() -> CheckResult:
     if not DB_PATH.exists():
+        if legacy_data_migration_required():
+            report = build_data_root_report()
+            legacy_keys = ", ".join(sorted(detect_legacy_data_paths().keys()))
+            return CheckResult(
+                "Database",
+                "WARNING",
+                f"Migration required from legacy data ({legacy_keys}) into {DATA_ROOT} | "
+                f"{report['recommended_actions']['migrate_now']}",
+            )
         return CheckResult("Database", "WARNING", f"Missing: {DB_PATH}")
     try:
-        temp = PROJECT_ROOT / f".db_write_test_{int(time.time())}.tmp"
+        ensure_generated_dirs()
+        temp = TEMP_ROOT / f"db_write_test_{int(time.time())}.tmp"
         temp.write_text("test", encoding="utf-8")
         temp.unlink()
         return CheckResult("Database", "PASS", f"Writable: {DB_PATH}")
@@ -75,6 +93,16 @@ def _check_db() -> CheckResult:
 
 def _check_chroma_storage() -> CheckResult:
     if not CHROMA_PATH.exists():
+        if legacy_data_migration_required():
+            report = build_data_root_report()
+            return CheckResult(
+                "ChromaDB (local)",
+                "WARNING",
+                f"Migration required before Chroma is available under {DATA_ROOT} | "
+                f"{report['recommended_actions']['migrate_now']}",
+            )
+        if not DB_PATH.exists():
+            return CheckResult("ChromaDB (local)", "WARNING", f"Missing: {CHROMA_PATH}")
         return CheckResult("ChromaDB (local)", "FAIL", f"Missing: {CHROMA_PATH}")
     file_count = sum(1 for path in CHROMA_PATH.rglob("*") if path.is_file())
     try:

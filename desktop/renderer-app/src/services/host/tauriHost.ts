@@ -8,8 +8,15 @@ export interface HostBootPayload {
   ready: boolean;
 }
 
+/**
+ * Detect whether the app is running inside a Tauri host.
+ * Guards against both Tauri v1 (__TAURI_IPC__) and Tauri v2 (__TAURI_INTERNALS__).
+ */
 function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_IPC__" in window;
+  return (
+    typeof window !== "undefined" &&
+    ("__TAURI_IPC__" in window || "__TAURI_INTERNALS__" in window)
+  );
 }
 
 export async function listenHostTransport(

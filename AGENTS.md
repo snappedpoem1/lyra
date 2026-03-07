@@ -30,6 +30,14 @@ Read these before proposing behavior changes:
 
 Rule: do not propose changes that contradict `docs/PROJECT_STATE.md` without updating it in the same PR/commit.
 
+## Governance-First Rule
+
+Before any build/runtime/product modernization wave begins:
+
+- update the authoritative docs first when roadmap/state/worklist/registry truth is changing
+- do not start later-wave implementation until those docs agree on execution order and constraints
+- treat documentation and agent-guidance alignment as a hard gate, not optional cleanup
+
 ## Coding Rules
 
 - `pathlib.Path` always, never `os.path`
@@ -95,6 +103,20 @@ Start command:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/new_session.ps1 -Slug "my-work" -Goal "What I am doing"
 ```
+
+## Parallel Lane Protocol
+
+When multiple agents are working in parallel:
+
+- read the root `AGENTS.md` first
+- then read the most relevant lane brief under `docs/agent_briefs/`
+- if two agents are sharing a wave, also read `docs/agent_briefs/tandem-wave-protocol.md`
+- do not cross into another lane's files unless the active brief explicitly allows it
+- if a task changes roadmap/state/worklist/registry or agent coordination, update docs first before implementation
+- exactly one agent is the wave owner for any active wave
+- the second agent must stay on a non-overlapping parallel lane with separately claimed files
+- each agent opens its own session and records owned files plus forbidden files in the matching session log
+- authoritative docs (`docs/PROJECT_STATE.md`, `docs/WORKLIST.md`, `docs/MISSING_FEATURES_REGISTRY.md`, `docs/SESSION_INDEX.md`) are reconciled only during an explicit sync window or by the wave owner
 
 ## Done Criteria
 

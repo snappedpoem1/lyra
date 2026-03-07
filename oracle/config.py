@@ -8,8 +8,9 @@ Every other module imports from here.
 import os
 import shutil
 import sys
-from pathlib import Path
 from dataclasses import dataclass, field
+import logging
+from pathlib import Path
 from typing import Optional
 
 try:
@@ -19,6 +20,8 @@ except ImportError:
 
 from oracle.llm_config import load_llm_config, resolve_llm_config
 
+logger = logging.getLogger(__name__)
+
 
 # â”€â”€ Resolve project root (wherever start.py lives) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _resolve_project_root() -> Path:
@@ -26,7 +29,7 @@ def _resolve_project_root() -> Path:
     if env_root:
         return Path(env_root)
     if getattr(sys, "frozen", False):
-        return Path.cwd()
+        return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent
 
 
@@ -44,20 +47,166 @@ def _env_path(key: str, fallback: Path) -> Path:
     return Path(value) if value else fallback
 
 
-LYRA_DB_PATH = _env_path("LYRA_DB_PATH", PROJECT_ROOT / "lyra_registry.db")
-CHROMA_PATH = _env_path("CHROMA_PATH", _env_path("CHROMA_DIR", PROJECT_ROOT / "chroma_storage"))
+def _env_flag(key: str) -> bool:
+    value = os.environ.get(key, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _resolve_local_appdata_root() -> Path:
+    local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
+    if local_appdata:
+        return Path(local_appdata)
+    return Path.home() / "AppData" / "Local"
+
+
+def _legacy_data_override_enabled() -> bool:
+    return _env_flag("LYRA_USE_LEGACY_DATA_ROOT")
+
+
+def _resolve_default_data_root() -> Path:
+    lyra_root = _resolve_local_appdata_root() / "Lyra"
+    if getattr(sys, "frozen", False):
+        return lyra_root
+    return lyra_root / "dev"
+
+
+def _resolve_data_root() -> Path:
+    return _env_path("LYRA_DATA_ROOT", _resolve_default_data_root())
+
+
+DATA_ROOT = _resolve_data_root()
+LYRA_DATA_ROOT = DATA_ROOT
+LEGACY_DATA_OVERRIDE = _legacy_data_override_enabled()
+
+LEGACY_DB_PATH = PROJECT_ROOT / "lyra_registry.db"
+LEGACY_CHROMA_PATH = PROJECT_ROOT / "chroma_storage"
+LEGACY_LIBRARY_BASE = PROJECT_ROOT / "library"
+LEGACY_DOWNLOADS_FOLDER = PROJECT_ROOT / "downloads"
+LEGACY_STAGING_FOLDER = PROJECT_ROOT / "staging"
+LEGACY_VIBES_FOLDER = PROJECT_ROOT / "Vibes"
+LEGACY_REPORTS_FOLDER = PROJECT_ROOT / "Reports"
+LEGACY_PLAYLISTS_FOLDER = PROJECT_ROOT / "playlists"
+LEGACY_SPOTIFY_DATA_DIR = PROJECT_ROOT / "data" / "spotify"
+LEGACY_LOG_ROOT = PROJECT_ROOT / "logs"
+LEGACY_TEMP_ROOT = PROJECT_ROOT / "tmp"
+LEGACY_STATE_ROOT = PROJECT_ROOT / "state"
+LEGACY_MODEL_CACHE_ROOT = PROJECT_ROOT / "hf_cache"
+
+BUILD_ROOT = _env_path("LYRA_BUILD_ROOT", PROJECT_ROOT / ".lyra-build")
+
+if LEGACY_DATA_OVERRIDE:
+    LYRA_DB_PATH = _env_path("LYRA_DB_PATH", LEGACY_DB_PATH)
+    CHROMA_PATH = _env_path("CHROMA_PATH", _env_path("CHROMA_DIR", LEGACY_CHROMA_PATH))
+    LIBRARY_BASE = _env_path("LIBRARY_BASE", _env_path("LIBRARY_DIR", LEGACY_LIBRARY_BASE))
+    DOWNLOADS_FOLDER = _env_path("DOWNLOADS_FOLDER", _env_path("DOWNLOAD_DIR", LEGACY_DOWNLOADS_FOLDER))
+    STAGING_FOLDER = _env_path("STAGING_FOLDER", _env_path("STAGING_DIR", LEGACY_STAGING_FOLDER))
+    VIBES_FOLDER = _env_path("VIBES_FOLDER", LEGACY_VIBES_FOLDER)
+    REPORTS_FOLDER = _env_path("REPORTS_FOLDER", LEGACY_REPORTS_FOLDER)
+    PLAYLISTS_FOLDER = _env_path("PLAYLISTS_FOLDER", LEGACY_PLAYLISTS_FOLDER)
+    SPOTIFY_DATA_DIR = _env_path("SPOTIFY_DATA_DIR", LEGACY_SPOTIFY_DATA_DIR)
+    LOG_ROOT = _env_path("LYRA_LOG_ROOT", LEGACY_LOG_ROOT)
+    TEMP_ROOT = _env_path("LYRA_TEMP_ROOT", LEGACY_TEMP_ROOT)
+    STATE_ROOT = _env_path("LYRA_STATE_ROOT", LEGACY_STATE_ROOT)
+    MODEL_CACHE_ROOT = _env_path("LYRA_MODEL_CACHE_ROOT", LEGACY_MODEL_CACHE_ROOT)
+else:
+    LYRA_DB_PATH = DATA_ROOT / "db" / "lyra_registry.db"
+    CHROMA_PATH = DATA_ROOT / "chroma"
+    LIBRARY_BASE = _env_path("LIBRARY_BASE", _env_path("LIBRARY_DIR", LEGACY_LIBRARY_BASE))
+    DOWNLOADS_FOLDER = DATA_ROOT / "downloads"
+    STAGING_FOLDER = DATA_ROOT / "staging"
+    VIBES_FOLDER = DATA_ROOT / "Vibes"
+    REPORTS_FOLDER = DATA_ROOT / "Reports"
+    PLAYLISTS_FOLDER = DATA_ROOT / "playlists"
+    SPOTIFY_DATA_DIR = DATA_ROOT / "data" / "spotify"
+    LOG_ROOT = _env_path("LYRA_LOG_ROOT", DATA_ROOT / "logs")
+    TEMP_ROOT = _env_path("LYRA_TEMP_ROOT", DATA_ROOT / "tmp")
+    STATE_ROOT = _env_path("LYRA_STATE_ROOT", DATA_ROOT / "state")
+    MODEL_CACHE_ROOT = _env_path("LYRA_MODEL_CACHE_ROOT", DATA_ROOT / "cache" / "hf")
+
+MODEL_CACHE_HUB_ROOT = _env_path("HUGGINGFACE_HUB_CACHE", MODEL_CACHE_ROOT / "hub")
 CHROMA_COLLECTION = os.environ.get("CHROMA_COLLECTION", "clap_embeddings").strip() or "clap_embeddings"
-LIBRARY_BASE = _env_path("LIBRARY_BASE", _env_path("LIBRARY_DIR", PROJECT_ROOT / "library"))
-DOWNLOADS_FOLDER = _env_path("DOWNLOADS_FOLDER", _env_path("DOWNLOAD_DIR", PROJECT_ROOT / "downloads"))
-STAGING_FOLDER = _env_path("STAGING_FOLDER", _env_path("STAGING_DIR", PROJECT_ROOT / "staging"))
 QUARANTINE_PATH = _env_path("QUARANTINE_PATH", LIBRARY_BASE.parent / "_Quarantine")
 REJECTED_FOLDER = _env_path("REJECTED_FOLDER", LIBRARY_BASE.parent / "_Rejected")
-VIBES_FOLDER = _env_path("VIBES_FOLDER", PROJECT_ROOT / "Vibes")
-REPORTS_FOLDER = _env_path("REPORTS_FOLDER", PROJECT_ROOT / "Reports")
-PLAYLISTS_FOLDER = _env_path("PLAYLISTS_FOLDER", PROJECT_ROOT / "playlists")
 ACOUSTID_API_KEY = os.environ.get("ACOUSTID_API_KEY", "").strip()
 FPCALC_PATH = os.environ.get("FPCALC_PATH", "").strip()
 RUNTIME_ROOT = _env_path("LYRA_RUNTIME_ROOT", PROJECT_ROOT / "runtime")
+
+
+def legacy_data_override_allowed() -> bool:
+    """Return True when repo-root mutable data fallback is explicitly enabled."""
+    return LEGACY_DATA_OVERRIDE
+
+
+def detect_legacy_data_paths() -> dict[str, Path]:
+    """Return legacy repo-root mutable paths that still exist."""
+    legacy_paths = {
+        "database": LEGACY_DB_PATH,
+        "chroma": LEGACY_CHROMA_PATH,
+        "logs": LEGACY_LOG_ROOT,
+        "temp": LEGACY_TEMP_ROOT,
+        "model_cache": LEGACY_MODEL_CACHE_ROOT,
+        "downloads": LEGACY_DOWNLOADS_FOLDER,
+        "staging": LEGACY_STAGING_FOLDER,
+        "profile_state": PROJECT_ROOT / ".lyra_profile",
+        "pause_state": PROJECT_ROOT / ".lyra_paused",
+    }
+    data_root_resolved = DATA_ROOT.resolve()
+    return {
+        label: path
+        for label, path in legacy_paths.items()
+        if path.exists() and path.resolve() != data_root_resolved
+    }
+
+
+def has_data_root_state() -> bool:
+    """Return True when the active data root already contains usable state."""
+    candidates = [
+        CHROMA_PATH,
+        STATE_ROOT / "profile",
+        STATE_ROOT / "pause.json",
+    ]
+    if LYRA_DB_PATH.exists():
+        try:
+            if LYRA_DB_PATH.stat().st_size > 0:
+                return True
+        except OSError:
+            pass
+    return any(path.exists() for path in candidates)
+
+
+def legacy_data_migration_required() -> bool:
+    """Return True when legacy data exists and the active data root is still empty."""
+    if legacy_data_override_allowed():
+        return False
+    return bool(detect_legacy_data_paths()) and not has_data_root_state()
+
+
+def log_legacy_data_warning() -> None:
+    """Log the current legacy-data state so startup behavior is explicit."""
+    legacy_paths = detect_legacy_data_paths()
+    if not legacy_paths:
+        return
+
+    if legacy_data_override_allowed():
+        logger.warning(
+            "Using legacy repo-root mutable data because LYRA_USE_LEGACY_DATA_ROOT is enabled."
+        )
+        return
+
+    if legacy_data_migration_required():
+        joined = ", ".join(sorted(legacy_paths.keys()))
+        logger.warning(
+            "Legacy repo-root mutable data detected (%s). Run "
+            "'python -m oracle.cli data-root migrate --yes' to copy it into %s, "
+            "or set LYRA_USE_LEGACY_DATA_ROOT=1 to defer temporarily.",
+            joined,
+            DATA_ROOT,
+        )
+        return
+
+    logger.info(
+        "Legacy repo-root mutable data remains present, but the active data root already contains state."
+    )
 
 
 def guard_bypass_allowed() -> bool:
@@ -103,6 +252,28 @@ def find_bundled_tool(*names: str) -> Optional[str]:
     return None
 
 
+def ensure_generated_dirs() -> None:
+    """Create runtime-generated directories that should stay outside source files."""
+    for path in [
+        DATA_ROOT,
+        BUILD_ROOT,
+        LYRA_DB_PATH.parent,
+        CHROMA_PATH,
+        DOWNLOADS_FOLDER,
+        STAGING_FOLDER,
+        REPORTS_FOLDER,
+        PLAYLISTS_FOLDER,
+        VIBES_FOLDER,
+        SPOTIFY_DATA_DIR,
+        STATE_ROOT,
+        LOG_ROOT,
+        TEMP_ROOT,
+        MODEL_CACHE_ROOT,
+        MODEL_CACHE_HUB_ROOT,
+    ]:
+        path.mkdir(parents=True, exist_ok=True)
+
+
 def validate_required_env(required_keys: list[str]) -> None:
     """Raise when any required environment key is missing/blank."""
     missing = [key for key in required_keys if not os.environ.get(key, "").strip()]
@@ -140,16 +311,17 @@ class OracleConfig:
     rclone_mount_drive: str = "L:"
 
     # ChromaDB (sonic DNA)
-    chroma_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "chroma_storage")
+    chroma_dir: Path = field(default_factory=lambda: CHROMA_PATH)
     chroma_collection: str = "clap_embeddings"
 
     # Paths
+    data_root: Path = field(default_factory=lambda: DATA_ROOT)
     project_root: Path = field(default_factory=lambda: PROJECT_ROOT)
-    download_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "downloads")
-    staging_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "staging")
-    library_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "library")
-    spotify_data_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "data" / "spotify")
-    log_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "logs")
+    download_dir: Path = field(default_factory=lambda: DOWNLOADS_FOLDER)
+    staging_dir: Path = field(default_factory=lambda: STAGING_FOLDER)
+    library_dir: Path = field(default_factory=lambda: LIBRARY_BASE)
+    spotify_data_dir: Path = field(default_factory=lambda: SPOTIFY_DATA_DIR)
+    log_dir: Path = field(default_factory=lambda: LOG_ROOT)
     db_path: Path = field(default_factory=lambda: LYRA_DB_PATH)
 
     # Download prefs
@@ -213,6 +385,7 @@ class OracleConfig:
                   self.spotify_data_dir, self.log_dir, self.db_path.parent,
                   self.chroma_dir, REPORTS_FOLDER, PLAYLISTS_FOLDER, VIBES_FOLDER]:
             d.mkdir(parents=True, exist_ok=True)
+        ensure_generated_dirs()
 
 
 def load_config(env_path: Optional[Path] = None) -> OracleConfig:
@@ -266,20 +439,21 @@ def load_config(env_path: Optional[Path] = None) -> OracleConfig:
         sleep_max=_env_int("SLEEP_MAX", 15),
     )
 
-    # Override paths if set in env (check both legacy and current var names)
-    dl_dir = _env("DOWNLOADS_FOLDER") or _env("DOWNLOAD_DIR")
-    if dl_dir:
-        cfg.download_dir = Path(dl_dir)
     lib_dir = _env("LIBRARY_BASE") or _env("LIBRARY_DIR")
     if lib_dir:
         cfg.library_dir = Path(lib_dir)
-    if _env("SPOTIFY_DATA_DIR"):
-        cfg.spotify_data_dir = Path(_env("SPOTIFY_DATA_DIR"))
-    chroma_dir = _env("CHROMA_PATH") or _env("CHROMA_DIR")
-    if chroma_dir:
-        cfg.chroma_dir = Path(chroma_dir)
     if _env("CHROMA_COLLECTION"):
         cfg.chroma_collection = _env("CHROMA_COLLECTION")
+
+    if legacy_data_override_allowed():
+        dl_dir = _env("DOWNLOADS_FOLDER") or _env("DOWNLOAD_DIR")
+        if dl_dir:
+            cfg.download_dir = Path(dl_dir)
+        if _env("SPOTIFY_DATA_DIR"):
+            cfg.spotify_data_dir = Path(_env("SPOTIFY_DATA_DIR"))
+        chroma_dir = _env("CHROMA_PATH") or _env("CHROMA_DIR")
+        if chroma_dir:
+            cfg.chroma_dir = Path(chroma_dir)
 
     cfg.ensure_dirs()
     return cfg

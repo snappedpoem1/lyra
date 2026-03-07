@@ -1,6 +1,6 @@
 # Lyra Oracle Gap Registry
 
-Last audited: March 6, 2026
+Last audited: March 7, 2026
 
 This file tracks active gaps only.
 Closed items stay in git history and session logs.
@@ -16,16 +16,14 @@ Closed items stay in git history and session logs.
 
 | ID | Area | Status | Evidence | What Needs To Happen |
 | --- | --- | --- | --- | --- |
-| G-040 | Agent and governance hardening | partial | root `AGENTS.md` exists and repo-wide `.github/copilot-instructions.md` exists, but nearest-directory `AGENTS.md` files, path-scoped instruction files, and explicit later-wave lane briefs are still missing | Land the document/agent-hardening wave so roadmap/state/worklist/registry and scoped lane instructions all agree before later modernization work proceeds |
-| G-039 | Docker elimination / packaged runtime | partial | core app no longer requires Docker, legacy-service bootstrap is opt-in only, bundled acquisition-runtime builders exist, clean-machine artifact proof passes locally, debug packaged-host boot reaches healthy backend state, installed-layout validation passes locally, and live Qobuz acquisition via bundled `rip.exe` is confirmed; remaining gap is true blank-machine installer validation | Install the Lyra installer EXE on a clean Windows VM and confirm first launch works |
+| G-039 | Docker elimination / packaged runtime | blocked-external | core app no longer requires Docker, legacy-service bootstrap is opt-in only, bundled acquisition-runtime builders exist, clean-machine artifact proof passes locally, debug packaged-host boot reaches healthy backend state, installed-layout validation passes locally, and live Qobuz acquisition via bundled `rip.exe` is confirmed; remaining gap is true blank-machine installer validation, but no clean Windows machine or VM is currently available for that proof | Acquire a clean Windows machine or VM and confirm first launch from the Lyra installer EXE |
 | G-009 | Spotify export | missing | no active export route or module | Explicitly decide ship vs cancel; implement only if in scope |
-| G-010 | Runtime/source separation / data-root authority | partial | packaged sidecar and bundled helper executables stage under dedicated `.lyra-build/bin`, frozen `PROJECT_ROOT` now resolves from `sys.executable`, and generated logs/temp/runtime-state/default model-cache paths now route through explicit `.lyra-build` roots; remaining gap is broader mutable-data cleanup, explicit `LYRA_DATA_ROOT` authority, and installer validation of those assumptions | Introduce `LYRA_DATA_ROOT`, move mutable defaults behind config-owned roots, and verify the resulting contract on installed layouts |
 | G-030 | Similarity coverage depth | partial | staged `similar` edge growth exists but incomplete full-library coverage; current `similar` edge count is 1,762 and a bounded 40-artist Last.fm pass added no new local-target edges | Continue bounded similarity runs and quality checks |
 | G-031 | Credit enrichment depth | partial | credit population is still low (`48` total credit rows); a bounded 15-track MusicBrainz search pass returned `0` new credits | Continue bounded `oracle credits enrich` runs |
 | G-032 | Structure analysis coverage | partial | structure table continues to grow; latest bounded run increased analyzed tracks from `159` to `172` while difficult-file warnings still fall back through librosa/audioread | Continue bounded analyze runs and harden difficult-file handling |
 | G-034 | Streamrip runtime availability | live | bundled `rip.exe` resolves correctly, streamrip 2.x command syntax is fixed, static proof passes, and `validate_packaged_streamrip.ps1 -LiveAcquire` succeeded against Qobuz | Closed |
-| G-035 | Tauri sidecar packaging completeness | partial | clean-machine artifact proof passes, simulated install layout proof passes, installed-layout validation passes against rebuilt host, frozen runtime roots are hardened, packaged runtime-root resolution now handles installed layouts more defensibly, the frozen sidecar now explicitly bundles `oracle.api.blueprints.*`, and packaged smoke now claims a fresh backend instead of reusing an existing listener; remaining gap is a true blank-machine install and first launch after the governance/build-contract waves finish | Complete the governance wave, then run the blank-machine installer proof against the finalized packaged/runtime contract |
-| G-036 | Native audio production confidence | partial | `miniaudio` path exists with fallback, parity hardening now performs restart recovery plus mutating soak checkpoints/logging, and the short local mutation run passes; the full long-session matrix is still incomplete | Validate a full 4-hour soak plus real-device pause/seek/repeat/resume reliability |
+| G-035 | Tauri sidecar packaging completeness | blocked-external | clean-machine artifact proof passes, simulated install layout proof passes, installed-layout validation passes against the rebuilt Tauri 2 host, frozen runtime roots are hardened, packaged runtime-root resolution now handles installed layouts more defensibly, the frozen sidecar now explicitly bundles `oracle.api.blueprints.*`, and packaged smoke now claims a fresh backend instead of reusing an existing listener; remaining gap is a true blank-machine install and first launch after the runtime/data-root contract settles, but that proof is blocked without a clean Windows machine or VM | Run the blank-machine installer proof against the finalized packaged/runtime contract once a clean Windows machine or VM is available |
+| G-036 | Native audio production confidence | partial | `miniaudio` path exists with fallback, parity hardening now performs restart recovery plus mutating soak checkpoints/logging, the short local mutation run passes, and Wave 4 host modernization stayed green on Tauri 2; the full long-session matrix is still incomplete and is currently deferred by operator choice | Reopen the release-gate lane and validate a full 4-hour soak plus real-device pause/seek/repeat/resume reliability |
 | G-037 | Oracle action breadth | partial | action router executes `queue_tracks`, `start_vibe`, `start_playlust`, `switch_chaos_intensity`, and `request_acquisition`; unified shell exposes keep/queue/play/skip and acquisition lead actions, but broader oracle execution depth is still expandable | Continue broadening high-leverage Oracle actions after installer and soak proof |
 | G-038 | Recommendation feedback loop | live | brokered recommendations persist accept/queue/skip/replay/acquire-request outcomes and apply that data as a ranking bias | Expand feedback sophistication later if passive playback-derived reinforcement is needed |
 
@@ -40,7 +38,7 @@ Closed items stay in git history and session logs.
 
 ## Execution Order (Easy -> Hard)
 
-1. Complete blank-machine installer verification for bundled sidecar and acquisition tools.
-2. Complete native audio soak and restart recovery validation.
-3. Continue graph, credits, and structure coverage work.
-4. Resolve Spotify export scope decision.
+1. Continue graph, credits, and structure coverage work.
+2. Resolve Spotify export scope decision.
+3. Resume blank-machine installer verification when a clean Windows machine or VM exists.
+4. Reopen native audio soak validation when the release-gate lane is back in scope.

@@ -1,11 +1,17 @@
 # Worklist
 
-Last updated: March 6, 2026
+Last updated: March 7, 2026
 
 This file tracks active execution work only.
 
 ## Completed Recently
 
+- Added the execution-grade phase companion for the remaining program:
+  - `docs/PHASE_EXECUTION_COMPANION.md` now defines iteration order, owner splits, validation, and handoff rules for Waves 3 through 11
+  - `docs/ROADMAP_ENGINE_TO_ENTITY.md` remains the forward-plan authority while the companion carries execution sequencing
+- Standing tandem execution protocol landed for future shared waves:
+  - `docs/agent_briefs/tandem-wave-protocol.md` defines wave owner vs parallel lane owner, file-claim rules, sync windows, and per-wave split patterns
+  - root `AGENTS.md` and `.github/copilot-instructions.md` now point both agents at the same shared-wave protocol
 - Wave 2 build/release governance landed locally:
   - stale Electron build authority removed from tracked desktop files
   - `desktop/package.json` is now a Tauri-only wrapper
@@ -90,29 +96,61 @@ This file tracks active execution work only.
   - Backend and Doctor panels now use the same summary-first bespoke shell language
   - settings diagnostics no longer read like older flat inspector blocks
   - renderer tests/build and backend pytest stayed green after the panel pass
+- Wave 4 renderer parallel lane prep landed (S-20260307-03) while Codex runs Wave 3:
+  - `agentActionRouter.ts` hardcoded `http://localhost:5000` replaced with `resolveApiUrl()` — API base is now configurable
+  - `tauriHost.ts` runtime detection extended to cover both Tauri v1 (`__TAURI_IPC__`) and v2 (`__TAURI_INTERNALS__`)
+  - safe in-range renderer dep bumps: `@tabler/icons-react` 3.40.0, `framer-motion` 12.35.1, `@tanstack/react-router` 1.166.2
+  - `jsdom` added as devDependency for per-file Vitest browser environment
+  - renderer test suite grew from 3 to 26 tests (agentActionRouter: 18 tests, tauriHost: 5 tests)
+  - renderer `test:ci` and `build` both pass clean
 
-## In Progress (Current Session S-20260306-23)
+- Wave 3 runtime/data-root contract landed (S-20260307-02):
+   - `oracle.config` now exposes authoritative `LYRA_DATA_ROOT` resolution with `%LOCALAPPDATA%\Lyra\dev` for dev and `%LOCALAPPDATA%\Lyra` for frozen installs
+   - runtime-owned mutable paths now derive from that root while `.lyra-build` stays build-only
+   - backend startup, worker, doctor, runtime-state, ingest watcher, Chroma users, CLI defaults, and packaged-host startup now follow the contract
+   - legacy repo-root mutable data is explicitly detected and can only be reused via `LYRA_USE_LEGACY_DATA_ROOT=1`
+   - strict validator plus backend suite now pass (`scripts/validate_data_root_contract.ps1`, `.venv\Scripts\python.exe -m pytest -q` => `119 passed`)
+- Wave 3 closeout landed locally (S-20260307-04):
+   - explicit migrate-now/defer flow is now actionable through both CLI and runtime API
+   - `oracle.data_root_migration` now reports action state plus API affordances for migration-aware consumers
+   - core API now exposes `GET /api/runtime/data-root`, `POST /api/runtime/data-root/migrate`, and `POST /api/runtime/data-root/defer`
+   - isolated API coverage was added for the new migration contract
+- Wave 4 desktop stack modernization landed locally (S-20260307-03 + S-20260307-05):
+   - renderer prep landed first: API base resolution, Tauri v1/v2 runtime detection, safe dep bumps, and 26 renderer tests
+   - host/runtime contract is now on Tauri 2 (`@tauri-apps/api` 2.x, `@tauri-apps/cli` 2.x, `tauri` 2.x, `tauri-build` 2.x)
+   - tray behavior was migrated onto the Tauri 2 tray API and the global-shortcut plugin
+   - Tauri config moved to schema `2` and the main desktop capability file now exists under `src-tauri/capabilities/default.json`
+   - Wave 4 acceptance passed locally: renderer `test:ci`, renderer `build`, Tauri debug build, and packaged-host smoke
 
-- Active: Wave 2 closeout and docs synchronization after local CI/release-governance validation
+## In Progress (Current Session S-20260306-29)
+
+- Active: docs synchronization and tandem-wave protocol hardening after local Wave 2 landing
+
+## In Progress (Current Session S-20260307-01)
+
+- Active: companion-doc execution framing for Waves 3 through 11, with immediate execution still starting at Wave 3 / Iteration 3A
+
+## In Progress (Current Session S-20260307-05)
+
+- Active: Wave 4 closeout sync and Wave 5 handoff after the local Tauri 2 host migration
 
 ## Order Of Operation (Highest Result First)
 
-1. `LYRA_DATA_ROOT` cutover:
-   - move mutable data authority out of repo-root assumptions
-2. Blank-machine installer proof:
-  - validate the packaged installer on a clean Windows machine
-3. Final parity/audio soak closure:
-  - execute the full 4-hour packaged/native validation run
-4. Desktop stack modernization:
-   - modernize Tauri/front-end toolchain only after governance and runtime contracts are aligned
-5. Metadata/recommendation/provider expansion:
+1. Metadata/recommendation/provider expansion:
    - deepen provider contracts, provenance, and source integration
-6. UI provenance and Oracle depth:
+2. Blank-machine installer proof:
+  - blocked-external until a clean Windows machine or VM exists
+3. Final parity/audio soak closure:
+  - deferred until a later release-gate window
+4. UI provenance and Oracle depth:
    - surface rationale, degraded states, and recommendation evidence where it matters
+5. Post-release trust and ritual depth:
+   - execute ingest-confidence, Scout/community-weather, MBID/live-orbit, and companion/native-ritual waves only after the earlier gates close
 
 ## Next Up
 
-1. Implement the `LYRA_DATA_ROOT` cutover as the next runtime/source-separation pass.
-2. Run the packaged installer on a clean Windows machine and confirm first launch.
-3. Execute the full 4-hour parity/audio soak with the finalized packaged host contract.
+1. Open Wave 5 implementation using `docs/specs/SPEC-004_RECOMMENDATION_PROVIDER_CONTRACT.md` as the contract authority.
+2. Resume blank-machine installer proof once a clean Windows machine or VM is available.
+3. Revisit the 4-hour parity/audio soak when release-gate work is back in scope.
 4. Resume later metadata/product-depth waves only after the earlier runtime/release gates remain green.
+5. Use `docs/PHASE_EXECUTION_COMPANION.md` as the iteration-level execution reference for any later wave opening.

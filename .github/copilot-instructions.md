@@ -28,24 +28,13 @@ Stack:
 - `/ws/player` is an SSE stream endpoint
 - `/api/playback/record` is compatibility-only
 
-## Validation Commands
+## Repo-Wide Operating Rules
 
-```powershell
-python -m pytest -q
-cd desktop\renderer-app
-npm run test
-npm run build
-powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop.ps1 -AllowLlmFailure
-powershell -ExecutionPolicy Bypass -File scripts\check_docs_state.ps1
-```
+- Run `scripts/new_session.ps1` for behavior-changing work
+- Update session artifacts when behavior or repo truth changes
+- If a task affects roadmap/state/worklist/registry/agent coordination, update docs first before implementation
+- Runtime paths come from `oracle/config.py`
+- Tauri is the only supported desktop host path
+- If working in parallel with another agent on the same wave, read `docs/agent_briefs/tandem-wave-protocol.md` and stay inside the assigned non-overlapping file set
 
-## Session Tracking (Required)
-
-For behavior-changing work:
-
-1. Run `scripts/new_session.ps1`
-2. Update `docs/sessions/YYYY-MM-DD-<slug>.md`
-3. Update `docs/SESSION_INDEX.md`
-4. Update `docs/PROJECT_STATE.md` if facts changed
-5. Update `docs/WORKLIST.md` if done/next changed
-6. Update `docs/MISSING_FEATURES_REGISTRY.md` if a gap changed
+Lane-specific guidance lives in `.github/instructions/*.instructions.md` and relevant `docs/agent_briefs/*.md` files.

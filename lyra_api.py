@@ -14,6 +14,14 @@ import traceback
 import sqlite3
 
 from dotenv import load_dotenv
+from oracle.config import (
+    LOG_ROOT,
+    MODEL_CACHE_HUB_ROOT,
+    MODEL_CACHE_ROOT,
+    PROJECT_ROOT,
+    ensure_generated_dirs,
+    log_legacy_data_warning,
+)
 
 
 def _configure_runtime_logging() -> None:
@@ -25,7 +33,7 @@ def _configure_runtime_logging() -> None:
     if log_path_raw:
         log_path = Path(log_path_raw)
     else:
-        log_path = PROJECT_ROOT / "logs" / "packaged-backend.log"
+        log_path = LOG_ROOT / "packaged-backend.log"
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
@@ -35,19 +43,6 @@ def _configure_runtime_logging() -> None:
         force=True,
     )
 
-def _resolve_project_root() -> Path:
-    env_root = os.getenv("LYRA_PROJECT_ROOT", "").strip()
-    if env_root:
-        return Path(env_root)
-    if getattr(sys, "frozen", False):
-        # Use the directory containing the frozen executable so the sidecar
-        # always resolves its data paths correctly even when launched directly
-        # (not via main.rs which explicitly sets cwd).
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parent
-
-
-PROJECT_ROOT = _resolve_project_root()
 _configure_runtime_logging()
 logger = logging.getLogger(__name__)
 
@@ -102,9 +97,11 @@ def _maybe_reexec_in_project_venv() -> None:
 
 _maybe_reexec_in_project_venv()
 load_dotenv(override=False)
-hf_home = str(PROJECT_ROOT / "hf_cache")
+ensure_generated_dirs()
+hf_home = str(MODEL_CACHE_ROOT)
 os.environ.setdefault("HF_HOME", hf_home)
-os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(Path(hf_home) / "hub"))
+os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(MODEL_CACHE_HUB_ROOT))
+log_legacy_data_warning()
 
 # ---------------------------------------------------------------------------
 # Everything below this line runs inside the project virtualenv.

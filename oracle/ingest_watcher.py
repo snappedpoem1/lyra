@@ -29,7 +29,12 @@ STABLE_SECONDS = 10  # file must not change size for this long before ingesting
 # Files older than this are assumed stable; skip stability wait in --once mode
 ALREADY_STABLE_AGE = 30  # seconds
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_LOCK_FILE = PROJECT_ROOT / ".ingest_watcher.lock"
+
+
+def _get_lock_file() -> Path:
+    from oracle.config import STATE_ROOT
+
+    return Path(STATE_ROOT) / "ingest_watcher.lock"
 
 
 class _WatcherLock:
@@ -571,7 +576,10 @@ def run_watcher(once: bool = False) -> None:
         datefmt="%H:%M:%S",
     )
 
-    lock = _WatcherLock(_LOCK_FILE)
+    from oracle.config import ensure_generated_dirs
+
+    ensure_generated_dirs()
+    lock = _WatcherLock(_get_lock_file())
     if not lock.acquire():
         logger.warning(
             "[WATCHER] Another watcher instance is already running. "

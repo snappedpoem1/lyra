@@ -12,7 +12,7 @@ from typing import Dict, Optional, Tuple
 
 from dotenv import load_dotenv
 
-from oracle.config import LIBRARY_BASE
+from oracle.config import LIBRARY_BASE, REPORTS_FOLDER
 from oracle.db.schema import get_connection, get_write_mode, get_content_hash_fast
 from oracle.classifier import classify_track
 
@@ -180,7 +180,7 @@ def generate_plan(
     preset: str = "artist_album",
     classify_first: bool = True,
     limit: int = 0,
-    output_dir: str = "Reports"
+    output_dir: str = str(REPORTS_FOLDER)
 ) -> Dict:
     """
     Generate curation plan for library reorganization.
@@ -536,7 +536,7 @@ def apply_plan(
     
     # Save journal
     if not dry_run:
-        journal_dir = Path("Reports")
+        journal_dir = REPORTS_FOLDER
         journal_dir.mkdir(parents=True, exist_ok=True)
         journal_path = journal_dir / f"curation_journal_{plan_id}.json"
         

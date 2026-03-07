@@ -9,6 +9,7 @@
 import type { AgentResponse } from "@/types/domain";
 import { useUiStore } from "@/stores/uiStore";
 import { useSearchStore } from "@/stores/searchStore";
+import { resolveApiUrl } from "@/services/lyraGateway/client";
 
 // Injected by AppShell — avoids circular dep on router hook
 let _navigate: ((opts: { to: string }) => void) | null = null;
@@ -22,7 +23,7 @@ function nav(to: string) { _navigate?.({ to }); }
 /** Fire a backend API call without blocking the action router. */
 async function callApi(path: string, body?: unknown): Promise<void> {
   try {
-    await fetch(`http://localhost:5000${path}`, {
+    await fetch(resolveApiUrl(path), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
