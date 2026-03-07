@@ -26,6 +26,7 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Legacy external-service bootstrap is opt-in only via `LYRA_BOOTSTRAP_LEGACY_SERVICES=1`
   - Unified runtime shell is active: Library, Semantic, Deep Cut, Now Playing, Queue, Artist Context, Oracle
   - Secondary renderer surfaces use the same Mantine-based foundation: settings route, right rail, track dossier drawer, developer HUD, companion shell
+    - Search mode controls, the semantic search hero, Oracle mode controls, and the artist route now also use Mantine primitives in the active runtime
 - Playback authority:
   - Canonical backend player domain in `oracle/player/*`
   - Persisted `player_state` and `player_queue` tables
@@ -83,13 +84,13 @@ This is the current repo/runtime snapshot verified from this workspace.
 
 From `python -m oracle status`:
 
-- Tracks total: 2,454
-- Tracks active: 2,454
-- Embeddings: 2,454
-- Scored tracks: 2,454
+- Tracks total: 2,455
+- Tracks active: 2,455
+- Embeddings: 2,455
+- Scored tracks: 2,455
 - Vibes: 9
-- Queue pending: 2,036
-- Spotify history rows: 127,572
+- Queue pending: 2,434
+- Spotify history rows: 127,312
 - Spotify library rows: 4,026
 - Playback events: 30,680
 
@@ -115,6 +116,11 @@ From `python -m oracle status`:
 - `powershell -ExecutionPolicy Bypass -File scripts/check_docs_state.ps1` -> success
 - `python -m oracle doctor` -> success with bundled `streamrip` and `spotdl` detected
 - `python -m oracle status` -> success with healthy core metrics
+- `python -m oracle.cli credits enrich --limit 15` -> success (`processed=15 found=0 empty=15 failed=0`)
+- `python -m oracle.cli structure analyze --limit 15` -> success (`track_structure` rows `159 -> 172`)
+- `python -m oracle.cli discover listenbrainz --limit-artists 80 --tracks-per-artist 8` -> success (`136` new queue candidates)
+- `python -m oracle.cli acquire prioritize --limit 500` -> success after fixing `priority_score` column usage
+- `python -m oracle.cli drain --limit 2 --workers 1 --max-tier 4` -> partial success (`1` streamrip acquisition ingested, `1` retry re-queued)
 
 ## 5) Documentation Truth Status
 
@@ -128,7 +134,7 @@ From `python -m oracle status`:
 1. Blank-machine installer install-and-launch validation is still pending outside this workstation.
 2. Native audio (`miniaudio`) production soak validation across real devices and a full 4-hour long-session run.
 3. Runtime/source separation is still partial beyond the dedicated `.lyra-build` staging root.
-4. Mantine/Figma foundation is live across the main workspace plus key secondary surfaces, but not yet across every legacy route or panel.
+4. Mantine/Figma foundation is live across the main workspace, Search, Oracle, Artist, and key secondary surfaces, but not yet across every remaining legacy route or panel.
 
 ## 7) Immediate Next Pass
 

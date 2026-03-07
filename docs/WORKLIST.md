@@ -48,6 +48,12 @@ This file tracks active execution work only.
 - Packaged proof scripts are now deterministic:
   - `scripts/packaged_host_smoke.ps1` stops any existing backend listener before launch
   - `scripts/parity_hardening_acceptance.ps1` records log/JSONL artifacts and runs transport mutations during soak
+- Safe parallel lane progressed while soak/runtime hardening continued elsewhere:
+  - Mantine controls landed for Search, Oracle, and Artist surfaces
+  - acquisition queue prioritization now works again against `priority_score`
+  - ListenBrainz discovery added 136 queue candidates
+  - bounded structure analysis increased `track_structure` coverage (`159 -> 172`)
+  - tiny queue drain produced 1 successful streamrip ingest and 1 retried failure
 
 ## In Progress (Current Session S-20260306-14)
 
@@ -67,6 +73,8 @@ This file tracks active execution work only.
    - Confirm no queue drift
 4. Remaining legacy UI surfaces:
    - Extend the Mantine foundation where it still improves day-to-day usability
+5. Graph, credits, and structure depth:
+  - Continue bounded passes after the release-gate work stays green
 
 ## Next Up
 
