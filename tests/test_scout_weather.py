@@ -18,7 +18,6 @@ import oracle.recommendation_broker as broker
 from oracle.integrations import listenbrainz as lb_module
 from oracle.provider_contract import (
     Availability,
-    EvidenceItem,
     ProviderStatus,
 )
 

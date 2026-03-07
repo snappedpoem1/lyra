@@ -157,7 +157,7 @@ function Wait-PortReleased {
   return $false
 }
 
-function Ensure-PlaybackActive {
+function Get-PlaybackActiveState {
   $state = Invoke-LyraJson -Method Get -Path "/api/player/state"
   $currentTrackId = [string]$state.current_track.track_id
   if ([string]::IsNullOrWhiteSpace($currentTrackId)) {
@@ -192,7 +192,7 @@ function Wait-PlayerStatus {
   throw "player did not reach expected status [$($Statuses -join ', ')] (last status: $([string]$state.status))"
 }
 
-function Pause-IfPlaying {
+function Suspend-PlaybackIfPlaying {
   $state = Invoke-LyraJson -Method Get -Path "/api/player/state"
   if ($state.status -ne "playing") {
     return $state
@@ -205,7 +205,7 @@ function Pause-IfPlaying {
 function Invoke-SoakMutation {
   param([int]$MutationIndex)
 
-  $state = Ensure-PlaybackActive
+  $state = Get-PlaybackActiveState
   $mutationKind = $MutationIndex % 4
   switch ($mutationKind) {
     0 {
@@ -358,7 +358,7 @@ try {
     throw "library response missing track_id"
   }
   $null = Invoke-LyraJson -Method Post -Path "/api/player/queue/add" -Body @{ track_id = $firstTrackId }
-  $playState = Ensure-PlaybackActive
+  $playState = Get-PlaybackActiveState
   $durationMs = [int]($playState.duration_ms -as [int])
   $recoverySeekTargetMs = if ($durationMs -gt 0) {
     [Math]::Min($RecoverySeekMs, [Math]::Max(0, $durationMs - 1500))
@@ -368,7 +368,7 @@ try {
   if ($recoverySeekTargetMs -gt 0) {
     $null = Invoke-LyraJson -Method Post -Path "/api/player/seek" -Body @{ position_ms = $recoverySeekTargetMs }
   }
-  $null = Pause-IfPlaying
+  $null = Suspend-PlaybackIfPlaying
 
   $stateBefore = Invoke-LyraJson -Method Get -Path "/api/player/state"
   $queueBefore = Invoke-LyraJson -Method Get -Path "/api/player/queue"
