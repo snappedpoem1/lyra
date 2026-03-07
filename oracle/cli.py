@@ -268,6 +268,17 @@ def main() -> None:
     structure_analyze.add_argument('--limit', type=int, default=20, help='Max tracks to analyze per run (default 20)')
     structure_sub.add_parser('stats', help='Show track_structure table statistics')
 
+    # MBID Identity Spine — Wave 10 (SPEC-010)
+    mbid_parser = subparsers.add_parser('mbid', help='Resolve MusicBrainz IDs for library tracks')
+    mbid_sub = mbid_parser.add_subparsers(dest='mbid_command')
+    mbid_resolve = mbid_sub.add_parser('resolve', help='Batch-resolve recording MBIDs via text search')
+    mbid_resolve.add_argument('--limit', type=int, default=100, help='Max tracks per run (default 100)')
+    mbid_resolve.add_argument('--min-confidence', type=float, default=0.65, dest='min_confidence',
+                              help='Minimum match confidence 0-1 (default 0.65)')
+    mbid_resolve.add_argument('--all', action='store_true', dest='resolve_all',
+                              help='Re-resolve even tracks that already have a recording_mbid')
+    mbid_sub.add_parser('stats', help='Show MBID coverage statistics')
+
     # Playlust — 4-act emotional arc generator (F-008) *** FLAGSHIP ***
     playlust_parser = subparsers.add_parser('playlust', help='Generate a 4-act emotional arc playlist')
     playlust_sub = playlust_parser.add_subparsers(dest='playlust_command')
@@ -1424,6 +1435,33 @@ def main() -> None:
             print(f"  found     : {stats['found']}")
             print(f"  empty     : {stats['empty']}")
             print(f"  failed    : {stats['failed']}")
+            return
+
+    if args.command == "mbid":
+        from oracle.enrichers.mb_identity import MBIdentityResolver
+        resolver = MBIdentityResolver()
+        if not args.mbid_command or args.mbid_command == "stats":
+            s = resolver.stats()
+            print("\nMBID Coverage")
+            print(f"  Active tracks         : {s.total_active}")
+            print(f"  recording_mbid        : {s.recording_mbid_count} ({s.coverage_pct:.1f}%)")
+            print(f"  artist_mbid           : {s.artist_mbid_count}")
+            print(f"  release_group_mbid    : {s.release_group_mbid_count}")
+            print(f"  isrc                  : {s.isrc_count}")
+            return
+        if args.mbid_command == "resolve":
+            limit = getattr(args, 'limit', 100)
+            min_confidence = getattr(args, 'min_confidence', 0.65)
+            only_missing = not getattr(args, 'resolve_all', False)
+            print(f"MBID Resolve Pass (limit={limit}, min_confidence={min_confidence}, only_missing={only_missing})")
+            print("Rate-limited to ~1 req/sec — this will take a while for large batches.")
+            result = resolver.resolve_batch(limit=limit, min_confidence=min_confidence, only_missing=only_missing)
+            print(f"\nMBID Resolve Pass — complete")
+            print(f"  Total eligible : {result.total_eligible}")
+            print(f"  Resolved       : {result.resolved}")
+            print(f"  No match       : {result.no_match}")
+            print(f"  Skipped        : {result.skipped}")
+            print(f"  Failed         : {result.failed}")
             return
 
     if args.command == "structure":

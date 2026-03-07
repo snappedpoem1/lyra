@@ -265,10 +265,11 @@ class CreditMapper:
 
         if only_missing:
             c.execute(
-                """SELECT t.track_id, t.musicbrainz_id, t.artist, t.title
+                """SELECT t.track_id, t.recording_mbid, t.artist, t.title
                    FROM tracks t
-                   WHERE t.musicbrainz_id IS NOT NULL
-                     AND t.musicbrainz_id != ''
+                   WHERE t.status = 'active'
+                     AND t.recording_mbid IS NOT NULL
+                     AND t.recording_mbid != ''
                      AND NOT EXISTS (
                          SELECT 1 FROM track_credits tc WHERE tc.track_id = t.track_id
                      )
@@ -277,10 +278,11 @@ class CreditMapper:
             )
         else:
             c.execute(
-                """SELECT track_id, musicbrainz_id, artist, title
+                """SELECT track_id, recording_mbid, artist, title
                    FROM tracks
-                   WHERE musicbrainz_id IS NOT NULL
-                     AND musicbrainz_id != ''
+                   WHERE status = 'active'
+                     AND recording_mbid IS NOT NULL
+                     AND recording_mbid != ''
                    LIMIT ?""",
                 (limit,),
             )

@@ -151,11 +151,17 @@ This file tracks active execution work only.
    - constraint: `LYRA_USE_LEGACY_DATA_ROOT=1` needed because dev data root has not been migrated with library data; `-UseLegacyDataRoot` flag added to parity script for this workaround
    - `scripts/parity_hardening_acceptance.ps1` extended with `-UseLegacyDataRoot` switch
 
-## In Progress (Current Session S-20260307-10)
+## In Progress (Current Session S-20260307-12)
 
-- Active: Wave 9 (Scout + Community Weather) — completed: SPEC-008, `oracle/integrations/listenbrainz.py` `get_similar_artists_recordings()`, `_recommend_from_scout()` and `_recommend_from_listenbrainz_weather()` in broker, `_SCOUT_GENRE_BRIDGES` adjacency map, `_scout_bridge_genre()` helper, `tests/test_scout_weather.py` (21 new tests), full suite 188 passing
+- Active: Wave 11 (Companion Pulse) — completed: SPEC-011, `oracle/companion/pulse.py` (`CompanionPulse` + `get_companion_pulse` singleton), `/ws/companion` SSE blueprint, blueprint registered in registry, 14 new tests (215 total passing), `useCompanionStream.ts` SSE hook, `companionLines.ts` authored templates, `LyraCompanion.tsx` now event-driven (stream consumer with static fallback), `settingsStore.ts` `notificationsEnabled` added. Renderer: 26 tests passing, clean build.
+- Active: Wave 12 (Oracle Action Breadth) — **completed S-20260307-14**: `PlayerService.set_volume()` + `clear_queue()`; `/api/player/volume` + `/api/player/queue/clear`; 8 new oracle execute actions (`resume`, `set_volume`, `set_shuffle`, `set_repeat`, `clear_queue`, `play_artist`, `play_album`, `play_similar`); agentActionRouter 8 new cases; 11 new contract tests; 226 Python tests passing; clean npm build; G-037 closed.
 
-## In Progress (Current Session S-20260307-08)
+## Next Up
+
+1. Continue `oracle mbid resolve` passes until recording_mbid coverage exceeds 50%, then run `oracle credits enrich --limit 500` for MBID-backed credit rows.
+2. **Wave 13**: scope candidates — playlist intelligence (save/load/edit playlists), acquisition waterfall improvements, native OS notification delivery (Tauri plugin), or deeper intelligence surfaces.
+3. Resume blank-machine installer proof once a clean Windows machine or VM is available.
+4. Run full 4-hour parity soak when the release-gate lane is reopened.
 
 - Active: Wave 8 (Ingest Confidence + Normalization) — completed: SPEC-007, `oracle/ingest_confidence.py`, DB table, 5-stage `_native_ingest` hook, `/api/ingest/confidence/*` endpoints, `_check_ingest_confidence` in doctor, startup backfill, 14 new tests, full suite 167 passing
 

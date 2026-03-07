@@ -49,6 +49,7 @@ BLUEPRINTS: list[BlueprintSpec] = [
     BlueprintSpec("oracle.api.blueprints.enrich"),
     BlueprintSpec("oracle.api.blueprints.discovery"),
     BlueprintSpec("oracle.api.blueprints.ingest"),
+    BlueprintSpec("oracle.api.blueprints.companion"),
 ]
 
 

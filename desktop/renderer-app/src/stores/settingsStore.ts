@@ -11,6 +11,7 @@ type SettingsSnapshot = {
   resumeSession: boolean;
   companionEnabled: boolean;
   companionStyle: "orb" | "pixel";
+  notificationsEnabled: boolean;
 };
 
 function loadInitial(): SettingsSnapshot {
@@ -23,6 +24,7 @@ function loadInitial(): SettingsSnapshot {
       resumeSession: true,
       companionEnabled: true,
       companionStyle: "orb",
+      notificationsEnabled: false,
     };
   }
   try {
@@ -36,6 +38,7 @@ function loadInitial(): SettingsSnapshot {
       resumeSession: parsed.resumeSession !== false,
       companionEnabled: parsed.companionEnabled !== false,
       companionStyle: parsed.companionStyle === "pixel" ? "pixel" : "orb",
+      notificationsEnabled: Boolean(parsed.notificationsEnabled),
     };
   } catch {
     return {
@@ -46,6 +49,7 @@ function loadInitial(): SettingsSnapshot {
       resumeSession: true,
       companionEnabled: true,
       companionStyle: "orb",
+      notificationsEnabled: false,
     };
   }
 }
@@ -63,6 +67,7 @@ interface SettingsStore extends SettingsSnapshot {
   setResumeSession: (value: boolean) => void;
   setCompanionEnabled: (value: boolean) => void;
   setCompanionStyle: (value: "orb" | "pixel") => void;
+  setNotificationsEnabled: (value: boolean) => void;
 }
 
 const initial = loadInitial();
@@ -103,5 +108,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const next = { ...get(), companionStyle: value };
     persist(next);
     set({ companionStyle: value });
+  },
+  setNotificationsEnabled: (value) => {
+    const next = { ...get(), notificationsEnabled: value };
+    persist(next);
+    set({ notificationsEnabled: value });
   },
 }));

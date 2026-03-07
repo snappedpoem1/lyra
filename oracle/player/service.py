@@ -295,6 +295,43 @@ class PlayerService:
             self._emit_state_changed_unlocked()
             return self._state_payload_unlocked()
 
+    def set_volume(self, volume: float) -> dict[str, Any]:
+        """Set playback volume (0.0–1.0)."""
+        with self._lock:
+            if volume < 0.0 or volume > 1.0:
+                raise ValueError("volume must be between 0.0 and 1.0")
+            self._volume = float(volume)
+            try:
+                self._playback_engine.set_volume(self._volume)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("audio set_volume failed: %s", exc)
+            self._touch_state_unlocked()
+            self._persist_state_unlocked()
+            self._emit_state_changed_unlocked()
+            return self._state_payload_unlocked()
+
+    def clear_queue(self) -> dict[str, Any]:
+        """Remove all tracks from the queue and stop playback."""
+        with self._lock:
+            if self._current_track_id:
+                try:
+                    self._playback_engine.stop()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("audio stop failed during clear_queue: %s", exc)
+            self._queue_track_ids = []
+            self._linear_queue_track_ids = []
+            self._current_track_id = None
+            self._current_queue_index = 0
+            self._position_ms = 0
+            self._duration_ms = 0
+            self._status = "idle"
+            self._touch_state_unlocked()
+            self._persist_state_unlocked()
+            self._persist_queue_unlocked()
+            self._emit_queue_changed_unlocked()
+            self._emit_state_changed_unlocked()
+            return self._state_payload_unlocked()
+
     def _coerce_loaded_state(self) -> None:
         if self._status == "playing":
             self._status = "paused"

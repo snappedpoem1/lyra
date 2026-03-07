@@ -124,6 +124,59 @@ export function routeAgentAction(response: AgentResponse): void {
       break;
     }
 
+    case "resume":
+      callApi("/api/oracle/action/execute", { action_type: "resume" });
+      break;
+
+    case "set_volume": {
+      const vol = (i.volume ?? i.level) as number | undefined;
+      if (vol !== undefined) callApi("/api/player/volume", { volume: vol });
+      break;
+    }
+
+    case "set_shuffle":
+      callApi("/api/player/mode", { shuffle: (i.shuffle ?? i.enabled) as boolean });
+      break;
+
+    case "set_repeat":
+      callApi("/api/player/mode", {
+        repeat_mode: (i.mode ?? i.repeat_mode ?? "off") as string,
+      });
+      break;
+
+    case "clear_queue":
+      callApi("/api/player/queue/clear");
+      break;
+
+    case "play_artist": {
+      const artist = (i.artist ?? i.name) as string | undefined;
+      if (artist) {
+        callApi("/api/oracle/action/execute", {
+          action_type: "play_artist",
+          payload: { artist },
+        });
+        nav("/queue");
+      }
+      break;
+    }
+
+    case "play_album": {
+      const album = i.album as string | undefined;
+      if (album) {
+        callApi("/api/oracle/action/execute", {
+          action_type: "play_album",
+          payload: { album, artist: (i.artist as string | undefined) ?? undefined },
+        });
+        nav("/queue");
+      }
+      break;
+    }
+
+    case "play_similar":
+      callApi("/api/oracle/action/execute", { action_type: "play_similar" });
+      nav("/queue");
+      break;
+
     default:
       // "respond", "error", "suggest" — text shown in thread, no routing
       break;

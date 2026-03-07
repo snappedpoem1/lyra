@@ -164,6 +164,81 @@ def _library_track_exists_for_artist_title(artist: str, title: str) -> str | Non
     return str(row[0]).strip() if row and row[0] else None
 
 
+def _get_tracks_by_artist(artist: str, limit: int = 200) -> list[str]:
+    """Return active track_ids for a given artist, ordered by album + track number."""
+    conn = get_connection(timeout=10.0)
+    try:
+        rows = conn.cursor().execute(
+            """
+            SELECT track_id
+            FROM tracks
+            WHERE status = 'active'
+              AND LOWER(artist) = LOWER(?)
+            ORDER BY LOWER(album), COALESCE(track_number, 999), LOWER(title)
+            LIMIT ?
+            """,
+            (artist.strip(), limit),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [str(row[0]) for row in rows]
+
+
+def _get_tracks_by_album(album: str, artist: str | None, limit: int = 200) -> list[str]:
+    """Return active track_ids on a given album, ordered by track number."""
+    conn = get_connection(timeout=10.0)
+    try:
+        if artist:
+            rows = conn.cursor().execute(
+                """
+                SELECT track_id
+                FROM tracks
+                WHERE status = 'active'
+                  AND LOWER(album) = LOWER(?)
+                  AND LOWER(artist) = LOWER(?)
+                ORDER BY COALESCE(track_number, 999), LOWER(title)
+                LIMIT ?
+                """,
+                (album.strip(), artist.strip(), limit),
+            ).fetchall()
+        else:
+            rows = conn.cursor().execute(
+                """
+                SELECT track_id
+                FROM tracks
+                WHERE status = 'active'
+                  AND LOWER(album) = LOWER(?)
+                ORDER BY COALESCE(track_number, 999), LOWER(title)
+                LIMIT ?
+                """,
+                (album.strip(), limit),
+            ).fetchall()
+    finally:
+        conn.close()
+    return [str(row[0]) for row in rows]
+
+
+def _get_similar_track_ids(track_id: str, limit: int = 20) -> list[str]:
+    """Return track_ids from the similarity graph for the given seed track."""
+    conn = get_connection(timeout=10.0)
+    try:
+        rows = conn.cursor().execute(
+            """
+            SELECT s.target_track_id
+            FROM similar s
+            JOIN tracks t ON t.track_id = s.target_track_id
+            WHERE s.source_track_id = ?
+              AND t.status = 'active'
+            ORDER BY s.score DESC
+            LIMIT ?
+            """,
+            (track_id, limit),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [str(row[0]) for row in rows]
+
+
 def _request_acquisition_for_lead(payload_dict: dict[str, Any]) -> dict[str, Any]:
     artist = str(payload_dict.get("artist") or "").strip()
     title = str(payload_dict.get("title") or "").strip()
@@ -464,6 +539,71 @@ def api_oracle_action_execute() -> tuple[Any, int] | Any:
 
         if action_type == "request_acquisition":
             return jsonify(_request_acquisition_for_lead(payload_dict))
+
+        if action_type == "resume":
+            return jsonify({"status": "ok", "action_type": action_type, "state": service.play()})
+
+        if action_type == "set_volume":
+            raw = payload_dict.get("volume")
+            if raw is None:
+                return jsonify({"error": "payload.volume is required"}), 400
+            try:
+                state = service.set_volume(float(raw))
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
+            return jsonify({"status": "ok", "action_type": action_type, "state": state})
+
+        if action_type == "set_shuffle":
+            shuffle = bool(payload_dict.get("enabled", payload_dict.get("shuffle", False)))
+            return jsonify(
+                {"status": "ok", "action_type": action_type, "state": service.set_mode(shuffle=shuffle)}
+            )
+
+        if action_type == "set_repeat":
+            mode = str(payload_dict.get("mode", payload_dict.get("repeat_mode", "off")))
+            return jsonify(
+                {"status": "ok", "action_type": action_type, "state": service.set_mode(repeat_mode=mode)}
+            )
+
+        if action_type == "clear_queue":
+            return jsonify({"status": "ok", "action_type": action_type, "state": service.clear_queue()})
+
+        if action_type == "play_artist":
+            artist = str(payload_dict.get("artist") or "").strip()
+            if not artist:
+                return jsonify({"error": "payload.artist is required"}), 400
+            track_ids = _get_tracks_by_artist(artist)
+            if not track_ids:
+                return jsonify({"error": f"no active tracks found for artist: {artist}"}), 404
+            queued = _queue_track_ids(service, track_ids)
+            service.play()
+            return jsonify({"status": "ok", "action_type": action_type, "artist": artist, **queued})
+
+        if action_type == "play_album":
+            album = str(payload_dict.get("album") or "").strip()
+            if not album:
+                return jsonify({"error": "payload.album is required"}), 400
+            artist_filter = str(payload_dict.get("artist") or "").strip() or None
+            track_ids = _get_tracks_by_album(album, artist_filter)
+            if not track_ids:
+                return jsonify({"error": f"no active tracks found for album: {album}"}), 404
+            queued = _queue_track_ids(service, track_ids)
+            service.play()
+            return jsonify({"status": "ok", "action_type": action_type, "album": album, **queued})
+
+        if action_type == "play_similar":
+            state = service.get_state()
+            current = (state.get("current_track") or {}) if isinstance(state, dict) else {}
+            current_id = str(current.get("track_id") or "").strip() or None
+            if not current_id:
+                return jsonify({"error": "no current track to find similar for"}), 409
+            track_ids = _get_similar_track_ids(current_id)
+            if not track_ids:
+                return jsonify({"error": "no similar tracks found for current track"}), 404
+            queued = _queue_track_ids(service, track_ids)
+            return jsonify(
+                {"status": "ok", "action_type": action_type, "source_track_id": current_id, **queued}
+            )
 
         return jsonify({"error": f"unsupported action_type: {action_type}"}), 400
     except KeyError:

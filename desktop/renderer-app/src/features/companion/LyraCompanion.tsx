@@ -5,6 +5,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useConnectivityStore } from "@/stores/connectivityStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useCompanionStream } from "./useCompanionStream";
+import { resolveCompanionLine } from "./companionLines";
 
 function companionMood(status: string, connectivity: string): { label: string; line: string } {
   if (connectivity !== "LIVE") {
@@ -26,8 +28,13 @@ export function LyraCompanion() {
   const track = usePlayerStore((state) => state.track);
   const status = usePlayerStore((state) => state.status);
   const navigate = useNavigate();
+  const pulseEvent = useCompanionStream();
 
   const mood = useMemo(() => companionMood(status, connectivity), [connectivity, status]);
+
+  const activeLine = pulseEvent
+    ? (resolveCompanionLine(pulseEvent.event_type, pulseEvent.context) ?? mood.line)
+    : mood.line;
 
   if (!enabled) {
     return null;
@@ -59,7 +66,7 @@ export function LyraCompanion() {
             {mood.label}
           </Badge>
         </Group>
-        <p className="lyra-companion-line">{mood.line}</p>
+        <p className="lyra-companion-line">{activeLine}</p>
         <div className="lyra-companion-thread">
           <IconWaveSine size={14} stroke={1.7} />
           <span>{track ? `${track.artist} - ${track.title}` : "No active thread yet."}</span>

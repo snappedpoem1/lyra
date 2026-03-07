@@ -212,6 +212,37 @@ def api_player_mode() -> tuple[Response, int] | Response:
         return _error("internal player error", 500)
 
 
+@bp.route("/api/player/volume", methods=["POST"])
+def api_player_volume() -> tuple[Response, int] | Response:
+    service = get_player_service()
+    data = request.get_json(silent=True) or {}
+    try:
+        raw = data.get("volume")
+        if raw is None:
+            return _error("volume is required", 400)
+        volume = float(raw)
+        payload = service.set_volume(volume)
+        return jsonify(payload)
+    except ValueError as exc:
+        return _error(str(exc), 400)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("player volume failed: %s", exc)
+        service.publish_error(str(exc))
+        return _error("internal player error", 500)
+
+
+@bp.route("/api/player/queue/clear", methods=["POST"])
+def api_player_queue_clear() -> tuple[Response, int] | Response:
+    service = get_player_service()
+    try:
+        payload = service.clear_queue()
+        return jsonify(payload)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("player queue clear failed: %s", exc)
+        service.publish_error(str(exc))
+        return _error("internal player error", 500)
+
+
 def _stream_player_events() -> Any:
     service = get_player_service()
     subscription = service.subscribe()
