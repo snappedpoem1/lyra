@@ -400,8 +400,9 @@ def download(artist: str, title: str) -> Dict[str, Any]:
 def _download_via_service(artist: str, title: str) -> Dict[str, Any]:
     """Call the Dockerised microservice to acquire the track."""
     try:
+        service_url = _get_qobuz_config()["service_url"]
         resp = requests.post(
-            f"{QOBUZ_SERVICE_URL}/acquire",
+            f"{service_url}/acquire",
             json={"artist": artist, "title": title},
             timeout=180,
         )
