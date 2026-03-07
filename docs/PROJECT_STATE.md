@@ -14,6 +14,7 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Wave 3 (`LYRA_DATA_ROOT` and mutable-data authority) is now locally closed through the runtime contract plus explicit migrate-now/defer actions
   - Wave 4 desktop stack modernization is now locally landed through the Tauri 2 host/runtime upgrade and acceptance pass
   - Wave 5 can now proceed locally while blank-machine proof remains blocked-external and the 4-hour soak is intentionally deferred until a later release-gate window
+  - a docs-only UI structure planning contract is now landed in `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` so future frontend work is driven by route archetypes, shell responsibilities, and evidence placement instead of ad hoc page composition
   - `docs/PHASE_EXECUTION_COMPANION.md` now carries the execution-grade phase sequence, iteration order, and owner-split rules from Wave 3 through the committed long-horizon end state
   - later metadata/product-depth work remains out of scope until earlier runtime/release gates stay green
 - Governance state:
@@ -46,6 +47,7 @@ This is the current repo/runtime snapshot verified from this workspace.
   - the main desktop capability file now lives at `desktop/renderer-app/src-tauri/capabilities/default.json`
   - Renderer component foundation includes Mantine (`@mantine/core`, `@mantine/hooks`) with a Lyra-specific theme layer
   - Mantine is now treated as infrastructure rather than visible design authority; high-traffic surfaces are being restyled into a more bespoke shell language
+  - `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` is now the structural authority for route archetypes, shell-region responsibilities, semantic UI blocks, and future explainability-surface placement
   - Canonical launcher: `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev`
   - Packaged runtime builder: `powershell -ExecutionPolicy Bypass -File scripts/build_packaged_runtime.ps1`
   - Docker is not required and not auto-started in the unified launch path

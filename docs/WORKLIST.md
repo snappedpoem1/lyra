@@ -6,6 +6,9 @@ This file tracks active execution work only.
 
 ## Completed Recently
 
+- Added a docs-only UI structure system for future frontend work:
+  - `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` now defines route inventory, shell responsibilities, canonical page archetypes, semantic UI blocks, and phased frontend adoption rules
+  - `docs/agent_briefs/frontend-provenance-brief.md` now points future UI explainability work at `SPEC-009` in addition to `SPEC-005`
 - Added the execution-grade phase companion for the remaining program:
   - `docs/PHASE_EXECUTION_COMPANION.md` now defines iteration order, owner splits, validation, and handoff rules for Waves 3 through 11
   - `docs/ROADMAP_ENGINE_TO_ENTITY.md` remains the forward-plan authority while the companion carries execution sequencing
@@ -154,3 +157,4 @@ This file tracks active execution work only.
 3. Revisit the 4-hour parity/audio soak when release-gate work is back in scope.
 4. Resume later metadata/product-depth waves only after the earlier runtime/release gates remain green.
 5. Use `docs/PHASE_EXECUTION_COMPANION.md` as the iteration-level execution reference for any later wave opening.
+6. Use `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` as the structural authority before any future cross-route frontend refactor or new explainability-surface adoption pass.

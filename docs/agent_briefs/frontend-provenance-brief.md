@@ -5,17 +5,23 @@ Wave: 6
 
 This lane is blocked until the document/governance, build, runtime/data-root, and metadata/recommendation waves are merged.
 
+Structural authority for future UI composition now also lives in:
+
+- `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md`
+
 ## Scope Once Unblocked
 
 - UI surfaces that expose recommendation rationale, provenance, confidence, and degraded states
 - Oracle, playlist detail, right-rail detail, and now-playing insight depth
 - visual/product depth that directly strengthens explainability and control
+- archetype-aligned route composition and semantic UI blocks that match `SPEC-009`
 
 ## Forbidden Until Unblocked
 
 - do not treat this as a detached aesthetic rewrite
 - do not change build/runtime authority here
 - do not ship provenance UI before the payload contract exists
+- do not add cross-route abstractions unless the pattern is stable across multiple routes
 
 ## Required Validation
 
