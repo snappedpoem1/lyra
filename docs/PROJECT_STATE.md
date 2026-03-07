@@ -7,8 +7,8 @@ This is the current repo/runtime snapshot verified from this workspace.
 ## 1) Repository State
 
 - Branch: `main`
-- Working tree: clean after session `S-20260306-13` finalization
-- Latest committed baseline before this audit: `930f290` (`S-20260306-13` installed runtime validation feat)
+- Working tree: local changes pending for session `S-20260306-14` plus unrelated renderer/UI edits already present in the workspace
+- Latest committed baseline before this audit: `9464d06` (`S-20260306-13` installed runtime validation docs)
 
 ## 2) Architecture State (Current)
 
@@ -46,11 +46,14 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Bundled acquisition helper executables are built and staged by:
     - `scripts/build_runtime_tools.ps1`
     - `scripts/build_packaged_runtime.ps1`
+  - Frozen sidecar packaging now includes explicit hidden imports for `oracle.api.blueprints.*` so the bundled backend exposes the real Flask API contract after PyInstaller onefile packaging
   - Packaged proof scripts now active:
     - `scripts/validate_clean_machine_install.ps1`
     - `scripts/validate_packaged_streamrip.ps1`
     - `scripts/packaged_host_smoke.ps1`
     - `scripts/validate_installed_runtime.ps1`
+  - `scripts/packaged_host_smoke.ps1` now claims port `5000` before launch so packaged validation cannot pass against an unrelated already-running backend
+  - `scripts/parity_hardening_acceptance.ps1` now writes log and JSONL snapshot artifacts under `.lyra-build/logs/parity`, runs transport mutations during soak, and captures failure diagnostics automatically
   - `scripts/parity_hardening_acceptance.ps1` runs packaged proof scripts as pre-flight
   - `oracle/acquirers/streamrip.py` uses streamrip 2.x syntax by default:
     `rip -f <output_dir> search <source> track <query> --first`
@@ -96,16 +99,17 @@ From `python -m oracle status`:
 - `cd desktop\renderer-app; npm run test` -> `1 file / 3 tests passed`
 - `cd desktop\renderer-app; npm run build` -> success
 - `cd desktop\renderer-app; npm run tauri:build -- --debug` -> success (debug host rebuilt, MSI and NSIS bundles produced)
-- `powershell -ExecutionPolicy Bypass -File scripts/build_backend_sidecar.ps1` -> success (`.lyra-build/bin/lyra_backend.exe`)
+- `powershell -ExecutionPolicy Bypass -File scripts/build_backend_sidecar.ps1` -> success (`.lyra-build/bin/lyra_backend.exe`; frozen sidecar launch check passed against the bundled API contract)
 - `powershell -ExecutionPolicy Bypass -File scripts/build_runtime_tools.ps1` -> success (`runtime/bin/*.exe` plus staged `.lyra-build/bin/runtime/bin` helpers)
 - `powershell -ExecutionPolicy Bypass -File scripts/build_packaged_runtime.ps1 -SkipLaunchCheck -SkipToolSmokeCheck` -> success
 - `powershell -ExecutionPolicy Bypass -File scripts/validate_clean_machine_install.ps1` -> success (artifact presence, Tauri config, executable smoke checks, simulated install layout check)
 - `powershell -ExecutionPolicy Bypass -File scripts/validate_packaged_streamrip.ps1` -> success (binary presence, version, `is_available()`, command syntax)
 - `powershell -ExecutionPolicy Bypass -File scripts/validate_packaged_streamrip.ps1 -LiveAcquire` -> success (live Qobuz acquisition; G-034 closed)
-- `powershell -ExecutionPolicy Bypass -File scripts/packaged_host_smoke.ps1 -HealthTimeoutSeconds 45` -> success
+- `powershell -ExecutionPolicy Bypass -File scripts/packaged_host_smoke.ps1 -HealthTimeoutSeconds 45` -> success (deterministic packaged-host launch smoke after claiming port `5000`)
 - `powershell -ExecutionPolicy Bypass -File scripts/validate_installed_runtime.ps1 -InstalledRoot desktop\renderer-app\src-tauri\target\debug -HealthTimeoutSeconds 45` -> success
 - `powershell -ExecutionPolicy Bypass -File scripts/smoke_step1_step2.ps1 -StartupTimeoutSeconds 60 -SoakSeconds 20` -> success
 - `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SoakSeconds 10 -StartupTimeoutSeconds 60` -> success
+- `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SkipInstallerProof -SoakSeconds 45 -CheckpointIntervalSeconds 10 -ActionIntervalSeconds 8 -StartupTimeoutSeconds 60` -> success (mutating parity soak with pause/resume, seek, next/previous, mode changes, and checkpoint artifacts)
 - `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev -HealthTimeoutSeconds 90 -LeaveRunning` -> success
 - `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode packaged -SkipSidecarBuild -HealthTimeoutSeconds 30` -> success
 - `powershell -ExecutionPolicy Bypass -File scripts/check_docs_state.ps1` -> success
@@ -122,7 +126,7 @@ From `python -m oracle status`:
 ## 6) Active Gaps
 
 1. Blank-machine installer install-and-launch validation is still pending outside this workstation.
-2. Native audio (`miniaudio`) production soak validation across real devices and long sessions.
+2. Native audio (`miniaudio`) production soak validation across real devices and a full 4-hour long-session run.
 3. Runtime/source separation is still partial beyond the dedicated `.lyra-build` staging root.
 4. Mantine/Figma foundation is live across the main workspace plus key secondary surfaces, but not yet across every legacy route or panel.
 

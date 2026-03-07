@@ -35,6 +35,9 @@ This file tracks active execution work only.
   - frozen `PROJECT_ROOT` uses `Path(sys.executable).parent`
   - HuggingFace cache roots resolve from `oracle.config.PROJECT_ROOT`
   - sidecar build collects broader Oracle subpackages for clean-machine frozen installs
+- Frozen sidecar completeness is now corrected:
+  - `scripts/build_backend_sidecar.ps1` explicitly hidden-imports `oracle.api.blueprints.*`
+  - sidecar launch check now proves the bundled backend exposes the real API contract
 - Live packaged streamrip acquisition proof is validated:
   - `scripts/validate_packaged_streamrip.ps1 -LiveAcquire` passed
   - G-034 is closed
@@ -42,10 +45,13 @@ This file tracks active execution work only.
   - `POST /api/spotify/import`
   - `GET /api/spotify/import/status`
   - backend suite is now `106 passed`
+- Packaged proof scripts are now deterministic:
+  - `scripts/packaged_host_smoke.ps1` stops any existing backend listener before launch
+  - `scripts/parity_hardening_acceptance.ps1` records log/JSONL artifacts and runs transport mutations during soak
 
-## In Progress (Current Session S-20260306-13)
+## In Progress (Current Session S-20260306-14)
 
-- Completed: installed-layout validation tooling, packaged runtime-root hardening, rebuilt debug bundle validation, and release-gate doc normalization
+- Completed: sidecar blueprint-packaging fix, deterministic packaged-host smoke, and hardened parity soak mutation/checkpoint runner
 
 ## Order Of Operation (Highest Result First)
 
@@ -53,7 +59,7 @@ This file tracks active execution work only.
    - Install the generated setup on a clean Windows VM or second machine
    - Confirm first launch works with bundled sidecar and runtime tools only
 2. Parity hardening acceptance as release gate:
-   - Extend from the passing short acceptance run to a 4-hour soak
+   - Run the hardened mutation/checkpoint runner as a 4-hour soak
    - Confirm canonical player, SSE, forced-restart recovery, and long-session stability
 3. 4-hour gaming/listening soak:
    - Confirm no crashes or dropouts
@@ -65,7 +71,7 @@ This file tracks active execution work only.
 ## Next Up
 
 1. Run a blank-machine installer install-and-launch proof on a clean Windows VM.
-2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild` as a 4-hour soak.
+2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -CheckpointIntervalSeconds 300 -ActionIntervalSeconds 120 -SoakSeconds 14400` as a 4-hour soak.
 3. Continue runtime/source separation cleanup after the external installer proof.
 4. Extend the Mantine foundation across remaining legacy routes and system panels where useful.
 5. Continue graph, credits, and structure depth passes after release-gate proof.
