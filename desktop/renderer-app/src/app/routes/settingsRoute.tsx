@@ -2,6 +2,7 @@ import { Badge, Card, Checkbox, Group, SegmentedControl, Stack, Text, TextInput,
 import { BackendStatusPanel } from "@/features/system/BackendStatusPanel";
 import { DoctorPanel } from "@/features/system/DoctorPanel";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { LyraPanel } from "@/ui/LyraPanel";
 
 const SHORTCUTS: Array<[string, string]> = [
   ["Ctrl K", "Open command palette"],
@@ -29,13 +30,48 @@ export function SettingsRoute() {
   const setResumeSession = useSettingsStore((state) => state.setResumeSession);
   const setCompanionEnabled = useSettingsStore((state) => state.setCompanionEnabled);
   const setCompanionStyle = useSettingsStore((state) => state.setCompanionStyle);
+  const enabledBehaviorCount = [fixtureMode, resumeSession, developerHud, companionEnabled].filter(Boolean).length;
 
   return (
     <div className="route-stack">
-      <section className="lyra-panel page-intro">
-        <span className="hero-kicker">Settings</span>
-        <h1>Configuration, diagnostics, and shell behavior.</h1>
-        <p>Control the runtime, tune the shell, and shape how Lyra presents itself while the rebuild hardens.</p>
+      <LyraPanel className="settings-system-hero">
+        <div className="settings-system-copy">
+          <span className="hero-kicker">Settings</span>
+          <Title order={1}>Configuration, diagnostics, and shell behavior from one system deck.</Title>
+          <Text className="settings-system-summary">
+            Control runtime posture, recovery choices, shell presence, and diagnostics
+            without scattering those decisions across multiple temporary surfaces.
+          </Text>
+        </div>
+        <Group gap="xs" className="settings-system-badges">
+          <Badge className="home-stat-badge" size="lg" variant="light" color="midnight">
+            {enabledBehaviorCount} toggles active
+          </Badge>
+          <Badge className="home-stat-badge" size="lg" variant="light" color="midnight">
+            {apiToken ? "token configured" : "token optional"}
+          </Badge>
+          <Badge className="home-stat-badge" size="lg" variant="light" color="lyra">
+            {companionEnabled ? `companion: ${companionStyle}` : "companion hidden"}
+          </Badge>
+        </Group>
+      </LyraPanel>
+
+      <section className="settings-signal-grid">
+        <LyraPanel className="settings-signal-card">
+          <span className="insight-kicker">Runtime target</span>
+          <strong>{apiBaseUrl || "No backend URL set"}</strong>
+          <p>Primary shell, diagnostics, and control traffic point here.</p>
+        </LyraPanel>
+        <LyraPanel className="settings-signal-card">
+          <span className="insight-kicker">Recovery posture</span>
+          <strong>{resumeSession ? "Resume queue and position" : "Launch clean"}</strong>
+          <p>Controls how much listening context Lyra restores after a restart.</p>
+        </LyraPanel>
+        <LyraPanel className="settings-signal-card">
+          <span className="insight-kicker">Diagnostics mode</span>
+          <strong>{developerHud ? "Developer HUD live" : "Panel-only diagnostics"}</strong>
+          <p>System truth lives in the panels below, not in ad hoc scattered indicators.</p>
+        </LyraPanel>
       </section>
 
       <section className="settings-grid">
@@ -140,8 +176,14 @@ export function SettingsRoute() {
         </Card>
       </section>
 
-      <BackendStatusPanel />
-      <DoctorPanel />
+      <section className="settings-diagnostics-stack">
+        <div className="section-heading">
+          <h2>Diagnostics</h2>
+          <span>Backend health and doctor evidence</span>
+        </div>
+        <BackendStatusPanel />
+        <DoctorPanel />
+      </section>
     </div>
   );
 }
