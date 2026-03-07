@@ -7,8 +7,8 @@ This is the current repo/runtime snapshot verified from this workspace.
 ## 1) Repository State
 
 - Branch: `main`
-- Working tree: local changes pending for session `S-20260306-14` plus unrelated renderer/UI edits already present in the workspace
-- Latest committed baseline before this audit: `9464d06` (`S-20260306-13` installed runtime validation docs)
+- Working tree: local changes pending for sessions `S-20260306-17` and `S-20260306-18`
+- Latest committed baseline before this audit: `1d09322` (`S-20260306-16` qobuz tier1 fix docs)
 
 ## 2) Architecture State (Current)
 
@@ -20,6 +20,7 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Tauri host in `desktop/renderer-app/src-tauri/`
   - React/Vite renderer in `desktop/renderer-app/`
   - Renderer component foundation includes Mantine (`@mantine/core`, `@mantine/hooks`) with a Lyra-specific theme layer
+  - Mantine is now treated as infrastructure rather than visible design authority; high-traffic surfaces are being restyled into a more bespoke shell language
   - Canonical launcher: `powershell -ExecutionPolicy Bypass -File scripts/start_lyra_unified.ps1 -Mode dev`
   - Packaged runtime builder: `powershell -ExecutionPolicy Bypass -File scripts/build_packaged_runtime.ps1`
   - Docker is not required and not auto-started in the unified launch path
@@ -27,6 +28,7 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Unified runtime shell is active: Library, Semantic, Deep Cut, Now Playing, Queue, Artist Context, Oracle
   - Secondary renderer surfaces use the same Mantine-based foundation: settings route, right rail, track dossier drawer, developer HUD, companion shell
     - Search mode controls, the semantic search hero, Oracle mode controls, and the artist route now also use Mantine primitives in the active runtime
+    - Home, Queue, and the playlists landing surface now use a bespoke "studio deck" treatment on top of the shared renderer foundation
 - Playback authority:
   - Canonical backend player domain in `oracle/player/*`
   - Persisted `player_state` and `player_queue` tables
@@ -99,6 +101,8 @@ From `python -m oracle status`:
 - `python -m pytest -q` -> `106 passed`
 - `cd desktop\renderer-app; npm run test` -> `1 file / 3 tests passed`
 - `cd desktop\renderer-app; npm run build` -> success
+- `cd desktop\renderer-app; npm run test` -> revalidated after the bespoke-shell route pass
+- `cd desktop\renderer-app; npm run build` -> revalidated after the bespoke-shell route pass
 - `cd desktop\renderer-app; npm run tauri:build -- --debug` -> success (debug host rebuilt, MSI and NSIS bundles produced)
 - `powershell -ExecutionPolicy Bypass -File scripts/build_backend_sidecar.ps1` -> success (`.lyra-build/bin/lyra_backend.exe`; frozen sidecar launch check passed against the bundled API contract)
 - `powershell -ExecutionPolicy Bypass -File scripts/build_runtime_tools.ps1` -> success (`runtime/bin/*.exe` plus staged `.lyra-build/bin/runtime/bin` helpers)
@@ -135,7 +139,7 @@ From `python -m oracle status`:
 1. Blank-machine installer install-and-launch validation is still pending outside this workstation.
 2. Native audio (`miniaudio`) production soak validation across real devices and a full 4-hour long-session run.
 3. Runtime/source separation is still partial beyond the dedicated `.lyra-build` staging root.
-4. Mantine/Figma foundation is live across the main workspace, Search, Oracle, Artist, and key secondary surfaces, but not yet across every remaining legacy route or panel.
+4. Mantine/Figma foundation plus the bespoke shell pass are live across the main workspace, Home, Queue, Playlists, Search, Oracle, Artist, and key secondary surfaces, but not yet across every remaining legacy route or panel.
 5. Tier 1 Qobuz runtime path is healthy again, but successful duplicate acquisitions still fall back into stale queue re-queue behavior instead of resolving cleanly.
 
 ## 7) Immediate Next Pass

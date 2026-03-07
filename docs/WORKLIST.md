@@ -58,10 +58,14 @@ This file tracks active execution work only.
   - `oracle/acquirers/qobuz.py` no longer references undefined `QOBUZ_SERVICE_URL`
   - second tiny drain proved T1 success (`Bear Hands - Agora`)
   - current follow-up issue is duplicate-aware queue resolution after successful acquisition
+- Bespoke shell cleanup advanced on the renderer:
+  - Home was rebuilt into a calmer studio-deck layout
+  - Queue and Playlists now use matching bespoke hero treatments instead of the older flat panel stack
+  - Mantine remains the infrastructure layer, not the visible design authority
 
-## In Progress (Current Session S-20260306-14)
+## In Progress (Current Session S-20260306-17)
 
-- Completed: sidecar blueprint-packaging fix, deterministic packaged-host smoke, and hardened parity soak mutation/checkpoint runner
+- Completed: bespoke Home, Queue, and Playlists shell pass with renderer validation
 
 ## Order Of Operation (Highest Result First)
 
@@ -76,7 +80,7 @@ This file tracks active execution work only.
    - Confirm tray and media keys remain responsive
    - Confirm no queue drift
 4. Remaining legacy UI surfaces:
-   - Extend the Mantine foundation where it still improves day-to-day usability
+   - Continue the bespoke shell language across remaining legacy routes and system panels
 5. Graph, credits, and structure depth:
   - Continue bounded passes after the release-gate work stays green
 
@@ -86,4 +90,5 @@ This file tracks active execution work only.
 2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -CheckpointIntervalSeconds 300 -ActionIntervalSeconds 120 -SoakSeconds 14400` as a 4-hour soak.
 3. Continue runtime/source separation cleanup after the external installer proof.
 4. Extend the Mantine foundation across remaining legacy routes and system panels where useful.
+   - Prefer bespoke styling on top of Mantine infrastructure rather than stock component aesthetics.
 5. Continue graph, credits, and structure depth passes after release-gate proof.
