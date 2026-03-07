@@ -18,7 +18,7 @@ export function TopAtmosphereBar() {
   const [bootReady, setBootReady] = useState(false);
   const apiBaseUrl = useSettingsStore((state) => state.apiBaseUrl);
 
-  // IPC boot status from Electron main process
+  // Optional host boot-status bridge for desktop shells
   useEffect(() => {
     const cleanup = window.lyraWindow?.onBootStatus?.((status) => {
       setBootMessage(PHASE_LABELS[status.phase] ?? status.message);

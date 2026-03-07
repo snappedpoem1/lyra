@@ -1,0 +1,80 @@
+name: Windows Release Governance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * *'
+  release:
+    types:
+      - published
+
+concurrency:
+  group: windows-release-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-gate:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: desktop/renderer-app/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.85.0
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/renderer-app/src-tauri
+
+      - name: Install renderer dependencies
+        working-directory: desktop/renderer-app
+        run: npm ci
+
+      - name: Build packaged runtime
+        run: powershell -ExecutionPolicy Bypass -File scripts/build_packaged_runtime.ps1 -SkipLaunchCheck -SkipToolSmokeCheck
+
+      - name: Build Tauri debug host
+        working-directory: desktop/renderer-app
+        run: npm run tauri:build -- --debug
+
+      - name: Validate installed layout
+        run: powershell -ExecutionPolicy Bypass -File scripts/validate_installed_runtime.ps1 -InstalledRoot desktop/renderer-app/src-tauri/target/debug -HealthTimeoutSeconds 45
+
+      - name: Packaged host smoke
+        run: powershell -ExecutionPolicy Bypass -File scripts/packaged_host_smoke.ps1 -HealthTimeoutSeconds 45
+
+      - name: Write build manifest
+        run: powershell -ExecutionPolicy Bypass -File scripts/write_build_manifest.ps1 -OutputPath .lyra-build/manifests/windows-release-gate.json
+
+      - name: Upload build governance artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-gate-${{ github.run_number }}
+          path: |
+            .lyra-build/manifests/*.json
+            .lyra-build/bin/**
+            desktop/renderer-app/src-tauri/target/debug/bundle/**

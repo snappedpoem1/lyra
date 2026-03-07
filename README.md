@@ -16,18 +16,7 @@ Tagline:
 - Docker services are optional acquisition support, not required for daily local playback.
 - Packaged builds now stage bundled acquisition helpers (`streamrip`, `spotdl`, `ffmpeg`, `ffprobe`) alongside the backend sidecar.
 
-## Current Verified Local Snapshot (March 6, 2026)
-
-- Tracks: 2,454
-- Embeddings: 2,454
-- Scored tracks: 2,454
-- Vibes: 9
-- Queue pending: 2,036
-- Spotify history rows: 127,312
-- Playback events: 30,680
-- Backend tests: 88 passing
-
-See `docs/PROJECT_STATE.md` for full audited detail.
+`docs/PROJECT_STATE.md` is the only audited runtime snapshot and source of truth for current metrics, validated commands, and repo state.
 
 ## Core Capabilities
 
@@ -80,11 +69,19 @@ npm run tauri:dev
 ```powershell
 python -m pytest -q
 cd desktop\renderer-app
-npm run test
+npm run test:ci
 npm run build
 powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop.ps1 -AllowLlmFailure
 powershell -ExecutionPolicy Bypass -File scripts\check_docs_state.ps1
 ```
+
+## Build Governance
+
+- Desktop host authority is Tauri-only. `desktop/package.json` is now a wrapper around `desktop/renderer-app` and no longer carries Electron build metadata.
+- Toolchain authority is pinned via `.python-version` (`3.12`), `.node-version` (`22`), and `rust-toolchain.toml` (`1.85.0`).
+- Windows PR governance lives in `.github/workflows/windows-pr.yml`.
+- Windows nightly/release governance lives in `.github/workflows/windows-release-governance.yml`.
+- Build provenance is emitted by `scripts/write_build_manifest.ps1` to `.lyra-build/manifests/`.
 
 ## Session Protocol
 

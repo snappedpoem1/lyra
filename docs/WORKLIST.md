@@ -6,6 +6,13 @@ This file tracks active execution work only.
 
 ## Completed Recently
 
+- Wave 2 build/release governance landed locally:
+  - stale Electron build authority removed from tracked desktop files
+  - `desktop/package.json` is now a Tauri-only wrapper
+  - Windows PR workflow now runs backend pytest, renderer `test:ci`, renderer build, and docs QA
+  - Windows nightly/release workflow now runs packaged runtime build, Tauri debug build, installed-layout validation, packaged-host smoke, and build-manifest emission
+  - toolchain authority now lives in `.python-version`, `.node-version`, and `rust-toolchain.toml`
+  - build provenance now emits `.lyra-build/manifests/windows-release-gate.json`
 - Tauri host path made the default desktop runtime path.
 - Canonical backend player domain is implemented (`oracle/player/*`).
 - `/api/player/*` contract and `/ws/player` SSE stream are implemented.
@@ -65,33 +72,47 @@ This file tracks active execution work only.
   - Home was rebuilt into a calmer studio-deck layout
   - Queue and Playlists now use matching bespoke hero treatments instead of the older flat panel stack
   - Mantine remains the infrastructure layer, not the visible design authority
+- Runtime/source separation advanced without touching the release-gate lanes:
+  - frozen `oracle.config` now matches `lyra_api.py` by resolving packaged `PROJECT_ROOT` from `sys.executable`
+  - generated logs, temp scratch, runtime state, and default CLAP cache now route through `.lyra-build/*` config roots
+  - runtime state keeps legacy repo-root read compatibility while new writes move behind `.lyra-build/state`
+  - backend suite is now `114 passed`
+- Bespoke shell cleanup continued safely while the soak lane stayed separate:
+  - Oracle now uses a fuller observatory-style hero and control deck framing
+  - Vibe Library now uses the same bespoke shell language instead of the older flat panel stack
+  - Oracle recommendations now refetch correctly when the current seed track changes
+  - renderer tests/build passed again after the route pass
+- Notes-driven shell cleanup continued in another safe lane:
+  - Library now has a proper archive hero and current-slice framing instead of only a minimal intro
+  - playlist detail now reads like a first-class thread surface instead of a leftover detail page
+  - renderer tests/build passed again after the Library + playlist-detail route pass
+- Notes-driven system panel cleanup also landed in the same safe lane:
+  - Backend and Doctor panels now use the same summary-first bespoke shell language
+  - settings diagnostics no longer read like older flat inspector blocks
+  - renderer tests/build and backend pytest stayed green after the panel pass
 
-## In Progress (Current Session S-20260306-17)
+## In Progress (Current Session S-20260306-23)
 
-- Completed: bespoke Home, Queue, and Playlists shell pass with renderer validation
+- Active: Wave 2 closeout and docs synchronization after local CI/release-governance validation
 
 ## Order Of Operation (Highest Result First)
 
-1. Blank-machine installer validation:
-   - Install the generated setup on a clean Windows VM or second machine
-   - Confirm first launch works with bundled sidecar and runtime tools only
-2. Parity hardening acceptance as release gate:
-   - Run the hardened mutation/checkpoint runner as a 4-hour soak
-   - Confirm canonical player, SSE, forced-restart recovery, and long-session stability
-3. 4-hour gaming/listening soak:
-   - Confirm no crashes or dropouts
-   - Confirm tray and media keys remain responsive
-   - Confirm no queue drift
-4. Remaining legacy UI surfaces:
-   - Continue the bespoke shell language across remaining legacy routes and system panels
-5. Graph, credits, and structure depth:
-  - Continue bounded passes after the release-gate work stays green
+1. `LYRA_DATA_ROOT` cutover:
+   - move mutable data authority out of repo-root assumptions
+2. Blank-machine installer proof:
+  - validate the packaged installer on a clean Windows machine
+3. Final parity/audio soak closure:
+  - execute the full 4-hour packaged/native validation run
+4. Desktop stack modernization:
+   - modernize Tauri/front-end toolchain only after governance and runtime contracts are aligned
+5. Metadata/recommendation/provider expansion:
+   - deepen provider contracts, provenance, and source integration
+6. UI provenance and Oracle depth:
+   - surface rationale, degraded states, and recommendation evidence where it matters
 
 ## Next Up
 
-1. Run a blank-machine installer install-and-launch proof on a clean Windows VM.
-2. Run `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -CheckpointIntervalSeconds 300 -ActionIntervalSeconds 120 -SoakSeconds 14400` as a 4-hour soak.
-3. Continue runtime/source separation cleanup after the external installer proof.
-4. Extend the Mantine foundation across remaining legacy routes and system panels where useful.
-   - Prefer bespoke styling on top of Mantine infrastructure rather than stock component aesthetics.
-5. Continue graph, credits, and structure depth passes after release-gate proof.
+1. Implement the `LYRA_DATA_ROOT` cutover as the next runtime/source-separation pass.
+2. Run the packaged installer on a clean Windows machine and confirm first launch.
+3. Execute the full 4-hour parity/audio soak with the finalized packaged host contract.
+4. Resume later metadata/product-depth waves only after the earlier runtime/release gates remain green.

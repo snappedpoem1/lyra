@@ -75,52 +75,101 @@ Core priority:
   - explainable recommendation provenance
   - acquisition radar leads
 
-## 4) Open Gaps
+## 4) Program State
 
-1. Native audio production validation (`miniaudio`) on real devices/long sessions.
-2. Packaged sidecar certainty (`lyra_backend.exe`) on clean machine installer.
-3. Oracle action breadth beyond current contract stubs.
-4. Packaged/runtime acquisition proof on bundled helpers.
-5. Transition DJ layer (future phase).
+Lyra is entering a split modernization sequence.
 
-## 5) Phase Plan
+Rule:
 
-### Phase A - Daily Driver Parity (current)
+- no build/runtime/product modernization proceeds until the document and agent-hardening wave lands
+- roadmap, state, worklist, registry, and scoped agent instructions must agree before later implementation waves begin
+
+This sequence intentionally fronts governance first so parallel agents do not drift, collide, or implement against stale repo truth.
+
+## 5) Open Gaps
+
+1. Runtime/data-root authority is still incomplete:
+   - generated paths are improved through `.lyra-build`
+   - repo-root mutable data assumptions still remain
+   - `LYRA_DATA_ROOT` cutover is not implemented yet
+2. Native audio production validation (`miniaudio`) on real devices/long sessions is still pending.
+3. Packaged sidecar certainty (`lyra_backend.exe`) on a true blank-machine installer is still pending.
+4. Oracle action breadth, metadata depth, and product explainability are still expandable after governance and build/runtime foundations are aligned.
+
+## 6) Wave Plan
+
+### Wave 1 - Document and Agent Hardening (landed locally)
 
 Gate:
-- Full listening sessions in Lyra with no CLI dependency.
+- authoritative docs, lane briefs, and scoped agent instructions all agree on execution order before any later modernization wave begins
 
 Deliverables:
-- Sidecar packaging hardening.
-- Device/soak validation for native audio path.
-- Startup/recovery reliability.
+- roadmap/state/worklist/registry alignment
+- README truth cleanup
+- root plus scoped agent instruction surfaces
+- explicit parallel lane briefs for later waves
 
-### Phase B - Surface Completion
+### Wave 2 - Build Simplification and Release Governance (landed locally)
 
 Gate:
-- Existing intelligence is fully visible in-player.
+- Wave 1 merged and docs-state clean
 
 Deliverables:
-- Now Playing intelligence depth.
-- Vibes and Playlust controls wired in UI.
-- Discover/Deep Cut UX polish.
+- Electron archival
+- Windows-first CI/release gate automation
+- reproducible build/toolchain guidance
+- build manifest generation for packaged Windows artifacts
 
-### Phase C - Oracle Action Reliability
+### Wave 3 - Runtime and Data-Root Hard Cutover
 
 Gate:
-- Oracle responses reliably mutate playback state and queue.
+- build/release governance is established and the runtime contract is documented
 
 Deliverables:
-- Action routing hardening.
-- Ambient default behavior polish.
-- Strong local context grounding from outcomes.
+- `LYRA_DATA_ROOT` as mutable-data authority
+- removal of repo-root mutable-data defaults
+- migration and compatibility strategy for legacy layouts
 
-### Phase D - Transition DJ Layer
+### Wave 4 - Desktop Stack Modernization
 
 Gate:
-- Intentional audible transitions without harming gaming performance.
+- runtime/data-root contract is stable enough to carry forward into host/runtime validation
 
-## 6) Non-Negotiables
+Deliverables:
+- Tauri and frontend stack modernization
+- packaged-host revalidation on the upgraded stack
+
+### Wave 5 - Metadata, Recommendation, and Oracle Expansion
+
+Gate:
+- host/build/runtime foundations remain green after earlier waves
+
+Deliverables:
+- provider-contract recommendation architecture
+- richer metadata/community-source integration
+- broader Oracle action depth
+
+### Wave 6 - Product Surface Depth
+
+Gate:
+- recommendation and metadata evidence is available to surface in the UI
+
+Deliverables:
+- provenance-first UX
+- clearer rationale and degraded-state reporting
+- deeper Oracle/playlist/detail insight surfaces
+
+### Wave 7 - Release-Gate Closure
+
+Gate:
+- all earlier waves are landed and documented
+
+Deliverables:
+- blank-machine installer validation
+- full parity/audio soak
+- final gap closure or restatement
+
+## 7) Non-Negotiables
 
 - No regressions to one-launch unified app behavior.
 - No backend side quests without listening UX impact.
@@ -128,7 +177,7 @@ Gate:
 - No new runtime dependency should default to Docker when it can be bundled or internalized.
 - No forced oracle chatter while silent mode is selected.
 
-## 7) North Star
+## 8) North Star
 
 Revelations per week:
 recommended tracks that are both saved and replayed within 7 days.
