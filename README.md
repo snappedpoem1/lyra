@@ -1,6 +1,6 @@
 # Lyra Oracle
 
-Lyra Oracle is a local-first music intelligence app for personally owned libraries.
+Lyra is a local-first media library and player for personally owned libraries, powered by Lyra Core.
 
 Tagline:
 

@@ -272,6 +272,7 @@ export function BottomTransportDock() {
     : "volume";
 
   const inlineFactDrop = factDrop && factDropTrackId === current?.trackId ? factDrop : null;
+  const inlineExplanation = player.explanation ?? null;
 
   return (
     <footer className="bottom-dock">
@@ -283,9 +284,9 @@ export function BottomTransportDock() {
           <div className="dock-subtitle">
             {current?.artist ?? "Select a track or start a vibe"}
           </div>
-          {(player.errorMessage || inlineFactDrop) && (
+          {(player.errorMessage || inlineExplanation || inlineFactDrop) && (
             <div className="dock-fact-drop">
-              {player.errorMessage ?? inlineFactDrop}
+              {player.errorMessage ?? inlineExplanation ?? inlineFactDrop}
             </div>
           )}
         </div>

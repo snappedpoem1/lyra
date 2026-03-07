@@ -7,6 +7,7 @@ import { LyraPanel } from "@/ui/LyraPanel";
 import { LyraButton } from "@/ui/LyraButton";
 import { ContextMenu } from "@/ui/ContextMenu";
 import { useContextMenu } from "@/ui/useContextMenu";
+import { ExplanationChips } from "@/features/explanations/ExplanationChips";
 import type { TrackListItem } from "@/types/domain";
 
 function QueueRow({
@@ -114,6 +115,11 @@ export function QueueLane() {
           <span className="insight-kicker">Current row</span>
           <strong>{current?.title ?? "Queue empty"}</strong>
           <p>{current?.reasons[0]?.text ?? current?.reason ?? "Play a track or load a playlist to start."}</p>
+          {current?.scoreChips && current.scoreChips.length > 0 && (
+            <ExplanationChips
+              chips={current.scoreChips.map((sc) => ({ label: sc.label, kind: "dimension" as const }))}
+            />
+          )}
         </div>
         <div className="queue-headline-meta">
           <span>{queue.origin}</span>

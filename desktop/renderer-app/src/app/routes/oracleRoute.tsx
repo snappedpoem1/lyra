@@ -29,6 +29,7 @@ export function OracleRoute() {
   const degraded = brokerResponse?.degraded ?? false;
   const degradationSummary = brokerResponse?.degradationSummary ?? "";
   const providerReports = brokerResponse?.providerReports ?? [];
+  const whatNext = brokerResponse?.whatNext ?? [];
   const constellationNodeCount = constellation?.nodes.length ?? 0;
   const constellationEdgeCount = constellation?.edges.length ?? 0;
 
@@ -106,6 +107,9 @@ export function OracleRoute() {
             recommendations={recommendations}
             degraded={degraded}
             degradationSummary={degradationSummary}
+            whatNext={whatNext}
+            mode={mode}
+            seedTrackId={seedTrackId}
             onPlayTrack={(track) => void audioEngine.playTrack(track)}
             onReplaceQueue={(tracks) =>
               replaceQueue({

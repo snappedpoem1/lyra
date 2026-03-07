@@ -13,18 +13,19 @@ Keep this file synchronized with current repo truth.
 
 ## Project Identity
 
-Lyra Oracle is a local-first music intelligence system.
+Lyra is a local-first media library and player powered by Lyra Core, the intelligence authority.
 Current desktop host direction is Tauri-only.
 Canonical playback authority is backend player state in `oracle/player/*`.
 
-## Current Truth Snapshot (March 6, 2026)
+## Current Truth Snapshot (March 7, 2026)
 
 - Tracks indexed: 2,454
 - Scored tracks: 2,454
 - Embeddings: 2,454
 - Spotify history rows: 127,312
 - Playback events: 30,680
-- Backend tests: 82 passing
+- Backend tests: 300 passing
+- Frontend tests: 41 passing
 
 For full audit detail, use `docs/PROJECT_STATE.md`.
 

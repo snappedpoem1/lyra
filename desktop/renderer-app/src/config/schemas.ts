@@ -197,6 +197,12 @@ export const recommendationBrokerSchema = z.object({
       score: z.number(),
     }).passthrough(),
   ),
+  what_next: z.array(z.object({
+    track_id: z.string(),
+    artist: z.string(),
+    title: z.string(),
+    hint: z.string(),
+  })).optional(),
 });
 
 export const deepCutHuntSchema = z.object({

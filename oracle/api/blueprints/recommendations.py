@@ -55,9 +55,39 @@ def api_recommendations_oracle_feedback() -> Any:
             provider=data.get("provider"),
             metadata=metadata,
         )
+
+        # Include the feedback effect description in response
+        from oracle.explainability import generate_feedback_effect_description
+
+        payload["effect_description"] = generate_feedback_effect_description(
+            str(data.get("feedback_type") or ""),
+            track_artist=str(data.get("artist") or "").strip(),
+            track_title=str(data.get("title") or "").strip(),
+        )
+
         return jsonify(payload)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": str(exc), "traceback": traceback.format_exc()}), 500
+
+
+@bp.route("/api/recommendations/feedback-effects", methods=["GET"])
+def api_feedback_effects() -> Any:
+    """Return recent feedback events with human-readable effect descriptions."""
+    try:
+        from oracle.explainability import get_recent_feedback_effects, summarize_feedback_direction
+
+        limit = sanitize_integer(request.args.get("limit", 5), default=5, min_val=1, max_val=20)
+        lookback = sanitize_integer(request.args.get("lookback", 3600), default=3600, min_val=60, max_val=86400)
+
+        effects = get_recent_feedback_effects(limit=limit, lookback_seconds=lookback)
+        direction = summarize_feedback_direction(lookback_seconds=lookback)
+
+        return jsonify({
+            "effects": effects,
+            "direction": direction,
+        })
     except Exception as exc:  # noqa: BLE001
         return jsonify({"error": str(exc), "traceback": traceback.format_exc()}), 500
 

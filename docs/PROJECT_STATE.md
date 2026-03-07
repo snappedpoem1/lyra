@@ -24,6 +24,8 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Wave 13 (Playlist Intelligence) is locally landed
   - Wave 14 (Saved Playlist UI) is locally landed
   - Wave 15 (Copilot lane: biographer stats fix, revelations metric, duplicates module, vibe→saved_playlists bridge) is locally landed
+  - Wave 16 (One Player governance: canonical/compatibility/legacy surface labels, Waves 17-21 defined) is locally landed
+  - Wave 17 (Core Legibility: explainability engine, explanation chips, feedback effects, why-this/why-now/what-next across Oracle/Home/Queue/Transport) is locally landed
   - `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` is landed as a docs-only UI structure authority for future route and shell work
   - `docs/PHASE_EXECUTION_COMPANION.md` remains the execution-grade phase sequence companion
 - Governance state:
@@ -53,7 +55,8 @@ This is the current repo/runtime snapshot verified from this workspace.
   - API surface: `/api/player/*`
   - SSE stream: `/ws/player`
 - Oracle and recommendation state:
-  - recommendation broker contract is exposed through `POST /api/recommendations/oracle`, `POST /api/recommendations/oracle/feedback`, and `GET /api/recommendations/providers/health`
+  - recommendation broker contract is exposed through `POST /api/recommendations/oracle`, `POST /api/recommendations/oracle/feedback`, `GET /api/recommendations/feedback-effects`, and `GET /api/recommendations/providers/health`
+  - `oracle/explainability.py` is the reusable explanation generation module for explanation text, chips, why-now, what-next, and feedback effect descriptions
   - broker fuses local radio, Last.fm similar-track signals, ListenBrainz community top-recording signals, Scout cross-genre bridge leads, and ListenBrainz community weather signals
   - provider health registry and degraded-state reporting are live
 - Acquisition and runtime packaging:
@@ -81,9 +84,9 @@ From `.venv\Scripts\python.exe -m oracle.status` on this workstation after the W
 
 ## 4) Verification Results (Current High-Water Marks)
 
-- `.venv\Scripts\python.exe -m pytest -q` -> success (`271 passed`) after Wave 15
-- `cd desktop\renderer-app; npx vitest run` -> success (`34 passed`) after Wave 14
-- `cd desktop\renderer-app; npm run build` -> success after Wave 14
+- `.venv\Scripts\python.exe -m pytest -q` -> success (`300 passed`) after Wave 17
+- `cd desktop\renderer-app; npx vitest run` -> success (`41 passed`) after Wave 17
+- `cd desktop\renderer-app; npm run build` -> success after Wave 17
 - `cd desktop\renderer-app; npx tsc --noEmit` -> success after Wave 6 frontend plumbing
 - `powershell -ExecutionPolicy Bypass -File scripts/validate_clean_machine_install.ps1` -> success (local artifact/layout proof)
 - `powershell -ExecutionPolicy Bypass -File scripts/validate_packaged_streamrip.ps1 -LiveAcquire` -> success
@@ -100,7 +103,7 @@ From `.venv\Scripts\python.exe -m oracle.status` on this workstation after the W
 - Execution companion: `docs/PHASE_EXECUTION_COMPANION.md`
 - Session ledger: `docs/SESSION_INDEX.md`
 - Current governance wave:
-  - Waves 1 through 14 are now represented as locally landed or explicitly release-gated
+  - Waves 1 through 17 are now represented as locally landed or explicitly release-gated
   - a standing tandem-wave protocol defines how Codex and Copilot split future waves without overlapping file ownership
   - the execution companion remains the iteration-level reference while the roadmap stays forward-plan authority
 
@@ -117,3 +120,7 @@ From `.venv\Scripts\python.exe -m oracle.status` on this workstation after the W
 2. Continue Wave 15 Codex lane: native OS notifications, global shortcuts, state persistence (Wave 11-11C backlog).
 3. Run blank-machine installer install-and-launch proof once a clean Windows machine or VM is available.
 4. Run full 4-hour parity/audio soak when the release-gate lane is reopened.
+
+## 8) Forward Governance
+
+After Wave 15, the next wave is **Wave 16: One Player** — a docs/governance/product-shape and repository cleanup wave. Wave 16 sharpens the canonical product identity (library + player + Lyra Core), defines surface labels, removes obsolete direction artifacts, and sets ordered follow-on waves (17 through 21). It is not a broad implementation spree. See `docs/ROADMAP_ENGINE_TO_ENTITY.md` § Wave 16 and `docs/WORKLIST.md` for the full definition.

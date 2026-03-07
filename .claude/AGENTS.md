@@ -7,7 +7,7 @@ You are the project's pressure test, not its hype man.
 
 Project Context
 
-Lyra Oracle is a local-first music intelligence system built primarily in Python and designed for Windows.
+Lyra is a local-first media library and player powered by Lyra Core, the intelligence authority. Built primarily in Python and designed for Windows.
 
 Core system characteristics:
 
@@ -19,7 +19,7 @@ SQLite for primary structured storage
 
 Flask backend/API
 
-Electron-based desktop direction
+Tauri-only desktop host
 
 Local music library focus
 

@@ -4,7 +4,7 @@ Read this file first. It is the authoritative entry point for repo-aware agents.
 
 ## What Lyra Is
 
-Lyra Oracle is a local-first music intelligence system built for personal library ownership.
+Lyra is a local-first media library and player powered by Lyra Core, the intelligence authority for discovery, playlist generation, listening memory, and explainable recommendations.
 
 - Python 3.12 backend + Flask API
 - SQLite primary store (`lyra_registry.db`)
@@ -16,7 +16,7 @@ Lyra Oracle is a local-first music intelligence system built for personal librar
 - 5-tier acquisition waterfall:
   Qobuz -> Streamrip -> Slskd -> Real-Debrid -> SpotDL
 
-It is not a generic dashboard or streaming app.
+Lyra must remain a dependable media library and player even when Lyra Core is unavailable, degraded, or still evolving. It is not a generic dashboard or streaming app.
 
 ## Ground Truth Files
 
@@ -29,6 +29,13 @@ Read these before proposing behavior changes:
 - `docs/SESSION_INDEX.md` (session table of record)
 
 Rule: do not propose changes that contradict `docs/PROJECT_STATE.md` without updating it in the same PR/commit.
+
+## Canonical Surface Rules
+
+- Always prefer canonical paths (see `docs/CANONICAL_PATHS.md`). New work must target canonical surfaces.
+- Compatibility-only and legacy paths must not be revived as active product direction. They exist for transition, not investment.
+- Obsolete host, runtime, or UI paths must be removed or clearly quarantined when no longer canonical. Do not preserve dead alternatives as if they are still viable.
+- No new implementation wave may broaden backend or oracle scope unless it improves the felt player/library experience in the same or next wave.
 
 ## Governance-First Rule
 
@@ -58,6 +65,7 @@ Before any build/runtime/product modernization wave begins:
 - `oracle/api/__init__.py` - Flask app factory
 - `oracle/api/blueprints/` - API route handlers
 - `oracle/player/` - canonical backend player domain
+- `docs/CANONICAL_PATHS.md` - canonical vs compatibility vs legacy surface registry
 
 ## Build, Test, Validation
 

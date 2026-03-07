@@ -27,8 +27,8 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "shortDescription": "Local-first music intelligence system",
-    "longDescription": "Lyra Oracle is a local-first music intelligence system for personally owned libraries. Discover, score, and acquire music through a unified desktop interface backed by a bundled Python engine.",
+    "shortDescription": "Local-first media library and player",
+    "longDescription": "Lyra is a local-first media library and player for personally owned libraries, powered by Lyra Core. Discover, score, and acquire music through a unified desktop interface backed by a bundled Python engine.",
     "copyright": "Lyra Oracle contributors",
     "resources": [
       "../../../.lyra-build/bin"

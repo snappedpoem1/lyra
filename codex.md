@@ -5,7 +5,7 @@ Root `AGENTS.md` is the primary policy source.
 
 ## Project Identity
 
-Lyra Oracle is a local-first music intelligence system, not a generic dashboard.
+Lyra is a local-first media library and player powered by Lyra Core, the intelligence authority. It is not a generic dashboard.
 
 - Python 3.12 + Flask API + SQLite (`lyra_registry.db`) + ChromaDB (`chroma_storage/`)
 - CLAP embeddings via DirectML on Windows

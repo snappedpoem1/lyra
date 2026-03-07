@@ -1159,6 +1159,9 @@ def _merge_provider_candidates(
     provider_results: list[ProviderResult],
     *,
     limit: int,
+    seed_track: dict[str, Any] | None = None,
+    mode: str = "flow",
+    novelty_band: str = "stretch",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Merge candidates from multiple providers into ranked recommendations and acquisition leads."""
     merged: dict[str, dict[str, Any]] = {}
@@ -1210,7 +1213,7 @@ def _merge_provider_candidates(
                 track["confidence"] = candidate.confidence
                 track["novelty_band_fit"] = candidate.novelty_band_fit
                 track["availability"] = candidate.availability.value
-                track["explanation"] = _build_explanation(result.provider, candidate)
+                track["explanation"] = _build_explanation(result.provider, candidate, seed_track=seed_track, mode=mode, novelty_band=novelty_band)
                 merged[track_id] = track
                 continue
 
@@ -1241,7 +1244,7 @@ def _merge_provider_candidates(
                 float(existing.get("confidence") or 0.0),
                 candidate.confidence,
             )
-            existing["explanation"] = _build_merged_explanation(existing)
+            existing["explanation"] = _build_merged_explanation(existing, seed_track=seed_track, mode=mode, novelty_band=novelty_band)
 
     ranked = sorted(
         merged.values(),
@@ -1262,23 +1265,46 @@ def _merge_provider_candidates(
     return ranked[:limit], acquisition_ranked[:limit]
 
 
-def _build_explanation(provider: str, candidate: Candidate) -> str:
+def _build_explanation(
+    provider: str,
+    candidate: Candidate,
+    *,
+    seed_track: dict[str, Any] | None = None,
+    mode: str = "flow",
+    novelty_band: str = "stretch",
+) -> str:
     """Build a plain-language explanation for a single-provider recommendation."""
-    if candidate.evidence:
-        return candidate.evidence[0].text
-    return f"Recommended by {provider}."
+    from oracle.explainability import generate_explanation
+
+    track_data = candidate.track_data or {}
+    track_data.setdefault("evidence", [e.__dict__ if hasattr(e, '__dict__') else e for e in (candidate.evidence or [])])
+    track_data.setdefault("provider_signals", [{"provider": provider, "score": candidate.score}])
+    track_data.setdefault("artist", candidate.artist)
+    track_data.setdefault("title", candidate.title)
+    return generate_explanation(
+        track_data,
+        seed_track=seed_track,
+        mode=mode,
+        novelty_band=novelty_band,
+    )
 
 
-def _build_merged_explanation(merged_track: dict[str, Any]) -> str:
+def _build_merged_explanation(
+    merged_track: dict[str, Any],
+    *,
+    seed_track: dict[str, Any] | None = None,
+    mode: str = "flow",
+    novelty_band: str = "stretch",
+) -> str:
     """Build a plain-language explanation for a multi-provider recommendation."""
-    providers = merged_track.get("provenance", "")
-    reasons = merged_track.get("reasons", [])
-    if len(reasons) == 1:
-        return str(reasons[0].get("text") or f"Recommended by {providers}.")
-    parts = [str(r.get("text") or "") for r in reasons if r.get("text")]
-    if parts:
-        return " ".join(parts[:2])
-    return f"Recommended by {providers}."
+    from oracle.explainability import generate_explanation
+
+    return generate_explanation(
+        merged_track,
+        seed_track=seed_track,
+        mode=mode,
+        novelty_band=novelty_band,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1346,10 +1372,38 @@ def recommend_tracks(
     merged_candidates, acquisition_leads = _merge_provider_candidates(
         provider_results,
         limit=resolved_limit,
+        seed_track=seed_track,
+        mode=resolved_mode,
+        novelty_band=resolved_novelty,
     )
 
     # Apply feedback bias
     merged_candidates = _apply_feedback_bias(merged_candidates)
+
+    # Enrich with explanation chips and regenerate explanations post-feedback
+    from oracle.explainability import generate_explanation_chips, generate_what_next
+
+    for candidate in merged_candidates:
+        candidate["explanation_chips"] = generate_explanation_chips(
+            candidate,
+            seed_track=seed_track,
+            mode=resolved_mode,
+            novelty_band=resolved_novelty,
+        )
+        # Regenerate explanation to incorporate feedback bias
+        candidate["explanation"] = _build_merged_explanation(
+            candidate,
+            seed_track=seed_track,
+            mode=resolved_mode,
+            novelty_band=resolved_novelty,
+        )
+
+    # Generate what-next hints
+    what_next = generate_what_next(
+        merged_candidates,
+        current_index=0,
+        mode=resolved_mode,
+    )
 
     # Build provider reports (SPEC-004 section 4.1)
     provider_reports = [r.to_dict() for r in provider_results]
@@ -1397,6 +1451,7 @@ def recommend_tracks(
         # SPEC-004 fields
         "provider_reports": provider_reports,
         "recommendations": merged_candidates,
+        "what_next": what_next,
         "degraded": is_degraded,
         "degradation_summary": degradation_summary,
         # Legacy compat fields (will be removed after Wave 6 UI transition)

@@ -344,6 +344,12 @@ export async function getBrokeredRecommendations(options: {
       noveltyBandFit: typeof row.novelty_band_fit === "string" ? row.novelty_band_fit : "stretch",
       availability: (typeof row.availability === "string" ? row.availability : "unresolved") as RecommendationAvailability,
       explanation: typeof row.explanation === "string" ? row.explanation : "",
+      explanationChips: Array.isArray(row.explanation_chips)
+        ? row.explanation_chips.map((c: Record<string, unknown>) => ({
+            label: String(c.label ?? ""),
+            kind: String(c.kind ?? "reason") as import("@/types/domain").ExplanationChipKind,
+          }))
+        : [],
       providerSignals: Array.isArray(row.provider_signals)
         ? row.provider_signals.flatMap((signal: Record<string, unknown>) => {
             if (!signal || typeof signal !== "object") {
@@ -367,6 +373,14 @@ export async function getBrokeredRecommendations(options: {
       score: row.score,
       evidence: Array.isArray(row.evidence) ? mapEvidence(row.evidence) : [],
     })),
+    whatNext: Array.isArray(payload.what_next)
+      ? payload.what_next.map((h) => ({
+          track_id: h.track_id,
+          artist: h.artist,
+          title: h.title,
+          hint: h.hint,
+        }))
+      : [],
   };
 }
 
@@ -395,6 +409,36 @@ export async function submitRecommendationFeedback(payload: {
       metadata: payload.metadata,
     }),
   }) as Promise<Record<string, unknown>>;
+}
+
+export async function getFeedbackEffects(options?: {
+  limit?: number;
+  lookback?: number;
+}): Promise<import("@/types/domain").FeedbackEffectsResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.lookback) params.set("lookback", String(options.lookback));
+  const qs = params.toString();
+  const url = `/api/recommendations/feedback-effects${qs ? `?${qs}` : ""}`;
+
+  const feedbackEffectsSchema = z.object({
+    effects: z.array(z.object({
+      feedback_type: z.string(),
+      artist: z.string(),
+      title: z.string(),
+      track_id: z.string(),
+      effect: z.string(),
+      created_at: z.number(),
+    })),
+    direction: z.object({
+      direction: z.string(),
+      summary: z.string(),
+      signal_count: z.number(),
+    }),
+  });
+
+  const payload = await requestJson(url, feedbackEffectsSchema);
+  return payload;
 }
 
 export async function searchSemanticTracks(query: string, n = 20): Promise<TrackListItem[]> {

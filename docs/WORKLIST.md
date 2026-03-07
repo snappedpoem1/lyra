@@ -1,6 +1,6 @@
 # Worklist
 
-Last updated: March 7, 2026 (post-Wave 14 sync)
+Last updated: March 7, 2026 (post-Wave 17 sync)
 
 This file tracks active execution work only.
 
@@ -33,10 +33,25 @@ This file tracks active execution work only.
   - `GET /api/duplicates/summary` and `GET /api/duplicates` endpoints added to `intelligence.py`
   - vibe→`saved_playlists` bridge wired in `oracle/vibes.py` `save_vibe()` using deterministic UUID5
   - 30 new tests (test_duplicates.py, test_revelations.py, test_vibe_bridge.py); backend suite now `271 passed`
+- Wave 16 (One Player governance) landed:
+  - canonical/compatibility/legacy surface labels defined
+  - `docs/CANONICAL_PATHS.md` added as short canonical path registry
+  - follow-on Waves 17-21 defined and ordered
+- Wave 17 (Core Legibility) landed:
+  - `oracle/explainability.py` created: reusable explanation engine with `generate_explanation`, `generate_explanation_chips`, `generate_why_now`, `generate_what_next`, `generate_feedback_effect_description`, `get_recent_feedback_effects`, `summarize_feedback_direction`
+  - broker wiring: `recommendation_broker.py` now enriches candidates with `explanation_chips` and `what_next` via explainability module
+  - `GET /api/recommendations/feedback-effects` endpoint added returning recent feedback effects with direction summary
+  - frontend: `ExplanationChipData`, `FeedbackEffect`, `FeedbackDirection`, `WhatNextHint` types in `domain.ts`
+  - frontend: `features/explanations/` created with `ExplanationChips`, `ExplanationPanel`, `FeedbackActions`, `FeedbackEffectBanner`
+  - `OracleRecommendationDeck` refactored to use explanation components with inline feedback actions
+  - `oracleRoute`, `homeRoute`, `queueRoute`, and `BottomTransportDock` updated with legibility surfaces
+  - `queries.ts` and `schemas.ts` updated for `explanation_chips`, `what_next`, and feedback-effects mapping
+  - CSS: explanation chip, explanation panel, feedback action, and feedback effect banner styles added to `global.css`
+  - 29 new backend tests (`test_explainability.py`); backend suite now `300 passed`; renderer `41 passed`
 
 ## Current State
 
-- Waves 10 through 14 are complete locally.
+- Waves 10 through 17 are complete locally.
 - Release-gate follow-up remains separate from the implementation sequence:
   - blank-machine installer proof is blocked-external
   - 4-hour parity/audio soak remains deferred
@@ -50,3 +65,32 @@ This file tracks active execution work only.
 4. Resume blank-machine installer proof once a clean Windows machine or VM is available.
 5. Run full 4-hour parity soak when the release-gate lane is reopened.
 6. Use `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` before any broader cross-route frontend refactor.
+
+## Wave 16: One Player (next docs/governance/product-shape and repo cleanup wave)
+
+Gate:
+- Wave 15 is locally landed and docs-state is clean
+
+Intent:
+Consolidate Lyra from a capable multi-system project into one coherent local-first media library and player with Lyra Core as the intelligence authority. Docs/governance/product-shape and repo cleanup only — not a broad implementation spree.
+
+Deliverables:
+1. Revised mission lock: library + player + Lyra Core identity
+2. Canonical product shape and surface responsibility definitions
+3. Product law encoding library/player reliability as first-class
+4. Surface labels: CANONICAL, COMPATIBILITY ONLY, LEGACY / PENDING ARCHIVE
+5. Cleanup principle for obsolete architectural remnants
+6. Repository cleanup of obsolete direction artifacts (Electron stubs, dead renderer paths, stale references)
+7. Tightened agent instructions for canonical-surface-first behavior
+8. Added `docs/CANONICAL_PATHS.md` as short canonical path registry
+9. Ordered follow-on waves (17 through 21) serving one coherent listening product
+
+## Follow-On Waves (ordered after Wave 16)
+
+These waves are ordered to build on Wave 16's product-shape clarity. Each must improve the felt experience of using Lyra as a daily player.
+
+- **Wave 17 — Core Legibility:** DONE — explainability engine, explanation chips, feedback effect tracking, why/why-now/what-next across all main surfaces
+- **Wave 18 — Playlist Sovereignty:** make playlist creation, saved vibes, sequencing, editing, and replay the center of the product
+- **Wave 19 — Discovery Graph:** bridge logic, adjacency, similarity growth, cross-genre movement, and confident discovery paths
+- **Wave 20 — Listening Memory:** behavior-driven refinement, replay/save trust signals, session continuity, and taste drift recognition
+- **Wave 21 — Release Confidence:** blank-machine installer proof, long-session audio validation, packaged runtime hardening, and release-gate closure

@@ -2,7 +2,7 @@
 
 ## Project
 
-Local-first music intelligence system for a personally owned library.
+Local-first media library and player powered by Lyra Core, for a personally owned library.
 Primary target is Windows 11.
 
 Stack:

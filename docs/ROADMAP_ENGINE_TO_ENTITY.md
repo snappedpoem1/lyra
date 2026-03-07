@@ -9,12 +9,13 @@ Execution sequencing, iteration order, owner splits, and handoff rules for the r
 
 ## 1) Mission Lock
 
-Lyra is a local-first music entity: one app entrypoint for playback, library, queue, oracle actions, and acquisition control surfaces.
+Lyra is a local-first media library and player powered by Lyra Core, the intelligence authority for discovery, playlist generation, listening memory, and explainable recommendations.
 
-Core priority:
+Core priorities:
 
-- Listening experience first.
-- Backend expansion only when it ships visible user value in the same or next phase.
+- Library and player reliability are first-class. Basic playback, queueing, browsing, and playlist use must always work even when Lyra Core is unavailable, degraded, or still evolving.
+- Lyra Core is the intelligence authority that makes the player smarter, more personal, more explainable, and more alive.
+- Backend expansion only when it ships visible user value in the same or next wave.
 
 ## 2) Decision Lock
 
@@ -177,6 +178,34 @@ Current status:
 Execution companion:
 - `docs/PHASE_EXECUTION_COMPANION.md` extends the committed phase track beyond Wave 7 and defines iteration-level execution for Waves 3 through 11.
 
+### Wave 16 - One Player (next after Wave 15)
+
+Gate:
+- Wave 15 is locally landed and docs-state is clean
+
+Intent:
+Consolidate Lyra from a capable multi-system project into one coherent local-first media library and player with Lyra Core as the intelligence authority. This is a docs/governance/product-shape and repository cleanup wave, not a broad implementation spree.
+
+Deliverables:
+- revised mission lock reflecting library + player + Lyra Core identity
+- canonical product shape and surface responsibility definitions
+- product law encoding library/player reliability as first-class
+- surface labels: CANONICAL, COMPATIBILITY ONLY, LEGACY / PENDING ARCHIVE
+- cleanup principle for obsolete architectural remnants
+- repository cleanup of obsolete direction artifacts
+- tightened agent instructions for canonical-surface-first behavior
+- ordered follow-on waves (17 through 21) serving one coherent listening product
+
+### waves 17 through 21 — forward plan
+
+These waves are ordered to build on Wave 16's product-shape clarity. Each wave must improve the felt library/player/core experience, not broaden backend scope in isolation.
+
+- **Wave 17 — Core Legibility:** make Lyra Core understandable on the surface — why this track, why now, what next, what changed from feedback
+- **Wave 18 — Playlist Sovereignty:** make playlist creation, saved vibes, sequencing, editing, and replay the center of the product
+- **Wave 19 — Discovery Graph:** bridge logic, adjacency, similarity growth, cross-genre movement, and confident discovery paths
+- **Wave 20 — Listening Memory:** behavior-driven refinement, replay/save trust signals, session continuity, and taste drift recognition
+- **Wave 21 — Release Confidence:** blank-machine installer proof, long-session audio validation, packaged runtime hardening, and release-gate closure
+
 ## 7) Non-Negotiables
 
 - No regressions to one-launch unified app behavior.
@@ -189,3 +218,48 @@ Execution companion:
 
 Revelations per week:
 recommended tracks that are both saved and replayed within 7 days.
+
+## 9) Canonical Product Shape
+
+Lyra is one product with the following canonical surfaces and responsibilities:
+
+| Surface | Primary responsibility | Archetype |
+| --- | --- | --- |
+| Home | Operate the current listening session; resume, control, branch playback | WorkspacePage |
+| Library | Browse and act on owned catalog; filter, select, play, queue | ArchivePage |
+| Search / Discover | Find material across library and semantic surfaces | ArchivePage |
+| Playlist | Browse and play saved listening paths and vibes | ArchivePage / DetailPage |
+| Player / Queue | Shape the active listening run; reorder, inspect, continue | WorkspacePage |
+| Lyra Core / Oracle | Steer recommendation behavior; act on proposals; inspect why | RecommendationPage |
+
+Canonical UI structure authority: `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md`.
+
+Future waves must deliver improvements that a person using Lyra as their daily player would notice. Backend-only work that does not surface within the same or next wave is not permitted.
+
+## 10) Product Law
+
+1. Lyra must remain a dependable media library and player even when Lyra Core is unavailable, degraded, or still evolving.
+2. Basic playback, queueing, browsing, and playlist usage are first-class product behavior.
+3. Lyra Core is the intelligence authority that makes the player smarter, more personal, more explainable, and more alive.
+4. Future work must improve library/player/core cohesion, not split them apart.
+5. No future wave should weaken standalone player/library usefulness.
+6. Once a canonical path is declared, obsolete alternatives should be removed, archived, or clearly quarantined so they do not continue to mislead development.
+
+## 11) Surface Labels
+
+Every runtime path, API surface, host, and UI entry should carry one of these labels:
+
+- **CANONICAL:** the active, supported, and preferred path. All new work targets this surface.
+- **COMPATIBILITY ONLY:** still functional but not the preferred path. Not actively improved. Exists to avoid breaking existing workflows during transition.
+- **LEGACY / PENDING ARCHIVE:** no longer functional or actively maintained. Should be archived or removed when the canonical replacement is stable.
+
+Cleanup principle: when a canonical path is declared and stable, compatibility-only paths should be frozen and legacy paths should be archived or removed in the next governance wave. The repo should present one obvious path, not a historically complete museum of dead alternatives.
+
+## 12) Forward-Wave Cohesion
+
+Every wave after Wave 16 must satisfy:
+
+1. The wave improves the felt experience of using Lyra as a daily local-first media library and player.
+2. Backend or intelligence work is justified by a visible surface improvement in the same or next wave.
+3. The wave does not introduce new runtime paths, host alternatives, or UI frameworks that compete with the canonical product shape.
+4. If a wave closes a gap, the matching gap registry entry, worklist, and project state are updated in the same pass.

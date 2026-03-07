@@ -125,6 +125,7 @@ export interface BrokeredRecommendation {
   noveltyBandFit: string;
   availability: RecommendationAvailability;
   explanation: string;
+  explanationChips: ExplanationChipData[];
 }
 
 export interface RecommendationBrokerResponse {
@@ -140,6 +141,7 @@ export interface RecommendationBrokerResponse {
   acquisitionLeads: AcquisitionLead[];
   degraded: boolean;
   degradationSummary: string;
+  whatNext: WhatNextHint[];
 }
 
 export interface PlaylistDetail {
@@ -349,4 +351,49 @@ export interface AgentFactDrop {
 export interface AgentSuggestion {
   suggestion: string;
   action: string;
+}
+
+// ── Core Legibility types (Wave 17) ────────────────────────────────────────
+
+export type ExplanationChipKind = "provider" | "reason" | "dimension" | "confidence" | "novelty" | "feedback" | "mode";
+
+export interface ExplanationChipData {
+  label: string;
+  kind: ExplanationChipKind;
+}
+
+export type FeedbackActionType =
+  | "keep"
+  | "play"
+  | "dismiss"
+  | "accepted"
+  | "queued"
+  | "skipped"
+  | "replayed";
+
+export interface FeedbackEffect {
+  feedback_type: string;
+  artist: string;
+  title: string;
+  track_id: string;
+  effect: string;
+  created_at: number;
+}
+
+export interface FeedbackDirection {
+  direction: string;
+  summary: string;
+  signal_count: number;
+}
+
+export interface FeedbackEffectsResponse {
+  effects: FeedbackEffect[];
+  direction: FeedbackDirection;
+}
+
+export interface WhatNextHint {
+  track_id: string;
+  artist: string;
+  title: string;
+  hint: string;
 }

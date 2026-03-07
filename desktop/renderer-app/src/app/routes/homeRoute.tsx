@@ -2,6 +2,7 @@ import { Badge, Group, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ConnectivityBadge } from "@/features/system/ConnectivityBadge";
+import { FeedbackEffectBanner } from "@/features/explanations/FeedbackEffectBanner";
 import { audioEngine } from "@/services/audio/audioEngine";
 import {
   getAgentBriefing,
@@ -267,6 +268,7 @@ export function HomeRoute() {
           <div className="home-card-actions">
             <LyraButton onClick={() => navigate({ to: "/oracle" })}>Open Oracle</LyraButton>
           </div>
+          <FeedbackEffectBanner />
         </LyraPanel>
 
         <LyraPanel className="home-studio-card home-studio-card--wide">
