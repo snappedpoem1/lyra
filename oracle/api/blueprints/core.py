@@ -327,6 +327,105 @@ def api_cache_stats():
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 
+@bp.route("/api/stats/revelations", methods=["GET"])
+def api_stats_revelations():
+    """Return the north-star metric: tracks that were recommended then replayed within N days.
+
+    A revelation is a track that:
+    - Received a positive recommendation feedback (queue / accept / replay)
+    - Was subsequently played in playback_history within ``window_days`` days
+
+    Query params:
+    - window_days (int, default 7): replay window after recommendation
+    - limit (int, default 50): max tracks to return in the detail list
+    """
+    try:
+        window_days = sanitize_integer(
+            request.args.get("window_days", 7),
+            default=7, min_val=1, max_val=90,
+        )
+        limit = sanitize_integer(
+            request.args.get("limit", 50),
+            default=50, min_val=1, max_val=500,
+        )
+        window_seconds = window_days * 24 * 3600
+
+        conn = get_connection(timeout=10.0)
+        cursor = conn.cursor()
+
+        # Summary: distinct revelations in the last 7 days and 30 days
+        cursor.execute(
+            """
+            SELECT COUNT(DISTINCT rf.track_id)
+            FROM recommendation_feedback rf
+            JOIN playback_history pb ON pb.track_id = rf.track_id
+            WHERE rf.feedback_type IN ('queue', 'accept', 'replay')
+              AND pb.ts BETWEEN rf.created_at AND (rf.created_at + ?)
+              AND rf.created_at >= (strftime('%s', 'now') - ?)
+            """,
+            (window_seconds, window_seconds),
+        )
+        count_this_window = int(cursor.fetchone()[0] or 0)
+
+        cursor.execute(
+            """
+            SELECT COUNT(DISTINCT rf.track_id)
+            FROM recommendation_feedback rf
+            JOIN playback_history pb ON pb.track_id = rf.track_id
+            WHERE rf.feedback_type IN ('queue', 'accept', 'replay')
+              AND pb.ts BETWEEN rf.created_at AND (rf.created_at + ?)
+            """,
+            (window_seconds,),
+        )
+        count_all_time = int(cursor.fetchone()[0] or 0)
+
+        # Detail: most recent revelations
+        cursor.execute(
+            """
+            SELECT
+                rf.track_id,
+                rf.artist,
+                rf.title,
+                rf.feedback_type,
+                rf.created_at AS recommended_at,
+                MIN(pb.ts) AS first_replayed_at,
+                COUNT(pb.id) AS replay_count
+            FROM recommendation_feedback rf
+            JOIN playback_history pb ON pb.track_id = rf.track_id
+            WHERE rf.feedback_type IN ('queue', 'accept', 'replay')
+              AND pb.ts BETWEEN rf.created_at AND (rf.created_at + ?)
+            GROUP BY rf.track_id, rf.artist, rf.title, rf.feedback_type, rf.created_at
+            ORDER BY rf.created_at DESC
+            LIMIT ?
+            """,
+            (window_seconds, limit),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        revelations = [
+            {
+                "track_id": row[0],
+                "artist": row[1],
+                "title": row[2],
+                "feedback_type": row[3],
+                "recommended_at": row[4],
+                "first_replayed_at": row[5],
+                "replay_count": int(row[6] or 0),
+            }
+            for row in rows
+        ]
+
+        return jsonify({
+            "window_days": window_days,
+            "count_this_window": count_this_window,
+            "count_all_time": count_all_time,
+            "revelations": revelations,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
 @bp.route("/")
 def index():
     """Serve the built React UI if it exists, otherwise return API info."""

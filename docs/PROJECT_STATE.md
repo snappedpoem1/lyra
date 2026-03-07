@@ -23,6 +23,7 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Wave 12 (Oracle Action Breadth) is locally landed
   - Wave 13 (Playlist Intelligence) is locally landed
   - Wave 14 (Saved Playlist UI) is locally landed
+  - Wave 15 (Copilot lane: biographer stats fix, revelations metric, duplicates module, vibe→saved_playlists bridge) is locally landed
   - `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` is landed as a docs-only UI structure authority for future route and shell work
   - `docs/PHASE_EXECUTION_COMPANION.md` remains the execution-grade phase sequence companion
 - Governance state:
@@ -80,7 +81,7 @@ From `.venv\Scripts\python.exe -m oracle.status` on this workstation after the W
 
 ## 4) Verification Results (Current High-Water Marks)
 
-- `.venv\Scripts\python.exe -m pytest -q` -> success (`241 passed`) after Wave 13
+- `.venv\Scripts\python.exe -m pytest -q` -> success (`271 passed`) after Wave 15
 - `cd desktop\renderer-app; npx vitest run` -> success (`34 passed`) after Wave 14
 - `cd desktop\renderer-app; npm run build` -> success after Wave 14
 - `cd desktop\renderer-app; npx tsc --noEmit` -> success after Wave 6 frontend plumbing
@@ -113,6 +114,6 @@ From `.venv\Scripts\python.exe -m oracle.status` on this workstation after the W
 ## 7) Immediate Next Pass
 
 1. Continue `oracle mbid resolve` passes until recording MBID coverage clears the practical threshold for broad credit enrichment, then run `oracle credits enrich --limit 500`.
-2. Scope Wave 15 as the next implementation wave: structure analysis coverage hardening, similarity graph growth, or acquisition waterfall improvements.
+2. Continue Wave 15 Codex lane: native OS notifications, global shortcuts, state persistence (Wave 11-11C backlog).
 3. Run blank-machine installer install-and-launch proof once a clean Windows machine or VM is available.
 4. Run full 4-hour parity/audio soak when the release-gate lane is reopened.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
+import logging
 import os
 import sqlite3
 import time
@@ -18,6 +19,11 @@ from oracle.types import PlaylistRun, PlaylistTrack, TrackReason
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VIBES_DIR = VIBES_FOLDER
+
+logger = logging.getLogger(__name__)
+
+# Stable namespace for deterministic vibe→saved_playlist UUIDs
+_VIBE_NS = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")  # uuid.NAMESPACE_URL
 
 
 def _reason_to_dict(reason: TrackReason) -> Dict[str, Any]:
@@ -211,7 +217,33 @@ def save_vibe(name: str, query: str, n: int = 200) -> Dict[str, Any]:
             """,
             track_values,
         )
-    
+
+    # Mirror vibe into saved_playlists so it surfaces in the saved playlist UI
+    # Use a deterministic UUID5 so re-saving the same vibe safely upserts.
+    playlist_id = str(uuid.uuid5(_VIBE_NS, f"lyra:vibe:{safe_name}"))
+    now_ts = created_at
+    cursor.execute(
+        """
+        INSERT INTO saved_playlists (id, name, description, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            description = excluded.description,
+            updated_at = excluded.updated_at
+        """,
+        (playlist_id, safe_name, query, now_ts, now_ts),
+    )
+    # Replace saved_playlist_tracks for this playlist
+    cursor.execute("DELETE FROM saved_playlist_tracks WHERE playlist_id = ?", (playlist_id,))
+    if track_values:
+        cursor.executemany(
+            """
+            INSERT OR IGNORE INTO saved_playlist_tracks (playlist_id, track_id, position)
+            VALUES (?, ?, ?)
+            """,
+            [(playlist_id, tid, pos) for _name, tid, pos in track_values],
+        )
+
     conn.commit()
     conn.close()
     

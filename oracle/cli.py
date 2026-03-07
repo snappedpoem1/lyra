@@ -1283,6 +1283,7 @@ def main() -> None:
             return
 
         if args.biographer_command == "stats":
+            from oracle.db.schema import get_connection
             conn = get_connection()
             try:
                 c = conn.cursor()

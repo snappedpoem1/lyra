@@ -224,3 +224,49 @@ def api_structure_track(track_id: str):
         return jsonify(payload)
     except Exception as e:
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+# ---------------------------------------------------------------------------
+# Routes — Duplicates
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/duplicates/summary", methods=["GET"])
+def api_duplicates_summary():
+    """Return a summary count of duplicate groups detected by each strategy."""
+    try:
+        from oracle.duplicates import get_duplicate_summary
+        threshold = float(request.args.get("threshold", 0.85))
+        threshold = max(0.5, min(1.0, threshold))
+        return jsonify(get_duplicate_summary(metadata_threshold=threshold))
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@bp.route("/api/duplicates", methods=["GET"])
+def api_duplicates():
+    """Return full duplicate groups from all three detection strategies.
+
+    Query params:
+    - strategy: ``exact`` | ``metadata`` | ``path`` | ``all`` (default ``all``)
+    - threshold: float 0.5–1.0 for metadata strategy (default 0.85)
+    """
+    try:
+        from oracle.duplicates import (
+            find_exact_duplicates,
+            find_metadata_duplicates,
+            find_path_duplicates,
+            find_all_duplicates,
+        )
+        strategy = (request.args.get("strategy") or "all").strip().lower()
+        threshold = float(request.args.get("threshold", 0.85))
+        threshold = max(0.5, min(1.0, threshold))
+
+        if strategy == "exact":
+            return jsonify({"exact": find_exact_duplicates()})
+        if strategy == "metadata":
+            return jsonify({"metadata": find_metadata_duplicates(threshold=threshold)})
+        if strategy == "path":
+            return jsonify({"path": find_path_duplicates()})
+        return jsonify(find_all_duplicates(metadata_threshold=threshold))
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500

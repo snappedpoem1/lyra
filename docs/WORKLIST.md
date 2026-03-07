@@ -26,6 +26,13 @@ This file tracks active execution work only.
   - renderer `vitest` reached `34 passed`; build stayed green
 - Docs navigation cleanup landed:
   - folder guides now exist in `docs/`, `docs/sessions/`, `docs/specs/`, `docs/research/`, and `docs/agent_briefs/`
+- Wave 15 (Copilot lane) landed:
+  - `oracle biographer stats` `UnboundLocalError` fixed in `oracle/cli.py`
+  - `GET /api/stats/revelations` endpoint added to `oracle/api/blueprints/core.py`
+  - `oracle/duplicates.py` created with exact-hash + metadata-fuzzy + path duplicate detection
+  - `GET /api/duplicates/summary` and `GET /api/duplicates` endpoints added to `intelligence.py`
+  - vibe→`saved_playlists` bridge wired in `oracle/vibes.py` `save_vibe()` using deterministic UUID5
+  - 30 new tests (test_duplicates.py, test_revelations.py, test_vibe_bridge.py); backend suite now `271 passed`
 
 ## Current State
 
@@ -38,10 +45,8 @@ This file tracks active execution work only.
 ## Next Up
 
 1. Continue `oracle mbid resolve` passes until recording MBID coverage is high enough for broad credit enrichment, then run `oracle credits enrich --limit 500`.
-2. Open Wave 15 with one bounded lane:
-   - structure analysis coverage hardening (`G-032`)
-   - similarity graph growth (`G-030`)
-   - acquisition waterfall improvements
-3. Resume blank-machine installer proof once a clean Windows machine or VM is available.
-4. Run full 4-hour parity soak when the release-gate lane is reopened.
-5. Use `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` before any broader cross-route frontend refactor.
+2. Wave 15 Codex lane: native OS notifications (P1), global shortcuts (P2), native state persistence (P3) per `docs/agent_briefs/wave15-codex-brief.md`.
+3. Structure analysis coverage hardening (`G-032`) and similarity graph growth (`G-030`) as background enrichment passes.
+4. Resume blank-machine installer proof once a clean Windows machine or VM is available.
+5. Run full 4-hour parity soak when the release-gate lane is reopened.
+6. Use `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` before any broader cross-route frontend refactor.

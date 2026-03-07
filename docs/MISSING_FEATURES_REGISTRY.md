@@ -35,6 +35,14 @@ Closed items stay in git history and session logs.
   Closed in Wave 13.
 - `G-041` Saved playlist UI surface
   Closed in Wave 14.
+- `G-042` Biographer stats `UnboundLocalError`
+  Closed in Wave 15 (S-20260307-21). Fixed import scope in `oracle/cli.py`.
+- `G-043` Revelations metric endpoint
+  Closed in Wave 15 (S-20260307-21). `GET /api/stats/revelations` added to `core.py`; returns count_this_window, count_all_time, and detail list.
+- `G-044` Duplicate detection module
+  Closed in Wave 15 (S-20260307-21). `oracle/duplicates.py` created with exact-hash, metadata-fuzzy, and path strategies. API at `GET /api/duplicates` and `GET /api/duplicates/summary`.
+- `G-045` Vibe → saved_playlists orphan
+  Closed in Wave 15 (S-20260307-21). `save_vibe()` in `oracle/vibes.py` now mirrors every vibe save into `saved_playlists` + `saved_playlist_tracks` using a deterministic UUID5 so re-saves are idempotent.
 
 ## Explicitly Not Cancelled
 
