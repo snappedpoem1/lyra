@@ -1,3 +1,4 @@
+import { Badge, Group, Text, Title } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { ConstellationScene } from "@/features/constellation/ConstellationScene";
@@ -22,6 +23,7 @@ export function PlaylistDetailRoute() {
   const replaceQueue = useQueueStore((state) => state.replaceQueue);
   const setCurrentTrack = useQueueStore((state) => state.setCurrentTrack);
   const setTrack = usePlayerStore((state) => state.setTrack);
+  const constellationNodeCount = constellation?.nodes.length ?? 0;
 
   if (!detail) {
     return null;
@@ -29,6 +31,30 @@ export function PlaylistDetailRoute() {
 
   return (
     <div className="route-stack">
+      <LyraPanel className="playlist-archive-hero">
+        <div className="playlist-archive-copy">
+          <span className="hero-kicker">Listening Thread</span>
+          <Title order={1}>{detail.summary.title}</Title>
+          <Text className="playlist-archive-summary">
+            {detail.summary.narrative}
+          </Text>
+        </div>
+        <Group gap="xs" className="playlist-archive-badges">
+          <Badge className="home-stat-badge" size="lg" variant="light" color="midnight">
+            {detail.summary.trackCount} tracks
+          </Badge>
+          <Badge className="home-stat-badge" size="lg" variant="light" color="midnight">
+            {detail.oraclePivots.length} oracle pivots
+          </Badge>
+          <Badge className="home-stat-badge" size="lg" variant="light" color="midnight">
+            {detail.relatedPlaylists.length} related threads
+          </Badge>
+          <Badge className="home-stat-badge" size="lg" variant="light" color="lyra">
+            {detail.summary.freshnessLabel}
+          </Badge>
+        </Group>
+      </LyraPanel>
+
       <PlaylistHero
         detail={detail}
         onPlay={() => void audioEngine.playTrack(detail.tracks[0])}
@@ -43,6 +69,24 @@ export function PlaylistDetailRoute() {
         }
         onConstellation={() => navigate({ to: "/oracle" })}
       />
+
+      <section className="playlist-archive-strip">
+        <LyraPanel className="playlist-archive-signal-card">
+          <span className="insight-kicker">Thread condition</span>
+          <strong>{detail.summary.lastTouchedLabel ?? "Tonight"}</strong>
+          <p>Saved as a reusable route through the current library state.</p>
+        </LyraPanel>
+        <LyraPanel className="playlist-archive-signal-card">
+          <span className="insight-kicker">Emotional markers</span>
+          <strong>{detail.summary.emotionalSignature.length} active tags</strong>
+          <p>{detail.summary.emotionalSignature.map((chip) => chip.key).join(" / ")}</p>
+        </LyraPanel>
+        <LyraPanel className="playlist-archive-signal-card">
+          <span className="insight-kicker">Graph context</span>
+          <strong>{constellationNodeCount} constellation nodes</strong>
+          <p>{constellationNodeCount ? "Nearby graph context is available for pivots." : "Graph context will appear when the backend provides it."}</p>
+        </LyraPanel>
+      </section>
 
       <section className="playlist-focus-grid">
         <EmotionalArcStrip arc={detail.arc} />
@@ -110,11 +154,17 @@ export function PlaylistDetailRoute() {
           <p>{constellationError instanceof Error ? constellationError.message : "The constellation backend did not respond."}</p>
         </section>
       ) : constellation ? (
-        <ConstellationScene
-          nodes={constellation.nodes}
-          edges={constellation.edges}
-          onSelectNode={() => navigate({ to: "/oracle" })}
-        />
+        <section className="playlist-archive-section">
+          <div className="section-heading">
+            <h2>Constellation bridge</h2>
+            <span>{constellation.nodes.length} nodes / {constellation.edges.length} edges</span>
+          </div>
+          <ConstellationScene
+            nodes={constellation.nodes}
+            edges={constellation.edges}
+            onSelectNode={() => navigate({ to: "/oracle" })}
+          />
+        </section>
       ) : null}
     </div>
   );
