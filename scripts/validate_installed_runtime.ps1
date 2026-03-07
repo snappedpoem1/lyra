@@ -35,6 +35,7 @@ param(
     [string]$InstalledExe,
     [string]$InstalledRoot,
     [switch]$SkipLaunchSmoke,
+    [switch]$SkipDataRootProof,
     [int]$HealthTimeoutSeconds = 60
 )
 
@@ -173,6 +174,92 @@ if (-not $SkipLaunchSmoke -and (Test-Path $hostExe)) {
         Write-Pass "installed launch smoke passed"
     } else {
         Write-Fail "installed launch smoke failed (exit $LASTEXITCODE)"
+    }
+}
+
+if (-not $SkipDataRootProof -and (Test-Path $hostExe)) {
+    Write-Section "Installed data-root contract proof"
+    $sandboxRoot = Join-Path $env:TEMP "lyra_installed_data_root_$(Get-Random)"
+    $localAppDataRoot = Join-Path $sandboxRoot "LocalAppData"
+    $expectedDataRoot = Join-Path $localAppDataRoot "Lyra"
+    $savedEnv = @{}
+    foreach ($key in @(
+        "LOCALAPPDATA",
+        "LYRA_DATA_ROOT",
+        "LYRA_LOG_ROOT",
+        "LYRA_TEMP_ROOT",
+        "LYRA_STATE_ROOT",
+        "LYRA_MODEL_CACHE_ROOT",
+        "LYRA_BACKEND_LOG_PATH"
+    )) {
+        $savedEnv[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
+    }
+
+    try {
+        New-Item -ItemType Directory -Path $localAppDataRoot -Force | Out-Null
+        [Environment]::SetEnvironmentVariable("LOCALAPPDATA", $localAppDataRoot, "Process")
+        foreach ($key in @(
+            "LYRA_DATA_ROOT",
+            "LYRA_LOG_ROOT",
+            "LYRA_TEMP_ROOT",
+            "LYRA_STATE_ROOT",
+            "LYRA_MODEL_CACHE_ROOT",
+            "LYRA_BACKEND_LOG_PATH"
+        )) {
+            [Environment]::SetEnvironmentVariable($key, $null, "Process")
+        }
+
+        $proofArgs = @(
+            "-ExecutionPolicy", "Bypass",
+            "-File", (Join-Path $repoRoot "scripts\packaged_host_smoke.ps1"),
+            "-HostExe", $hostExe,
+            "-HealthTimeoutSeconds", "$HealthTimeoutSeconds",
+            "-UseInstalledDataRootContract",
+            "-LocalAppDataRoot", $localAppDataRoot
+        )
+        powershell @proofArgs
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail "installed data-root proof launch failed (exit $LASTEXITCODE)"
+        } else {
+            Write-Pass "installed data-root proof launch passed"
+        }
+
+        foreach ($check in @(
+            @{ Label = "data root"; Path = $expectedDataRoot },
+            @{ Label = "database"; Path = (Join-Path $expectedDataRoot "db\lyra_registry.db") },
+            @{ Label = "chroma"; Path = (Join-Path $expectedDataRoot "chroma") },
+            @{ Label = "logs"; Path = (Join-Path $expectedDataRoot "logs") },
+            @{ Label = "tmp"; Path = (Join-Path $expectedDataRoot "tmp") },
+            @{ Label = "state"; Path = (Join-Path $expectedDataRoot "state") },
+            @{ Label = "cache"; Path = (Join-Path $expectedDataRoot "cache\hf") },
+            @{ Label = "downloads"; Path = (Join-Path $expectedDataRoot "downloads") },
+            @{ Label = "staging"; Path = (Join-Path $expectedDataRoot "staging") }
+        )) {
+            if (Test-Path $check.Path) {
+                Write-Pass "$($check.Label) created under installed LocalAppData root"
+            } else {
+                Write-Fail "$($check.Label) missing under installed LocalAppData root: $($check.Path)"
+            }
+        }
+
+        foreach ($legacyPath in @(
+            (Join-Path $appRoot "lyra_registry.db"),
+            (Join-Path $appRoot "chroma_storage"),
+            (Join-Path $appRoot "logs"),
+            (Join-Path $appRoot "tmp"),
+            (Join-Path $appRoot "state")
+        )) {
+            if (Test-Path $legacyPath) {
+                Write-Fail "installed app root should not accumulate mutable runtime data: $legacyPath"
+            } else {
+                Write-Pass "installed app root stays clean of mutable runtime data: $legacyPath"
+            }
+        }
+    } finally {
+        foreach ($entry in $savedEnv.GetEnumerator()) {
+            [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, "Process")
+        }
+        Remove-Item -Recurse -Force $sandboxRoot -ErrorAction SilentlyContinue
     }
 }
 

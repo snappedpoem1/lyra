@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 import os
 import sys
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from oracle.config import LYRA_DB_PATH
+
 load_dotenv(override=True)
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -95,7 +99,7 @@ def main() -> None:
         print("ERROR: LASTFM_API_KEY not set in .env")
         return
     
-    db_path = Path("lyra_registry.db")
+    db_path = LYRA_DB_PATH
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
     

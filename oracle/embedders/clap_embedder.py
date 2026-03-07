@@ -34,6 +34,7 @@ import numpy as np
 import torch
 from transformers import ClapModel, ClapProcessor
 from dotenv import load_dotenv
+from oracle.config import MODEL_CACHE_HUB_ROOT, MODEL_CACHE_ROOT, ensure_generated_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -84,13 +85,13 @@ class CLAPEmbedder:
         elif os.getenv("HF_HOME"):
             self.cache_dir = os.getenv("HF_HOME")
         else:
-            # Default to project directory
-            project_cache = Path(__file__).resolve().parents[2] / "hf_cache"
+            ensure_generated_dirs()
+            project_cache = MODEL_CACHE_ROOT
             project_cache.mkdir(parents=True, exist_ok=True)
             self.cache_dir = str(project_cache)
             # Also set env var so transformers uses it
             os.environ["HF_HOME"] = self.cache_dir
-            os.environ["HUGGINGFACE_HUB_CACHE"] = str(project_cache / "hub")
+            os.environ["HUGGINGFACE_HUB_CACHE"] = str(MODEL_CACHE_HUB_ROOT)
         
         self.use_fallback = use_fallback
         self.processor = None

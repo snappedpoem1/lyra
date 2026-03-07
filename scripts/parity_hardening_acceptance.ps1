@@ -165,6 +165,35 @@ function Ensure-PlaybackActive {
   return Invoke-LyraJson -Method Get -Path "/api/player/state"
 }
 
+function Wait-PlayerStatus {
+  param(
+    [string[]]$Statuses,
+    [int]$TimeoutMilliseconds = 8000
+  )
+
+  $deadline = (Get-Date).AddMilliseconds($TimeoutMilliseconds)
+  while ((Get-Date) -lt $deadline) {
+    $state = Invoke-LyraJson -Method Get -Path "/api/player/state"
+    if ($Statuses -contains [string]$state.status) {
+      return $state
+    }
+    Start-Sleep -Milliseconds 250
+  }
+
+  $state = Invoke-LyraJson -Method Get -Path "/api/player/state"
+  throw "player did not reach expected status [$($Statuses -join ', ')] (last status: $([string]$state.status))"
+}
+
+function Pause-IfPlaying {
+  $state = Invoke-LyraJson -Method Get -Path "/api/player/state"
+  if ($state.status -ne "playing") {
+    return $state
+  }
+
+  $null = Invoke-LyraJson -Method Post -Path "/api/player/pause" -Body @{}
+  return Wait-PlayerStatus -Statuses @("paused")
+}
+
 function Invoke-SoakMutation {
   param([int]$MutationIndex)
 
@@ -321,10 +350,17 @@ try {
     throw "library response missing track_id"
   }
   $null = Invoke-LyraJson -Method Post -Path "/api/player/queue/add" -Body @{ track_id = $firstTrackId }
-  $null = Invoke-LyraJson -Method Post -Path "/api/player/play" -Body @{ queue_index = 0 }
-  Start-Sleep -Milliseconds 700
-  $null = Invoke-LyraJson -Method Post -Path "/api/player/seek" -Body @{ position_ms = $RecoverySeekMs }
-  $null = Invoke-LyraJson -Method Post -Path "/api/player/pause" -Body @{}
+  $playState = Ensure-PlaybackActive
+  $durationMs = [int]($playState.duration_ms -as [int])
+  $recoverySeekTargetMs = if ($durationMs -gt 0) {
+    [Math]::Min($RecoverySeekMs, [Math]::Max(0, $durationMs - 1500))
+  } else {
+    $RecoverySeekMs
+  }
+  if ($recoverySeekTargetMs -gt 0) {
+    $null = Invoke-LyraJson -Method Post -Path "/api/player/seek" -Body @{ position_ms = $recoverySeekTargetMs }
+  }
+  $null = Pause-IfPlaying
 
   $stateBefore = Invoke-LyraJson -Method Get -Path "/api/player/state"
   $queueBefore = Invoke-LyraJson -Method Get -Path "/api/player/queue"
@@ -366,7 +402,7 @@ try {
   $afterTrackId = [string]$stateAfter.current_track.track_id
   $afterQueueCount = [int]$queueAfter.count
   $afterPositionMs = [int]$stateAfter.position_ms
-  $deltaMs = [Math]::Abs($afterPositionMs - $RecoverySeekMs)
+  $deltaMs = [Math]::Abs($afterPositionMs - $recoverySeekTargetMs)
 
   if ($afterTrackId -ne $beforeTrackId) {
     throw "restart recovery failed: current track mismatch ($beforeTrackId -> $afterTrackId)"
@@ -386,6 +422,7 @@ try {
     after_track_id = $afterTrackId
     after_queue_count = $afterQueueCount
     position_delta_ms = $deltaMs
+    recovery_seek_target_ms = $recoverySeekTargetMs
   }
 
   Write-Step "validating SSE contract post-restart"

@@ -11,9 +11,10 @@ import requests
 
 from dotenv import load_dotenv
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DOWNLOAD_DIR = (PROJECT_ROOT / "downloads").resolve()
-STAGING_DIR = (PROJECT_ROOT / "staging").resolve()
+from oracle.config import DOWNLOADS_FOLDER, STAGING_FOLDER
+
+DOWNLOAD_DIR = Path(DOWNLOADS_FOLDER).resolve()
+STAGING_DIR = Path(STAGING_FOLDER).resolve()
 
 # Prowlarr audio subcategories focused on music releases:
 #   3010 = Audio/MP3

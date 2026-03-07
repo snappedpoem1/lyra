@@ -174,6 +174,13 @@ class MiniaudioPlaybackEngine:
         with self._lock:
             self._finished = True
 
+    def _prime_callback_stream(self, stream: Any) -> Any:
+        try:
+            next(stream)
+        except StopIteration:
+            return stream
+        return stream
+
     def _build_stream(self, seek_frame: int) -> Any:
         base_stream = self._miniaudio.stream_file(
             str(self._file_path),
@@ -183,12 +190,13 @@ class MiniaudioPlaybackEngine:
             frames_to_read=2048,
             seek_frame=max(0, seek_frame),
         )
-        return self._miniaudio.stream_with_callbacks(
+        stream = self._miniaudio.stream_with_callbacks(
             base_stream,
             progress_callback=self._on_progress,
             frame_process_method=self._frame_processor,
             end_callback=self._on_end,
         )
+        return self._prime_callback_stream(stream)
 
     def _rebuild_device(self) -> None:
         if self._device:

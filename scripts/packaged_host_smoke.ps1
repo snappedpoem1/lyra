@@ -3,7 +3,9 @@ param(
   [switch]$RebuildHost,
   [switch]$KeepHostRunning,
   [switch]$AllowExistingBackend,
-  [string]$HostExe
+  [string]$HostExe,
+  [switch]$UseInstalledDataRootContract,
+  [string]$LocalAppDataRoot
 )
 
 $ErrorActionPreference = "Stop"
@@ -88,6 +90,12 @@ $launcherArgs = @(
   "-HealthTimeoutSeconds", "$HealthTimeoutSeconds",
   "-LeaveRunning"
 )
+if ($UseInstalledDataRootContract) {
+  $launcherArgs += "-UseInstalledDataRootContract"
+}
+if ($LocalAppDataRoot) {
+  $launcherArgs += @("-LocalAppDataRoot", $LocalAppDataRoot)
+}
 
 Write-Step "running debug packaged-host launch smoke"
 $launcherOutput = powershell @launcherArgs 2>&1

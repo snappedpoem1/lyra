@@ -16,7 +16,7 @@ from typing import Dict, List, Set, Tuple
 import mutagen
 
 from oracle.acquirers.guard import guard_file, move_rejected_file, GuardResult
-from oracle.config import LIBRARY_BASE, REJECTED_FOLDER
+from oracle.config import DOWNLOADS_FOLDER, LIBRARY_BASE, REJECTED_FOLDER
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +297,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Guarded Import Processor")
     parser.add_argument("command", choices=["scan", "import", "audit", "quarantine"])
-    parser.add_argument("--downloads", default="downloads", help="Downloads folder")
+    parser.add_argument("--downloads", default=str(DOWNLOADS_FOLDER), help="Downloads folder")
     parser.add_argument("--library", default=str(LIBRARY_BASE))
     parser.add_argument("--dry-run", action="store_true", help="Preview only")
     parser.add_argument("--delete-rejected", action="store_true", help="Delete rejected files")

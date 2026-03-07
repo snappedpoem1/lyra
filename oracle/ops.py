@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import sys
 
-from oracle.config import PROJECT_ROOT
+from oracle.config import PROJECT_ROOT, REPORTS_FOLDER
 
 
 @dataclass
@@ -216,7 +216,7 @@ def run_iteration(
 
     if not report_path:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        report_path = str(PROJECT_ROOT / "Reports" / f"ops_iteration_{stamp}.md")
+        report_path = str(REPORTS_FOLDER / f"ops_iteration_{stamp}.md")
     report_file = Path(report_path)
 
     payload = {

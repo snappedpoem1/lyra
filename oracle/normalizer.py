@@ -33,6 +33,7 @@ from mutagen.id3 import ID3, TXXX, ID3NoHeaderError
 from mutagen.mp3 import MP3
 from mutagen.mp4 import MP4
 
+from oracle.config import LYRA_DB_PATH, REPORTS_FOLDER
 from oracle.db.schema import get_connection
 
 logger = logging.getLogger(__name__)
@@ -710,7 +711,7 @@ def _write_easy_tags(
 # ---------------------------------------------------------------------------
 
 def normalize_library(
-    db_path: str = "lyra_registry.db",
+    db_path: str = str(LYRA_DB_PATH),
     apply: bool = False,
     output_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
@@ -792,7 +793,12 @@ def normalize_library(
             },
             "changes": changes,
         }
-        log_path = Path(output_path) if output_path else Path(f"normalize_plan_{int(time.time())}.json")
+        log_path = (
+            Path(output_path)
+            if output_path
+            else REPORTS_FOLDER / f"normalize_plan_{int(time.time())}.json"
+        )
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.write_text(json.dumps(audit, indent=2, ensure_ascii=False), encoding="utf-8")
         logger.info("Audit log written to %s", log_path)
 
@@ -826,7 +832,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Normalize library metadata")
     parser.add_argument("--apply", action="store_true", help="Apply changes (default: dry-run)")
-    parser.add_argument("--db", default="lyra_registry.db", help="Database path")
+    parser.add_argument("--db", default=str(LYRA_DB_PATH), help="Database path")
     parser.add_argument("--output", help="Output path for audit JSON")
 
     args = parser.parse_args()

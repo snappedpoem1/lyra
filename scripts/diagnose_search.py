@@ -7,7 +7,9 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-db_path = Path("lyra_registry.db")
+from oracle.config import LYRA_DB_PATH
+
+db_path = LYRA_DB_PATH
 conn = sqlite3.connect(str(db_path))
 cursor = conn.cursor()
 
@@ -18,7 +20,7 @@ for row in cursor.fetchall():
 
 print("\n=== Sample IDs from ChromaDB ===")
 from oracle.chroma_store import LyraChromaStore
-store = LyraChromaStore(persist_dir="./chroma_storage")
+store = LyraChromaStore()
 
 # Get some IDs from ChromaDB
 result = store.collection.peek(limit=5)

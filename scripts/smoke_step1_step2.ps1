@@ -37,6 +37,47 @@ function Invoke-LyraJson {
   return Invoke-RestMethod -Method $Method -Uri $uri
 }
 
+function Wait-PlayerStatus {
+  param(
+    [string[]]$Statuses,
+    [int]$TimeoutMilliseconds = 8000
+  )
+
+  $deadline = (Get-Date).AddMilliseconds($TimeoutMilliseconds)
+  while ((Get-Date) -lt $deadline) {
+    $state = Invoke-LyraJson -Method Get -Path "/api/player/state"
+    if ($Statuses -contains [string]$state.status) {
+      return $state
+    }
+    Start-Sleep -Milliseconds 250
+  }
+
+  $state = Invoke-LyraJson -Method Get -Path "/api/player/state"
+  throw "player did not reach expected status [$($Statuses -join ', ')] (last status: $([string]$state.status))"
+}
+
+function Ensure-PlaybackActive {
+  param([int]$QueueIndex = 0)
+
+  $state = Invoke-LyraJson -Method Get -Path "/api/player/state"
+  if (($state.status -eq "playing") -and $state.current_track -and $state.current_track.track_id) {
+    return $state
+  }
+
+  $null = Invoke-LyraJson -Method Post -Path "/api/player/play" -Body @{ queue_index = $QueueIndex }
+  return Wait-PlayerStatus -Statuses @("playing")
+}
+
+function Pause-IfPlaying {
+  $state = Invoke-LyraJson -Method Get -Path "/api/player/state"
+  if ($state.status -ne "playing") {
+    return $state
+  }
+
+  $null = Invoke-LyraJson -Method Post -Path "/api/player/pause" -Body @{}
+  return Wait-PlayerStatus -Statuses @("paused")
+}
+
 function Test-HealthReady {
   try {
     $health = Invoke-LyraJson -Method Get -Path "/api/health"
@@ -122,13 +163,21 @@ try {
   }
 
   Write-Step "running canonical player commands"
-  $null = Invoke-LyraJson -Method Post -Path "/api/player/play" -Body @{ queue_index = 0 }
-  Start-Sleep -Milliseconds 900
-  $null = Invoke-LyraJson -Method Post -Path "/api/player/seek" -Body @{ position_ms = 10000 }
+  $playState = Ensure-PlaybackActive -QueueIndex 0
+  $durationMs = [int]($playState.duration_ms -as [int])
+  $seekTargetMs = if ($durationMs -gt 12000) {
+    10000
+  } elseif ($durationMs -gt 2500) {
+    [Math]::Max(0, $durationMs - 1500)
+  } else {
+    0
+  }
+  if ($seekTargetMs -gt 0) {
+    $null = Invoke-LyraJson -Method Post -Path "/api/player/seek" -Body @{ position_ms = $seekTargetMs }
+  }
   $null = Invoke-LyraJson -Method Post -Path "/api/player/mode" -Body @{ shuffle = $false; repeat_mode = "one" }
-  Start-Sleep -Milliseconds 500
-  $null = Invoke-LyraJson -Method Post -Path "/api/player/pause" -Body @{}
-  $null = Invoke-LyraJson -Method Post -Path "/api/player/play" -Body @{ queue_index = 0 }
+  $null = Pause-IfPlaying
+  $null = Ensure-PlaybackActive -QueueIndex 0
 
   Write-Step "soak polling player state for $SoakSeconds seconds"
   $deadline = (Get-Date).AddSeconds($SoakSeconds)
@@ -159,7 +208,7 @@ try {
     throw "SSE stream did not include player_state_changed"
   }
 
-  $null = Invoke-LyraJson -Method Post -Path "/api/player/pause" -Body @{}
+  $null = Pause-IfPlaying
   Write-Step "step 1 + step 2 smoke passed"
 } finally {
   if ($startedSidecar -and $sidecarRootPid) {

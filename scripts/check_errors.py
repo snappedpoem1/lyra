@@ -6,10 +6,14 @@ import sys
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-db_path = Path("lyra_registry.db")
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from oracle.config import LYRA_DB_PATH
+
+db_path = LYRA_DB_PATH
 if not db_path.exists():
     print("Database not found")
-    exit(1)
+    sys.exit(1)
 
 conn = sqlite3.connect(str(db_path))
 cursor = conn.cursor()
