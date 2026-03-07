@@ -52,7 +52,7 @@ import type {
   VibeCreateResult,
   VibeGenerateResult,
 } from "@/types/domain";
-import { requestJson } from "./client";
+import { requestJson, resolveApiUrl } from "./client";
 import { mapBootStatus, mapDoctorReport, mapDossier, mapGeneratedVibe, mapOracleRecommendations, mapPlaylistDetail, mapPlaylists, mapRadioQueue, mapSearch, mapTrack } from "./mappers";
 import { useConnectivityStore } from "@/stores/connectivityStore";
 
@@ -95,6 +95,54 @@ export async function getPlaylists(): Promise<PlaylistSummary[]> {
     }
     throw error;
   }
+}
+
+export async function getSavedPlaylists(): Promise<Array<{ id: string; name: string; description: string; track_count: number; created_at: number; updated_at: number }>> {
+  const res = await fetch(resolveApiUrl("/api/playlists"));
+  if (!res.ok) throw new Error(`getSavedPlaylists failed: ${res.status}`);
+  const data = await res.json() as { playlists: Array<{ id: string; name: string; description: string; track_count: number; created_at: number; updated_at: number }> };
+  return data.playlists ?? [];
+}
+
+export async function createPlaylist(name: string, description = "", trackIds: string[] = []): Promise<{ id: string; name: string }> {
+  const res = await fetch(resolveApiUrl("/api/playlists"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, description, track_ids: trackIds }),
+  });
+  if (!res.ok) throw new Error(`createPlaylist failed: ${res.status}`);
+  const data = await res.json() as { playlist: { id: string; name: string } };
+  return data.playlist;
+}
+
+export async function addTracksToPlaylist(playlistId: string, trackIds: string[]): Promise<void> {
+  const res = await fetch(resolveApiUrl(`/api/playlists/${encodeURIComponent(playlistId)}/tracks`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ track_ids: trackIds }),
+  });
+  if (!res.ok) throw new Error(`addTracksToPlaylist failed: ${res.status}`);
+}
+
+export async function removeTrackFromPlaylist(playlistId: string, trackId: string): Promise<void> {
+  const res = await fetch(resolveApiUrl(`/api/playlists/${encodeURIComponent(playlistId)}/tracks/${encodeURIComponent(trackId)}`), {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`removeTrackFromPlaylist failed: ${res.status}`);
+}
+
+export async function deletePlaylist(playlistId: string): Promise<void> {
+  const res = await fetch(resolveApiUrl(`/api/playlists/${encodeURIComponent(playlistId)}`), {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`deletePlaylist failed: ${res.status}`);
+}
+
+export async function playPlaylist(playlistId: string): Promise<void> {
+  const res = await fetch(resolveApiUrl(`/api/playlists/${encodeURIComponent(playlistId)}/play`), {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(`playPlaylist failed: ${res.status}`);
 }
 
 export async function getPlaylistDetail(id: string): Promise<PlaylistDetail> {

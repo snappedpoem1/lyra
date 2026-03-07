@@ -155,11 +155,12 @@ This file tracks active execution work only.
 
 - Active: Wave 11 (Companion Pulse) — completed: SPEC-011, `oracle/companion/pulse.py` (`CompanionPulse` + `get_companion_pulse` singleton), `/ws/companion` SSE blueprint, blueprint registered in registry, 14 new tests (215 total passing), `useCompanionStream.ts` SSE hook, `companionLines.ts` authored templates, `LyraCompanion.tsx` now event-driven (stream consumer with static fallback), `settingsStore.ts` `notificationsEnabled` added. Renderer: 26 tests passing, clean build.
 - Active: Wave 12 (Oracle Action Breadth) — **completed S-20260307-14**: `PlayerService.set_volume()` + `clear_queue()`; `/api/player/volume` + `/api/player/queue/clear`; 8 new oracle execute actions (`resume`, `set_volume`, `set_shuffle`, `set_repeat`, `clear_queue`, `play_artist`, `play_album`, `play_similar`); agentActionRouter 8 new cases; 11 new contract tests; 226 Python tests passing; clean npm build; G-037 closed.
+- Active: Wave 13 (Playlist Intelligence) — **completed S-20260307-16**: `saved_playlists` + `saved_playlist_tracks` schema tables; `oracle/api/blueprints/playlists.py` with 7 CRUD+play endpoints; vibes.py route conflict resolved; 4 new oracle execute actions (`create_playlist`, `add_to_playlist`, `play_playlist`, `list_playlists`); agentActionRouter 4 new cases; 6 gateway mutation helpers in queries.ts; 15 new contract tests; 241 Python tests passing; clean npm build.
 
 ## Next Up
 
 1. Continue `oracle mbid resolve` passes until recording_mbid coverage exceeds 50%, then run `oracle credits enrich --limit 500` for MBID-backed credit rows.
-2. **Wave 13**: scope candidates — playlist intelligence (save/load/edit playlists), acquisition waterfall improvements, native OS notification delivery (Tauri plugin), or deeper intelligence surfaces.
+2. **Wave 14**: scope candidates — structure analysis coverage expansion, acquisition waterfall improvements, native OS notification delivery (Tauri plugin), or deeper intelligence surfaces.
 3. Resume blank-machine installer proof once a clean Windows machine or VM is available.
 4. Run full 4-hour parity soak when the release-gate lane is reopened.
 

@@ -116,18 +116,6 @@ def api_vibes_list():
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 
-@bp.route("/api/playlists/<playlist_id>", methods=["GET"])
-def api_playlist_detail(playlist_id: str):
-    """Return canonical playlist/listening-thread detail."""
-    try:
-        detail = _load_vibe_detail(playlist_id)
-        if not detail:
-            return jsonify({"error": "Playlist not found"}), 404
-        return jsonify(detail)
-    except Exception as e:
-        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
-
-
 @bp.route("/api/playlists/<int:run_id>/explain", methods=["GET"])
 def api_playlist_explain(run_id: int):
     """Structured reasons for every track in a playlist run (F-007)."""

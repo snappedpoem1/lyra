@@ -177,6 +177,47 @@ export function routeAgentAction(response: AgentResponse): void {
       nav("/queue");
       break;
 
+    case "create_playlist": {
+      const plName = (i.name ?? i.playlist_name) as string | undefined;
+      if (plName) {
+        callApi("/api/oracle/action/execute", {
+          action_type: "create_playlist",
+          payload: {
+            name: plName,
+            description: (i.description as string | undefined) ?? "",
+            track_ids: (i.track_ids as string[] | undefined) ?? [],
+          },
+        });
+        nav("/playlists");
+      }
+      break;
+    }
+
+    case "add_to_playlist": {
+      const plId = (i.playlist_id ?? i.id) as string | undefined;
+      const addIds = (i.track_ids ?? i.tracks) as string[] | undefined;
+      if (plId && addIds?.length) {
+        callApi("/api/oracle/action/execute", {
+          action_type: "add_to_playlist",
+          payload: { playlist_id: plId, track_ids: addIds },
+        });
+      }
+      break;
+    }
+
+    case "play_playlist": {
+      const playId = (i.playlist_id ?? i.id) as string | undefined;
+      if (playId) {
+        callApi("/api/playlists/" + encodeURIComponent(playId) + "/play");
+        nav("/queue");
+      }
+      break;
+    }
+
+    case "list_playlists":
+      nav("/playlists");
+      break;
+
     default:
       // "respond", "error", "suggest" — text shown in thread, no routing
       break;

@@ -40,6 +40,7 @@ BLUEPRINTS: list[BlueprintSpec] = [
     BlueprintSpec("oracle.api.blueprints.player"),
     BlueprintSpec("oracle.api.blueprints.oracle_actions"),
     BlueprintSpec("oracle.api.blueprints.recommendations"),
+    BlueprintSpec("oracle.api.blueprints.playlists"),
     BlueprintSpec("oracle.api.blueprints.vibes"),
     BlueprintSpec("oracle.api.blueprints.acquire"),
     BlueprintSpec("oracle.api.blueprints.intelligence"),

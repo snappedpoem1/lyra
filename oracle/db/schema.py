@@ -617,6 +617,34 @@ def _apply_schema() -> bool:
     c.execute("CREATE INDEX IF NOT EXISTS idx_llm_audit_track ON llm_audit(track_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_llm_audit_created_at ON llm_audit(created_at)")
 
+    # Wave 13 — User-saved named playlists (SPEC-012)
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS saved_playlists (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            created_at REAL DEFAULT (strftime('%s', 'now')),
+            updated_at REAL DEFAULT (strftime('%s', 'now'))
+        )
+        """
+    )
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS saved_playlist_tracks (
+            playlist_id TEXT NOT NULL,
+            track_id TEXT NOT NULL,
+            position INTEGER NOT NULL DEFAULT 0,
+            added_at REAL DEFAULT (strftime('%s', 'now')),
+            PRIMARY KEY (playlist_id, track_id),
+            FOREIGN KEY (playlist_id) REFERENCES saved_playlists(id) ON DELETE CASCADE,
+            FOREIGN KEY (track_id) REFERENCES tracks(track_id)
+        )
+        """
+    )
+    c.execute("CREATE INDEX IF NOT EXISTS idx_saved_pl_name ON saved_playlists(name)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_saved_pl_tracks_playlist ON saved_playlist_tracks(playlist_id, position)")
+
     conn.commit()
     try:
         return True

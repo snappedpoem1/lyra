@@ -605,6 +605,50 @@ def api_oracle_action_execute() -> tuple[Any, int] | Any:
                 {"status": "ok", "action_type": action_type, "source_track_id": current_id, **queued}
             )
 
+        if action_type == "create_playlist":
+            from oracle.api.blueprints.playlists import _create_playlist, _add_tracks_to_playlist
+            name = str(payload_dict.get("name") or "").strip()
+            if not name:
+                return jsonify({"error": "payload.name is required"}), 400
+            description = str(payload_dict.get("description") or "").strip()
+            pl = _create_playlist(name, description)
+            seed_ids: list[str] = [str(t) for t in (payload_dict.get("track_ids") or []) if t]
+            if seed_ids:
+                _add_tracks_to_playlist(pl["id"], seed_ids)
+                pl["track_count"] = len(seed_ids)
+            return jsonify({"status": "ok", "action_type": action_type, "playlist": pl})
+
+        if action_type == "add_to_playlist":
+            from oracle.api.blueprints.playlists import _add_tracks_to_playlist
+            playlist_id = str(payload_dict.get("playlist_id") or "").strip()
+            if not playlist_id:
+                return jsonify({"error": "payload.playlist_id is required"}), 400
+            track_ids_raw: list[str] = [str(t) for t in (payload_dict.get("track_ids") or []) if t]
+            if not track_ids_raw:
+                return jsonify({"error": "payload.track_ids is required"}), 400
+            inserted = _add_tracks_to_playlist(playlist_id, track_ids_raw)
+            return jsonify({"status": "ok", "action_type": action_type,
+                            "playlist_id": playlist_id, "inserted": inserted})
+
+        if action_type == "play_playlist":
+            from oracle.api.blueprints.playlists import _get_playlist_track_ids
+            playlist_id = str(payload_dict.get("playlist_id") or "").strip()
+            if not playlist_id:
+                return jsonify({"error": "payload.playlist_id is required"}), 400
+            track_ids_pl = _get_playlist_track_ids(playlist_id)
+            if not track_ids_pl:
+                return jsonify({"error": "playlist is empty or has no active tracks"}), 404
+            queued_pl = _queue_track_ids(service, track_ids_pl)
+            state_pl = service.play()
+            return jsonify({"status": "ok", "action_type": action_type,
+                            "playlist_id": playlist_id, "state": state_pl, **queued_pl})
+
+        if action_type == "list_playlists":
+            from oracle.api.blueprints.playlists import _list_saved_playlists
+            playlists = _list_saved_playlists()
+            return jsonify({"status": "ok", "action_type": action_type,
+                            "playlists": playlists, "count": len(playlists)})
+
         return jsonify({"error": f"unsupported action_type: {action_type}"}), 400
     except KeyError:
         return jsonify({"error": "track not found"}), 404

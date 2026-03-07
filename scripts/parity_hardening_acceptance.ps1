@@ -40,6 +40,18 @@ function Stop-ProcessTree {
   Stop-Process -Id $RootPid -Force -ErrorAction SilentlyContinue
 }
 
+function Invoke-CheckedPowerShellScript {
+  param(
+    [string]$ScriptPath,
+    [string[]]$ArgumentList = @()
+  )
+
+  & powershell -ExecutionPolicy Bypass -File $ScriptPath @ArgumentList
+  if ($LASTEXITCODE -ne 0) {
+    throw "script failed ($LASTEXITCODE): $ScriptPath"
+  }
+}
+
 function Invoke-LyraJson {
   param(
     [string]$Method,
@@ -135,6 +147,8 @@ function Start-Sidecar {
   $env:LYRA_PROJECT_ROOT = $RepoRoot
   $env:LYRA_SKIP_VENV_REEXEC = "1"
   $env:LYRA_BOOTSTRAP = "0"
+  Remove-Item Env:LYRA_DATA_ROOT -ErrorAction SilentlyContinue
+  Remove-Item Env:LYRA_USE_LEGACY_DATA_ROOT -ErrorAction SilentlyContinue
   if ($DataRoot) {
     $env:LYRA_DATA_ROOT = $DataRoot
   }
@@ -169,8 +183,7 @@ function Get-PlaybackActiveState {
 
   $queueIndex = [int]$state.current_queue_index
   $null = Invoke-LyraJson -Method Post -Path "/api/player/play" -Body @{ queue_index = $queueIndex }
-  Start-Sleep -Milliseconds 700
-  return Invoke-LyraJson -Method Get -Path "/api/player/state"
+  return Wait-PlayerStatus -Statuses @("playing")
 }
 
 function Wait-PlayerStatus {
@@ -275,6 +288,19 @@ function Assert-SoakState {
   }
 }
 
+function Stop-ExistingBackendListener {
+  $existingListenerPid = Get-BackendListenerProcessId
+  if ($null -eq $existingListenerPid) {
+    return
+  }
+
+  Write-Step "stopping pre-existing backend listener for deterministic sidecar validation"
+  Stop-ProcessTree -RootPid $existingListenerPid
+  if (-not (Wait-PortReleased -TimeoutSeconds 15)) {
+    throw "existing backend listener did not release port 5000"
+  }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
 
@@ -295,16 +321,10 @@ Write-Step "writing soak artifacts to $resolvedLogDirectory"
 
 if (-not $SkipInstallerProof) {
   Write-Step "running clean-machine installer proof"
-  powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\validate_clean_machine_install.ps1") -SkipToolSmokeCheck
-  if ($LASTEXITCODE -ne 0) {
-    throw "clean-machine installer proof failed (exit $LASTEXITCODE)"
-  }
+  Invoke-CheckedPowerShellScript -ScriptPath (Join-Path $repoRoot "scripts\validate_clean_machine_install.ps1") -ArgumentList @("-SkipToolSmokeCheck")
 
   Write-Step "running packaged streamrip proof"
-  powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\validate_packaged_streamrip.ps1")
-  if ($LASTEXITCODE -ne 0) {
-    throw "packaged streamrip proof failed (exit $LASTEXITCODE)"
-  }
+  Invoke-CheckedPowerShellScript -ScriptPath (Join-Path $repoRoot "scripts\validate_packaged_streamrip.ps1")
 }
 
 $sidecarExe = Join-Path $repoRoot ".lyra-build\bin\lyra_backend.exe"
@@ -314,22 +334,15 @@ $startedByThisScript = $false
 
 if (-not $SkipSidecarBuild) {
   Write-Step "building sidecar (launch check skipped; this script validates runtime)"
-  powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\build_backend_sidecar.ps1") -SkipLaunchCheck
+  Invoke-CheckedPowerShellScript -ScriptPath (Join-Path $repoRoot "scripts\build_backend_sidecar.ps1") -ArgumentList @("-SkipLaunchCheck")
 }
 
 if (-not (Test-Path $sidecarExe)) {
   throw "sidecar executable not found: $sidecarExe"
 }
 
-if (Test-HealthReady) {
-  Write-Step "stopping pre-existing backend listener for deterministic sidecar validation"
-  $existingListenerPid = Get-BackendListenerProcessId
-  if ($existingListenerPid) {
-    Stop-ProcessTree -RootPid $existingListenerPid
-    if (-not (Wait-PortReleased -TimeoutSeconds 15)) {
-      throw "existing backend listener did not release port 5000"
-    }
-  }
+if ($null -ne (Get-BackendListenerProcessId)) {
+  Stop-ExistingBackendListener
 }
 
 Write-Step "starting sidecar backend"
@@ -345,7 +358,11 @@ if (-not (Wait-HealthReady -TimeoutSeconds $StartupTimeoutSeconds -HostProcess $
 
 try {
   Write-Step "running Step 1/2 smoke"
-  powershell -ExecutionPolicy Bypass -File (Join-Path $repoRoot "scripts\smoke_step1_step2.ps1") -SkipSidecarBuild -StartupTimeoutSeconds $StartupTimeoutSeconds -SoakSeconds ([Math]::Min($SoakSeconds, 30))
+  Invoke-CheckedPowerShellScript -ScriptPath (Join-Path $repoRoot "scripts\smoke_step1_step2.ps1") -ArgumentList @(
+    "-SkipSidecarBuild",
+    "-StartupTimeoutSeconds", [string]$StartupTimeoutSeconds,
+    "-SoakSeconds", [string]([Math]::Min($SoakSeconds, 30))
+  )
   Write-JsonSnapshot -Label "post-step1-2-smoke"
 
   Write-Step "preparing restart recovery assertion state"

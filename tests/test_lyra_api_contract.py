@@ -50,26 +50,26 @@ def test_doctor_contract(client, monkeypatch):
 
 
 def test_playlist_detail_contract(client, monkeypatch):
-    monkeypatch.setattr(
-        vibes_bp,
-        "_load_vibe_detail",
-        lambda playlist_id: {
-            "id": playlist_id,
-            "kind": "vibe",
-            "title": "Test Playlist",
-            "subtitle": "prompt",
-            "narrative": "story",
-            "trackCount": 1,
-            "freshnessLabel": "Saved vibe",
-            "coverMosaic": ["T"],
-            "emotionalSignature": [],
-            "tracks": [{"track_id": "track-1", "artist": "A", "title": "B"}],
-            "storyBeats": ["beat"],
-            "arc": [{"step": 1, "energy": 0.4, "valence": 0.5, "tension": 0.3}],
-            "relatedPlaylists": [],
-            "oraclePivots": [],
-        },
-    )
+    _vibe_detail = {
+        "id": "test-playlist",
+        "kind": "vibe",
+        "title": "Test Playlist",
+        "subtitle": "prompt",
+        "narrative": "story",
+        "trackCount": 1,
+        "freshnessLabel": "Saved vibe",
+        "coverMosaic": ["T"],
+        "emotionalSignature": [],
+        "tracks": [{"track_id": "track-1", "artist": "A", "title": "B"}],
+        "storyBeats": ["beat"],
+        "arc": [{"step": 1, "energy": 0.4, "valence": 0.5, "tension": 0.3}],
+        "relatedPlaylists": [],
+        "oraclePivots": [],
+    }
+    # Patch both the vibes blueprint (for old vibes tests) and api_helpers
+    # (where the playlists blueprint imports _load_vibe_detail lazily)
+    monkeypatch.setattr(vibes_bp, "_load_vibe_detail", lambda playlist_id: _vibe_detail)
+    monkeypatch.setattr(api_helpers, "_load_vibe_detail", lambda playlist_id: _vibe_detail)
     response = client.get("/api/playlists/test-playlist")
     assert response.status_code == 200
     payload = response.get_json()
