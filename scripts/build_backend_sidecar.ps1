@@ -61,9 +61,34 @@ $env:LYRA_SKIP_VENV_REEXEC = "1"
 $excludeModules = @(
     "nltk"
 )
+# PyInstaller's collect-submodules is not sufficient on its own for the
+# dynamically imported Flask blueprint package in the frozen onefile build.
+# Keep explicit hidden imports for the blueprint package and every registered
+# blueprint so the sidecar exposes the real API contract after packaging.
+$hiddenImports = @(
+    "oracle.api",
+    "oracle.api.app",
+    "oracle.api.registry",
+    "oracle.api.blueprints",
+    "oracle.api.blueprints.core",
+    "oracle.api.blueprints.search",
+    "oracle.api.blueprints.library",
+    "oracle.api.blueprints.player",
+    "oracle.api.blueprints.oracle_actions",
+    "oracle.api.blueprints.recommendations",
+    "oracle.api.blueprints.vibes",
+    "oracle.api.blueprints.acquire",
+    "oracle.api.blueprints.intelligence",
+    "oracle.api.blueprints.radio",
+    "oracle.api.blueprints.agent",
+    "oracle.api.blueprints.pipeline",
+    "oracle.api.blueprints.enrich",
+    "oracle.api.blueprints.discovery"
+)
 # Collect all oracle subpackages so dynamic blueprint/player/acquirer imports
 # are always available in the frozen binary on a clean install (no venv).
 $collectSubmodules = @(
+    "oracle.api",
     "oracle.api.blueprints",
     "oracle.player",
     "oracle.acquirers",
@@ -74,6 +99,7 @@ $collectSubmodules = @(
     "oracle.enrichers"
 )
 $collectArgs = $collectSubmodules | ForEach-Object { "--collect-submodules", $_ }
+$hiddenImportArgs = $hiddenImports | ForEach-Object { "--hidden-import", $_ }
 & $pythonExe -m PyInstaller `
     --noconfirm `
     --clean `
@@ -83,6 +109,7 @@ $collectArgs = $collectSubmodules | ForEach-Object { "--collect-submodules", $_ 
     --workpath $workDir `
     --specpath $specDir `
     --exclude-module $excludeModules[0] `
+    @hiddenImportArgs `
     @collectArgs `
     $entrypoint
 if ($LASTEXITCODE -ne 0) {

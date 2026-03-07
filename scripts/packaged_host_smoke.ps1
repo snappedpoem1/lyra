@@ -2,6 +2,7 @@ param(
   [int]$HealthTimeoutSeconds = 120,
   [switch]$RebuildHost,
   [switch]$KeepHostRunning,
+  [switch]$AllowExistingBackend,
   [string]$HostExe
 )
 
@@ -21,6 +22,27 @@ function Stop-ProcessTree {
     Stop-ProcessTree -RootPid $childPid
   }
   Stop-Process -Id $RootPid -Force -ErrorAction SilentlyContinue
+}
+
+function Get-BackendListenerProcessId {
+  $listener = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($null -eq $listener) {
+    return $null
+  }
+  return [int]$listener.OwningProcess
+}
+
+function Wait-PortReleased {
+  param([int]$TimeoutSeconds = 15)
+
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $deadline) {
+    if ($null -eq (Get-BackendListenerProcessId)) {
+      return $true
+    }
+    Start-Sleep -Milliseconds 250
+  }
+  return $false
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -44,6 +66,17 @@ if ($RebuildHost) {
     }
   } finally {
     Pop-Location
+  }
+}
+
+if (-not $AllowExistingBackend) {
+  $existingListenerPid = Get-BackendListenerProcessId
+  if ($existingListenerPid) {
+    Write-Step "stopping pre-existing backend listener ($existingListenerPid) for deterministic packaged smoke"
+    Stop-ProcessTree -RootPid $existingListenerPid
+    if (-not (Wait-PortReleased -TimeoutSeconds 15)) {
+      throw "existing backend listener did not release port 5000"
+    }
   }
 }
 
