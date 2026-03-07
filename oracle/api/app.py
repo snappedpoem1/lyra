@@ -81,6 +81,14 @@ def create_app() -> Flask:
     except Exception as exc:  # noqa: BLE001
         logger.warning("[acquisition-bootstrap] startup refresh failed: %s", exc)
     _maybe_start_clap_prewarm()
+    try:
+        from oracle.ingest_confidence import backfill_placed_tracks
+
+        n = backfill_placed_tracks()
+        if n > 0:
+            logger.info("[ingest-confidence] backfilled %d placed track(s)", n)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[ingest-confidence] backfill failed: %s", exc)
 
     return app
 

@@ -316,6 +316,23 @@ def _check_recommendation_providers() -> list[CheckResult]:
     return results
 
 
+def _check_ingest_confidence() -> CheckResult:
+    """Check ingest confidence state — placed/rejected counts and stall detection."""
+    try:
+        from oracle.ingest_confidence import get_confidence_summary  # lazy; avoids import cycles
+
+        s = get_confidence_summary()
+        placed = s.get("summary", {}).get("placed", 0)
+        rejected = s.get("summary", {}).get("rejected", 0)
+        stalled = s.get("stalled", 0)
+        backfill = s.get("backfill_count", 0)
+        detail = f"{placed} placed / {rejected} rejected / {stalled} stalled (backfill {backfill})"
+        status = "WARNING" if stalled > 0 else "PASS"
+        return CheckResult("Ingest Confidence", status, detail)
+    except Exception as exc:  # noqa: BLE001
+        return CheckResult("Ingest Confidence", "WARNING", f"Could not query: {exc}")
+
+
 def run_doctor() -> List[CheckResult]:
     return [
         _check_python(),
@@ -336,6 +353,7 @@ def run_doctor() -> List[CheckResult]:
         _check_lidarr(),
         _check_llm(),
         *_check_recommendation_providers(),
+        _check_ingest_confidence(),
     ]
 
 

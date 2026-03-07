@@ -129,9 +129,39 @@ This file tracks active execution work only.
 
 - Active: docs synchronization and tandem-wave protocol hardening after local Wave 2 landing
 
-## In Progress (Current Session S-20260307-01)
+- Wave 5 provider contract and recommendation core landed locally (S-20260307-07):
+   - all providers return normalized `ProviderResult` with structured evidence (`SPEC-004`)
+   - broker output is versioned with `schema_version`, per-provider `provider_reports`, `degraded` flag, and `degradation_summary`
+   - provider health registry tracks success/degraded/unavailable transitions with structured logging (`SPEC-006`)
+   - provider health exposed in `/api/health`, `/api/status`, `/api/recommendations/providers/health`, and `oracle doctor`
+   - backend suite is now `153 passed`
+- Wave 6 product explainability surfaces landed locally (S-20260307-07):
+   - frontend Oracle route uses brokered recommendation path (`SPEC-005`)
+   - provider chips, confidence bands, degraded-state banners, and expandable "Why this?" evidence trace active
+   - TypeScript types and Zod schemas for SPEC-004 payload in place
+   - renderer zero type errors and build pass clean
+- Frozen sidecar rebuilt post-Wave 5+6 (S-20260307-07):
+   - `scripts/build_backend_sidecar.ps1` rebuilt `.lyra-build/bin/lyra_backend.exe` (310.7 MB, March 7 2026 15:10)
+   - sidecar launch check passed after rebuild
+- Wave 7 parity soak validated (S-20260307-07):
+   - `scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SkipInstallerProof -UseLegacyDataRoot -SoakSeconds 60 -StartupTimeoutSeconds 90` passed
+   - Step 1+2 smoke (health, library, canonical player commands, SSE stream) passed
+   - restart recovery passed
+   - 60-second stability soak with pause/resume and seek mutations passed
+   - constraint: `LYRA_USE_LEGACY_DATA_ROOT=1` needed because dev data root has not been migrated with library data; `-UseLegacyDataRoot` flag added to parity script for this workaround
+   - `scripts/parity_hardening_acceptance.ps1` extended with `-UseLegacyDataRoot` switch
 
-- Active: companion-doc execution framing for Waves 3 through 11, with immediate execution still starting at Wave 3 / Iteration 3A
+## In Progress (Current Session S-20260307-10)
+
+- Active: Wave 9 (Scout + Community Weather) — completed: SPEC-008, `oracle/integrations/listenbrainz.py` `get_similar_artists_recordings()`, `_recommend_from_scout()` and `_recommend_from_listenbrainz_weather()` in broker, `_SCOUT_GENRE_BRIDGES` adjacency map, `_scout_bridge_genre()` helper, `tests/test_scout_weather.py` (21 new tests), full suite 188 passing
+
+## In Progress (Current Session S-20260307-08)
+
+- Active: Wave 8 (Ingest Confidence + Normalization) — completed: SPEC-007, `oracle/ingest_confidence.py`, DB table, 5-stage `_native_ingest` hook, `/api/ingest/confidence/*` endpoints, `_check_ingest_confidence` in doctor, startup backfill, 14 new tests, full suite 167 passing
+
+## In Progress (Current Session S-20260307-07)
+
+- Active: Wave 7 doc sync — recording Wave 5+6 completion state and Wave 7 blocked items with evidence
 
 ## In Progress (Current Session S-20260307-05)
 
@@ -152,9 +182,8 @@ This file tracks active execution work only.
 
 ## Next Up
 
-1. Open Wave 5 implementation using `docs/specs/SPEC-004_RECOMMENDATION_PROVIDER_CONTRACT.md` as the contract authority.
+1. Open Wave 10 (MBID Identity Spine + Live Orbit): write spec first, then implement per `docs/PHASE_EXECUTION_COMPANION.md`.
 2. Resume blank-machine installer proof once a clean Windows machine or VM is available.
-3. Revisit the 4-hour parity/audio soak when release-gate work is back in scope.
-4. Resume later metadata/product-depth waves only after the earlier runtime/release gates remain green.
-5. Use `docs/PHASE_EXECUTION_COMPANION.md` as the iteration-level execution reference for any later wave opening.
-6. Use `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` as the structural authority before any future cross-route frontend refactor or new explainability-surface adoption pass.
+3. Run full 4-hour parity soak when the release-gate lane is reopened.
+4. Use `docs/PHASE_EXECUTION_COMPANION.md` as the iteration-level execution reference for any later wave opening.
+5. Use `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` as the structural authority before any future cross-route frontend refactor or new explainability-surface adoption pass.

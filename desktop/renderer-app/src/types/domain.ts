@@ -63,12 +63,38 @@ export interface OracleRecommendation {
   actions: Array<"play-now" | "replace-queue" | "append-queue" | "save-playlist" | "open-constellation">;
 }
 
+export type RecommendationAvailability = "local" | "acquisition-lead" | "unresolved";
+
+export interface EvidenceItem {
+  type: string;
+  source: string;
+  weight: number;
+  text: string;
+  rawValue?: unknown;
+}
+
 export interface RecommendationProviderSignal {
   provider: RecommendationProvider | string;
   label: string;
   score: number;
   rawScore: number;
   reason: string;
+}
+
+export interface ProviderError {
+  code: string;
+  message: string;
+  detail?: string;
+}
+
+export interface ProviderReport {
+  provider: string;
+  status: "ok" | "empty" | "degraded" | "failed";
+  message: string;
+  seedContext: string;
+  candidates: Array<Record<string, unknown>>;
+  errors: ProviderError[];
+  timingMs: number;
 }
 
 export interface RecommendationProviderStatus {
@@ -86,6 +112,7 @@ export interface AcquisitionLead {
   provider: RecommendationProvider | string;
   reason: string;
   score: number;
+  evidence: EvidenceItem[];
 }
 
 export interface BrokeredRecommendation {
@@ -93,6 +120,11 @@ export interface BrokeredRecommendation {
   brokerScore: number;
   primaryReason: string;
   providerSignals: RecommendationProviderSignal[];
+  evidence: EvidenceItem[];
+  confidence: number;
+  noveltyBandFit: string;
+  availability: RecommendationAvailability;
+  explanation: string;
 }
 
 export interface RecommendationBrokerResponse {
@@ -103,8 +135,11 @@ export interface RecommendationBrokerResponse {
   seedTrack?: TrackListItem | null;
   providerWeights: Record<string, number>;
   providerStatus: Record<string, RecommendationProviderStatus>;
+  providerReports: ProviderReport[];
   recommendations: BrokeredRecommendation[];
   acquisitionLeads: AcquisitionLead[];
+  degraded: boolean;
+  degradationSummary: string;
 }
 
 export interface PlaylistDetail {

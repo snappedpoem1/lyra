@@ -10,7 +10,9 @@ param(
   [switch]$SkipSidecarBuild,
   [switch]$SkipInstallerProof,
   [switch]$SkipSoakMutations,
-  [switch]$LeaveBackendRunning
+  [switch]$LeaveBackendRunning,
+  [string]$DataRoot = "",
+  [switch]$UseLegacyDataRoot
 )
 
 $ErrorActionPreference = "Stop"
@@ -133,6 +135,12 @@ function Start-Sidecar {
   $env:LYRA_PROJECT_ROOT = $RepoRoot
   $env:LYRA_SKIP_VENV_REEXEC = "1"
   $env:LYRA_BOOTSTRAP = "0"
+  if ($DataRoot) {
+    $env:LYRA_DATA_ROOT = $DataRoot
+  }
+  if ($UseLegacyDataRoot) {
+    $env:LYRA_USE_LEGACY_DATA_ROOT = "1"
+  }
   return Start-Process -FilePath $ExePath -WorkingDirectory $RepoRoot -PassThru
 }
 

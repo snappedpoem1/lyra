@@ -573,7 +573,26 @@ def _apply_schema() -> bool:
         """
     )
 
-    # â”€â”€ All indexes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Wave 8 — Ingest confidence lifecycle (SPEC-007)
+    c.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ingest_confidence (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            track_id TEXT,
+            filepath TEXT NOT NULL,
+            state TEXT NOT NULL,
+            reason_codes TEXT NOT NULL DEFAULT '[]',
+            source TEXT,
+            transitioned_at REAL DEFAULT (strftime('%s', 'now')),
+            FOREIGN KEY (track_id) REFERENCES tracks(track_id)
+        )
+        """
+    )
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ingest_conf_filepath ON ingest_confidence(filepath)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ingest_conf_state ON ingest_confidence(state)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ingest_conf_track_id ON ingest_confidence(track_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ingest_conf_transitioned_at ON ingest_confidence(transitioned_at)")
+
     c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_filepath ON tracks(filepath)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_status ON tracks(status)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_tracks_artist_title ON tracks(artist, title)")

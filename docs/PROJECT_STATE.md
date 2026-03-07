@@ -7,16 +7,19 @@ This is the current repo/runtime snapshot verified from this workspace.
 ## 1) Repository State
 
 - Branch: `main`
-- Working tree: local changes pending for sessions `S-20260306-17` through `S-20260307-05`
-- Latest committed baseline before this audit: `1d09322` (`S-20260306-16` qobuz tier1 fix docs)
+- Working tree: local changes pending for sessions `S-20260306-17` through `S-20260307-07`
+- Latest committed baseline before this audit: `eb4180c` (`S-20260307` Wave 5B + 5C completion)
 - Program state:
   - the governance-first split modernization sequence is now locally aligned through Wave 2
   - Wave 3 (`LYRA_DATA_ROOT` and mutable-data authority) is now locally closed through the runtime contract plus explicit migrate-now/defer actions
   - Wave 4 desktop stack modernization is now locally landed through the Tauri 2 host/runtime upgrade and acceptance pass
-  - Wave 5 can now proceed locally while blank-machine proof remains blocked-external and the 4-hour soak is intentionally deferred until a later release-gate window
+  - Wave 5 (Provider Contract and Recommendation Core) is now locally landed: normalized provider contract (`SPEC-004`), provider health registry (`SPEC-006`), versioned broker output with evidence preservation, and provider-level diagnostics
+  - Wave 6 (Product Explainability Surfaces) is now locally landed: frontend types and Zod schemas for SPEC-004, brokered recommendation query path, provider chips, confidence bands, degraded-state banners, and expandable "Why this?" evidence trace on recommendation cards
+  - Wave 7 (Release-Gate Closure) is locally landed (packaged host smoke passes, 60-second parity soak passes); blank-machine proof remains blocked-external, 4-hour soak remains deferred
+  - Wave 8 (Ingest Confidence + Normalization) is locally landed: SPEC-007 spec, `oracle/ingest_confidence.py` state machine, `ingest_confidence` DB table, 5-stage hook in `_native_ingest`, `/api/ingest/confidence/*` endpoints, `_check_ingest_confidence` in doctor, startup backfill
+  - Wave 9 (Scout + Community Weather) is locally landed: SPEC-008 spec, Scout cross-genre bridge provider (`_recommend_from_scout`) and ListenBrainz community weather provider (`_recommend_from_listenbrainz_weather`) are wired into the recommendation broker with weight keys `scout: 0.10` and `listenbrainz_weather: 0.10`; `_SCOUT_GENRE_BRIDGES` adjacency map, `_scout_bridge_genre()` helper, and `get_similar_artists_recordings()` LB expansion function are all landed; 21 new contract tests bring the suite to 188 passing
   - a docs-only UI structure planning contract is now landed in `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` so future frontend work is driven by route archetypes, shell responsibilities, and evidence placement instead of ad hoc page composition
   - `docs/PHASE_EXECUTION_COMPANION.md` now carries the execution-grade phase sequence, iteration order, and owner-split rules from Wave 3 through the committed long-horizon end state
-  - later metadata/product-depth work remains out of scope until earlier runtime/release gates stay green
 - Governance state:
   - root `AGENTS.md` plus scoped lane briefs/instruction files exist in the working tree
   - nearest-directory `AGENTS.md` files now exist for `oracle/`, `desktop/renderer-app/`, `scripts/`, and `docs/`
@@ -69,8 +72,18 @@ This is the current repo/runtime snapshot verified from this workspace.
   - Recommendation broker contract is exposed at:
     - `POST /api/recommendations/oracle`
     - `POST /api/recommendations/oracle/feedback`
-  - Broker fuses local radio, Last.fm similar-track signals, and ListenBrainz community top-recording signals
+    - `GET /api/recommendations/providers/health`
+  - Broker fuses local radio, Last.fm similar-track signals, ListenBrainz community top-recording signals, Scout cross-genre bridge leads, and ListenBrainz community weather (similar-artist chain) signals — 5 providers total
   - Recommendation feedback is persisted in SQLite and used as a lightweight ranking bias
+  - All providers now return normalized `ProviderResult` with structured evidence items (`SPEC-004`)
+  - Broker output is versioned (`schema_version: "2026-03-07"`) and includes:
+    - `provider_reports` with per-provider timing, status, and error detail
+    - `recommendations` with merged evidence chains and provenance labels
+    - `degraded` flag and `degradation_summary` for partial-failure visibility
+  - Two new provider slots from Wave 9 (SPEC-008): `scout` (Discogs cross-genre bridge) and `listenbrainz_weather` (LB similar-artist chain); new evidence types `scout_bridge_artist`, `scout_cross_genre`, `community_similar_artist`, `community_top_recording`
+  - Provider health registry (`SPEC-006`) tracks success/degraded/unavailable state transitions with structured logging
+  - Provider health summaries are surfaced in `/api/health`, `/api/status`, `/api/recommendations/providers/health`, and `oracle doctor`
+  - Frontend Oracle route now uses the brokered recommendation path with provider chips, confidence bands, degraded-state banners, and expandable "Why this?" evidence trace (`SPEC-005`)
 - Acquisition and runtime packaging:
   - `LYRA_DATA_ROOT` is now the config-owned writable-data authority for SQLite, Chroma, logs, temp, runtime state, HuggingFace cache, staging/downloads, and generated reports/playlists/vibes artifacts
   - dev default data root resolves to `%LOCALAPPDATA%\Lyra\dev`
@@ -125,6 +138,13 @@ This is the current repo/runtime snapshot verified from this workspace.
 - Spotify import background path:
   - `POST /api/spotify/import` triggers a non-blocking Spotify history import
   - `GET /api/spotify/import/status` reports running state, last result, and last error
+- Ingest confidence (Wave 8 — SPEC-007):
+  - `oracle/ingest_confidence.py` — lifecycle state machine: `acquired → validated → normalized → enriched → placed / rejected`
+  - `ingest_confidence` table in SQLite (added to `oracle/db/schema.py`)
+  - 5-stage hook in `oracle/ingest_watcher.py` `_native_ingest()`: record_transition at guard, validated, moved, enriched, placed
+  - Blueprint `oracle/api/blueprints/ingest.py` at `/api/ingest/confidence/summary` and `/api/ingest/confidence/recent`
+  - `_check_ingest_confidence()` in `oracle/doctor.py` surfaces placed/rejected/stalled counts
+  - `backfill_placed_tracks()` runs at app startup to seed confidence rows for all existing library tracks
 
 ## 3) Runtime Metrics
 
@@ -194,6 +214,13 @@ From `.venv\Scripts\python.exe -m oracle.status` after the Wave 3 cutover on thi
 - `cd desktop\renderer-app; npm run build` -> success after the Wave 4 Tauri 2 dependency uplift
 - `cd desktop\renderer-app; npm run tauri:build -- --debug` -> success after the Wave 4 Tauri 2 host migration (debug host rebuilt, MSI and NSIS bundles produced)
 - `powershell -ExecutionPolicy Bypass -File scripts/packaged_host_smoke.ps1 -HealthTimeoutSeconds 45` -> success after the Wave 4 Tauri 2 host migration
+- `.venv\Scripts\python.exe -m pytest -q` -> success (`153 passed`) after Wave 5 + Wave 6 completion
+- `.venv\Scripts\python.exe -m pytest -q` -> success (`167 passed`) after Wave 8 ingest confidence completion
+- `.venv\Scripts\python.exe -m pytest -q` -> success (`188 passed`) after Wave 9 Scout + community weather completion
+- `cd desktop\renderer-app; npx tsc --noEmit` -> success (zero type errors) after Wave 6 frontend plumbing
+- `cd desktop\renderer-app; npm run build` -> success after Wave 6 provenance surfaces
+- `powershell -ExecutionPolicy Bypass -File scripts/packaged_host_smoke.ps1 -HealthTimeoutSeconds 45` -> success (Wave 7 baseline smoke)
+- `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SkipInstallerProof -UseLegacyDataRoot -SoakSeconds 60 -StartupTimeoutSeconds 90` -> success (Wave 7 60-second parity soak: sidecar rebuilt with Wave 5+6 modules, Step 1+2 smoke, restart recovery, sustained stability soak with pause/resume and seek mutations)
 
 ## 5) Documentation Truth Status
 
@@ -207,19 +234,23 @@ From `.venv\Scripts\python.exe -m oracle.status` after the Wave 3 cutover on thi
   - Wave 2 build/release governance is locally landed and validated
   - Wave 3 runtime/data-root contract is locally landed and validated, including explicit migrate-now/defer CLI and API flow
   - Wave 4 desktop stack modernization is locally landed and validated against the packaged host contract
-  - Wave 5 is now the next implementation wave while blank-machine proof remains blocked-external and soak work is deferred
+  - Wave 5 provider contract and Wave 6 explainability surfaces are locally landed
+  - Wave 7 release-gate closure is locally landed; packaged host smoke passes, blank-machine proof remains blocked-external, 4-hour soak remains deferred
+  - Wave 8 ingest confidence is locally landed
+  - Wave 9 Scout + community weather is locally landed
   - a standing tandem-wave protocol now defines how Codex and Copilot split future waves without overlapping file ownership
   - the new execution companion turns Waves 3 through 11 into one iteration-level committed phase track without replacing the roadmap authority
 
 ## 6) Active Gaps
 
 1. Blank-machine installer install-and-launch validation is still pending outside this workstation and is currently blocked by the lack of a clean Windows machine or VM.
-2. Native audio (`miniaudio`) production soak validation across real devices and a full 4-hour long-session run is intentionally deferred until a later release-gate window.
-3. Mantine/Figma foundation plus the bespoke shell pass are live across the main workspace, Home, Queue, Playlists, playlist detail, Search, Oracle, Vibe Library, the Library route shell, backend/doctor system panels, Artist, and key secondary surfaces, but not yet across every remaining legacy route or panel.
+2. Native audio (`miniaudio`) full 4-hour production soak is intentionally deferred until a later release-gate window; the 60-second parity soak with the rebuilt sidecar passes in dev-validation mode.
+3. The dev data root at `%LOCALAPPDATA%\Lyra\dev` has not yet been migrated with the full library data; parity soak uses `LYRA_USE_LEGACY_DATA_ROOT=1` as a dev-validation workaround until data-root migration is explicitly run.
+4. Mantine/Figma foundation plus the bespoke shell pass are live across the main workspace, Home, Queue, Playlists, playlist detail, Search, Oracle, Vibe Library, the Library route shell, backend/doctor system panels, Artist, and key secondary surfaces; `SPEC-009` now defines the route-archetype and shell-responsibility contract for finishing that work, but not every remaining route or panel has been adopted to it yet.
+5. Wave 8 ingest confidence rows are written only for new ingest events going forward; the startup backfill covers existing placed tracks, but normalized/enriched states for historical events are not reconstructed.
 
 ## 7) Immediate Next Pass
 
-1. Open Wave 5 provider-contract and recommendation-core work on top of the settled Wave 4 host/runtime contract.
+1. Open Wave 10 (MBID Identity Spine + Live Orbit) — per `docs/PHASE_EXECUTION_COMPANION.md`, this is the next wave in the committed sequence.
 2. Run blank-machine installer install-and-launch proof once a clean Windows machine or VM is available.
-3. Revisit the 4-hour parity/audio soak when the release-gate window is reopened.
-4. Resume later metadata/product-depth expansion only after the earlier runtime/release gates stay green.
+3. Run full 4-hour parity/audio soak when the release-gate lane is reopened.

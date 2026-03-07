@@ -104,6 +104,18 @@ a { color: inherit; text-decoration: none; }
   border-color: rgba(200, 255, 130, 0.55);
 }
 
+.lyra-button--subtle {
+  background: transparent;
+  border-color: transparent;
+  opacity: 0.7;
+  font-size: 0.82rem;
+}
+.lyra-button--subtle:hover {
+  background: rgba(42, 47, 54, 0.4);
+  border-color: rgba(160, 170, 185, 0.15);
+  opacity: 1;
+}
+
 .lyra-pill {
   display: inline-flex;
   align-items: center;
@@ -2002,6 +2014,40 @@ a { color: inherit; text-decoration: none; }
 /* ── Oracle ──────────────────────────────────────────────────────────────── */
 .oracle-deck, .oracle-card { display: grid; gap: var(--space-md); }
 .oracle-card { padding: var(--space-lg); }
+.oracle-degraded-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid rgba(255, 165, 0, 0.25);
+  background: rgba(255, 165, 0, 0.06);
+}
+.oracle-degraded-text { font-size: 0.85rem; color: var(--text-muted); }
+.oracle-deck-actions { padding-top: var(--space-sm); }
+.oracle-card--expanded { border-color: rgba(var(--lyra-rgb, 120,90,255), 0.3); }
+.oracle-trace {
+  display: grid;
+  gap: var(--space-sm);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.oracle-trace-label { font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.oracle-trace-table { width: 100%; border-collapse: collapse; }
+.oracle-trace-table th,
+.oracle-trace-table td { padding: 2px var(--space-sm); text-align: left; }
+.oracle-trace-table th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.oracle-trace-evidence { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
+.oracle-trace-evidence-text { color: var(--text); }
+.oracle-trace-evidence-weight { opacity: 0.5; }
+.oracle-trace-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
 
 /* ── Thread / layer cards ────────────────────────────────────────────────── */
 .thread-row {

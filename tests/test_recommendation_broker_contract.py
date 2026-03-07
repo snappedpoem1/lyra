@@ -189,6 +189,16 @@ def test_recommendation_broker_merges_provider_signals(monkeypatch: pytest.Monke
             ),
         ]),
     )
+    monkeypatch.setattr(
+        broker,
+        "_recommend_from_scout",
+        lambda **_: _make_provider_result("scout", status=ProviderStatus.EMPTY),
+    )
+    monkeypatch.setattr(
+        broker,
+        "_recommend_from_listenbrainz_weather",
+        lambda **_: _make_provider_result("listenbrainz_weather", status=ProviderStatus.EMPTY),
+    )
 
     payload = broker.recommend_tracks(
         seed_track_id=None,
@@ -200,8 +210,8 @@ def test_recommendation_broker_merges_provider_signals(monkeypatch: pytest.Monke
 
     # SPEC-004: schema_version is current
     assert payload["schema_version"] == "2026-03-07"
-    # SPEC-004: provider_reports present
-    assert len(payload["provider_reports"]) == 3
+    # SPEC-004: provider_reports present (5 providers in Wave 9+)
+    assert len(payload["provider_reports"]) == 5
     # SPEC-004: recommendations and degraded
     assert "recommendations" in payload
     assert payload["degraded"] is False

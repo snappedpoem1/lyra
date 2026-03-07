@@ -140,6 +140,30 @@ export const radioResultsSchema = z.object({
   count: z.number(),
 });
 
+export const evidenceItemSchema = z.object({
+  type: z.string(),
+  source: z.string(),
+  weight: z.number(),
+  text: z.string(),
+  raw_value: z.any().optional(),
+});
+
+export const providerErrorSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  detail: z.string().optional(),
+});
+
+export const providerReportSchema = z.object({
+  provider: z.string(),
+  status: z.enum(["ok", "empty", "degraded", "failed"]),
+  message: z.string(),
+  seed_context: z.string(),
+  candidates: z.array(z.record(z.any())),
+  errors: z.array(providerErrorSchema),
+  timing_ms: z.number(),
+});
+
 export const recommendationBrokerSchema = z.object({
   schema_version: z.string(),
   mode: z.string(),
@@ -147,6 +171,12 @@ export const recommendationBrokerSchema = z.object({
   seed_track_id: z.string().nullable().optional(),
   seed_track: z.record(z.any()).nullable().optional(),
   provider_weights: z.record(z.number()),
+  // SPEC-004 fields
+  provider_reports: z.array(providerReportSchema).optional(),
+  recommendations: z.array(z.record(z.any())).optional(),
+  degraded: z.boolean().optional(),
+  degradation_summary: z.string().optional(),
+  // Legacy compat fields
   provider_status: z.record(
     z.object({
       available: z.boolean(),

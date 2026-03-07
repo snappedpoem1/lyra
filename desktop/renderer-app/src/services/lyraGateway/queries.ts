@@ -34,7 +34,9 @@ import type {
   ConstellationNode,
   DoctorCheck,
   DoctorReport,
+  EvidenceItem,
   LibraryAlbumDetail,
+  RecommendationAvailability,
   LibraryArtistDetail,
   OracleMode,
   OracleRecommendation,
@@ -249,6 +251,31 @@ export async function getBrokeredRecommendations(options: {
     ]),
   );
 
+  const providerReports = Array.isArray(payload.provider_reports)
+    ? payload.provider_reports.map((r) => ({
+        provider: r.provider,
+        status: r.status as "ok" | "empty" | "degraded" | "failed",
+        message: r.message,
+        seedContext: r.seed_context,
+        candidates: r.candidates,
+        errors: r.errors.map((e) => ({
+          code: e.code,
+          message: e.message,
+          detail: e.detail,
+        })),
+        timingMs: r.timing_ms,
+      }))
+    : [];
+
+  const mapEvidence = (raw: unknown[]): EvidenceItem[] =>
+    raw.map((item) => item as Record<string, unknown>).map((e) => ({
+      type: String(e.type ?? ""),
+      source: String(e.source ?? ""),
+      weight: typeof e.weight === "number" ? e.weight : 0,
+      text: String(e.text ?? ""),
+      rawValue: e.raw_value,
+    }));
+
   return {
     schemaVersion: payload.schema_version,
     mode: payload.mode,
@@ -257,12 +284,20 @@ export async function getBrokeredRecommendations(options: {
     seedTrack: payload.seed_track ? mapTrack(payload.seed_track) : null,
     providerWeights: payload.provider_weights,
     providerStatus,
+    providerReports,
+    degraded: payload.degraded ?? false,
+    degradationSummary: payload.degradation_summary ?? "",
     recommendations: payload.candidates.map((row) => ({
       track: mapTrack(row),
       brokerScore: typeof row.broker_score === "number" ? row.broker_score : Number(row.broker_score ?? 0),
       primaryReason: typeof row.reason === "string" ? row.reason : "Brokered recommendation",
+      evidence: Array.isArray(row.evidence) ? mapEvidence(row.evidence) : [],
+      confidence: typeof row.confidence === "number" ? row.confidence : 0,
+      noveltyBandFit: typeof row.novelty_band_fit === "string" ? row.novelty_band_fit : "stretch",
+      availability: (typeof row.availability === "string" ? row.availability : "unresolved") as RecommendationAvailability,
+      explanation: typeof row.explanation === "string" ? row.explanation : "",
       providerSignals: Array.isArray(row.provider_signals)
-        ? row.provider_signals.flatMap((signal) => {
+        ? row.provider_signals.flatMap((signal: Record<string, unknown>) => {
             if (!signal || typeof signal !== "object") {
               return [];
             }
@@ -282,12 +317,13 @@ export async function getBrokeredRecommendations(options: {
       provider: row.provider,
       reason: row.reason,
       score: row.score,
+      evidence: Array.isArray(row.evidence) ? mapEvidence(row.evidence) : [],
     })),
   };
 }
 
 export async function submitRecommendationFeedback(payload: {
-  feedbackType: "accepted" | "queued" | "skipped" | "replayed" | "acquire_requested";
+  feedbackType: "accepted" | "queued" | "skipped" | "replayed" | "acquire_requested" | "keep" | "play" | "dismiss";
   trackId?: string;
   artist?: string;
   title?: string;

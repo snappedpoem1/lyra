@@ -472,3 +472,167 @@ def get_top_recordings_for_artist_name(artist_name: str, count: int = 8) -> List
         logger.debug("[listenbrainz] no MBID available for artist '%s'", artist)
         return []
     return _get_top_recordings(mbid, artist, safe_count, sess)
+
+
+# ---------------------------------------------------------------------------
+# Similar-artist chain (community weather)
+# ---------------------------------------------------------------------------
+
+def _get_similar_artists(
+    artist_mbid: str,
+    count: int,
+    sess: requests.Session,
+) -> List[Dict]:
+    """Fetch ListenBrainz similar artists for an artist MBID.
+
+    Uses the LB similarity endpoint (no auth required).  Returns a list of
+    dicts with ``artist_mbid``, ``name``, and ``similarity`` (0.0–1.0) keys.
+    Results are cached in ``enrich_cache`` for ``_CACHE_TTL_SECONDS``.
+
+    Args:
+        artist_mbid: MusicBrainz artist MBID.
+        count: Maximum number of similar artists to return.
+        sess: HTTP session.
+
+    Returns:
+        Up to ``count`` similar-artist dicts, sorted by similarity descending.
+    """
+    import json as _json
+
+    safe_count = max(1, min(count, 20))
+    cache_key = f"similar_artists:{artist_mbid}:{safe_count}"
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT payload_json FROM enrich_cache "
+            "WHERE provider = 'listenbrainz_similar' AND lookup_key = ? "
+            "AND fetched_at > ?",
+            (cache_key, time.time() - _CACHE_TTL_SECONDS),
+        ).fetchone()
+        if row:
+            return _json.loads(row[0]).get("artists", [])[:safe_count]
+    finally:
+        conn.close()
+
+    _lb_rate_limit()
+    try:
+        resp = sess.get(
+            f"{_LB_BASE}/similarity/artist/{artist_mbid}/",
+            params={"algorithm": "session_based_days_7500_session_300_contribution_5_threshold_05_limit_100_offset_0_base_skip_1"},
+            timeout=_REQUEST_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            logger.debug(
+                "[listenbrainz] similar-artists returned %d for %s",
+                resp.status_code,
+                artist_mbid,
+            )
+            return []
+        data = resp.json()
+    except Exception as exc:
+        logger.debug("[listenbrainz] similar-artists request failed for '%s': %s", artist_mbid, exc)
+        return []
+
+    # The response is a list of similar-artist objects
+    raw = data if isinstance(data, list) else data.get("similar_artists", [])
+    artists: List[Dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        mbid_val = item.get("artist_mbid") or item.get("mbid") or ""
+        name = item.get("name") or item.get("artist_name") or ""
+        similarity = float(item.get("similarity", 0.0) or 0.0)
+        if mbid_val and name:
+            artists.append({"artist_mbid": mbid_val, "name": name, "similarity": similarity})
+
+    artists.sort(key=lambda a: a["similarity"], reverse=True)
+    artists = artists[:safe_count]
+
+    conn2 = get_connection()
+    try:
+        conn2.execute(
+            "INSERT OR REPLACE INTO enrich_cache "
+            "(provider, lookup_key, payload_json, fetched_at) VALUES (?, ?, ?, ?)",
+            ("listenbrainz_similar", cache_key, _json.dumps({"artists": artists}), time.time()),
+        )
+        conn2.commit()
+    finally:
+        conn2.close()
+
+    return artists
+
+
+def get_similar_artists_recordings(
+    artist_name: str,
+    count_artists: int = 5,
+    recordings_per_artist: int = 3,
+) -> List[Dict]:
+    """Return top recordings from ListenBrainz similar artists.
+
+    Resolves the seed artist to a MusicBrainz MBID, fetches LB similar artists,
+    then fetches the community top recordings for each.  This is the "community
+    weather" signal — what similar artists' audiences consider essential right now.
+
+    Args:
+        artist_name: Seed artist name.
+        count_artists: Max similar artists to follow (capped at 10).
+        recordings_per_artist: Top recordings to fetch per similar artist (capped at 5).
+
+    Returns:
+        List of recording dicts with ``artist``, ``title``, ``listen_count``,
+        ``recording_mbid``, ``similarity_score``, and ``source_artist`` keys.
+        Empty list if the seed artist cannot be resolved or LB is unavailable.
+    """
+    artist_name = artist_name.strip()
+    if not artist_name:
+        return []
+
+    safe_count_artists = max(1, min(int(count_artists), 10))
+    safe_rpa = max(1, min(int(recordings_per_artist), 5))
+
+    sess = _session()
+    seed_mbid = _get_mbid(artist_name, sess)
+    if not seed_mbid:
+        logger.debug("[listenbrainz] no MBID for seed artist '%s' — community weather unavailable", artist_name)
+        return []
+
+    similar = _get_similar_artists(seed_mbid, safe_count_artists, sess)
+    if not similar:
+        logger.debug("[listenbrainz] no similar artists found for '%s'", artist_name)
+        return []
+
+    results: List[Dict] = []
+    for sim_artist in similar:
+        sim_mbid = sim_artist["artist_mbid"]
+        sim_name = sim_artist["name"]
+        similarity = sim_artist["similarity"]
+        recordings = _get_top_recordings(sim_mbid, sim_name, safe_rpa, sess)
+        for rec in recordings:
+            results.append(
+                {
+                    "artist": rec.get("artist", sim_name),
+                    "title": rec.get("title", ""),
+                    "listen_count": rec.get("listen_count", 0),
+                    "recording_mbid": rec.get("recording_mbid", ""),
+                    "similarity_score": round(similarity, 4),
+                    "source_artist": artist_name,
+                }
+            )
+
+    # Sort by combined signal: similarity × listen popularity
+    for r in results:
+        import math
+        pop_factor = min(1.0, math.log10(max(10, r["listen_count"])) / 6.0)
+        r["_sort_score"] = r["similarity_score"] * 0.6 + pop_factor * 0.4
+
+    results.sort(key=lambda r: r["_sort_score"], reverse=True)
+    for r in results:
+        r.pop("_sort_score", None)
+
+    logger.debug(
+        "[listenbrainz] community weather for '%s': %d candidates from %d similar artists",
+        artist_name,
+        len(results),
+        len(similar),
+    )
+    return results

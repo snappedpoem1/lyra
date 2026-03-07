@@ -425,16 +425,20 @@ def _native_ingest(files: List[Path]) -> Dict[str, int]:
 
     from oracle.acquirers.guard import guard_file, move_rejected_file
     from oracle.config import LIBRARY_BASE
+    from oracle.ingest_confidence import record_transition
     from oracle.indexer import index_track_ids
     from oracle.name_cleaner import target_path as _target_path
     from oracle.scanner import AUDIO_EXTS, extract_metadata, scan_paths
 
     summary = {"imported": 0, "rejected": 0, "errors": 0}
     accepted_paths: List[Path] = []
+    # tracks src → dest mapping for later confidence updates
+    moved_map: Dict[str, str] = {}
 
     # --- Stage 1 & 2: guard + move ---
     for src in files:
         try:
+            record_transition(str(src), "acquired", ["file_detected"], source=src.name)
             result = guard_file(src)
             if not result.allowed:
                 move_rejected_file(src, result)
@@ -452,9 +456,22 @@ def _native_ingest(files: List[Path]) -> Dict[str, int]:
                             result.artist,
                             result.title,
                         )
+                reason = result.rejection_reason or "unknown"
+                # Map guard reasons to spec reason codes
+                if result.is_duplicate:
+                    codes = ["guard_duplicate"]
+                elif "junk" in reason.lower() or "karaoke" in reason.lower():
+                    codes = ["guard_junk"]
+                elif "label" in reason.lower():
+                    codes = ["guard_label"]
+                else:
+                    codes = ["guard_junk"]
+                record_transition(str(src), "rejected", codes, source=src.name)
                 summary["rejected"] += 1
-                logger.info("[INGEST] REJECT %s — %s", src.name, result.rejection_reason)
+                logger.info("[INGEST] REJECT %s — %s", src.name, reason)
                 continue
+
+            record_transition(str(src), "validated", ["guard_pass"], source=src.name)
 
             meta  = extract_metadata(src)
             artist    = meta.get("artist", "") or "Unknown Artist"
@@ -474,12 +491,15 @@ def _native_ingest(files: List[Path]) -> Dict[str, int]:
 
             if dest.exists():
                 logger.info("[INGEST] SKIP (exists): %s", dest.name)
+                record_transition(str(dest), "normalized", ["moved_to_library"], source=src.name)
                 summary["imported"] += 1  # already there counts
                 continue
 
             dest.parent.mkdir(parents=True, exist_ok=True)
             _shutil.move(str(src), str(dest))
             logger.info("[INGEST] MOVED: %s → …/%s/%s", src.name, dest.parent.name, dest.name)
+            record_transition(str(dest), "normalized", ["normalized_name", "moved_to_library"], source=f"{artist} - {title}")
+            moved_map[str(src)] = str(dest)
             accepted_paths.append(dest)
 
         except Exception as exc:
@@ -499,6 +519,29 @@ def _native_ingest(files: List[Path]) -> Dict[str, int]:
         summary["errors"] += len(accepted_paths)
         return summary
 
+    # Build filepath → track_id map for enrichment/placed records
+    path_to_track_id: Dict[str, str] = {}
+    if track_ids:
+        from oracle.db.schema import get_connection as _get_conn
+        _conn = _get_conn(timeout=5.0)
+        try:
+            placeholders = ",".join("?" * len(accepted_paths))
+            rows = _conn.execute(
+                f"SELECT track_id, filepath FROM tracks WHERE filepath IN ({placeholders})",
+                [str(p) for p in accepted_paths],
+            ).fetchall()
+            path_to_track_id = {r[1]: r[0] for r in rows}
+        except Exception:
+            pass
+        finally:
+            _conn.close()
+
+    # Record enrichment_skipped — no external enrichment source in vanilla ingest
+    for dest in accepted_paths:
+        tid = path_to_track_id.get(str(dest))
+        src_name = next((s for s, d in moved_map.items() if d == str(dest)), dest.name)
+        record_transition(str(dest), "enriched", ["enrichment_skipped"], track_id=tid, source=src_name)
+
     # --- Stages 4 & 5: index (embed + auto-score) ---
     if track_ids:
         try:
@@ -507,6 +550,16 @@ def _native_ingest(files: List[Path]) -> Dict[str, int]:
             scored  = idx_result.get("scored", 0)
             logger.info("[INGEST] Indexed: %d embedded, %d scored", indexed, scored)
             summary["imported"] += indexed
+            # Record placed for indexed tracks
+            for dest in accepted_paths:
+                tid = path_to_track_id.get(str(dest))
+                src_name = next((s for s, d in moved_map.items() if d == str(dest)), dest.name)
+                placement_codes = ["scan_complete"]
+                if indexed > 0:
+                    placement_codes.append("embedding_indexed")
+                if scored > 0:
+                    placement_codes.append("scored")
+                record_transition(str(dest), "placed", placement_codes, track_id=tid, source=src_name)
         except Exception as exc:
             logger.error("[INGEST] Index stage failed: %s", exc)
             summary["errors"] += len(track_ids)

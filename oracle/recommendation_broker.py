@@ -18,7 +18,10 @@ from typing import Any
 from oracle.api.helpers import _load_track
 from oracle.db.schema import get_connection, get_write_mode
 from oracle.enrichers.lastfm import build_track_profile
-from oracle.integrations.listenbrainz import get_top_recordings_for_artist_name
+from oracle.integrations.listenbrainz import (
+    get_similar_artists_recordings,
+    get_top_recordings_for_artist_name,
+)
 from oracle.provider_contract import (
     BROKER_SCHEMA_VERSION,
     Availability,
@@ -35,9 +38,31 @@ from oracle.radio import Radio
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROVIDER_WEIGHTS: dict[str, float] = {
-    "local": 0.55,
-    "lastfm": 0.2,
-    "listenbrainz": 0.25,
+    "local": 0.45,
+    "lastfm": 0.15,
+    "listenbrainz": 0.20,
+    "scout": 0.10,
+    "listenbrainz_weather": 0.10,
+}
+
+# Static genre adjacency map used by the Scout bridge provider.
+# Keys are normalised lowercase genre tokens; values are natural bridge genres.
+_SCOUT_GENRE_BRIDGES: dict[str, list[str]] = {
+    "rock": ["electronic", "jazz", "folk"],
+    "electronic": ["jazz", "classical", "hip hop"],
+    "hip hop": ["jazz", "electronic", "r&b"],
+    "jazz": ["electronic", "classical", "soul"],
+    "classical": ["electronic", "jazz", "ambient"],
+    "folk": ["electronic", "bluegrass", "world"],
+    "metal": ["electronic", "jazz", "classical"],
+    "pop": ["electronic", "r&b", "jazz"],
+    "r&b": ["hip hop", "jazz", "electronic"],
+    "soul": ["jazz", "r&b", "electronic"],
+    "ambient": ["classical", "electronic", "drone"],
+    "country": ["folk", "blues", "rock"],
+    "blues": ["jazz", "soul", "rock"],
+    "reggae": ["dub", "electronic", "world"],
+    "punk": ["electronic", "noise", "jazz"],
 }
 DEFAULT_LIMIT = 12
 SUPPORTED_MODES = {"flow", "chaos", "discovery"}
@@ -126,14 +151,15 @@ def _normalize_provider_weights(raw_weights: dict[str, Any] | None) -> dict[str,
                 merged[provider] = max(0.0, float(raw_weights[provider] or 0.0))
             except (TypeError, ValueError):
                 merged[provider] = DEFAULT_PROVIDER_WEIGHTS[provider]
+    return _normalize_weight_dict(merged)
 
-    total = sum(merged.values())
+
+def _normalize_weight_dict(weights: dict[str, float]) -> dict[str, float]:
+    """Re-normalise a weight dict so all values sum to 1.0."""
+    total = sum(weights.values())
     if total <= 0:
-        return dict(DEFAULT_PROVIDER_WEIGHTS)
-    return {
-        provider: round(weight / total, 4)
-        for provider, weight in merged.items()
-    }
+        return dict(weights)
+    return {k: round(v / total, 4) for k, v in weights.items()}
 
 
 def _normalize_feedback_type(value: Any) -> str:
@@ -782,6 +808,349 @@ def _recommend_from_listenbrainz(
 
 
 # ---------------------------------------------------------------------------
+# Scout provider — cross-genre bridge discovery (SPEC-008)
+# ---------------------------------------------------------------------------
+
+def _scout_bridge_genre(seed_genre: str, mode: str) -> str:
+    """Return a bridge genre for Scout cross-genre hunting.
+
+    Args:
+        seed_genre: Normalised genre token from the seed track.
+        mode: Broker mode (``flow`` | ``chaos`` | ``discovery``).
+
+    Returns:
+        A bridge genre string.
+    """
+    import random
+
+    key = seed_genre.lower().strip()
+    candidates_list = _SCOUT_GENRE_BRIDGES.get(key, [])
+
+    if not candidates_list:
+        # Fall back to a fixed cross-genre list
+        all_genres = list({g for genres in _SCOUT_GENRE_BRIDGES.values() for g in genres})
+        candidates_list = [g for g in all_genres if g != key]
+        if not candidates_list:
+            return "electronic"
+
+    if mode == "flow":
+        # Pick the first (most adjacent) bridge genre
+        return candidates_list[0]
+
+    # chaos / discovery — random pick
+    return random.choice(candidates_list)  # noqa: S311
+
+
+def _recommend_from_scout(
+    *,
+    seed_track: dict[str, Any] | None,
+    mode: str,
+    limit: int,
+    novelty_band: str,
+    weight: float,
+) -> ProviderResult:
+    """Produce acquisition leads via Scout cross-genre bridge discovery (SPEC-008).
+
+    Uses ``oracle.scout.Scout`` (Discogs-backed) to hunt bridge artists spanning
+    the seed track's genre and an adjacent/surprising genre determined by mode.
+
+    Degrades gracefully when ``DISCOGS_API_TOKEN`` is absent or the API is
+    unavailable — returns ``DEGRADED`` rather than ``FAILED`` so the downstream
+    broker still produces a valid response.
+
+    Args:
+        seed_track: Library track dict used as seed context.
+        mode: Broker mode string.
+        limit: Max candidates to return.
+        novelty_band: Novelty band string.
+        weight: Provider weight for scoring.
+
+    Returns:
+        Normalized ``ProviderResult``.
+    """
+    timer = ProviderTimer()
+    seed_ctx = _seed_context_str(seed_track)
+
+    with timer:
+        if not seed_track:
+            return ProviderResult(
+                provider="scout",
+                status=ProviderStatus.FAILED,
+                message="No seed track available for Scout.",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="no_seed", message="No seed track available.")],
+                timing_ms=timer.elapsed_ms,
+            )
+
+        seed_genre = str(seed_track.get("genre") or "").strip() or "rock"
+        bridge_genre = _scout_bridge_genre(seed_genre, mode)
+
+        try:
+            from oracle.scout import Scout  # lazy import — Scout opens a DB conn
+
+            scout_inst = Scout()
+            try:
+                hits = scout_inst.cross_genre_hunt(
+                    seed_genre,
+                    bridge_genre,
+                    limit=min(limit * 2, 20),
+                    prefer_remixes=(novelty_band != "safe"),
+                )
+            finally:
+                try:
+                    scout_inst.conn.close()
+                except Exception:
+                    pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[broker] scout provider error: %s", exc)
+            return ProviderResult(
+                provider="scout",
+                status=ProviderStatus.DEGRADED,
+                message=f"Scout provider degraded: {exc}",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="scout_error", message=str(exc))],
+                timing_ms=timer.elapsed_ms,
+            )
+
+        if not hits:
+            return ProviderResult(
+                provider="scout",
+                status=ProviderStatus.EMPTY,
+                message=f"Scout found no bridge artists for {seed_genre} × {bridge_genre}.",
+                seed_context=seed_ctx,
+                timing_ms=timer.elapsed_ms,
+            )
+
+        candidates: list[Candidate] = []
+        for hit in hits[:limit]:
+            artist = str(hit.get("artist") or "").strip()
+            title = str(hit.get("title") or "").strip()
+            if not artist or not title:
+                continue
+            reason_text = (
+                f"Scout bridge: {seed_genre} × {bridge_genre} "
+                f"— {artist} spans both styles."
+            )
+            raw_score = round(
+                0.3 + 0.5 * min(1.0, float(hit.get("acquisition_priority") or 0.0) / 10.0),
+                4,
+            )
+            # Check library first
+            track = _load_track_by_artist_title(artist, title)
+            if track:
+                candidates.append(Candidate(
+                    track_id=str(track.get("track_id") or ""),
+                    artist=artist,
+                    title=title,
+                    album=track.get("album"),
+                    score=round(raw_score * weight, 4),
+                    confidence=round(raw_score, 4),
+                    novelty_band_fit=novelty_band,
+                    availability=Availability.LOCAL,
+                    provenance_label=f"scout-{seed_genre}-{bridge_genre}",
+                    track_data=track,
+                    evidence=[EvidenceItem(
+                        type="scout_bridge_artist",
+                        source="scout",
+                        weight=round(raw_score * weight, 4),
+                        text=reason_text,
+                        raw_value={"seed_genre": seed_genre, "bridge_genre": bridge_genre},
+                    )],
+                ))
+            else:
+                candidates.append(Candidate(
+                    track_id=None,
+                    artist=artist,
+                    title=title,
+                    score=round(raw_score * weight, 4),
+                    confidence=round(raw_score, 4),
+                    novelty_band_fit=novelty_band,
+                    availability=Availability.ACQUISITION_LEAD,
+                    provenance_label=f"scout-{seed_genre}-{bridge_genre}",
+                    evidence=[EvidenceItem(
+                        type="scout_cross_genre",
+                        source="scout",
+                        weight=round(raw_score * weight, 4),
+                        text=reason_text,
+                        raw_value={
+                            "seed_genre": seed_genre,
+                            "bridge_genre": bridge_genre,
+                            "discogs_url": hit.get("discogs_url"),
+                        },
+                    )],
+                ))
+
+    if not candidates:
+        return ProviderResult(
+            provider="scout",
+            status=ProviderStatus.EMPTY,
+            message=f"Scout returned no usable candidates for {seed_genre} × {bridge_genre}.",
+            seed_context=seed_ctx,
+            timing_ms=timer.elapsed_ms,
+        )
+
+    return ProviderResult(
+        provider="scout",
+        status=ProviderStatus.OK,
+        message=f"Scout bridge discovery: {seed_genre} × {bridge_genre}.",
+        seed_context=seed_ctx,
+        candidates=candidates,
+        timing_ms=timer.elapsed_ms,
+    )
+
+
+# ---------------------------------------------------------------------------
+# ListenBrainz Weather provider — similar-artist chain (SPEC-008)
+# ---------------------------------------------------------------------------
+
+def _recommend_from_listenbrainz_weather(
+    *,
+    seed_track: dict[str, Any] | None,
+    limit: int,
+    weight: float,
+) -> ProviderResult:
+    """Produce candidates from the LB similar-artist community chain (SPEC-008).
+
+    Expands from the seed artist outward via ListenBrainz artist similarity,
+    then scores the similar artists' top recordings by combined popularity and
+    similarity.  This captures "community weather" — what the broader listening
+    community around this artist is enjoying — as opposed to only what the seed
+    artist themselves are known for.
+
+    Args:
+        seed_track: Library track dict used as seed context.
+        limit: Max candidates to return.
+        weight: Provider weight for scoring.
+
+    Returns:
+        Normalized ``ProviderResult``.
+    """
+    timer = ProviderTimer()
+    seed_ctx = _seed_context_str(seed_track)
+
+    with timer:
+        if not seed_track:
+            return ProviderResult(
+                provider="listenbrainz_weather",
+                status=ProviderStatus.FAILED,
+                message="No seed track available for community weather.",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="no_seed", message="No seed track available.")],
+                timing_ms=timer.elapsed_ms,
+            )
+
+        artist_name = str(seed_track.get("artist") or "").strip()
+        if not artist_name:
+            return ProviderResult(
+                provider="listenbrainz_weather",
+                status=ProviderStatus.FAILED,
+                message="Seed track is missing artist metadata.",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="no_artist", message="Missing artist metadata.")],
+                timing_ms=timer.elapsed_ms,
+            )
+
+        try:
+            recordings = get_similar_artists_recordings(
+                artist_name,
+                count_artists=min(5, limit),
+                recordings_per_artist=max(2, limit // 5),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[broker] listenbrainz_weather provider failed: %s", exc)
+            return ProviderResult(
+                provider="listenbrainz_weather",
+                status=ProviderStatus.DEGRADED,
+                message=f"Community weather provider degraded: {exc}",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="weather_error", message=str(exc))],
+                timing_ms=timer.elapsed_ms,
+            )
+
+        if not recordings:
+            return ProviderResult(
+                provider="listenbrainz_weather",
+                status=ProviderStatus.EMPTY,
+                message=f"No similar-artist recordings found for '{artist_name}'.",
+                seed_context=seed_ctx,
+                timing_ms=timer.elapsed_ms,
+            )
+
+        candidates: list[Candidate] = []
+        for row in recordings[:limit * 2]:
+            title = str(row.get("title") or "").strip()
+            artist = str(row.get("artist") or "").strip()
+            listen_count = max(0, int(row.get("listen_count") or 0))
+            similarity = float(row.get("similarity_score") or 0.0)
+            source_artist = str(row.get("source_artist") or artist_name)
+            if not title or not artist:
+                continue
+
+            raw_score = round(0.25 + 0.5 * similarity + 0.15 * min(1.0, math.log10(max(listen_count, 10)) / 5.0), 4)
+            reason_text = (
+                f"Listeners of {source_artist} also love {artist} — "
+                f"{listen_count:,} global plays."
+            )
+            track = _load_track_by_artist_title(artist, title)
+            if track:
+                candidates.append(Candidate(
+                    track_id=str(track.get("track_id") or ""),
+                    artist=artist,
+                    title=title,
+                    album=track.get("album"),
+                    score=round(raw_score * weight, 4),
+                    confidence=round(raw_score, 4),
+                    novelty_band_fit="stretch",
+                    availability=Availability.LOCAL,
+                    provenance_label=f"listenbrainz-weather-{source_artist[:20]}",
+                    track_data=track,
+                    evidence=[EvidenceItem(
+                        type="community_similar_artist",
+                        source="listenbrainz_weather",
+                        weight=round(raw_score * weight, 4),
+                        text=reason_text,
+                        raw_value={"listen_count": listen_count, "similarity_score": similarity, "source_artist": source_artist},
+                    )],
+                ))
+            else:
+                candidates.append(Candidate(
+                    track_id=None,
+                    artist=artist,
+                    title=title,
+                    score=round(raw_score * weight, 4),
+                    confidence=round(raw_score, 4),
+                    novelty_band_fit="stretch",
+                    availability=Availability.ACQUISITION_LEAD,
+                    provenance_label=f"listenbrainz-weather-{source_artist[:20]}",
+                    evidence=[EvidenceItem(
+                        type="community_top_recording",
+                        source="listenbrainz_weather",
+                        weight=round(raw_score * weight, 4),
+                        text=reason_text,
+                        raw_value={"listen_count": listen_count, "similarity_score": similarity, "source_artist": source_artist},
+                    )],
+                ))
+
+    if not candidates:
+        return ProviderResult(
+            provider="listenbrainz_weather",
+            status=ProviderStatus.EMPTY,
+            message=f"Community weather returned no usable candidates for '{artist_name}'.",
+            seed_context=seed_ctx,
+            timing_ms=timer.elapsed_ms,
+        )
+
+    return ProviderResult(
+        provider="listenbrainz_weather",
+        status=ProviderStatus.OK,
+        message=f"Community weather active for '{artist_name}'.",
+        seed_context=seed_ctx,
+        candidates=candidates[:limit],
+        timing_ms=timer.elapsed_ms,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Broker merge logic
 # ---------------------------------------------------------------------------
 
@@ -956,6 +1325,18 @@ def recommend_tracks(
             novelty_band=resolved_novelty,
             limit=resolved_limit,
             weight=resolved_weights["listenbrainz"],
+        ),
+        _recommend_from_scout(
+            seed_track=seed_track,
+            mode=resolved_mode,
+            limit=resolved_limit,
+            novelty_band=resolved_novelty,
+            weight=resolved_weights.get("scout", 0.0),
+        ),
+        _recommend_from_listenbrainz_weather(
+            seed_track=seed_track,
+            limit=resolved_limit,
+            weight=resolved_weights.get("listenbrainz_weather", 0.0),
         ),
     ]:
         _update_health(result)

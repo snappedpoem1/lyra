@@ -138,7 +138,7 @@ Deliverables:
 - Tauri and frontend stack modernization
 - packaged-host revalidation on the upgraded stack
 
-### Wave 5 - Metadata, Recommendation, and Oracle Expansion
+### Wave 5 - Metadata, Recommendation, and Oracle Expansion (landed locally)
 
 Gate:
 - host/build/runtime foundations remain green after earlier waves
@@ -148,7 +148,7 @@ Deliverables:
 - richer metadata/community-source integration
 - broader Oracle action depth
 
-### Wave 6 - Product Surface Depth
+### Wave 6 - Product Surface Depth (landed locally)
 
 Gate:
 - recommendation and metadata evidence is available to surface in the UI
@@ -158,7 +158,7 @@ Deliverables:
 - clearer rationale and degraded-state reporting
 - deeper Oracle/playlist/detail insight surfaces
 
-### Wave 7 - Release-Gate Closure
+### Wave 7 - Release-Gate Closure (active)
 
 Gate:
 - all earlier waves are landed and documented
@@ -167,6 +167,12 @@ Deliverables:
 - blank-machine installer validation
 - full parity/audio soak
 - final gap closure or restatement
+
+Current status:
+- packaged host smoke passes
+- 60-second parity soak passes with rebuilt sidecar (Wave 5+6 modules included) and `-UseLegacyDataRoot` dev workaround
+- full 4-hour soak deferred
+- blank-machine proof remains blocked-external
 
 Execution companion:
 - `docs/PHASE_EXECUTION_COMPANION.md` extends the committed phase track beyond Wave 7 and defines iteration-level execution for Waves 3 through 11.

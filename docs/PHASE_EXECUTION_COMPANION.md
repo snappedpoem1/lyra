@@ -14,7 +14,7 @@ Use this document when the question is "what phase are we in, what iteration com
 
 ## 2) Current Baseline
 
-Waves 1, 2, 3, and 4 are already landed locally.
+Waves 1 through 6 are already landed locally.
 
 - Wave 1 closed the governance-first gate:
   roadmap, state, worklist, registry, lane briefs, and scoped agent instructions are aligned.
@@ -24,14 +24,23 @@ Waves 1, 2, 3, and 4 are already landed locally.
   `LYRA_DATA_ROOT` is the mutable-data authority, explicit migrate-now/defer actions exist in CLI and runtime API, and the Wave 3 validation set passes locally.
 - Wave 4 closed the desktop-stack gate:
   the host/runtime contract now runs on Tauri 2, renderer and host validation stayed green, and packaged-host smoke still passes against the Wave 3 runtime contract.
+- Wave 5 closed the provider-contract and recommendation-core gate:
+  all providers return normalized `ProviderResult` with structured evidence items (`SPEC-004`), broker output is versioned with per-provider reports and degradation summaries, and provider health registry (`SPEC-006`) tracks state transitions with structured logging.
+- Wave 6 closed the product explainability gate:
+  frontend Oracle route uses the brokered recommendation path with provider chips, confidence bands, degraded-state banners, and expandable "Why this?" evidence trace from API output alone (`SPEC-005`); renderer tests and build pass clean.
 
-Active open gaps entering this companion:
+Active open gaps entering Wave 8:
 
 1. Blank-machine installer install-and-launch proof is still pending outside this workstation and is blocked until a clean Windows machine or VM exists.
 2. The full 4-hour parity/audio soak is still pending and is currently deferred until a later release-gate window.
-3. Later metadata, recommendation, explainability, trust, and ritual-depth work remains intentionally gated behind the runtime and release-confidence phases.
 
-Current execution begins at Wave 5.
+Active open gaps entering Wave 9:
+
+1. Wave 8 ingest confidence rows are written for new ingest events and backfilled for existing placed tracks; normalized/enriched states for historical events are not reconstructed.
+2. Blank-machine installer proof remains blocked-external.
+3. Full 4-hour parity soak remains deferred.
+
+Current execution begins at Wave 9.
 
 ## 3) Program Rules
 
@@ -253,6 +262,9 @@ powershell -ExecutionPolicy Bypass -File scripts\check_docs_state.ps1
 
 ### Wave 5 - Provider Contract and Recommendation Core
 
+Status:
+- landed locally
+
 Objective:
 - implement the versioned provider and evidence contract with explicit degradation behavior from `SPEC-004` and `SPEC-006`
 
@@ -310,6 +322,9 @@ powershell -ExecutionPolicy Bypass -File scripts\check_docs_state.ps1
 
 ### Wave 6 - Product Explainability Surfaces
 
+Status:
+- landed locally
+
 Objective:
 - render provenance, confidence, and degraded states directly in the key UX surfaces from `SPEC-005`
 
@@ -356,6 +371,12 @@ powershell -ExecutionPolicy Bypass -File scripts\check_docs_state.ps1
 
 ### Wave 7 - Release-Gate Closure
 
+Status:
+- active; packaged host smoke passes; 60-second parity soak passes with rebuilt sidecar and `UseLegacyDataRoot` workaround; full 4-hour soak deferred; blank-machine proof blocked-external
+
+Status:
+- active; packaged host smoke passes; 60-second parity soak passes with rebuilt sidecar and `UseLegacyDataRoot` workaround; full 4-hour soak deferred; blank-machine proof blocked-external
+
 Objective:
 - close the installer/runtime confidence gap and the production audio confidence gap
 
@@ -399,6 +420,9 @@ powershell -ExecutionPolicy Bypass -File scripts\check_docs_state.ps1
 ```
 
 ### Wave 8 - Ingest Confidence and Normalization
+
+Status:
+- landed locally; SPEC-007 written; `oracle/ingest_confidence.py` state machine live; `ingest_confidence` DB table added; 5-stage hook in `_native_ingest`; `/api/ingest/confidence/*` endpoints registered; `_check_ingest_confidence` in doctor; startup backfill wired; 14 new tests pass; full suite 167 passing
 
 Objective:
 - turn acquisition trust into a visible lifecycle instead of hidden background plumbing
@@ -446,7 +470,7 @@ Validation:
 powershell -ExecutionPolicy Bypass -File scripts\check_docs_state.ps1
 ```
 
-### Wave 9 - Scout and Community Weather
+### Wave 9 - Scout and Community Weather — LANDED LOCALLY (S-20260307-10)
 
 Objective:
 - make discovery more time-aware and make Scout a first-class provider and mode
@@ -454,29 +478,11 @@ Objective:
 Gate:
 - ingest trust and normalized provider contracts are stable enough to broaden recommendation intelligence
 
-Iterations:
-- `9A` write and land a new spec for Scout plus community-weather provider behavior
-- `9B` expand ListenBrainz inputs with fresh releases, similar users, and tag/radio motion
-- `9C` promote Scout into the broker and Oracle as controlled-surprise discovery
-
-Owner split:
-- wave owner:
-  - discovery-spec authority
-  - broker and Oracle mode truth
-  - contract tests
-- parallel lane:
-  - ListenBrainz expansion
-  - Scout adapter work
-  - supporting Oracle and library consumers
-
-Public contract changes:
-- provider keys and evidence types for Scout and community-weather signals
-- Oracle mode and state additions for bridge-discovery flows
-- time-aware discovery evidence alongside static similarity evidence
-
-Acceptance:
-- discovery can express current motion as evidence instead of only static similarity
-- Scout is visible in recommendation and Oracle flows, not stranded as a side utility
+Delivered:
+- `docs/specs/SPEC-008_SCOUT_COMMUNITY_WEATHER.md` — full spec
+- `oracle/integrations/listenbrainz.py` — `get_similar_artists_recordings()` + `_get_similar_artists()` for similar-artist chain
+- `oracle/recommendation_broker.py` — `_SCOUT_GENRE_BRIDGES` adjacency map, `_scout_bridge_genre()` helper, `_recommend_from_scout()` and `_recommend_from_listenbrainz_weather()` providers wired into 5-provider broker loop; weight keys `scout: 0.10`, `listenbrainz_weather: 0.10`
+- `tests/test_scout_weather.py` — 21 contract tests; full suite now 188 passing
 
 Next trigger:
 - Wave 10 may begin only after identity and cultural context can build on the expanded provider layer

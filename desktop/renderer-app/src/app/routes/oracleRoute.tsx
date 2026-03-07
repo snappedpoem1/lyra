@@ -5,7 +5,7 @@ import { OracleModeSwitch } from "@/features/oracle/OracleModeSwitch";
 import { OracleRecommendationDeck } from "@/features/oracle/OracleRecommendationDeck";
 import { TasteProfileCard } from "@/features/oracle/TasteProfileCard";
 import { audioEngine } from "@/services/audio/audioEngine";
-import { getConstellation, getOracleRecommendations } from "@/services/lyraGateway/queries";
+import { getBrokeredRecommendations, getConstellation } from "@/services/lyraGateway/queries";
 import { useOracleStore } from "@/stores/oracleStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
@@ -15,16 +15,20 @@ export function OracleRoute() {
   const mode = useOracleStore((state) => state.mode);
   const replaceQueue = useQueueStore((state) => state.replaceQueue);
   const seedTrackId = usePlayerStore((state) => state.track?.trackId);
-  const { data: recommendations = [] } = useQuery({
-    queryKey: ["oracle", mode, seedTrackId],
-    queryFn: () => getOracleRecommendations(mode, seedTrackId),
+  const { data: brokerResponse } = useQuery({
+    queryKey: ["oracle-broker", mode, seedTrackId],
+    queryFn: () => getBrokeredRecommendations({ mode, seedTrackId }),
   });
   const { data: constellation, error: constellationError } = useQuery({
     queryKey: ["constellation"],
     queryFn: () => getConstellation(),
     staleTime: 10 * 60 * 1000,
   });
-  const previewTrackCount = recommendations.reduce((total, item) => total + item.previewTracks.length, 0);
+
+  const recommendations = brokerResponse?.recommendations ?? [];
+  const degraded = brokerResponse?.degraded ?? false;
+  const degradationSummary = brokerResponse?.degradationSummary ?? "";
+  const providerReports = brokerResponse?.providerReports ?? [];
   const constellationNodeCount = constellation?.nodes.length ?? 0;
   const constellationEdgeCount = constellation?.edges.length ?? 0;
 
@@ -44,14 +48,21 @@ export function OracleRoute() {
             {mode}
           </Badge>
           <Badge className="home-stat-badge" size="lg" variant="light" color="midnight">
-            {recommendations.length} live moves
+            {recommendations.length} recommendations
           </Badge>
-          <Badge className="home-stat-badge" size="lg" variant="light" color="midnight">
-            {previewTrackCount} preview tracks
-          </Badge>
+          {providerReports.length > 0 && (
+            <Badge className="home-stat-badge" size="lg" variant="light" color="midnight">
+              {providerReports.filter((r) => r.status === "ok").length}/{providerReports.length} providers
+            </Badge>
+          )}
           <Badge className="home-stat-badge" size="lg" variant="light" color="midnight">
             {constellationNodeCount} constellation nodes
           </Badge>
+          {degraded && (
+            <Badge className="home-stat-badge" size="lg" variant="light" color="orange">
+              degraded
+            </Badge>
+          )}
         </Group>
       </LyraPanel>
 
@@ -93,6 +104,8 @@ export function OracleRoute() {
         {recommendations.length ? (
           <OracleRecommendationDeck
             recommendations={recommendations}
+            degraded={degraded}
+            degradationSummary={degradationSummary}
             onPlayTrack={(track) => void audioEngine.playTrack(track)}
             onReplaceQueue={(tracks) =>
               replaceQueue({
