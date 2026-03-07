@@ -32,7 +32,7 @@ Bullet list of completed work:
 
 | SHA (short) | Message |
 |---|---|
-| local only | not committed yet |
+| `cf940c2` | `[S-20260306-18] fix: resolve duplicate-backed queue rows` |
 
 ---
 
