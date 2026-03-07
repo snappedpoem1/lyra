@@ -390,6 +390,114 @@ def test_recommendation_broker_feedback_bias_reorders_candidates(
     assert payload["candidates"][1]["feedback_bias"] < 0
 
 
+def test_triple_provider_merge_preserves_all_evidence(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When the same track appears from all 3 providers, all evidence must be preserved."""
+    seed_track = {
+        "track_id": "seed-1", "artist": "Seed", "title": "Title",
+        "filepath": "C:/Music/seed.flac", "file_exists": True,
+    }
+    shared_track = {
+        "track_id": "track-1", "artist": "Shared", "title": "Song",
+        "filepath": "C:/Music/shared.flac", "file_exists": True,
+    }
+
+    monkeypatch.setattr(broker, "_load_latest_track_id", lambda: "seed-1")
+    monkeypatch.setattr(broker, "_load_track_from_library", lambda tid: seed_track if tid == "seed-1" else shared_track)
+    monkeypatch.setattr(broker, "_update_health", lambda r: None)
+
+    monkeypatch.setattr(broker, "_recommend_from_local", lambda **_: _make_provider_result("local", candidates=[
+        Candidate(
+            track_id="track-1", artist="Shared", title="Song",
+            score=0.4, confidence=0.85, availability=Availability.LOCAL,
+            provenance_label="local-flow", track_data=dict(shared_track),
+            evidence=[EvidenceItem(type="embedding_neighbor", source="local", weight=0.4, text="Flow match.")],
+        ),
+    ]))
+    monkeypatch.setattr(broker, "_recommend_from_lastfm", lambda **_: _make_provider_result("lastfm", candidates=[
+        Candidate(
+            track_id="track-1", artist="Shared", title="Song",
+            score=0.15, confidence=0.7, availability=Availability.LOCAL,
+            provenance_label="lastfm-similar-track", track_data=dict(shared_track),
+            evidence=[EvidenceItem(type="similar_track", source="lastfm", weight=0.15, text="Last.fm similar.")],
+        ),
+    ]))
+    monkeypatch.setattr(broker, "_recommend_from_listenbrainz", lambda **_: _make_provider_result("listenbrainz", candidates=[
+        Candidate(
+            track_id="track-1", artist="Shared", title="Song",
+            score=0.2, confidence=0.6, availability=Availability.LOCAL,
+            provenance_label="listenbrainz-stretch", track_data=dict(shared_track),
+            evidence=[EvidenceItem(type="community_popularity", source="listenbrainz", weight=0.2, text="LB popular.")],
+        ),
+    ]))
+
+    payload = broker.recommend_tracks(
+        seed_track_id="seed-1", mode="flow", novelty_band="stretch", limit=6,
+    )
+
+    recs = payload["recommendations"]
+    assert len(recs) == 1
+    rec = recs[0]
+    assert len(rec["provider_signals"]) == 3
+    assert len(rec["evidence"]) == 3
+    evidence_sources = {e["source"] for e in rec["evidence"]}
+    assert evidence_sources == {"local", "lastfm", "listenbrainz"}
+    assert rec["broker_score"] == pytest.approx(0.75)
+    assert rec["confidence"] == 0.85
+    assert "local" in rec["provenance"]
+    assert "lastfm" in rec["provenance"]
+    assert "listenbrainz" in rec["provenance"]
+
+
+def test_feedback_new_outcome_types(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """SPEC-004 feedback types: keep, play, dismiss must be accepted."""
+    db_path = tmp_path / "feedback.db"
+
+    def _connect(timeout: float = 5.0) -> sqlite3.Connection:
+        del timeout
+        return sqlite3.connect(db_path)
+
+    monkeypatch.setattr(broker, "get_connection", _connect)
+    monkeypatch.setattr(broker, "get_write_mode", lambda: "apply_allowed")
+
+    for ftype in ("keep", "play", "dismiss"):
+        result = broker.record_feedback(
+            feedback_type=ftype,
+            track_id=f"track-{ftype}",
+            artist="Artist",
+            title="Title",
+        )
+        assert result["status"] == "ok"
+        assert result["feedback_type"] == ftype
+
+
+def test_feedback_stores_schema_version(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Feedback metadata must include the broker schema_version."""
+    import json
+
+    db_path = tmp_path / "feedback.db"
+
+    def _connect(timeout: float = 5.0) -> sqlite3.Connection:
+        del timeout
+        return sqlite3.connect(db_path)
+
+    monkeypatch.setattr(broker, "get_connection", _connect)
+    monkeypatch.setattr(broker, "get_write_mode", lambda: "apply_allowed")
+
+    broker.record_feedback(
+        feedback_type="accepted",
+        track_id="track-1",
+        artist="Artist",
+        title="Title",
+    )
+
+    conn = sqlite3.connect(db_path)
+    row = conn.execute("SELECT metadata_json FROM recommendation_feedback LIMIT 1").fetchone()
+    conn.close()
+    assert row is not None
+    metadata = json.loads(row[0])
+    assert metadata["schema_version"] == "2026-03-07"
+
+
 def test_provider_health_endpoint(client: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         recommendations_bp,

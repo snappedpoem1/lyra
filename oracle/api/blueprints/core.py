@@ -17,6 +17,7 @@ from oracle.data_root_migration import (
     migrate_legacy_data,
 )
 from oracle.db.schema import get_connection, get_write_mode
+from oracle.provider_health import get_all_health as _get_provider_health
 from oracle.validation import sanitize_integer, validate_boolean
 
 bp = Blueprint("core", __name__)
@@ -169,6 +170,7 @@ def api_health():
             "runtime_services": _runtime_services_status(),
             "data_root": build_data_root_report(),
             "llm": llm_status,
+            "recommendation_providers": _get_provider_health(),
             "auth": auth,
             "cors": cors,
             # Backward compatibility for existing consumers/tests.
@@ -212,6 +214,7 @@ def api_status():
             "runtime_services": _runtime_services_status(),
             "data_root": build_data_root_report(),
             "llm": llm_info,
+            "recommendation_providers": _get_provider_health(),
             "features": _feature_flags(),
         })
     except Exception as e:

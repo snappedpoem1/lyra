@@ -19,6 +19,7 @@ from oracle.provider_contract import (
     HealthStatus,
 )
 from oracle.provider_health import get_all_health, reset, update_from_result
+from oracle.doctor import _check_recommendation_providers, CheckResult
 
 
 class TestEvidenceItem:
@@ -191,3 +192,56 @@ class TestProviderHealthRegistry:
         assert by_provider["local"]["status"] == "healthy"
         assert by_provider["lastfm"]["status"] == "healthy"  # empty is still success
         assert by_provider["listenbrainz"]["status"] == "unavailable"
+
+    def test_structured_logging_on_failure(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+        with caplog.at_level(logging.WARNING, logger="oracle.provider_health"):
+            update_from_result(ProviderResult(
+                provider="lastfm", status=ProviderStatus.FAILED,
+                message="API timeout", timing_ms=5000.0,
+            ))
+        assert any("lastfm" in r.message and "failed" in r.message for r in caplog.records)
+
+    def test_structured_logging_on_recovery(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+        # First make it fail
+        update_from_result(ProviderResult(
+            provider="lastfm", status=ProviderStatus.FAILED, message="down", timing_ms=100.0,
+        ))
+        # Then recover
+        with caplog.at_level(logging.INFO, logger="oracle.provider_health"):
+            update_from_result(ProviderResult(
+                provider="lastfm", status=ProviderStatus.OK, message="ok", timing_ms=50.0,
+            ))
+        assert any("recovered" in r.message and "lastfm" in r.message for r in caplog.records)
+
+
+class TestDoctorProviderChecks:
+    def setup_method(self) -> None:
+        reset()
+
+    def test_no_health_data_returns_warning(self) -> None:
+        results = _check_recommendation_providers()
+        assert len(results) == 1
+        assert results[0].status == "WARNING"
+        assert "not run" in results[0].details.lower() or "no provider" in results[0].details.lower()
+
+    def test_healthy_provider_returns_pass(self) -> None:
+        update_from_result(ProviderResult(provider="local", status=ProviderStatus.OK, message="ok"))
+        results = _check_recommendation_providers()
+        assert any(r.name == "Provider (local)" and r.status == "PASS" for r in results)
+
+    def test_failed_provider_returns_fail(self) -> None:
+        update_from_result(ProviderResult(provider="lastfm", status=ProviderStatus.FAILED, message="no key"))
+        results = _check_recommendation_providers()
+        assert any(r.name == "Provider (lastfm)" and r.status == "FAIL" for r in results)
+
+    def test_mixed_providers(self) -> None:
+        update_from_result(ProviderResult(provider="local", status=ProviderStatus.OK, message="ok"))
+        update_from_result(ProviderResult(provider="lastfm", status=ProviderStatus.FAILED, message="no key"))
+        update_from_result(ProviderResult(provider="listenbrainz", status=ProviderStatus.EMPTY, message="empty"))
+        results = _check_recommendation_providers()
+        by_name = {r.name: r for r in results}
+        assert by_name["Provider (local)"].status == "PASS"
+        assert by_name["Provider (lastfm)"].status == "FAIL"
+        assert by_name["Provider (listenbrainz)"].status == "PASS"

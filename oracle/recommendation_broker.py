@@ -42,13 +42,20 @@ DEFAULT_PROVIDER_WEIGHTS: dict[str, float] = {
 DEFAULT_LIMIT = 12
 SUPPORTED_MODES = {"flow", "chaos", "discovery"}
 SUPPORTED_NOVELTY_BANDS = {"safe", "stretch", "chaos"}
-SUPPORTED_FEEDBACK_TYPES = {"accepted", "queued", "skipped", "replayed", "acquire_requested"}
+SUPPORTED_FEEDBACK_TYPES = {
+    "accepted", "queued", "skipped", "replayed", "acquire_requested",
+    # SPEC-004 section 5.1 explicit outcomes
+    "keep", "play", "dismiss",
+}
 _FEEDBACK_LOOKBACK_SECONDS = 60 * 60 * 24 * 90
 _FEEDBACK_SCORE_WEIGHTS: dict[str, float] = {
     "accepted": 0.18,
     "queued": 0.12,
     "replayed": 0.08,
     "skipped": -0.2,
+    "keep": 0.15,
+    "play": 0.2,
+    "dismiss": -0.25,
 }
 
 
@@ -169,6 +176,7 @@ def record_feedback(
         }
 
     payload = dict(metadata or {})
+    payload.setdefault("schema_version", BROKER_SCHEMA_VERSION)
     conn = get_connection(timeout=10.0)
     try:
         _ensure_feedback_table(conn)
@@ -859,6 +867,10 @@ def _merge_provider_candidates(
                     for s in existing["provider_signals"]
                     if s.get("provider")
                 })
+            )
+            existing["confidence"] = max(
+                float(existing.get("confidence") or 0.0),
+                candidate.confidence,
             )
             existing["explanation"] = _build_merged_explanation(existing)
 

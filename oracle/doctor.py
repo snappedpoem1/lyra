@@ -26,6 +26,7 @@ from oracle.config import (
 )
 from oracle.data_root_migration import build_data_root_report
 from oracle.llm_config import diagnose_llm_config, load_llm_config
+from oracle.provider_health import get_all_health
 from oracle.runtime_services import get_runtime_service_manifest
 
 DB_PATH = LYRA_DB_PATH
@@ -285,6 +286,36 @@ def _check_docker() -> CheckResult:
         return CheckResult("Docker", "WARNING", f"Docker check failed: {exc}")
 
 
+def _check_recommendation_providers() -> list[CheckResult]:
+    """Check recommendation provider health from the in-memory registry."""
+    health_entries = get_all_health()
+    if not health_entries:
+        return [CheckResult(
+            "Recommendation Providers",
+            "WARNING",
+            "No provider health data yet (broker has not run since startup)",
+        )]
+
+    results: list[CheckResult] = []
+    for entry in health_entries:
+        provider = entry.get("provider", "unknown")
+        status = entry.get("status", "unknown")
+        name = f"Provider ({provider})"
+        if status == "healthy":
+            results.append(CheckResult(name, "PASS", "Healthy"))
+        elif status == "degraded":
+            summary = entry.get("last_error_summary") or "degraded"
+            results.append(CheckResult(name, "WARNING", f"Degraded: {summary}"))
+        elif status == "unavailable":
+            summary = entry.get("last_error_summary") or "unavailable"
+            results.append(CheckResult(name, "FAIL", f"Unavailable: {summary}"))
+        elif status == "disabled":
+            results.append(CheckResult(name, "WARNING", "Disabled"))
+        else:
+            results.append(CheckResult(name, "WARNING", f"Unknown status: {status}"))
+    return results
+
+
 def run_doctor() -> List[CheckResult]:
     return [
         _check_python(),
@@ -304,6 +335,7 @@ def run_doctor() -> List[CheckResult]:
         _check_spotdl(),
         _check_lidarr(),
         _check_llm(),
+        *_check_recommendation_providers(),
     ]
 
 

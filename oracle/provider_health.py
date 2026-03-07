@@ -26,9 +26,11 @@ def _ensure_provider(provider: str) -> ProviderHealth:
 
 
 def update_from_result(result: ProviderResult) -> None:
-    """Update health state from a provider result."""
+    """Update health state from a provider result and emit structured logs."""
     with _lock:
         health = _ensure_provider(result.provider)
+        prev_status = health.status
+
         if result.status == ProviderStatus.OK:
             health.record_success()
         elif result.status == ProviderStatus.EMPTY:
@@ -37,6 +39,24 @@ def update_from_result(result: ProviderResult) -> None:
             health.record_error(result.message)
         elif result.status == ProviderStatus.FAILED:
             health.record_failure(result.message)
+
+        # Structured logging for state transitions and failures
+        if result.status in (ProviderStatus.DEGRADED, ProviderStatus.FAILED):
+            logger.warning(
+                "[provider_health] %s: %s (was %s) | %s | %.0fms",
+                result.provider,
+                result.status.value,
+                prev_status.value,
+                result.message,
+                result.timing_ms,
+            )
+        elif prev_status != HealthStatus.HEALTHY and health.status == HealthStatus.HEALTHY:
+            logger.info(
+                "[provider_health] %s: recovered to healthy (was %s) | %.0fms",
+                result.provider,
+                prev_status.value,
+                result.timing_ms,
+            )
 
 
 def get_health(provider: str) -> ProviderHealth | None:
