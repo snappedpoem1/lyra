@@ -7,6 +7,7 @@ import { getFactDrop } from "@/services/lyraGateway/queries";
 import { useAgentStore } from "@/stores/agentStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
+import { usePersistentState } from "@/features/native/usePersistentState";
 import { Icon } from "@/ui/Icon";
 
 function fmtTime(seconds: number): string {
@@ -107,6 +108,12 @@ export function BottomTransportDock() {
   const factDropTrackId = useAgentStore((state) => state.factDropTrackId);
   const setFactDrop     = useAgentStore((state) => state.setFactDrop);
   const lastFetchedTrackId = useRef<string | null>(null);
+  const [persistedVolume, setPersistedVolume] = usePersistentState<number>("lyra:volume", player.volume ?? 0.82);
+
+  useEffect(() => {
+    usePlayerStore.getState().setVolume(persistedVolume);
+    audioEngine.setVolume(persistedVolume);
+  }, [persistedVolume]);
 
   useEffect(() => {
     const trackId = player.track?.trackId ?? null;
@@ -218,6 +225,7 @@ export function BottomTransportDock() {
   const handleVolume = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = parseFloat(e.target.value);
     player.setVolume(v);
+    setPersistedVolume(v);
     audioEngine.element.volume = v;
   };
 

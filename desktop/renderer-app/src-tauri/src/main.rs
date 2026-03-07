@@ -62,8 +62,14 @@ fn emit_boot_status(app: &AppHandle, phase: &str, message: &str, ready: bool) {
 }
 
 fn backend_base_url() -> String {
+    let default_url = env::var("LYRA_PORT")
+        .ok()
+        .and_then(|value| value.trim().parse::<u16>().ok())
+        .map(|port| format!("http://127.0.0.1:{port}"))
+        .unwrap_or_else(|| "http://127.0.0.1:5000".to_string());
+
     env::var("LYRA_BACKEND_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:5000".to_string())
+        .unwrap_or(default_url)
         .trim_end_matches('/')
         .to_string()
 }
@@ -540,7 +546,7 @@ fn register_media_shortcuts(app: &AppHandle) {
     let shortcuts = [
         ("MediaPlayPause", "play-pause"),
         ("MediaNextTrack", "next"),
-        ("MediaPrevTrack", "previous"),
+        ("MediaPreviousTrack", "previous"),
     ];
 
     for (accelerator, action) in shortcuts {
@@ -563,6 +569,10 @@ fn register_media_shortcuts(app: &AppHandle) {
             );
         }
     }
+}
+
+fn unregister_media_shortcuts(app: &AppHandle) {
+    let _ = app.global_shortcut().unregister_all();
 }
 
 fn create_tray_icon(app: &AppHandle) -> tauri::Result<()> {
@@ -621,6 +631,8 @@ fn main() {
     };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(state)
         .setup(|app| {
             write_boot_log("[main] setup entered");
@@ -635,6 +647,7 @@ fn main() {
         .run(|app_handle, run_event| {
             if matches!(run_event, tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }) {
                 write_boot_log("[main] exit event received");
+                unregister_media_shortcuts(app_handle);
                 stop_backend_process(app_handle);
             }
         });

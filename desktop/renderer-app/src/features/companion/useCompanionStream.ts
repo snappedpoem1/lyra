@@ -4,6 +4,7 @@ import { resolveApiUrl } from "@/services/lyraGateway/client";
 export interface CompanionPulseEvent {
   event_type: string;
   context: Record<string, string>;
+  at?: number;
 }
 
 /**

@@ -35,6 +35,7 @@ import {
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
 import { DIMENSIONS } from "@/types/dimensions";
+import { usePersistentState } from "@/features/native/usePersistentState";
 import type {
   AcquisitionLead,
   BrokeredRecommendation,
@@ -149,8 +150,8 @@ export function UnifiedWorkspace() {
   const [searchMessage, setSearchMessage] = useState<string>("");
   const [transportBusy, setTransportBusy] = useState<boolean>(false);
   const [oracleBusy, setOracleBusy] = useState<boolean>(false);
-  const [oracleOpen, setOracleOpen] = useState<boolean>(true);
-  const [controlDeckOpen, setControlDeckOpen] = useState<boolean>(false);
+  const [oracleOpen, setOracleOpen] = usePersistentState<boolean>("lyra:oracleOpen", true);
+  const [controlDeckOpen, setControlDeckOpen] = usePersistentState<boolean>("lyra:oracleControlDeckOpen", false);
   const [oracleMode, setOracleMode] = useState<OracleMode>("flow");
   const [oracleNoveltyBand, setOracleNoveltyBand] = useState<RecommendationNoveltyBand>("stretch");
   const [chaosIntensity, setChaosIntensity] = useState<"low" | "medium" | "high">("medium");
