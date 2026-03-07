@@ -1,4 +1,9 @@
-"""Recommendation broker for explainable multi-provider discovery."""
+"""Recommendation broker for explainable multi-provider discovery.
+
+Implements SPEC-004: every provider returns a normalized ProviderResult,
+and the broker emits a versioned response with provider_reports,
+merged recommendations with preserved evidence, and degradation summaries.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +19,17 @@ from oracle.api.helpers import _load_track
 from oracle.db.schema import get_connection, get_write_mode
 from oracle.enrichers.lastfm import build_track_profile
 from oracle.integrations.listenbrainz import get_top_recordings_for_artist_name
+from oracle.provider_contract import (
+    BROKER_SCHEMA_VERSION,
+    Availability,
+    Candidate,
+    EvidenceItem,
+    ProviderError,
+    ProviderResult,
+    ProviderStatus,
+    ProviderTimer,
+)
+from oracle.provider_health import update_from_result as _update_health
 from oracle.radio import Radio
 
 logger = logging.getLogger(__name__)
@@ -247,6 +263,17 @@ def _apply_feedback_bias(candidates: list[dict[str, Any]]) -> list[dict[str, Any
         adjusted = dict(candidate)
         adjusted["feedback_bias"] = bias
         adjusted["broker_score"] = round(float(candidate.get("broker_score") or 0.0) + bias, 4)
+        evidence = list(adjusted.get("evidence") or [])
+        evidence.append({
+            "type": "feedback_history",
+            "source": "broker",
+            "weight": round(abs(bias), 4),
+            "text": "Past accepts and replays reinforce this pick."
+            if bias > 0
+            else "Past skips are suppressing this pick.",
+        })
+        adjusted["evidence"] = evidence
+        # Keep legacy reasons for backward compat during transition
         reasons = list(adjusted.get("reasons") or [])
         reasons.append(
             {
@@ -350,26 +377,6 @@ def _listenbrainz_threshold_for_band(novelty_band: str) -> tuple[int, int]:
     return 8, 125
 
 
-def _build_provider_status(
-    *,
-    available: bool,
-    used: bool,
-    weight: float,
-    message: str,
-    matched_local_tracks: int = 0,
-    acquisition_candidates: int = 0,
-) -> dict[str, Any]:
-    """Build a JSON-safe provider status payload."""
-    return {
-        "available": available,
-        "used": used,
-        "weight": round(weight, 4),
-        "message": message,
-        "matched_local_tracks": matched_local_tracks,
-        "acquisition_candidates": acquisition_candidates,
-    }
-
-
 def _local_reason_for_mode(mode: str, seed_track: dict[str, Any] | None) -> str:
     """Generate a concise plain-language explanation for local signals."""
     if mode == "flow":
@@ -381,6 +388,20 @@ def _local_reason_for_mode(mode: str, seed_track: dict[str, Any] | None) -> str:
     return "Local discovery engine surfaced a low-play cut with hidden-gem potential."
 
 
+def _seed_context_str(seed_track: dict[str, Any] | None) -> str:
+    """Build a human-readable seed context string."""
+    if not seed_track:
+        return "no seed track"
+    artist = seed_track.get("artist", "Unknown")
+    title = seed_track.get("title", "Unknown")
+    return f"{artist} - {title}"
+
+
+# ---------------------------------------------------------------------------
+# Provider adapters — each returns a normalized ProviderResult
+# ---------------------------------------------------------------------------
+
+
 def _recommend_from_local(
     *,
     mode: str,
@@ -389,70 +410,104 @@ def _recommend_from_local(
     novelty_band: str,
     weight: float,
     seed_track: dict[str, Any] | None,
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+) -> ProviderResult:
     """Run the local provider via the canonical radio engine."""
-    del novelty_band
-    radio = Radio()
-    safe_limit = max(1, limit * 2)
+    timer = ProviderTimer()
+    seed_ctx = _seed_context_str(seed_track)
 
-    try:
-        if mode == "flow":
-            if not seed_track_id:
-                return [], _build_provider_status(
-                    available=False,
-                    used=False,
-                    weight=weight,
-                    message="Flow mode needs a seed track.",
-                )
-            rows = radio.get_flow_track(seed_track_id, count=safe_limit)
-        elif mode == "chaos":
-            rows = radio.get_chaos_track(seed_track_id, count=safe_limit)
-        else:
-            rows = radio.get_discovery_track(count=safe_limit)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("[broker] local provider failed: %s", exc)
-        return [], _build_provider_status(
-            available=False,
-            used=False,
-            weight=weight,
-            message=f"Local provider failed: {exc}",
+    with timer:
+        radio = Radio()
+        safe_limit = max(1, limit * 2)
+
+        try:
+            if mode == "flow":
+                if not seed_track_id:
+                    return ProviderResult(
+                        provider="local",
+                        status=ProviderStatus.FAILED,
+                        message="Flow mode needs a seed track.",
+                        seed_context=seed_ctx,
+                        errors=[ProviderError(code="no_seed", message="Flow mode needs a seed track.")],
+                        timing_ms=timer.elapsed_ms,
+                    )
+                rows = radio.get_flow_track(seed_track_id, count=safe_limit)
+            elif mode == "chaos":
+                rows = radio.get_chaos_track(seed_track_id, count=safe_limit)
+            else:
+                rows = radio.get_discovery_track(count=safe_limit)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[broker] local provider failed: %s", exc)
+            return ProviderResult(
+                provider="local",
+                status=ProviderStatus.FAILED,
+                message=f"Local provider failed: {exc}",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="provider_error", message=str(exc))],
+                timing_ms=timer.elapsed_ms,
+            )
+
+        candidates: list[Candidate] = []
+        reason_text = _local_reason_for_mode(mode, seed_track)
+
+        for index, row in enumerate(rows):
+            track_id = str(row.get("track_id") or "").strip()
+            if not track_id:
+                continue
+            track = _load_track_from_library(track_id)
+            if not track:
+                continue
+
+            rank_bonus = 1.0 - min(index / max(len(rows), 1), 0.9)
+            if mode == "flow":
+                raw_score = 0.45 + 0.45 * _clamp_score(row.get("compatibility"), default=rank_bonus)
+                evidence_type = "embedding_neighbor"
+                evidence_raw = row.get("compatibility")
+            elif mode == "chaos":
+                raw_score = 0.5 + 0.35 * rank_bonus
+                evidence_type = "embedding_neighbor"
+                evidence_raw = {"rank_bonus": round(rank_bonus, 4)}
+            else:
+                play_count = max(0, int(row.get("play_count") or 0))
+                raw_score = 0.35 + 0.5 * (1.0 / (1.0 + math.log10(play_count + 1)))
+                evidence_type = "low_play_discovery"
+                evidence_raw = {"play_count": play_count}
+
+            candidates.append(Candidate(
+                track_id=track_id,
+                artist=str(track.get("artist") or ""),
+                title=str(track.get("title") or ""),
+                album=track.get("album"),
+                score=round(raw_score * weight, 4),
+                confidence=round(raw_score, 4),
+                novelty_band_fit=novelty_band,
+                availability=Availability.LOCAL,
+                provenance_label=f"local-{mode}",
+                track_data=track,
+                evidence=[EvidenceItem(
+                    type=evidence_type,
+                    source="local",
+                    weight=round(raw_score * weight, 4),
+                    text=reason_text,
+                    raw_value=evidence_raw,
+                )],
+            ))
+
+    if not candidates:
+        return ProviderResult(
+            provider="local",
+            status=ProviderStatus.EMPTY,
+            message=f"Local {mode} provider returned no candidates.",
+            seed_context=seed_ctx,
+            timing_ms=timer.elapsed_ms,
         )
 
-    candidates: list[dict[str, Any]] = []
-    for index, row in enumerate(rows):
-        track_id = str(row.get("track_id") or "").strip()
-        if not track_id:
-            continue
-        track = _load_track_from_library(track_id)
-        if not track:
-            continue
-
-        rank_bonus = 1.0 - min(index / max(len(rows), 1), 0.9)
-        if mode == "flow":
-            raw_score = 0.45 + 0.45 * _clamp_score(row.get("compatibility"), default=rank_bonus)
-        elif mode == "chaos":
-            raw_score = 0.5 + 0.35 * rank_bonus
-        else:
-            play_count = max(0, int(row.get("play_count") or 0))
-            raw_score = 0.35 + 0.5 * (1.0 / (1.0 + math.log10(play_count + 1)))
-
-        candidates.append(
-            {
-                "track": track,
-                "provider": "local",
-                "label": f"local-{mode}",
-                "raw_score": round(raw_score, 4),
-                "weighted_score": round(raw_score * weight, 4),
-                "reason": _local_reason_for_mode(mode, seed_track),
-            }
-        )
-
-    return candidates, _build_provider_status(
-        available=True,
-        used=bool(candidates),
-        weight=weight,
+    return ProviderResult(
+        provider="local",
+        status=ProviderStatus.OK,
         message=f"Local {mode} provider ready.",
-        matched_local_tracks=len(candidates),
+        seed_context=seed_ctx,
+        candidates=candidates,
+        timing_ms=timer.elapsed_ms,
     )
 
 
@@ -461,83 +516,129 @@ def _recommend_from_lastfm(
     seed_track: dict[str, Any] | None,
     limit: int,
     weight: float,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    """Resolve local and acquisition candidates from Last.fm similar tracks."""
-    if not seed_track:
-        return [], [], _build_provider_status(
-            available=False,
-            used=False,
-            weight=weight,
-            message="No seed track available for Last.fm.",
-        )
+    novelty_band: str,
+) -> ProviderResult:
+    """Resolve candidates from Last.fm similar tracks."""
+    timer = ProviderTimer()
+    seed_ctx = _seed_context_str(seed_track)
 
-    if not os.getenv("LASTFM_API_KEY", "").strip():
-        return [], [], _build_provider_status(
-            available=False,
-            used=False,
-            weight=weight,
-            message="LASTFM_API_KEY is not configured.",
-        )
-
-    payload = build_track_profile(
-        str(seed_track.get("artist") or "").strip(),
-        str(seed_track.get("title") or "").strip(),
-    )
-    similar_rows = payload.get("similar_tracks", []) if isinstance(payload, dict) else []
-    if not isinstance(similar_rows, list) or not similar_rows:
-        return [], [], _build_provider_status(
-            available=True,
-            used=False,
-            weight=weight,
-            message="Last.fm returned no similar-track results.",
-        )
-
-    local_matches: list[dict[str, Any]] = []
-    acquisition_candidates: list[dict[str, Any]] = []
-    for index, row in enumerate(similar_rows[: max(limit * 3, 12)]):
-        if not isinstance(row, dict):
-            continue
-        artist = str(row.get("artist") or "").strip()
-        title = str(row.get("title") or "").strip()
-        if not artist or not title:
-            continue
-        raw_score = round(max(0.2, 1.0 - (index / max(len(similar_rows), 1))), 4)
-        reason = (
-            "Last.fm similar-track signal "
-            f"from {seed_track.get('artist', 'Unknown')} - {seed_track.get('title', 'Unknown')}."
-        )
-
-        track = _load_track_by_artist_title(artist, title)
-        if track:
-            local_matches.append(
-                {
-                    "track": track,
-                    "provider": "lastfm",
-                    "label": "lastfm-similar-track",
-                    "raw_score": raw_score,
-                    "weighted_score": round(raw_score * weight, 4),
-                    "reason": reason,
-                }
+    with timer:
+        if not seed_track:
+            return ProviderResult(
+                provider="lastfm",
+                status=ProviderStatus.FAILED,
+                message="No seed track available for Last.fm.",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="no_seed", message="No seed track available.")],
+                timing_ms=timer.elapsed_ms,
             )
-            continue
 
-        acquisition_candidates.append(
-            {
-                "artist": artist,
-                "title": title,
-                "provider": "lastfm",
-                "reason": reason,
-                "score": round(raw_score * weight, 4),
-            }
+        if not os.getenv("LASTFM_API_KEY", "").strip():
+            return ProviderResult(
+                provider="lastfm",
+                status=ProviderStatus.FAILED,
+                message="LASTFM_API_KEY is not configured.",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="not_configured", message="LASTFM_API_KEY is not configured.")],
+                timing_ms=timer.elapsed_ms,
+            )
+
+        try:
+            payload = build_track_profile(
+                str(seed_track.get("artist") or "").strip(),
+                str(seed_track.get("title") or "").strip(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[broker] lastfm provider failed: %s", exc)
+            return ProviderResult(
+                provider="lastfm",
+                status=ProviderStatus.FAILED,
+                message=f"Last.fm provider failed: {exc}",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="provider_error", message=str(exc))],
+                timing_ms=timer.elapsed_ms,
+            )
+
+        similar_rows = payload.get("similar_tracks", []) if isinstance(payload, dict) else []
+        if not isinstance(similar_rows, list) or not similar_rows:
+            return ProviderResult(
+                provider="lastfm",
+                status=ProviderStatus.EMPTY,
+                message="Last.fm returned no similar-track results.",
+                seed_context=seed_ctx,
+                timing_ms=timer.elapsed_ms,
+            )
+
+        candidates: list[Candidate] = []
+        for index, row in enumerate(similar_rows[: max(limit * 3, 12)]):
+            if not isinstance(row, dict):
+                continue
+            artist = str(row.get("artist") or "").strip()
+            title = str(row.get("title") or "").strip()
+            if not artist or not title:
+                continue
+            raw_score = round(max(0.2, 1.0 - (index / max(len(similar_rows), 1))), 4)
+            reason_text = (
+                "Last.fm similar-track signal "
+                f"from {seed_track.get('artist', 'Unknown')} - {seed_track.get('title', 'Unknown')}."
+            )
+
+            track = _load_track_by_artist_title(artist, title)
+            if track:
+                candidates.append(Candidate(
+                    track_id=str(track.get("track_id") or ""),
+                    artist=artist,
+                    title=title,
+                    album=track.get("album"),
+                    score=round(raw_score * weight, 4),
+                    confidence=round(raw_score, 4),
+                    novelty_band_fit=novelty_band,
+                    availability=Availability.LOCAL,
+                    provenance_label="lastfm-similar-track",
+                    track_data=track,
+                    evidence=[EvidenceItem(
+                        type="similar_track",
+                        source="lastfm",
+                        weight=round(raw_score * weight, 4),
+                        text=reason_text,
+                        raw_value={"match_score": row.get("match"), "rank": index},
+                    )],
+                ))
+            else:
+                candidates.append(Candidate(
+                    track_id=None,
+                    artist=artist,
+                    title=title,
+                    score=round(raw_score * weight, 4),
+                    confidence=round(raw_score, 4),
+                    novelty_band_fit=novelty_band,
+                    availability=Availability.ACQUISITION_LEAD,
+                    provenance_label="lastfm-similar-track",
+                    evidence=[EvidenceItem(
+                        type="similar_track",
+                        source="lastfm",
+                        weight=round(raw_score * weight, 4),
+                        text=reason_text,
+                        raw_value={"match_score": row.get("match"), "rank": index},
+                    )],
+                ))
+
+    if not candidates:
+        return ProviderResult(
+            provider="lastfm",
+            status=ProviderStatus.EMPTY,
+            message="Last.fm returned no usable similar-track results.",
+            seed_context=seed_ctx,
+            timing_ms=timer.elapsed_ms,
         )
 
-    return local_matches, acquisition_candidates[:limit], _build_provider_status(
-        available=True,
-        used=True,
-        weight=weight,
+    return ProviderResult(
+        provider="lastfm",
+        status=ProviderStatus.OK,
         message="Last.fm similar-track provider active.",
-        matched_local_tracks=len(local_matches),
-        acquisition_candidates=len(acquisition_candidates),
+        seed_context=seed_ctx,
+        candidates=candidates,
+        timing_ms=timer.elapsed_ms,
     )
 
 
@@ -547,142 +648,219 @@ def _recommend_from_listenbrainz(
     novelty_band: str,
     limit: int,
     weight: float,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
-    """Resolve local and acquisition candidates from ListenBrainz artist popularity."""
-    if not seed_track:
-        return [], [], _build_provider_status(
-            available=False,
-            used=False,
-            weight=weight,
-            message="No seed track available for ListenBrainz.",
-        )
+) -> ProviderResult:
+    """Resolve candidates from ListenBrainz artist popularity."""
+    timer = ProviderTimer()
+    seed_ctx = _seed_context_str(seed_track)
 
-    artist_name = str(seed_track.get("artist") or "").strip()
-    if not artist_name:
-        return [], [], _build_provider_status(
-            available=False,
-            used=False,
-            weight=weight,
-            message="Seed track is missing artist metadata.",
-        )
-
-    fetch_count, min_listen_count = _listenbrainz_threshold_for_band(novelty_band)
-    recordings = get_top_recordings_for_artist_name(artist_name, count=max(fetch_count, limit))
-    if not recordings:
-        return [], [], _build_provider_status(
-            available=True,
-            used=False,
-            weight=weight,
-            message="ListenBrainz returned no artist-popularity data.",
-        )
-
-    local_matches: list[dict[str, Any]] = []
-    acquisition_candidates: list[dict[str, Any]] = []
-    for row in recordings:
-        title = str(row.get("title") or "").strip()
-        artist = str(row.get("artist") or artist_name).strip()
-        listen_count = max(0, int(row.get("listen_count") or 0))
-        if not title or listen_count < min_listen_count:
-            continue
-
-        raw_score = round(
-            0.35 + 0.45 * min(1.0, math.log10(max(listen_count, 10)) / 5.0),
-            4,
-        )
-        reason = (
-            "ListenBrainz community popularity "
-            f"for {artist_name} ({novelty_band} band)."
-        )
-        track = _load_track_by_artist_title(artist, title)
-        if track:
-            local_matches.append(
-                {
-                    "track": track,
-                    "provider": "listenbrainz",
-                    "label": f"listenbrainz-{novelty_band}",
-                    "raw_score": raw_score,
-                    "weighted_score": round(raw_score * weight, 4),
-                    "reason": reason,
-                }
+    with timer:
+        if not seed_track:
+            return ProviderResult(
+                provider="listenbrainz",
+                status=ProviderStatus.FAILED,
+                message="No seed track available for ListenBrainz.",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="no_seed", message="No seed track available.")],
+                timing_ms=timer.elapsed_ms,
             )
-            continue
 
-        acquisition_candidates.append(
-            {
-                "artist": artist,
-                "title": title,
-                "provider": "listenbrainz",
-                "reason": reason,
-                "score": round(raw_score * weight, 4),
-            }
+        artist_name = str(seed_track.get("artist") or "").strip()
+        if not artist_name:
+            return ProviderResult(
+                provider="listenbrainz",
+                status=ProviderStatus.FAILED,
+                message="Seed track is missing artist metadata.",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="no_artist", message="Seed track is missing artist metadata.")],
+                timing_ms=timer.elapsed_ms,
+            )
+
+        try:
+            fetch_count, min_listen_count = _listenbrainz_threshold_for_band(novelty_band)
+            recordings = get_top_recordings_for_artist_name(artist_name, count=max(fetch_count, limit))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[broker] listenbrainz provider failed: %s", exc)
+            return ProviderResult(
+                provider="listenbrainz",
+                status=ProviderStatus.FAILED,
+                message=f"ListenBrainz provider failed: {exc}",
+                seed_context=seed_ctx,
+                errors=[ProviderError(code="provider_error", message=str(exc))],
+                timing_ms=timer.elapsed_ms,
+            )
+
+        if not recordings:
+            return ProviderResult(
+                provider="listenbrainz",
+                status=ProviderStatus.EMPTY,
+                message="ListenBrainz returned no artist-popularity data.",
+                seed_context=seed_ctx,
+                timing_ms=timer.elapsed_ms,
+            )
+
+        candidates: list[Candidate] = []
+        for row in recordings:
+            title = str(row.get("title") or "").strip()
+            artist = str(row.get("artist") or artist_name).strip()
+            listen_count = max(0, int(row.get("listen_count") or 0))
+            if not title or listen_count < min_listen_count:
+                continue
+
+            raw_score = round(
+                0.35 + 0.45 * min(1.0, math.log10(max(listen_count, 10)) / 5.0),
+                4,
+            )
+            reason_text = (
+                "ListenBrainz community popularity "
+                f"for {artist_name} ({novelty_band} band)."
+            )
+            track = _load_track_by_artist_title(artist, title)
+            if track:
+                candidates.append(Candidate(
+                    track_id=str(track.get("track_id") or ""),
+                    artist=artist,
+                    title=title,
+                    album=track.get("album"),
+                    score=round(raw_score * weight, 4),
+                    confidence=round(raw_score, 4),
+                    novelty_band_fit=novelty_band,
+                    availability=Availability.LOCAL,
+                    provenance_label=f"listenbrainz-{novelty_band}",
+                    track_data=track,
+                    evidence=[EvidenceItem(
+                        type="community_popularity",
+                        source="listenbrainz",
+                        weight=round(raw_score * weight, 4),
+                        text=reason_text,
+                        raw_value={"listen_count": listen_count, "min_threshold": min_listen_count},
+                    )],
+                ))
+            else:
+                candidates.append(Candidate(
+                    track_id=None,
+                    artist=artist,
+                    title=title,
+                    score=round(raw_score * weight, 4),
+                    confidence=round(raw_score, 4),
+                    novelty_band_fit=novelty_band,
+                    availability=Availability.ACQUISITION_LEAD,
+                    provenance_label=f"listenbrainz-{novelty_band}",
+                    evidence=[EvidenceItem(
+                        type="community_popularity",
+                        source="listenbrainz",
+                        weight=round(raw_score * weight, 4),
+                        text=reason_text,
+                        raw_value={"listen_count": listen_count, "min_threshold": min_listen_count},
+                    )],
+                ))
+
+    if not candidates:
+        return ProviderResult(
+            provider="listenbrainz",
+            status=ProviderStatus.EMPTY,
+            message="ListenBrainz returned no qualifying recordings for this band.",
+            seed_context=seed_ctx,
+            timing_ms=timer.elapsed_ms,
         )
 
-    return local_matches, acquisition_candidates[:limit], _build_provider_status(
-        available=True,
-        used=True,
-        weight=weight,
+    return ProviderResult(
+        provider="listenbrainz",
+        status=ProviderStatus.OK,
         message="ListenBrainz community provider active.",
-        matched_local_tracks=len(local_matches),
-        acquisition_candidates=len(acquisition_candidates),
+        seed_context=seed_ctx,
+        candidates=candidates,
+        timing_ms=timer.elapsed_ms,
     )
 
 
-def _merge_recommendation_candidates(
-    candidates: list[dict[str, Any]],
+# ---------------------------------------------------------------------------
+# Broker merge logic
+# ---------------------------------------------------------------------------
+
+
+def _merge_provider_candidates(
+    provider_results: list[ProviderResult],
     *,
     limit: int,
-) -> list[dict[str, Any]]:
-    """Aggregate provider signals into a single ranked list."""
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Merge candidates from multiple providers into ranked recommendations and acquisition leads."""
     merged: dict[str, dict[str, Any]] = {}
+    acquisition_leads: list[dict[str, Any]] = []
 
-    for candidate in candidates:
-        track = candidate["track"]
-        track_id = str(track.get("track_id") or "").strip()
-        if not track_id:
-            continue
+    for result in provider_results:
+        for candidate in result.candidates:
+            if candidate.availability == Availability.ACQUISITION_LEAD:
+                acquisition_leads.append({
+                    "artist": candidate.artist,
+                    "title": candidate.title,
+                    "provider": result.provider,
+                    "reason": candidate.evidence[0].text if candidate.evidence else "",
+                    "score": candidate.score,
+                    "evidence": [e.to_dict() for e in candidate.evidence],
+                })
+                continue
 
-        signal = {
-            "provider": candidate["provider"],
-            "label": candidate["label"],
-            "score": candidate["weighted_score"],
-            "raw_score": candidate["raw_score"],
-            "reason": candidate["reason"],
-        }
+            track_id = str(candidate.track_id or "").strip()
+            if not track_id:
+                continue
 
-        if track_id not in merged:
-            merged_track = dict(track)
-            merged_track["broker_score"] = candidate["weighted_score"]
-            merged_track["provider_signals"] = [signal]
-            merged_track["reasons"] = [
-                {
-                    "type": candidate["provider"],
-                    "text": candidate["reason"],
-                    "score": candidate["weighted_score"],
-                }
-            ]
-            merged_track["reason"] = candidate["reason"]
-            merged_track["provenance"] = candidate["label"]
-            merged[track_id] = merged_track
-            continue
-
-        existing = merged[track_id]
-        existing["broker_score"] = round(
-            float(existing.get("broker_score") or 0.0) + float(candidate["weighted_score"] or 0.0),
-            4,
-        )
-        existing.setdefault("provider_signals", []).append(signal)
-        existing.setdefault("reasons", []).append(
-            {
-                "type": candidate["provider"],
-                "text": candidate["reason"],
-                "score": candidate["weighted_score"],
+            evidence_dicts = [e.to_dict() for e in candidate.evidence]
+            signal = {
+                "provider": result.provider,
+                "label": candidate.provenance_label,
+                "score": candidate.score,
+                "raw_score": candidate.confidence,
+                "reason": candidate.evidence[0].text if candidate.evidence else "",
             }
-        )
-        best_signal = max(existing["provider_signals"], key=lambda item: float(item.get("score") or 0.0))
-        existing["reason"] = str(best_signal.get("reason") or existing.get("reason") or "")
-        existing["provenance"] = ", ".join(
-            sorted({str(item.get("provider") or "") for item in existing["provider_signals"] if item.get("provider")})
-        )
+
+            if track_id not in merged:
+                track = dict(candidate.track_data) if candidate.track_data else {
+                    "track_id": track_id,
+                    "artist": candidate.artist,
+                    "title": candidate.title,
+                    "album": candidate.album,
+                }
+                track["broker_score"] = candidate.score
+                track["provider_signals"] = [signal]
+                track["evidence"] = evidence_dicts
+                track["reasons"] = [{
+                    "type": result.provider,
+                    "text": candidate.evidence[0].text if candidate.evidence else "",
+                    "score": candidate.score,
+                }]
+                track["reason"] = candidate.evidence[0].text if candidate.evidence else ""
+                track["provenance"] = candidate.provenance_label
+                track["confidence"] = candidate.confidence
+                track["novelty_band_fit"] = candidate.novelty_band_fit
+                track["availability"] = candidate.availability.value
+                track["explanation"] = _build_explanation(result.provider, candidate)
+                merged[track_id] = track
+                continue
+
+            existing = merged[track_id]
+            existing["broker_score"] = round(
+                float(existing.get("broker_score") or 0.0) + candidate.score, 4
+            )
+            existing.setdefault("provider_signals", []).append(signal)
+            existing.setdefault("evidence", []).extend(evidence_dicts)
+            existing.setdefault("reasons", []).append({
+                "type": result.provider,
+                "text": candidate.evidence[0].text if candidate.evidence else "",
+                "score": candidate.score,
+            })
+            best_signal = max(
+                existing["provider_signals"],
+                key=lambda s: float(s.get("score") or 0.0),
+            )
+            existing["reason"] = str(best_signal.get("reason") or existing.get("reason") or "")
+            existing["provenance"] = ", ".join(
+                sorted({
+                    str(s.get("provider") or "")
+                    for s in existing["provider_signals"]
+                    if s.get("provider")
+                })
+            )
+            existing["explanation"] = _build_merged_explanation(existing)
 
     ranked = sorted(
         merged.values(),
@@ -693,7 +871,38 @@ def _merge_recommendation_candidates(
         ),
         reverse=True,
     )
-    return ranked[:limit]
+
+    acquisition_ranked = sorted(
+        acquisition_leads,
+        key=lambda item: float(item.get("score") or 0.0),
+        reverse=True,
+    )
+
+    return ranked[:limit], acquisition_ranked[:limit]
+
+
+def _build_explanation(provider: str, candidate: Candidate) -> str:
+    """Build a plain-language explanation for a single-provider recommendation."""
+    if candidate.evidence:
+        return candidate.evidence[0].text
+    return f"Recommended by {provider}."
+
+
+def _build_merged_explanation(merged_track: dict[str, Any]) -> str:
+    """Build a plain-language explanation for a multi-provider recommendation."""
+    providers = merged_track.get("provenance", "")
+    reasons = merged_track.get("reasons", [])
+    if len(reasons) == 1:
+        return str(reasons[0].get("text") or f"Recommended by {providers}.")
+    parts = [str(r.get("text") or "") for r in reasons if r.get("text")]
+    if parts:
+        return " ".join(parts[:2])
+    return f"Recommended by {providers}."
+
+
+# ---------------------------------------------------------------------------
+# Public broker entry point
+# ---------------------------------------------------------------------------
 
 
 def recommend_tracks(
@@ -712,56 +921,93 @@ def recommend_tracks(
     resolved_seed_track_id = seed_track_id or _load_latest_track_id()
     seed_track = _load_track_from_library(resolved_seed_track_id) if resolved_seed_track_id else None
 
-    provider_status: dict[str, dict[str, Any]] = {}
-    provider_candidates: list[dict[str, Any]] = []
-    acquisition_candidates: list[dict[str, Any]] = []
+    # Run all providers and collect normalized results
+    provider_results: list[ProviderResult] = []
 
-    local_candidates, provider_status["local"] = _recommend_from_local(
-        mode=resolved_mode,
-        seed_track_id=resolved_seed_track_id,
-        limit=resolved_limit,
-        novelty_band=resolved_novelty,
-        weight=resolved_weights["local"],
-        seed_track=seed_track,
-    )
-    provider_candidates.extend(local_candidates)
+    for result in [
+        _recommend_from_local(
+            mode=resolved_mode,
+            seed_track_id=resolved_seed_track_id,
+            limit=resolved_limit,
+            novelty_band=resolved_novelty,
+            weight=resolved_weights["local"],
+            seed_track=seed_track,
+        ),
+        _recommend_from_lastfm(
+            seed_track=seed_track,
+            limit=resolved_limit,
+            weight=resolved_weights["lastfm"],
+            novelty_band=resolved_novelty,
+        ),
+        _recommend_from_listenbrainz(
+            seed_track=seed_track,
+            novelty_band=resolved_novelty,
+            limit=resolved_limit,
+            weight=resolved_weights["listenbrainz"],
+        ),
+    ]:
+        _update_health(result)
+        provider_results.append(result)
 
-    lastfm_candidates, lastfm_acquisition, provider_status["lastfm"] = _recommend_from_lastfm(
-        seed_track=seed_track,
-        limit=resolved_limit,
-        weight=resolved_weights["lastfm"],
-    )
-    provider_candidates.extend(lastfm_candidates)
-    acquisition_candidates.extend(lastfm_acquisition)
-
-    listenbrainz_candidates, listenbrainz_acquisition, provider_status["listenbrainz"] = _recommend_from_listenbrainz(
-        seed_track=seed_track,
-        novelty_band=resolved_novelty,
-        limit=resolved_limit,
-        weight=resolved_weights["listenbrainz"],
-    )
-    provider_candidates.extend(listenbrainz_candidates)
-    acquisition_candidates.extend(listenbrainz_acquisition)
-
-    merged_candidates = _merge_recommendation_candidates(
-        provider_candidates,
+    # Merge candidates across providers
+    merged_candidates, acquisition_leads = _merge_provider_candidates(
+        provider_results,
         limit=resolved_limit,
     )
+
+    # Apply feedback bias
     merged_candidates = _apply_feedback_bias(merged_candidates)
-    acquisition_ranked = sorted(
-        acquisition_candidates,
-        key=lambda item: float(item.get("score") or 0.0),
-        reverse=True,
-    )[:resolved_limit]
+
+    # Build provider reports (SPEC-004 section 4.1)
+    provider_reports = [r.to_dict() for r in provider_results]
+
+    # Compute degradation summary
+    degraded_providers = [
+        r for r in provider_results
+        if r.status in (ProviderStatus.DEGRADED, ProviderStatus.FAILED)
+    ]
+    is_degraded = bool(degraded_providers)
+    degradation_summary = (
+        "; ".join(f"{r.provider}: {r.message}" for r in degraded_providers)
+        if degraded_providers
+        else None
+    )
+
+    # Build legacy-compatible provider_status for transition period
+    provider_status: dict[str, dict[str, Any]] = {}
+    for r in provider_results:
+        local_count = sum(
+            1 for c in r.candidates
+            if c.availability == Availability.LOCAL
+        )
+        acq_count = sum(
+            1 for c in r.candidates
+            if c.availability == Availability.ACQUISITION_LEAD
+        )
+        provider_status[r.provider] = {
+            "available": r.status != ProviderStatus.FAILED,
+            "used": r.status == ProviderStatus.OK,
+            "weight": resolved_weights.get(r.provider, 0.0),
+            "message": r.message,
+            "matched_local_tracks": local_count,
+            "acquisition_candidates": acq_count,
+        }
 
     return {
-        "schema_version": "2026-03-06",
+        "schema_version": BROKER_SCHEMA_VERSION,
         "mode": resolved_mode,
         "novelty_band": resolved_novelty,
         "seed_track_id": resolved_seed_track_id,
         "seed_track": seed_track,
+        "seed": _seed_context_str(seed_track),
         "provider_weights": resolved_weights,
+        # SPEC-004 fields
+        "provider_reports": provider_reports,
+        "recommendations": merged_candidates,
+        "degraded": is_degraded,
+        "degradation_summary": degradation_summary,
+        # Legacy compat fields (will be removed after Wave 6 UI transition)
         "provider_status": provider_status,
         "candidates": merged_candidates,
-        "acquisition_candidates": acquisition_ranked,
+        "acquisition_candidates": acquisition_leads,
     }

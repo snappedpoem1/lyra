@@ -7,6 +7,7 @@ from typing import Any
 
 from flask import Blueprint, jsonify, request
 
+from oracle.provider_health import get_all_health
 from oracle.recommendation_broker import record_feedback, recommend_tracks
 from oracle.validation import sanitize_integer
 
@@ -59,3 +60,9 @@ def api_recommendations_oracle_feedback() -> Any:
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:  # noqa: BLE001
         return jsonify({"error": str(exc), "traceback": traceback.format_exc()}), 500
+
+
+@bp.route("/api/recommendations/providers/health", methods=["GET"])
+def api_provider_health() -> Any:
+    """Return provider health summaries per SPEC-006."""
+    return jsonify({"providers": get_all_health()})
