@@ -21,7 +21,6 @@ Explanation primitives supported:
 from __future__ import annotations
 
 import logging
-import math
 import time
 from typing import Any
 
@@ -481,9 +480,9 @@ def generate_feedback_effect_description(
         "skipped": f"Reducing weight on tracks like {track_label}.",
         "replayed": f"Strengthening affinity for {track_label} and similar material.",
         "acquire_requested": f"Marked {track_label} as wanted — acquisition radar updated.",
-        "keep": f"Leaning further into this direction.",
+        "keep": "Leaning further into this direction.",
         "play": f"Rewarding this path — more like {track_label} ahead.",
-        "dismiss": f"Pulling back from this direction.",
+        "dismiss": "Pulling back from this direction.",
     }
 
     return effects.get(feedback_type, f"Feedback noted for {track_label}.")

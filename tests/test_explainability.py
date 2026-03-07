@@ -3,8 +3,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from oracle.explainability import (
     generate_explanation,
     generate_explanation_chips,
