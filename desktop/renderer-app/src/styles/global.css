@@ -774,6 +774,262 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.02em;
 }
 
+.home-studio-hero,
+.queue-stage-hero,
+.playlists-stage-hero {
+  padding: clamp(1.2rem, 1.6vw, 1.8rem);
+  display: grid;
+  gap: var(--space-lg);
+  border-color: rgba(200, 255, 130, 0.12);
+  background:
+    radial-gradient(circle at top right, rgba(200, 255, 130, 0.10), transparent 28%),
+    linear-gradient(145deg, rgba(41, 51, 63, 0.56), rgba(9, 12, 16, 0.92) 55%);
+}
+
+.home-studio-hero-copy,
+.queue-stage-copy,
+.playlists-stage-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.home-studio-summary,
+.queue-stage-summary,
+.playlists-stage-summary {
+  max-width: 70ch;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+
+.home-studio-badges,
+.queue-stage-badges,
+.playlists-stage-badges {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.home-stat-badge {
+  border: 1px solid rgba(160, 170, 185, 0.16);
+  background: rgba(12, 16, 21, 0.74);
+  color: var(--text-soft);
+}
+
+.home-studio-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+
+.home-studio-card {
+  grid-column: span 4;
+  padding: clamp(1rem, 1.2vw, 1.4rem);
+  display: grid;
+  gap: var(--space-md);
+  align-content: start;
+  border-color: rgba(160, 170, 185, 0.14);
+  background:
+    linear-gradient(155deg, rgba(39, 47, 57, 0.42), rgba(8, 11, 16, 0.92) 58%),
+    rgba(8, 11, 16, 0.92);
+}
+
+.home-studio-card--feature {
+  grid-column: span 8;
+}
+
+.home-studio-card--wide {
+  grid-column: 1 / -1;
+}
+
+.home-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  align-items: start;
+}
+
+.home-card-header h2 {
+  margin: 0.2rem 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(0.95rem, 1.25vw, 1.18rem);
+  line-height: 1.12;
+  letter-spacing: 0.01em;
+}
+
+.home-card-meta {
+  font-size: var(--text-2xs);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.home-card-body-copy {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.home-progress-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 0.42rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 255, 130, 0.18);
+  background: rgba(200, 255, 130, 0.06);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+}
+
+.home-studio-list {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.home-thread-card,
+.home-recommendation-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-md);
+  align-items: start;
+  width: 100%;
+  padding: 0.9rem 0.95rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(160, 170, 185, 0.14);
+  background: rgba(13, 17, 22, 0.72);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    transform var(--duration-fast) ease;
+}
+
+.home-thread-card:hover,
+.home-recommendation-card:hover {
+  border-color: rgba(200, 255, 130, 0.28);
+  background: rgba(19, 26, 33, 0.92);
+  transform: translateY(-1px);
+}
+
+.home-thread-card strong,
+.home-recommendation-card strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: var(--text-base);
+  color: var(--text);
+}
+
+.home-thread-card p,
+.home-recommendation-card p {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-soft);
+}
+
+.home-thread-card span:last-child,
+.home-recommendation-card span:last-child {
+  font-size: var(--text-2xs);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.home-card-actions,
+.queue-stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-signal-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.home-signal-card {
+  display: grid;
+  gap: 4px;
+  padding: 0.95rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(160, 170, 185, 0.12);
+  background: rgba(10, 13, 18, 0.74);
+}
+
+.home-signal-card--wide {
+  grid-column: 1 / -1;
+}
+
+.home-signal-card strong {
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.home-signal-card p {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-soft);
+}
+
+.home-recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-sm);
+}
+
+.queue-stage-hero {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.playlists-stage-hero {
+  align-content: start;
+}
+
+@media (max-width: 1500px) {
+  .home-studio-card {
+    grid-column: span 6;
+  }
+
+  .home-studio-card--feature,
+  .home-studio-card--wide {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 980px) {
+  .home-studio-grid,
+  .home-signal-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .home-studio-card,
+  .home-studio-card--feature,
+  .home-studio-card--wide {
+    grid-column: 1 / -1;
+  }
+
+  .home-thread-card,
+  .home-recommendation-card {
+    grid-template-columns: 1fr;
+  }
+
+  .home-thread-card span:last-child,
+  .home-recommendation-card span:last-child {
+    white-space: normal;
+  }
+}
+
 /* ── Track rows (library style) ──────────────────────────────────────────── */
 /* 5-col: [art 32px] [title+artist] [context] [duration 48px] [actions] */
 .track-row {
