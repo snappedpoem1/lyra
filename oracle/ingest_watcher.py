@@ -161,6 +161,148 @@ def _mark_queue_completed(artist: str, title: str) -> None:
             conn.close()
 
 
+def _text_matches(left: str, right: str) -> bool:
+    """Return True for exact or prefix-equivalent text matches."""
+    left_clean = (left or "").strip().lower()
+    right_clean = (right or "").strip().lower()
+    if not left_clean or not right_clean:
+        return False
+    return (
+        left_clean == right_clean
+        or left_clean.startswith(right_clean)
+        or right_clean.startswith(left_clean)
+    )
+
+
+def _download_path_marker(download_path: Path | str) -> str:
+    """Encode a staging path for temporary queue-row correlation."""
+    return f"downloaded_path::{Path(download_path)}"
+
+
+def _resolve_duplicate_queue_row(existing_path: str, download_path: Path | str, artist: str, title: str) -> bool:
+    """Resolve queue rows when ingest proves the acquired file is already in library."""
+    import sqlite3
+
+    if not existing_path or not artist or not title:
+        return False
+
+    from oracle.db.schema import get_connection
+
+    normalized_path = str(Path(existing_path))
+    download_marker = _download_path_marker(download_path)
+    attempts = 4
+    for attempt in range(1, attempts + 1):
+        conn = get_connection(timeout=10.0)
+        try:
+            row = conn.execute(
+                """
+                SELECT track_id, artist, title
+                FROM tracks
+                WHERE status='active'
+                  AND (
+                    filepath = ?
+                    OR lower(filepath) = lower(?)
+                  )
+                LIMIT 1
+                """,
+                (normalized_path, normalized_path),
+            ).fetchone()
+            if not row:
+                return False
+
+            matched_track_id = str(row[0])
+            matched_artist = str(row[1] or artist)
+            matched_title = str(row[2] or title)
+
+            queue_row = conn.execute(
+                """
+                SELECT id, artist, title, COALESCE(retry_count, 0)
+                FROM acquisition_queue
+                WHERE status='downloaded'
+                  AND (
+                    error = ?
+                    OR lower(error) = lower(?)
+                  )
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (download_marker, download_marker),
+            ).fetchone()
+
+            if queue_row:
+                queue_id = int(queue_row[0])
+                requested_artist = str(queue_row[1] or "")
+                requested_title = str(queue_row[2] or "")
+                retry_count = int(queue_row[3] or 0)
+                if _text_matches(requested_artist, matched_artist) and _text_matches(requested_title, matched_title):
+                    cur = conn.execute(
+                        """
+                        UPDATE acquisition_queue
+                        SET status='completed',
+                            completed_at=datetime('now'),
+                            error=NULL,
+                            matched_track_id=?
+                        WHERE id=?
+                        """,
+                        (matched_track_id, queue_id),
+                    )
+                else:
+                    cur = conn.execute(
+                        """
+                        UPDATE acquisition_queue
+                        SET status='pending',
+                            completed_at=NULL,
+                            retry_count=?,
+                            error=?
+                        WHERE id=?
+                        """,
+                        (
+                            retry_count + 1,
+                            (
+                                "duplicate acquisition mismatch: requested "
+                                f"{requested_artist} - {requested_title}; acquired existing "
+                                f"{matched_artist} - {matched_title}"
+                            ),
+                            queue_id,
+                        ),
+                    )
+                conn.commit()
+                return bool(cur.rowcount)
+
+            cur = conn.execute(
+                """
+                UPDATE acquisition_queue
+                SET status='completed',
+                    completed_at=datetime('now'),
+                    error=NULL,
+                    matched_track_id=?
+                WHERE lower(trim(artist)) = lower(trim(?))
+                  AND (
+                      lower(trim(title)) = lower(trim(?))
+                      OR lower(trim(title)) LIKE lower(trim(?)) || '%'
+                      OR lower(trim(?)) LIKE lower(trim(title)) || '%'
+                  )
+                  AND status IN ('downloaded', 'pending')
+                """,
+                (matched_track_id, artist, title, title, title),
+            )
+            conn.commit()
+            return bool(cur.rowcount)
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc).lower() and attempt < attempts:
+                time.sleep(0.05 * attempt)
+                continue
+            logger.warning(
+                "[INGEST] Duplicate queue resolution failed for %s - %s: %s",
+                artist,
+                title,
+                exc,
+            )
+            return False
+        finally:
+            conn.close()
+
+
 def _reconcile_downloaded_queue_rows() -> int:
     """Mark downloaded queue items completed when the track exists in library DB."""
     import sqlite3
@@ -291,6 +433,20 @@ def _native_ingest(files: List[Path]) -> Dict[str, int]:
             result = guard_file(src)
             if not result.allowed:
                 move_rejected_file(src, result)
+                if result.is_duplicate and result.existing_path:
+                    resolved = _resolve_duplicate_queue_row(
+                        result.existing_path,
+                        src,
+                        result.artist,
+                        result.title,
+                    )
+                    if resolved:
+                        logger.info(
+                            "[INGEST] DUPLICATE RESOLVED %s -> %s - %s",
+                            src.name,
+                            result.artist,
+                            result.title,
+                        )
                 summary["rejected"] += 1
                 logger.info("[INGEST] REJECT %s — %s", src.name, result.rejection_reason)
                 continue

@@ -2033,10 +2033,11 @@ def main() -> None:
             if result.success and file_ready:
                 # Download succeeded; watcher marks final completion after post-flight ingest.
                 try:
+                    download_marker = f"downloaded_path::{_Path(result.path)}"
                     wconn = get_connection()
                     wconn.execute(
-                        "UPDATE acquisition_queue SET status='downloaded', completed_at=NULL, error=NULL WHERE id=?",
-                        (queue_id,),
+                        "UPDATE acquisition_queue SET status='downloaded', completed_at=NULL, error=? WHERE id=?",
+                        (download_marker, queue_id),
                     )
                     wconn.commit()
                     wconn.close()

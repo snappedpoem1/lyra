@@ -57,7 +57,10 @@ This file tracks active execution work only.
 - Tier 1 Qobuz runtime path is fixed again:
   - `oracle/acquirers/qobuz.py` no longer references undefined `QOBUZ_SERVICE_URL`
   - second tiny drain proved T1 success (`Bear Hands - Agora`)
-  - current follow-up issue is duplicate-aware queue resolution after successful acquisition
+  - duplicate-aware queue handling now resolves the exact downloaded row immediately
+  - true duplicate hits can complete without waiting for stale-row reconciliation
+  - mismatch cases like `Agora -> 2AM` now re-queue immediately with an explicit mismatch error instead of stale downloaded drift
+  - backend suite is now `109 passed`
 - Bespoke shell cleanup advanced on the renderer:
   - Home was rebuilt into a calmer studio-deck layout
   - Queue and Playlists now use matching bespoke hero treatments instead of the older flat panel stack

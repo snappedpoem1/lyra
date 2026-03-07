@@ -125,7 +125,8 @@ From `python -m oracle status`:
 - `python -m oracle.cli discover listenbrainz --limit-artists 80 --tracks-per-artist 8` -> success (`136` new queue candidates)
 - `python -m oracle.cli acquire prioritize --limit 500` -> success after fixing `priority_score` column usage
 - `python -m oracle.cli drain --limit 2 --workers 1 --max-tier 4` -> partial success (`1` streamrip acquisition ingested, `1` retry re-queued)
-- `python -m oracle.cli drain --limit 1 --workers 1 --max-tier 4` -> Tier 1 Qobuz success after fixing the service URL runtime bug; acquired file was rejected as a duplicate and the queue item was re-queued as stale
+- `python -m oracle.cli drain --limit 1 --workers 1 --max-tier 4` -> Tier 1 Qobuz success after fixing the service URL runtime bug; duplicate-backed post-flight handling now resolves against the exact downloaded queue row, completing true duplicate hits and immediately retrying mismatch cases with an explicit error instead of stale re-queue drift
+- `python -m pytest -q` -> success (`109 passed`)
 
 ## 5) Documentation Truth Status
 
@@ -140,7 +141,6 @@ From `python -m oracle status`:
 2. Native audio (`miniaudio`) production soak validation across real devices and a full 4-hour long-session run.
 3. Runtime/source separation is still partial beyond the dedicated `.lyra-build` staging root.
 4. Mantine/Figma foundation plus the bespoke shell pass are live across the main workspace, Home, Queue, Playlists, Search, Oracle, Artist, and key secondary surfaces, but not yet across every remaining legacy route or panel.
-5. Tier 1 Qobuz runtime path is healthy again, but successful duplicate acquisitions still fall back into stale queue re-queue behavior instead of resolving cleanly.
 
 ## 7) Immediate Next Pass
 
