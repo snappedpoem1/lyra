@@ -7,6 +7,7 @@ edition = "2021"
 chrono = { version = "0.4", features = ["serde"] }
 cpal = "0.15"
 dotenvy = "0.15"
+keyring = "3"
 lofty = "0.22"
 rodio = "0.20"
 rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
@@ -16,4 +17,7 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ureq = { version = "2", features = ["json"] }
+md5 = "0.7"
 walkdir = "2"
+base64 = "0.22"
+which = "5"

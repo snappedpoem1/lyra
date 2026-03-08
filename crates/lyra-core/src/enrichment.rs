@@ -319,18 +319,491 @@ impl EnricherAdapter for AcoustIDAdapter {
     }
 }
 
+// ── Last.fm adapter ───────────────────────────────────────────────────────────
+
+pub struct LastFmAdapter {
+    api_key: String,
+}
+
+impl LastFmAdapter {
+    pub fn from_db(conn: &Connection) -> Self {
+        let api_key = conn
+            .query_row(
+                "SELECT config_json FROM provider_configs WHERE provider_key = 'lastfm'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .and_then(|json| serde_json::from_str::<Value>(&json).ok())
+            .and_then(|v| {
+                v.get("lastfm_api_key")
+                    .or_else(|| v.get("LASTFM_API_KEY"))
+                    .and_then(Value::as_str)
+                    .map(String::from)
+            })
+            .unwrap_or_default();
+        Self { api_key }
+    }
+}
+
+impl EnricherAdapter for LastFmAdapter {
+    fn name(&self) -> &str {
+        "lastfm"
+    }
+
+    fn enrich(
+        &self,
+        _conn: &Connection,
+        _track_id: i64,
+        artist: &str,
+        title: &str,
+        _path: &str,
+    ) -> LyraResult<Option<Value>> {
+        if self.api_key.is_empty() {
+            return Ok(Some(json!({
+                "status": "not_configured",
+                "provider": "lastfm",
+                "artist": artist,
+                "title": title,
+            })));
+        }
+
+        let result = ureq::get("https://ws.audioscrobbler.com/2.0/")
+            .set("User-Agent", "Lyra/0.1 (https://github.com/snappedpoem1/lyra)")
+            .query("method", "track.getInfo")
+            .query("api_key", &self.api_key)
+            .query("artist", artist)
+            .query("track", title)
+            .query("format", "json")
+            .query("autocorrect", "1")
+            .call();
+
+        match result {
+            Ok(response) => {
+                let body: Value = response.into_json().unwrap_or(Value::Null);
+                if body.get("error").is_some() {
+                    return Ok(Some(json!({
+                        "status": "not_found",
+                        "provider": "lastfm",
+                        "artist": artist,
+                        "title": title,
+                        "errorCode": body.get("error"),
+                    })));
+                }
+
+                let track = body.get("track").cloned().unwrap_or(Value::Null);
+                let listeners = track
+                    .get("listeners")
+                    .and_then(Value::as_str)
+                    .and_then(|s| s.parse::<i64>().ok())
+                    .unwrap_or(0);
+                let playcount = track
+                    .get("playcount")
+                    .and_then(Value::as_str)
+                    .and_then(|s| s.parse::<i64>().ok())
+                    .unwrap_or(0);
+
+                let tags: Vec<String> = track
+                    .get("toptags")
+                    .and_then(|t| t.get("tag"))
+                    .and_then(Value::as_array)
+                    .map(|arr| {
+                        arr.iter()
+                            .take(5)
+                            .filter_map(|t| t.get("name").and_then(Value::as_str).map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let summary = track
+                    .get("wiki")
+                    .and_then(|w| w.get("summary"))
+                    .and_then(Value::as_str)
+                    .map(|s| {
+                        // Strip Last.fm footer link and HTML
+                        let trimmed = s.split("<a href=\"https://www.last.fm").next().unwrap_or(s);
+                        trimmed.trim().to_string()
+                    })
+                    .unwrap_or_default();
+
+                let mbid = track
+                    .get("mbid")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+
+                Ok(Some(json!({
+                    "status": "ok",
+                    "provider": "lastfm",
+                    "artist": artist,
+                    "title": title,
+                    "listeners": listeners,
+                    "playcount": playcount,
+                    "tags": tags,
+                    "mbid": mbid,
+                    "summary": summary,
+                })))
+            }
+            Err(e) => {
+                warn!("Last.fm request failed for {artist} / {title}: {e}");
+                Ok(Some(json!({
+                    "status": "error",
+                    "provider": "lastfm",
+                    "artist": artist,
+                    "title": title,
+                    "error": e.to_string(),
+                })))
+            }
+        }
+    }
+}
+
+// ── Discogs adapter ───────────────────────────────────────────────────────────
+
+pub struct DiscogsAdapter {
+    user_token: String,
+}
+
+impl DiscogsAdapter {
+    pub fn from_db(conn: &Connection) -> Self {
+        let user_token = conn
+            .query_row(
+                "SELECT config_json FROM provider_configs WHERE provider_key = 'discogs'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .and_then(|json| serde_json::from_str::<Value>(&json).ok())
+            .and_then(|v| {
+                v.get("discogs_token")
+                    .or_else(|| v.get("DISCOGS_TOKEN"))
+                    .or_else(|| v.get("discogs_user_token"))
+                    .and_then(Value::as_str)
+                    .map(String::from)
+            })
+            .unwrap_or_default();
+        Self { user_token }
+    }
+}
+
+impl EnricherAdapter for DiscogsAdapter {
+    fn name(&self) -> &str {
+        "discogs"
+    }
+
+    fn enrich(
+        &self,
+        _conn: &Connection,
+        _track_id: i64,
+        artist: &str,
+        title: &str,
+        _path: &str,
+    ) -> LyraResult<Option<Value>> {
+        let query = format!("{artist} {title}");
+        let mut request = ureq::get("https://api.discogs.com/database/search")
+            .set("User-Agent", "Lyra/0.1 +https://github.com/snappedpoem1/lyra")
+            .query("q", &query)
+            .query("type", "release")
+            .query("per_page", "1");
+
+        if !self.user_token.is_empty() {
+            request = request.set(
+                "Authorization",
+                &format!("Discogs token={}", self.user_token),
+            );
+        }
+
+        match request.call() {
+            Ok(response) => {
+                let body: Value = response.into_json().unwrap_or(Value::Null);
+                let first = body
+                    .get("results")
+                    .and_then(Value::as_array)
+                    .and_then(|arr| arr.first())
+                    .cloned();
+
+                match first {
+                    None => Ok(Some(json!({
+                        "status": "not_found",
+                        "provider": "discogs",
+                        "artist": artist,
+                        "title": title,
+                    }))),
+                    Some(hit) => {
+                        let year = hit
+                            .get("year")
+                            .cloned()
+                            .map(|v| match v {
+                                Value::String(s) => s,
+                                Value::Number(n) => n.to_string(),
+                                _ => String::new(),
+                            })
+                            .unwrap_or_default();
+
+                        let genres: Vec<String> = hit
+                            .get("genre")
+                            .and_then(Value::as_array)
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+
+                        let styles: Vec<String> = hit
+                            .get("style")
+                            .and_then(Value::as_array)
+                            .map(|arr| {
+                                arr.iter()
+                                    .take(3)
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+
+                        let label = hit
+                            .get("label")
+                            .and_then(Value::as_array)
+                            .and_then(|arr| arr.first())
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+
+                        let country = hit
+                            .get("country")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+
+                        let cover_image = hit
+                            .get("cover_image")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+
+                        Ok(Some(json!({
+                            "status": "ok",
+                            "provider": "discogs",
+                            "artist": artist,
+                            "title": title,
+                            "year": year,
+                            "genres": genres,
+                            "styles": styles,
+                            "label": label,
+                            "country": country,
+                            "coverImage": cover_image,
+                        })))
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Discogs request failed for {artist} / {title}: {e}");
+                Ok(Some(json!({
+                    "status": "error",
+                    "provider": "discogs",
+                    "artist": artist,
+                    "title": title,
+                    "error": e.to_string(),
+                })))
+            }
+        }
+    }
+}
+
+// ── Genius adapter ────────────────────────────────────────────────────────────
+//
+// Queries the Genius search API for the track and returns the canonical Genius
+// URL, full_title, and album art thumbnail.  Actual lyrics text is not returned
+// by the API, but the URL can be opened by the user.
+
+pub struct GeniusAdapter {
+    token: String,
+}
+
+impl GeniusAdapter {
+    pub fn from_db(conn: &Connection) -> Self {
+        let token = conn
+            .query_row(
+                "SELECT config_json FROM provider_configs WHERE provider_key = 'genius'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .and_then(|json| serde_json::from_str::<Value>(&json).ok())
+            .and_then(|v| {
+                v.get("genius_token")
+                    .or_else(|| v.get("GENIUS_TOKEN"))
+                    .or_else(|| v.get("genius_access_token"))
+                    .or_else(|| v.get("GENIUS_ACCESS_TOKEN"))
+                    .and_then(Value::as_str)
+                    .map(String::from)
+            })
+            .unwrap_or_default();
+        Self { token }
+    }
+}
+
+impl EnricherAdapter for GeniusAdapter {
+    fn name(&self) -> &str {
+        "genius"
+    }
+
+    fn enrich(
+        &self,
+        _conn: &Connection,
+        _track_id: i64,
+        artist: &str,
+        title: &str,
+        _path: &str,
+    ) -> LyraResult<Option<Value>> {
+        if self.token.is_empty() {
+            return Ok(Some(json!({
+                "status": "not_configured",
+                "provider": "genius",
+                "artist": artist,
+                "title": title,
+            })));
+        }
+
+        let query = format!("{artist} {title}");
+        let result = ureq::get("https://api.genius.com/search")
+            .set("User-Agent", "Lyra/0.1 (https://github.com/snappedpoem1/lyra)")
+            .set("Authorization", &format!("Bearer {}", self.token))
+            .query("q", &query)
+            .call();
+
+        match result {
+            Ok(response) => {
+                let body: Value = response.into_json().unwrap_or(Value::Null);
+                let hit = body
+                    .pointer("/response/hits/0/result")
+                    .cloned();
+
+                match hit {
+                    None => Ok(Some(json!({
+                        "status": "not_found",
+                        "provider": "genius",
+                        "artist": artist,
+                        "title": title,
+                    }))),
+                    Some(result) => {
+                        let url = result.get("url").and_then(Value::as_str).unwrap_or("").to_string();
+                        let full_title = result.get("full_title").and_then(Value::as_str).unwrap_or("").to_string();
+                        let art_url = result.get("song_art_image_thumbnail_url").and_then(Value::as_str).unwrap_or("").to_string();
+                        let genius_id = result.get("id").and_then(Value::as_i64).unwrap_or(0);
+                        let artist_name = result
+                            .pointer("/primary_artist/name")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+
+                        Ok(Some(json!({
+                            "status": "ok",
+                            "provider": "genius",
+                            "artist": artist,
+                            "title": title,
+                            "geniusId": genius_id,
+                            "fullTitle": full_title,
+                            "artistName": artist_name,
+                            "url": url,
+                            "artUrl": art_url,
+                        })))
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Genius request failed for {artist} / {title}: {e}");
+                Ok(Some(json!({
+                    "status": "error",
+                    "provider": "genius",
+                    "artist": artist,
+                    "title": title,
+                    "error": e.to_string(),
+                })))
+            }
+        }
+    }
+}
+
+// ── LRC sidecar adapter ───────────────────────────────────────────────────────
+//
+// Checks for a `.lrc` file co-located with the audio file (same path, `.lrc`
+// extension).  Returns the raw LRC content so the UI can display synchronized
+// lyrics without any network call.
+
+pub struct LrcSidecarAdapter;
+
+impl EnricherAdapter for LrcSidecarAdapter {
+    fn name(&self) -> &str {
+        "lrc_sidecar"
+    }
+
+    fn enrich(
+        &self,
+        _conn: &Connection,
+        _track_id: i64,
+        artist: &str,
+        title: &str,
+        path: &str,
+    ) -> LyraResult<Option<Value>> {
+        use std::path::Path;
+        let audio_path = Path::new(path);
+        let lrc_path = audio_path.with_extension("lrc");
+        if !lrc_path.exists() {
+            return Ok(Some(json!({
+                "status": "not_found",
+                "provider": "lrc_sidecar",
+                "artist": artist,
+                "title": title,
+            })));
+        }
+        match std::fs::read_to_string(&lrc_path) {
+            Ok(content) => Ok(Some(json!({
+                "status": "ok",
+                "provider": "lrc_sidecar",
+                "artist": artist,
+                "title": title,
+                "lrcContent": content,
+                "lrcPath": lrc_path.to_string_lossy(),
+            }))),
+            Err(e) => Ok(Some(json!({
+                "status": "error",
+                "provider": "lrc_sidecar",
+                "artist": artist,
+                "title": title,
+                "error": e.to_string(),
+            }))),
+        }
+    }
+}
+
+// ── Dispatcher ────────────────────────────────────────────────────────────────
+
 pub struct EnrichmentDispatcher {
     adapters: Vec<Box<dyn EnricherAdapter>>,
 }
 
-impl Default for EnrichmentDispatcher {
-    fn default() -> Self {
+impl EnrichmentDispatcher {
+    /// Full dispatcher: all providers, credentials read from DB.
+    pub fn new(conn: &Connection) -> Self {
         Self {
             adapters: vec![
                 Box::new(MusicBrainzAdapter),
                 Box::new(AcoustIDAdapter::default()),
-                Box::new(NullAdapter::new("discogs")),
-                Box::new(NullAdapter::new("lastfm")),
+                Box::new(LastFmAdapter::from_db(conn)),
+                Box::new(DiscogsAdapter::from_db(conn)),
+                Box::new(GeniusAdapter::from_db(conn)),
+                Box::new(LrcSidecarAdapter),
+            ],
+        }
+    }
+
+    /// Background-safe dispatcher: only MusicBrainz + AcoustID (no credential reads needed).
+    pub fn background() -> Self {
+        Self {
+            adapters: vec![
+                Box::new(MusicBrainzAdapter),
+                Box::new(AcoustIDAdapter::default()),
             ],
         }
     }

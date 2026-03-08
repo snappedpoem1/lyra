@@ -5,7 +5,9 @@ import type {
   AppShellState,
   AudioOutputDevice,
   BootstrapPayload,
+  DiagnosticsReport,
   DuplicateCluster,
+  ExplainPayload,
   LegacyImportReport,
   LibraryOverview,
   LibraryRootRecord,
@@ -15,7 +17,10 @@ import type {
   PlaylistSummary,
   ProviderConfigRecord,
   ProviderHealth,
+  ProviderValidationResult,
   QueueItemRecord,
+  RecentPlayRecord,
+  RecommendationResult,
   ScanJobRecord,
   SettingsPayload,
   TasteProfile,
@@ -77,6 +82,16 @@ export const api = {
     invoke<AcquisitionQueueItem[]>("add_to_acquisition_queue", { artist, title, album, source }),
   updateAcquisitionItem: (id: number, status: string, error?: string) =>
     invoke<AcquisitionQueueItem[]>("update_acquisition_item", { id, status, error }),
+  processAcquisitionQueue: () =>
+    invoke<boolean>("process_acquisition_queue"),
+  startAcquisitionWorker: () =>
+    invoke<boolean>("start_acquisition_worker"),
+  stopAcquisitionWorker: () =>
+    invoke<void>("stop_acquisition_worker"),
+  acquisitionWorkerStatus: () =>
+    invoke<boolean>("acquisition_worker_status"),
+  runDiagnostics: () =>
+    invoke<DiagnosticsReport>("run_diagnostics"),
   playbackHistory: (limit?: number) => invoke<PlaybackEvent[]>("list_playback_history", { limit }),
   recordPlaybackEvent: (trackId: number, completionRate: number, context?: string) =>
     invoke<void>("record_playback_event", { trackId, completionRate, context }),
@@ -93,6 +108,36 @@ export const api = {
   // --- enrichment ---
   enrichTrack: (trackId: number) => invoke<Record<string, unknown>>("enrich_track", { trackId }),
   enrichLibrary: () => invoke<void>("enrich_library"),
+  refreshTrackEnrichment: (trackId: number) =>
+    invoke<Record<string, unknown>>("refresh_track_enrichment", { trackId }),
+  validateProvider: (providerKey: string) =>
+    invoke<ProviderValidationResult>("validate_provider", { providerKey }),
+  // --- recommendations / oracle ---
+  getRecommendations: (limit?: number) =>
+    invoke<RecommendationResult[]>("get_recommendations", { limit }),
+  explainRecommendation: (trackId: number) =>
+    invoke<ExplainPayload>("explain_recommendation", { trackId }),
+  // --- keyring / secure credentials ---
+  keyringSave: (providerKey: string, keyName: string, secret: string) =>
+    invoke<void>("keyring_save", { providerKey, keyName, secret }),
+  keyringLoad: (providerKey: string, keyName: string) =>
+    invoke<string | null>("keyring_load", { providerKey, keyName }),
+  keyringDelete: (providerKey: string, keyName: string) =>
+    invoke<void>("keyring_delete", { providerKey, keyName }),
+  // --- liked tracks ---
+  toggleLike: (trackId: number) => invoke<boolean>("toggle_like", { trackId }),
+  listLikedTracks: () => invoke<TrackRecord[]>("list_liked_tracks"),
+  // --- Last.fm auth ---
+  lastfmGetSession: (apiKey: string, apiSecret: string, username: string, password: string) =>
+    invoke<string>("lastfm_get_session", { apiKey, apiSecret, username, password }),
+  // --- sleep timer ---
+  setSleepTimer: (minutes: number) => invoke<void>("set_sleep_timer", { minutes }),
+  getSleepTimer: () => invoke<number | null>("get_sleep_timer"),
+  // --- recent plays ---
+  listRecentPlays: (limit?: number) => invoke<RecentPlayRecord[]>("list_recent_plays", { limit }),
+  // --- env keychain backup ---
+  backupEnvToKeychain: (envPath: string) => invoke<{ saved: number; skipped: number }>("backup_env_to_keychain", { envPath }),
+  loadEnvCredential: (keyName: string) => invoke<string | null>("load_env_credential", { keyName }),
   on<T>(event: string, callback: (payload: T) => void) {
     return listen<T>(event, (message) => callback(message.payload));
   }

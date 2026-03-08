@@ -11,6 +11,7 @@
     { href: "/playlists", label: "Playlists" },
     { href: "/discover", label: "Discover" },
     { href: "/queue", label: "Queue / Now Playing" },
+    { href: "/acquisition", label: "Acquisition" },
     { href: "/settings", label: "Settings" }
   ];
 

@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+// Re-export diagnostics types
+pub use crate::diagnostics::{ComponentHealth, DiagnosticsReport, SystemStats};
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioOutputDevice {
@@ -23,6 +26,8 @@ pub struct TrackRecord {
     pub year: Option<String>,
     pub bpm: Option<f64>,
     pub key_signature: Option<String>,
+    pub liked: bool,
+    pub liked_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -210,6 +215,18 @@ pub struct PlaybackEvent {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RecentPlayRecord {
+    pub id: i64,
+    pub track_id: i64,
+    pub artist: String,
+    pub title: String,
+    pub ts: String,
+    pub completion_rate: Option<f64>,
+    pub skipped: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TrackDetail {
     pub track: TrackRecord,
     pub scores: Option<TrackScores>,
@@ -263,4 +280,33 @@ pub struct AppShellState {
 pub struct BootstrapPayload {
     pub shell: AppShellState,
     pub native_capabilities: NativeCapabilities,
+}
+
+/// Result of a lightweight provider credential validation probe.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderValidationResult {
+    pub provider_key: String,
+    pub valid: bool,
+    pub latency_ms: u64,
+    pub error: Option<String>,
+    pub detail: Option<String>,
+}
+
+/// Human-readable explanation of why a track was recommended.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExplainPayload {
+    pub track_id: i64,
+    pub reasons: Vec<String>,
+    pub confidence: f64,
+    pub source: String,
+}
+
+/// A recommended track with its similarity score.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecommendationResult {
+    pub track: TrackRecord,
+    pub score: f64,
 }

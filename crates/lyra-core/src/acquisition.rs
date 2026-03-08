@@ -1,8 +1,33 @@
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
 
 use crate::commands::AcquisitionQueueItem;
 use crate::errors::LyraResult;
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AcquisitionQueueSummary {
+    pub total_count: i64,
+    pub pending_count: i64,
+    pub completed_count: i64,
+    pub failed_count: i64,
+    pub skipped_count: i64,
+    pub retrying_count: i64,
+    pub average_priority: f64,
+    pub oldest_pending_added_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AcquisitionSourceSummary {
+    pub source: String,
+    pub total_count: i64,
+    pub pending_count: i64,
+    pub completed_count: i64,
+    pub failed_count: i64,
+    pub average_priority: f64,
+}
 
 pub fn list_acquisition_queue(
     conn: &Connection,
@@ -126,6 +151,60 @@ pub fn pending_count(conn: &Connection) -> i64 {
     .unwrap_or(0)
 }
 
+pub fn summarize_acquisition_queue(conn: &Connection) -> LyraResult<AcquisitionQueueSummary> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*),
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN retry_count > 0 AND status != 'completed' THEN 1 ELSE 0 END),
+                AVG(priority_score),
+                MIN(CASE WHEN status = 'pending' THEN added_at ELSE NULL END)
+         FROM acquisition_queue",
+        [],
+        |row| {
+            Ok(AcquisitionQueueSummary {
+                total_count: row.get(0)?,
+                pending_count: row.get(1)?,
+                completed_count: row.get(2)?,
+                failed_count: row.get(3)?,
+                skipped_count: row.get(4)?,
+                retrying_count: row.get(5)?,
+                average_priority: row.get::<_, Option<f64>>(6)?.unwrap_or(0.0),
+                oldest_pending_added_at: row.get(7)?,
+            })
+        },
+    )?)
+}
+
+pub fn list_acquisition_sources(conn: &Connection) -> LyraResult<Vec<AcquisitionSourceSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(NULLIF(source, ''), 'manual') AS source_key,
+                COUNT(*) AS total_count,
+                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed_count,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+                AVG(priority_score) AS average_priority
+         FROM acquisition_queue
+         GROUP BY source_key
+         ORDER BY pending_count DESC, average_priority DESC, source_key ASC",
+    )?;
+
+    let rows = stmt.query_map([], |row| {
+        Ok(AcquisitionSourceSummary {
+            source: row.get(0)?,
+            total_count: row.get(1)?,
+            pending_count: row.get(2)?,
+            completed_count: row.get(3)?,
+            failed_count: row.get(4)?,
+            average_priority: row.get::<_, Option<f64>>(5)?.unwrap_or(0.0),
+        })
+    })?;
+
+    Ok(rows.filter_map(Result::ok).collect())
+}
+
 pub fn import_queue_from_legacy(conn: &Connection, legacy: &Connection) -> LyraResult<usize> {
     let mut stmt = legacy.prepare(
         "SELECT artist, title, album, priority_score, source, added_at
@@ -217,4 +296,97 @@ pub fn import_spotify_library_as_queue(
         count += 1;
     }
     Ok(count)
+}
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::{params, Connection};
+
+    use super::{list_acquisition_sources, summarize_acquisition_queue};
+
+    fn setup_conn() -> Connection {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite");
+        conn.execute_batch(
+            "
+            CREATE TABLE acquisition_queue (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              artist TEXT NOT NULL DEFAULT '',
+              title TEXT NOT NULL DEFAULT '',
+              album TEXT,
+              status TEXT NOT NULL DEFAULT 'pending',
+              priority_score REAL NOT NULL DEFAULT 0.0,
+              source TEXT,
+              added_at TEXT NOT NULL,
+              completed_at TEXT,
+              error TEXT,
+              retry_count INTEGER NOT NULL DEFAULT 0
+            );
+            ",
+        )
+        .expect("queue schema");
+        conn
+    }
+
+    #[test]
+    fn summarizes_queue_state() {
+        let conn = setup_conn();
+        let rows = [
+            ("A", "One", Some("Album"), "pending", 0.9, Some("wishlist"), "2026-03-08T01:00:00Z", None::<String>, None::<String>, 0_i64),
+            ("B", "Two", None, "failed", 0.6, Some("manual"), "2026-03-08T02:00:00Z", Some("2026-03-08T03:00:00Z".to_string()), Some("boom".to_string()), 2_i64),
+            ("C", "Three", None, "completed", 0.4, Some("recommendation"), "2026-03-08T04:00:00Z", Some("2026-03-08T05:00:00Z".to_string()), None::<String>, 1_i64),
+            ("D", "Four", None, "skipped", 0.2, None, "2026-03-08T06:00:00Z", Some("2026-03-08T07:00:00Z".to_string()), None::<String>, 0_i64),
+        ];
+
+        for (artist, title, album, status, priority, source, added_at, completed_at, error, retry_count) in rows {
+            conn.execute(
+                "INSERT INTO acquisition_queue
+                 (artist, title, album, status, priority_score, source, added_at, completed_at, error, retry_count)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![artist, title, album, status, priority, source, added_at, completed_at, error, retry_count],
+            )
+            .expect("insert acquisition row");
+        }
+
+        let summary = summarize_acquisition_queue(&conn).expect("summary");
+        assert_eq!(summary.total_count, 4);
+        assert_eq!(summary.pending_count, 1);
+        assert_eq!(summary.completed_count, 1);
+        assert_eq!(summary.failed_count, 1);
+        assert_eq!(summary.skipped_count, 1);
+        assert_eq!(summary.retrying_count, 1);
+        assert_eq!(summary.oldest_pending_added_at.as_deref(), Some("2026-03-08T01:00:00Z"));
+        assert!((summary.average_priority - 0.525).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn groups_queue_by_source() {
+        let conn = setup_conn();
+        let rows = [
+            ("A", "One", "pending", 0.9, Some("wishlist")),
+            ("B", "Two", "failed", 0.6, Some("wishlist")),
+            ("C", "Three", "completed", 0.3, Some("manual")),
+            ("D", "Four", "pending", 0.5, None),
+        ];
+
+        for (artist, title, status, priority, source) in rows {
+            conn.execute(
+                "INSERT INTO acquisition_queue
+                 (artist, title, status, priority_score, source, added_at, retry_count)
+                 VALUES (?1, ?2, ?3, ?4, ?5, '2026-03-08T01:00:00Z', 0)",
+                params![artist, title, status, priority, source],
+            )
+            .expect("insert acquisition row");
+        }
+
+        let sources = list_acquisition_sources(&conn).expect("source summary");
+        assert_eq!(sources.len(), 2);
+        assert_eq!(sources[0].source, "wishlist");
+        assert_eq!(sources[0].total_count, 2);
+        assert_eq!(sources[0].pending_count, 1);
+        assert_eq!(sources[0].failed_count, 1);
+        assert_eq!(sources[1].source, "manual");
+        assert_eq!(sources[1].total_count, 2);
+        assert_eq!(sources[1].completed_count, 1);
+        assert_eq!(sources[1].pending_count, 1);
+    }
 }

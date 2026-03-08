@@ -9,9 +9,10 @@ mod smtc;
 
 use lyra_core::commands::{
     AcquisitionQueueItem, AppShellState, AudioOutputDevice, BootstrapPayload, DuplicateCluster,
-    LegacyImportReport, NativeCapabilities, PlaybackEvent, PlaybackState, PlaylistDetail,
-    PlaylistSummary, ProviderConfigRecord, ProviderHealth, QueueItemRecord, ScanJobRecord,
-    SettingsPayload, TasteProfile, TrackDetail, TrackRecord, TrackScores,
+    ExplainPayload, LegacyImportReport, NativeCapabilities, PlaybackEvent, PlaybackState,
+    PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth, ProviderValidationResult,
+    QueueItemRecord, RecentPlayRecord, RecommendationResult, ScanJobRecord, SettingsPayload,
+    TasteProfile, TrackDetail, TrackRecord, TrackScores,
 };
 use lyra_core::logging::initialize_logging;
 use lyra_core::LyraCore;
@@ -25,6 +26,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 #[derive(Clone)]
 struct AppState {
     core: LyraCore,
+    sleep_until: Arc<std::sync::Mutex<Option<std::time::Instant>>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -344,6 +346,118 @@ fn enrich_library(state: State<'_, AppState>) -> Result<(), String> {
         let _ = core.enrich_unenriched_tracks(50);
     });
     Ok(())
+}
+
+#[tauri::command]
+fn refresh_track_enrichment(
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<serde_json::Value, String> {
+    state
+        .core
+        .refresh_track_enrichment(track_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn validate_provider(
+    state: State<'_, AppState>,
+    provider_key: String,
+) -> Result<ProviderValidationResult, String> {
+    state
+        .core
+        .validate_provider(provider_key)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn keyring_save(
+    state: State<'_, AppState>,
+    provider_key: String,
+    key_name: String,
+    secret: String,
+) -> Result<(), String> {
+    state.core.keyring_save(provider_key, key_name, secret)
+}
+
+#[tauri::command]
+fn keyring_load(
+    state: State<'_, AppState>,
+    provider_key: String,
+    key_name: String,
+) -> Result<Option<String>, String> {
+    state.core.keyring_load(provider_key, key_name)
+}
+
+#[tauri::command]
+fn keyring_delete(
+    state: State<'_, AppState>,
+    provider_key: String,
+    key_name: String,
+) -> Result<(), String> {
+    state.core.keyring_delete(provider_key, key_name)
+}
+
+#[tauri::command]
+fn toggle_like(state: State<'_, AppState>, track_id: i64) -> Result<bool, String> {
+    state.core.toggle_like(track_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_liked_tracks(state: State<'_, AppState>) -> Result<Vec<TrackRecord>, String> {
+    state.core.list_liked_tracks().map_err(|e| e.to_string())
+}
+
+/// Set a sleep timer to stop playback after `minutes` minutes.
+/// Pass 0 to cancel.
+#[tauri::command]
+fn list_recent_plays(state: State<'_, AppState>, limit: Option<i64>) -> Result<Vec<RecentPlayRecord>, String> {
+    state.core.list_recent_plays(limit).map_err(|e| e.to_string())
+}
+
+/// Scan a .env file and save all credential-like values to the OS keychain.
+/// Returns { saved, skipped }.
+#[tauri::command]
+fn backup_env_to_keychain(state: State<'_, AppState>, env_path: String) -> Result<serde_json::Value, String> {
+    let (saved, skipped) = state.core.backup_env_to_keychain(env_path)?;
+    Ok(serde_json::json!({ "saved": saved, "skipped": skipped }))
+}
+
+#[tauri::command]
+fn load_env_credential(state: State<'_, AppState>, key_name: String) -> Result<Option<String>, String> {
+    state.core.load_env_credential(key_name)
+}
+
+#[tauri::command]
+fn set_sleep_timer(state: State<'_, AppState>, minutes: u32) -> Result<(), String> {
+    let mut guard = state.sleep_until.lock().map_err(|e| e.to_string())?;
+    if minutes == 0 {
+        *guard = None;
+    } else {
+        *guard = Some(std::time::Instant::now() + Duration::from_secs(minutes as u64 * 60));
+    }
+    Ok(())
+}
+
+/// Returns seconds remaining in the sleep timer, or None if not set.
+#[tauri::command]
+fn get_sleep_timer(state: State<'_, AppState>) -> Result<Option<u64>, String> {
+    let guard = state.sleep_until.lock().map_err(|e| e.to_string())?;
+    Ok(guard.map(|t| {
+        let now = std::time::Instant::now();
+        if t > now { (t - now).as_secs() } else { 0 }
+    }))
+}
+
+#[tauri::command]
+fn lastfm_get_session(
+    state: State<'_, AppState>,
+    api_key: String,
+    api_secret: String,
+    username: String,
+    password: String,
+) -> Result<String, String> {
+    state.core.lastfm_get_session(api_key, api_secret, username, password)
 }
 
 #[tauri::command]
@@ -721,6 +835,28 @@ fn get_taste_profile(state: State<'_, AppState>) -> Result<TasteProfile, String>
 }
 
 #[tauri::command]
+fn get_recommendations(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<RecommendationResult>, String> {
+    state
+        .core
+        .get_recommendations(limit.unwrap_or(20))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn explain_recommendation(
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<ExplainPayload, String> {
+    state
+        .core
+        .explain_recommendation(track_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_acquisition_queue(
     state: State<'_, AppState>,
     status_filter: Option<String>,
@@ -762,6 +898,61 @@ fn update_acquisition_item(
         .map_err(|e| e.to_string())?;
     emit_shell(&app, &state.core);
     Ok(payload)
+}
+
+#[tauri::command]
+fn process_acquisition_queue(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let processed = state
+        .core
+        .process_acquisition_queue()
+        .map_err(|e| e.to_string())?;
+    if processed {
+        emit_shell(&app, &state.core);
+    }
+    Ok(processed)
+}
+
+#[tauri::command]
+fn start_acquisition_worker(
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    state
+        .core
+        .start_acquisition_worker()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn stop_acquisition_worker(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .core
+        .stop_acquisition_worker()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn acquisition_worker_status(
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    state
+        .core
+        .acquisition_worker_status()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn run_diagnostics(
+    state: State<'_, AppState>,
+) -> Result<lyra_core::commands::DiagnosticsReport, String> {
+    state
+        .core
+        .run_diagnostics()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -914,7 +1105,10 @@ fn main() {
             fs::create_dir_all(&app_data_dir)?;
             let core = LyraCore::new(app_data_dir)
                 .map_err(|error| tauri::Error::Anyhow(anyhow::anyhow!(error.to_string())))?;
-            let state = AppState { core };
+            let state = AppState {
+                core,
+                sleep_until: Arc::new(std::sync::Mutex::new(None)),
+            };
             restore_window_state(app.handle());
             create_tray(app.handle(), &state)?;
             register_shortcuts(app.handle(), &state);
@@ -939,6 +1133,7 @@ fn main() {
             // Playback position ticker — emits state + handles auto-advance every second
             let core_tick = state.core.clone();
             let app_tick = app.handle().clone();
+            let sleep_tick = state.sleep_until.clone();
             #[cfg(target_os = "windows")]
             let smtc_tick = smtc_bridge.clone();
             thread::spawn(move || {
@@ -954,6 +1149,21 @@ fn main() {
                     if let Some(smtc) = &smtc_tick {
                         smtc.update(&playback);
                     }
+                    // Check sleep timer — stop if deadline has passed.
+                    if playback.status == "playing" {
+                        let expired = sleep_tick
+                            .lock()
+                            .map(|guard| guard.map(|t| std::time::Instant::now() >= t).unwrap_or(false))
+                            .unwrap_or(false);
+                        if expired {
+                            if let Ok(stopped) = core_tick.stop_playback() {
+                                emit_playback(&app_tick, &stopped);
+                            }
+                            if let Ok(mut guard) = sleep_tick.lock() { *guard = None; }
+                            let _ = app_tick.emit("lyra://sleep-timer-fired", ());
+                            continue;
+                        }
+                    }
                     if playback.status == "playing" {
                         emit_playback(&app_tick, &playback);
                         // Persist live position every 5 ticks for accurate session restore.
@@ -963,8 +1173,6 @@ fn main() {
                         if core_tick.playback_finished() {
                             let queue_len = core_tick.get_queue().map(|q| q.len()).unwrap_or(0);
                             let next_idx = (playback.queue_index + 1) as usize;
-                            let should_advance =
-                                playback.repeat_mode == "all" || next_idx < queue_len;
                             // Record completion for the track that just finished
                             if let Some(track_id) = playback.current_track_id {
                                 let duration = playback.duration_seconds.max(1.0);
@@ -976,15 +1184,26 @@ fn main() {
                                     Some("player".to_string()),
                                 );
                             }
-                            if should_advance {
-                                if let Ok(next) = core_tick.play_next() {
-                                    emit_playback(&app_tick, &next);
+                            if playback.repeat_mode == "one" {
+                                // Repeat the current track.
+                                if let Some(track_id) = playback.current_track_id {
+                                    if let Ok(next) = core_tick.play_track(track_id) {
+                                        emit_playback(&app_tick, &next);
+                                    }
                                 }
                             } else {
-                                // Persist the stopped state so the ticker does not
-                                // fire this branch on every subsequent tick.
-                                if let Ok(stopped) = core_tick.stop_playback() {
-                                    emit_playback(&app_tick, &stopped);
+                                let should_advance =
+                                    playback.repeat_mode == "all" || next_idx < queue_len;
+                                if should_advance {
+                                    if let Ok(next) = core_tick.play_next() {
+                                        emit_playback(&app_tick, &next);
+                                    }
+                                } else {
+                                    // Persist the stopped state so the ticker does not
+                                    // fire this branch on every subsequent tick.
+                                    if let Ok(stopped) = core_tick.stop_playback() {
+                                        emit_playback(&app_tick, &stopped);
+                                    }
                                 }
                             }
                         }
@@ -1005,6 +1224,11 @@ fn main() {
             start_library_scan,
             get_scan_jobs,
             enrich_library,
+            refresh_track_enrichment,
+            validate_provider,
+            keyring_save,
+            keyring_load,
+            keyring_delete,
             list_playlists,
             get_playlist_detail,
             create_playlist,
@@ -1042,9 +1266,16 @@ fn main() {
             get_native_capabilities,
             get_track_scores,
             get_taste_profile,
+            get_recommendations,
+            explain_recommendation,
             get_acquisition_queue,
             add_to_acquisition_queue,
             update_acquisition_item,
+            process_acquisition_queue,
+            start_acquisition_worker,
+            stop_acquisition_worker,
+            acquisition_worker_status,
+            run_diagnostics,
             list_playback_history,
             record_playback_event,
             get_track_detail,
@@ -1052,7 +1283,15 @@ fn main() {
             list_provider_health,
             get_provider_health,
             record_provider_event,
-            reset_provider_health
+            reset_provider_health,
+            toggle_like,
+            list_liked_tracks,
+            lastfm_get_session,
+            set_sleep_timer,
+            get_sleep_timer,
+            list_recent_plays,
+            backup_env_to_keychain,
+            load_env_credential
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

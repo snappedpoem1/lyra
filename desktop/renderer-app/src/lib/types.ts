@@ -9,6 +9,8 @@ export type TrackRecord = {
   year?: string | null;
   bpm?: number | null;
   keySignature?: string | null;
+  liked: boolean;
+  likedAt?: string | null;
 };
 
 export type LibraryOverview = {
@@ -172,6 +174,16 @@ export type PlaybackEvent = {
   skipped: boolean;
 };
 
+export type RecentPlayRecord = {
+  id: number;
+  trackId: number;
+  artist: string;
+  title: string;
+  ts: string;
+  completionRate?: number | null;
+  skipped: boolean;
+};
+
 export type TrackDetail = {
   track: TrackRecord;
   scores?: TrackScores | null;
@@ -189,5 +201,46 @@ export type ProviderHealth = {
   lastSuccess?: string | null;
   circuitOpen: boolean;
   lastCheck: string;
+};
+
+export type DiagnosticsReport = {
+  status: string;
+  checks: Record<string, ComponentHealth>;
+  stats: SystemStats;
+};
+
+export type ComponentHealth = {
+  status: string;
+  message: string;
+  error?: string | null;
+};
+
+export type SystemStats = {
+  totalTracks: number;
+  totalPlaylists: number;
+  pendingAcquisitions: number;
+  libraryRoots: number;
+  enrichedTracks: number;
+  likedTracks: number;
+};
+
+export type ProviderValidationResult = {
+  providerKey: string;
+  valid: boolean;
+  latencyMs: number;
+  error?: string | null;
+  detail?: string | null;
+};
+
+export type ExplainPayload = {
+  trackId: number;
+  reasons: string[];
+  confidence: number;
+  source: string;
+};
+
+export type RecommendationResult = {
+  track: TrackRecord;
+  score: number;
 };
 

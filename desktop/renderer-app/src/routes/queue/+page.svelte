@@ -4,6 +4,18 @@
   import { api } from "$lib/tauri";
 
   let saveAsName = "";
+  let likedOverride: boolean | null = null; // optimistic update until shell refreshes
+
+  $: currentTrack = $shell.playback.currentTrack;
+  $: isLiked = likedOverride !== null ? likedOverride : (currentTrack?.liked ?? false);
+
+  async function toggleLikeCurrentTrack() {
+    if (!currentTrack) return;
+    const nowLiked = await api.toggleLike(currentTrack.id);
+    likedOverride = nowLiked;
+  }
+
+  $: if (currentTrack?.id) likedOverride = null; // reset override when track changes
 
   async function move(queueItemId: number, newPosition: number) {
     const queue = await api.moveQueueItem(queueItemId, newPosition);
@@ -41,9 +53,15 @@
 </section>
 
 <section class="current">
-  <strong>{$shell.playback.currentTrack?.title ?? "Nothing playing"}</strong>
-  <small>{$shell.playback.currentTrack?.artist ?? "Queue a track to begin."}</small>
-  <span>Status: {$shell.playback.status}</span>
+  <div class="current-info">
+    <strong>{currentTrack?.title ?? "Nothing playing"}</strong>
+    <small>{currentTrack?.artist ?? "Queue a track to begin."}{currentTrack?.album ? ` · ${currentTrack.album}` : ''}</small>
+    <span>Status: {$shell.playback.status}</span>
+  </div>
+  {#if currentTrack}
+    <button class="like-btn" class:liked={isLiked} on:click={toggleLikeCurrentTrack}
+      title={isLiked ? 'Unlike' : 'Like this track'}>{isLiked ? '♥' : '♡'}</button>
+  {/if}
 </section>
 
 <div class="queue-list">
@@ -73,6 +91,10 @@
     background: rgba(255,255,255,0.05);
     margin-bottom: 14px;
   }
+  .current { display: flex; justify-content: space-between; align-items: center; }
+  .current-info { display: flex; flex-direction: column; gap: 4px; }
+  .like-btn { font-size: 1.4rem; padding: 6px 12px; color: #9cb2c7; background: transparent; border: none; cursor: pointer; }
+  .like-btn.liked { color: #ff6b8a; }
   .queue-list { flex-direction: column; }
   article { justify-content: space-between; align-items: center; }
   button {

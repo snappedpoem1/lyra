@@ -16,9 +16,19 @@
   let dupsLoaded = false;
   let dupsOpen = false;
   let enrichLibraryPending = false;
+  let viewMode: "all" | "liked" = "all";
 
   async function loadTracks() {
-    tracks = await api.tracks(query);
+    if (viewMode === "liked") {
+      tracks = await api.listLikedTracks();
+    } else {
+      tracks = await api.tracks(query);
+    }
+  }
+
+  async function toggleLike(track: TrackRecord) {
+    const nowLiked = await api.toggleLike(track.id);
+    tracks = tracks.map((t) => t.id === track.id ? { ...t, liked: nowLiked, likedAt: nowLiked ? new Date().toISOString() : null } : t);
   }
 
   async function play(trackId: number) {
@@ -68,6 +78,16 @@
     }
   }
 
+  async function refreshEnrich(trackId: number) {
+    expandedEnrich = { ...expandedEnrich, [trackId]: "loading" };
+    try {
+      const result = await api.refreshTrackEnrichment(trackId);
+      expandedEnrich = { ...expandedEnrich, [trackId]: result };
+    } catch {
+      expandedEnrich = { ...expandedEnrich, [trackId]: null };
+    }
+  }
+
   async function runEnrichLibrary() {
     enrichLibraryPending = true;
     try {
@@ -90,10 +110,16 @@
   <div>
     <p class="eyebrow">Library</p>
     <h2>Local catalog</h2>
+    <div class="view-tabs">
+      <button class="tab-btn" class:active={viewMode === 'all'} on:click={() => { viewMode = 'all'; loadTracks(); }}>All</button>
+      <button class="tab-btn" class:active={viewMode === 'liked'} on:click={() => { viewMode = 'liked'; loadTracks(); }}>♥ Liked</button>
+    </div>
   </div>
   <div class="search-row">
-    <input bind:value={query} placeholder="Search title, artist, or album" on:keydown={(e) => e.key === 'Enter' && loadTracks()} />
-    <button on:click={loadTracks}>Search</button>
+    <input bind:value={query} placeholder="Search title, artist, or album"
+      disabled={viewMode === 'liked'}
+      on:keydown={(e) => e.key === 'Enter' && loadTracks()} />
+    <button on:click={loadTracks} disabled={viewMode === 'liked'}>Search</button>
     <button class="dups-btn" on:click={() => dupsLoaded ? (dupsOpen = !dupsOpen) : loadDuplicates()}
       title="Find duplicate tracks">Duplicates{duplicates.length ? ` (${duplicates.length})` : ''}</button>
     <button class="enrich-btn" on:click={runEnrichLibrary} disabled={enrichLibraryPending}
@@ -137,6 +163,8 @@
         </small>
       </div>
       <div class="actions">
+        <button class="like-btn" class:liked={track.liked} on:click={() => toggleLike(track)}
+          title={track.liked ? 'Unlike' : 'Like'}>{track.liked ? '♥' : '♡'}</button>
         <button on:click={() => play(track.id)}>Play</button>
         <button on:click={() => queue(track.id)}>Queue</button>
         <button on:click={() => openAddToPlaylist(track.id)}>+ Playlist</button>
@@ -171,32 +199,92 @@
         <div class="enrich-panel muted-panel"><small>Enrichment failed.</small></div>
       {:else}
         {@const er = expandedEnrich[track.id] as Record<string, unknown>}
-        {@const mb = typeof er.providers === 'object' && er.providers !== null
-          ? (er.providers as Record<string, unknown>)['musicbrainz'] as Record<string, unknown> | undefined
-          : undefined}
-        {@const pl = mb ? mb.payload as Record<string, unknown> | undefined : undefined}
+        {@const providers = typeof er.providers === 'object' && er.providers !== null
+          ? er.providers as Record<string, unknown>
+          : {}}
+        {@const mbRaw = providers['musicbrainz'] as Record<string, unknown> | undefined}
+        {@const mb = mbRaw?.payload as Record<string, unknown> | undefined}
+        {@const lfRaw = providers['lastfm'] as Record<string, unknown> | undefined}
+        {@const lf = lfRaw?.payload as Record<string, unknown> | undefined}
+        {@const dcRaw = providers['discogs'] as Record<string, unknown> | undefined}
+        {@const dc = dcRaw?.payload as Record<string, unknown> | undefined}
+        {@const gnRaw = providers['genius'] as Record<string, unknown> | undefined}
+        {@const gn = gnRaw?.payload as Record<string, unknown> | undefined}
+        {@const lrcRaw = providers['lrc_sidecar'] as Record<string, unknown> | undefined}
+        {@const lrc = lrcRaw?.payload as Record<string, unknown> | undefined}
         <div class="enrich-panel">
-          {#if pl && pl.status === 'ok'}
+          <div class="enrich-section-head">
+            <span class="elabel-section">MusicBrainz</span>
+            <button class="refresh-btn" on:click={() => refreshEnrich(track.id)} title="Force refresh all enrichment">↺ Refresh</button>
+          </div>
+          {#if mb && mb.status === 'ok'}
             <div class="enrich-row">
               <span class="elabel">MBID</span>
-              <code class="evalue">{pl.recordingMbid ?? '—'}</code>
+              <code class="evalue">{mb.recordingMbid ?? '—'}</code>
             </div>
             <div class="enrich-row">
               <span class="elabel">Release</span>
-              <span class="evalue">{pl.releaseTitle ?? '—'}{pl.releaseDate ? ` · ${pl.releaseDate}` : ''}</span>
+              <span class="evalue">{mb.releaseTitle ?? '—'}{mb.releaseDate ? ` · ${mb.releaseDate}` : ''}</span>
             </div>
             <div class="enrich-row">
               <span class="elabel">Match</span>
-              <span class="evalue">{pl.matchScore ?? '—'}%</span>
+              <span class="evalue">{mb.matchScore ?? '—'}%</span>
             </div>
-            {#if pl.releaseMbid}
+          {:else}
+            <span class="muted"><small>MusicBrainz: {mb?.status ?? 'not fetched'}</small></span>
+          {/if}
+
+          {#if lf && lf.status === 'ok'}
+            <div class="enrich-section-head"><span class="elabel-section">Last.fm</span></div>
+            <div class="enrich-row">
+              <span class="elabel">Listeners</span>
+              <span class="evalue">{(lf.listeners as number ?? 0).toLocaleString()}</span>
+            </div>
+            {#if Array.isArray(lf.tags) && (lf.tags as string[]).length}
               <div class="enrich-row">
-                <span class="elabel">Release MBID</span>
-                <code class="evalue">{pl.releaseMbid}</code>
+                <span class="elabel">Tags</span>
+                <span class="evalue">{(lf.tags as string[]).join(' · ')}</span>
               </div>
             {/if}
-          {:else}
-            <span class="muted"><small>Status: {pl?.status ?? 'unknown'}</small></span>
+          {:else if lf && lf.status === 'not_configured'}
+            <div class="enrich-section-head"><span class="elabel-section">Last.fm</span></div>
+            <span class="muted"><small>Not configured — add API key in Settings</small></span>
+          {/if}
+
+          {#if dc && dc.status === 'ok'}
+            <div class="enrich-section-head"><span class="elabel-section">Discogs</span></div>
+            {#if dc.year}<div class="enrich-row"><span class="elabel">Year</span><span class="evalue">{dc.year}</span></div>{/if}
+            {#if Array.isArray(dc.genres) && (dc.genres as string[]).length}
+              <div class="enrich-row">
+                <span class="elabel">Genre</span>
+                <span class="evalue">{(dc.genres as string[]).join(' · ')}</span>
+              </div>
+            {/if}
+            {#if dc.label}<div class="enrich-row"><span class="elabel">Label</span><span class="evalue">{dc.label}</span></div>{/if}
+            {#if dc.country}<div class="enrich-row"><span class="elabel">Country</span><span class="evalue">{dc.country}</span></div>{/if}
+          {:else if dc && dc.status === 'not_configured'}
+            <!-- Discogs unconfigured: silent -->
+          {/if}
+
+          {#if gn && gn.status === 'ok'}
+            <div class="enrich-section-head"><span class="elabel-section">Genius</span></div>
+            <div class="enrich-row">
+              <span class="elabel">Lyrics</span>
+              <a class="evalue" href={gn.url as string} target="_blank" rel="noopener">{gn.fullTitle ?? 'Open on Genius'}</a>
+            </div>
+            {#if gn.artistName}
+              <div class="enrich-row">
+                <span class="elabel">Artist</span>
+                <span class="evalue">{gn.artistName}</span>
+              </div>
+            {/if}
+          {:else if gn && gn.status === 'not_configured'}
+            <!-- Genius unconfigured: silent -->
+          {/if}
+
+          {#if lrc && lrc.status === 'ok'}
+            <div class="enrich-section-head"><span class="elabel-section">Lyrics (LRC)</span></div>
+            <pre class="lrc-content">{lrc.lrcContent}</pre>
           {/if}
         </div>
       {/if}
@@ -260,6 +348,11 @@
   .scores-toggle { padding: 8px 10px; min-width: 32px; text-align: center; }
   .enrich-toggle { padding: 8px 10px; min-width: 32px; text-align: center; color: #a8c4e0; }
   .enrich-btn { color: #a8c4e0; }
+  .like-btn { color: #9cb2c7; font-size: 1rem; padding: 6px 10px; }
+  .like-btn.liked { color: #ff6b8a; }
+  .view-tabs { display: flex; gap: 6px; margin-top: 8px; }
+  .tab-btn { padding: 5px 14px; border-radius: 20px; font-size: 0.78rem; border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #9cb2c7; cursor: pointer; }
+  .tab-btn.active { background: rgba(255,255,255,0.1); color: #d0e8f8; }
   .score-panel {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -283,6 +376,22 @@
   .elabel { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em; color: #9cb2c7; min-width: 90px; }
   .evalue { font-size: 0.8rem; color: #d0e8f8; word-break: break-all; }
   code.evalue { font-family: monospace; font-size: 0.72rem; color: #a8c4e0; }
+  .enrich-section-head { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+  .elabel-section { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.18em; color: #6a8aab; }
+  .refresh-btn { padding: 3px 8px; font-size: 0.68rem; color: #a8c4e0; }
+  a.evalue { color: #a8c4e0; text-decoration: underline; }
+  .lrc-content {
+    font-size: 0.72rem;
+    color: #9cb2c7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.03);
+    font-family: monospace;
+  }
   .sdim { display: grid; gap: 4px; }
   .sdim span { font-size: 0.68rem; text-transform: capitalize; color: #9cb2c7; }
   .sbar-bg { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); }

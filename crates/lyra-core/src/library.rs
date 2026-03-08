@@ -56,7 +56,7 @@ pub fn list_tracks(conn: &Connection, query: Option<String>) -> LyraResult<Vec<T
         let mut stmt = conn.prepare(
             "
             SELECT t.id, t.title, COALESCE(ar.name, ''), COALESCE(al.title, ''), t.path, t.duration_seconds,
-                   t.genre, t.year, t.bpm, t.key_signature
+                   t.genre, t.year, t.bpm, t.key_signature, t.liked_at
             FROM tracks t
             LEFT JOIN artists ar ON ar.id = t.artist_id
             LEFT JOIN albums al ON al.id = t.album_id
@@ -74,7 +74,7 @@ pub fn list_tracks(conn: &Connection, query: Option<String>) -> LyraResult<Vec<T
         let mut stmt = conn.prepare(
             "
             SELECT t.id, t.title, COALESCE(ar.name, ''), COALESCE(al.title, ''), t.path, t.duration_seconds,
-                   t.genre, t.year, t.bpm, t.key_signature
+                   t.genre, t.year, t.bpm, t.key_signature, t.liked_at
             FROM tracks t
             LEFT JOIN artists ar ON ar.id = t.artist_id
             LEFT JOIN albums al ON al.id = t.album_id
@@ -168,7 +168,7 @@ pub fn get_track_by_id(conn: &Connection, track_id: i64) -> LyraResult<Option<Tr
     conn.query_row(
         "
         SELECT t.id, t.title, COALESCE(ar.name, ''), COALESCE(al.title, ''), t.path, t.duration_seconds,
-               t.genre, t.year, t.bpm, t.key_signature
+               t.genre, t.year, t.bpm, t.key_signature, t.liked_at
         FROM tracks t
         LEFT JOIN artists ar ON ar.id = t.artist_id
         LEFT JOIN albums al ON al.id = t.album_id
@@ -349,6 +349,46 @@ pub fn map_legacy_track_id(conn: &Connection, legacy_track_id: &str) -> LyraResu
     .map_err(Into::into)
 }
 
+/// Toggle the liked state of a track. Returns `true` if track is now liked.
+pub fn toggle_like(conn: &Connection, track_id: i64) -> LyraResult<bool> {
+    let liked_at: Option<String> = conn
+        .query_row(
+            "SELECT liked_at FROM tracks WHERE id = ?1",
+            params![track_id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+    if liked_at.is_some() {
+        conn.execute("UPDATE tracks SET liked_at = NULL WHERE id = ?1", params![track_id])?;
+        Ok(false)
+    } else {
+        conn.execute(
+            "UPDATE tracks SET liked_at = ?1 WHERE id = ?2",
+            params![Utc::now().to_rfc3339(), track_id],
+        )?;
+        Ok(true)
+    }
+}
+
+/// Return all liked tracks in order of when they were liked (newest first).
+pub fn list_liked_tracks(conn: &Connection) -> LyraResult<Vec<TrackRecord>> {
+    let mut stmt = conn.prepare(
+        "
+        SELECT t.id, t.title, COALESCE(ar.name, ''), COALESCE(al.title, ''), t.path, t.duration_seconds,
+               t.genre, t.year, t.bpm, t.key_signature, t.liked_at
+        FROM tracks t
+        LEFT JOIN artists ar ON ar.id = t.artist_id
+        LEFT JOIN albums al ON al.id = t.album_id
+        WHERE t.liked_at IS NOT NULL
+        ORDER BY t.liked_at DESC
+        LIMIT 1000
+        ",
+    )?;
+    let rows = stmt.query_map([], map_track)?;
+    Ok(rows.filter_map(Result::ok).collect())
+}
+
 fn ensure_artist(conn: &Connection, name: &str) -> LyraResult<i64> {
     conn.execute(
         "INSERT OR IGNORE INTO artists (name) VALUES (?1)",
@@ -391,6 +431,7 @@ fn get_scan_job(conn: &Connection, job_id: i64) -> LyraResult<ScanJobRecord> {
 }
 
 fn map_track(row: &rusqlite::Row<'_>) -> rusqlite::Result<TrackRecord> {
+    let liked_at: Option<String> = row.get(10).unwrap_or(None);
     Ok(TrackRecord {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -402,6 +443,8 @@ fn map_track(row: &rusqlite::Row<'_>) -> rusqlite::Result<TrackRecord> {
         year: row.get(7)?,
         bpm: row.get(8)?,
         key_signature: row.get(9)?,
+        liked: liked_at.is_some(),
+        liked_at,
     })
 }
 

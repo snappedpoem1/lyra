@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::commands::{TasteProfile, TrackScores};
+use crate::commands::{ExplainPayload, TasteProfile, TrackScores};
 
 const DIMENSIONS: &[&str] = &[
     "energy",
@@ -52,14 +52,7 @@ impl MoodInterpreter {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExplainPayload {
-    pub track_id: i64,
-    pub reasons: Vec<String>,
-    pub confidence: f64,
-    pub source: String,
-}
+// ExplainPayload is defined in commands.rs and re-exported here for callers.
 
 pub struct RecommendationBroker<'conn> {
     conn: &'conn Connection,
@@ -126,6 +119,61 @@ impl<'conn> RecommendationBroker<'conn> {
             .take(limit)
             .map(|(track_id, _)| track_id)
             .collect()
+    }
+
+    /// Like `recommend` but returns (track_id, score) pairs.
+    pub fn recommend_scored(&self, taste: &TasteProfile, limit: usize) -> Vec<(i64, f64)> {
+        if taste.dimensions.is_empty() || limit == 0 {
+            return Vec::new();
+        }
+
+        let Ok(mut stmt) = self.conn.prepare(
+            "SELECT track_id, energy, valence, tension, density, warmth, movement,
+                    space, rawness, complexity, nostalgia, bpm, key_signature,
+                    scored_at, score_version
+             FROM track_scores",
+        ) else {
+            return Vec::new();
+        };
+
+        let rows = match stmt.query_map([], |row| {
+            Ok(TrackScores {
+                track_id: row.get(0)?,
+                energy: row.get(1)?,
+                valence: row.get(2)?,
+                tension: row.get(3)?,
+                density: row.get(4)?,
+                warmth: row.get(5)?,
+                movement: row.get(6)?,
+                space: row.get(7)?,
+                rawness: row.get(8)?,
+                complexity: row.get(9)?,
+                nostalgia: row.get(10)?,
+                bpm: row.get(11)?,
+                key_signature: row.get(12)?,
+                scored_at: row.get(13)?,
+                score_version: row.get(14)?,
+            })
+        }) {
+            Ok(rows) => rows,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut scored: Vec<(i64, f64)> = rows
+            .filter_map(Result::ok)
+            .map(|scores| {
+                let score_map = scores_to_map(&scores);
+                let similarity = cosine_similarity(&taste.dimensions, &score_map);
+                let overlap = mean_overlap(&taste.dimensions, &score_map);
+                let weighted_score =
+                    (similarity * 0.85 + overlap * 0.15) * taste.confidence.max(0.35);
+                (scores.track_id, weighted_score.clamp(0.0, 1.0))
+            })
+            .filter(|(_, similarity)| *similarity >= 0.15)
+            .collect();
+
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        scored.into_iter().take(limit).collect()
     }
 }
 

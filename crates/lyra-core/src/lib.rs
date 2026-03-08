@@ -1,7 +1,10 @@
 pub mod acquisition;
+pub mod acquisition_dispatcher;
+pub mod acquisition_worker;
 pub mod commands;
 pub mod config;
 pub mod db;
+pub mod diagnostics;
 pub mod enrichment;
 pub mod errors;
 pub mod library;
@@ -13,6 +16,7 @@ pub mod playlists;
 pub mod providers;
 pub mod queue;
 pub mod scores;
+pub mod scrobble;
 pub mod state;
 pub mod taste;
 
@@ -21,11 +25,11 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use commands::{
-    AcquisitionQueueItem, AudioOutputDevice, BootstrapPayload, DuplicateCluster,
+    AcquisitionQueueItem, AudioOutputDevice, BootstrapPayload, DuplicateCluster, ExplainPayload,
     LegacyImportReport, LibraryOverview, LibraryRootRecord, NativeCapabilities, PlaybackEvent,
     PlaybackState, PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
-    QueueItemRecord, ScanJobRecord, SettingsPayload, TasteProfile, TrackDetail, TrackRecord,
-    TrackScores,
+    ProviderValidationResult, QueueItemRecord, RecommendationResult, ScanJobRecord, SettingsPayload,
+    TasteProfile, TrackDetail, TrackRecord, TrackScores,
 };
 use config::AppPaths;
 use db::{connect, init_database};
@@ -121,6 +125,16 @@ impl LyraCore {
     pub fn list_tracks(&self, query: Option<String>) -> LyraResult<Vec<TrackRecord>> {
         let conn = self.conn()?;
         library::list_tracks(&conn, query)
+    }
+
+    pub fn list_liked_tracks(&self) -> LyraResult<Vec<TrackRecord>> {
+        let conn = self.conn()?;
+        library::list_liked_tracks(&conn)
+    }
+
+    pub fn toggle_like(&self, track_id: i64) -> LyraResult<bool> {
+        let conn = self.conn()?;
+        library::toggle_like(&conn, track_id)
     }
 
     pub fn get_library_overview(&self) -> LyraResult<LibraryOverview> {
@@ -335,6 +349,18 @@ impl LyraCore {
         queue::ensure_track_in_queue(&conn, track_id)?;
         let track =
             library::get_track_by_id(&conn, track_id)?.ok_or(LyraError::NotFound("track"))?;
+        // Fire Last.fm Now Playing in background — no-op if session_key absent.
+        {
+            let artist = track.artist.clone();
+            let title = track.title.clone();
+            let album = track.album.clone();
+            let duration_secs = track.duration_seconds as u64;
+            if let Ok(c2) = self.conn() {
+                std::thread::spawn(move || {
+                    scrobble::now_playing(&c2, &artist, &title, &album, duration_secs);
+                });
+            }
+        }
         let current = state::load_playback_state(&conn)?;
         let mut controller = self.playback.lock().map_err(|_| LyraError::LockPoisoned)?;
         let next = controller.play_track(track, current.volume)?;
@@ -405,21 +431,43 @@ impl LyraCore {
         let conn = self.conn()?;
         let queue_items = queue::get_queue(&conn)?;
         let current = state::load_playback_state(&conn)?;
-        let next_index = current.queue_index.saturating_add(1);
-        let fallback = current.queue_index;
-        let item = queue_items
-            .get(next_index as usize)
-            .or_else(|| queue_items.first())
-            .ok_or(LyraError::InvalidInput("queue is empty"))?;
+        let queue_len = queue_items.len();
+
+        let (chosen_index, item) = if current.shuffle && queue_len > 1 {
+            // Pick a random index different from the current one.
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_nanos() as usize;
+            let candidate = nanos % queue_len;
+            let idx = if candidate == current.queue_index as usize {
+                (candidate + 1) % queue_len
+            } else {
+                candidate
+            };
+            let item = queue_items
+                .get(idx)
+                .ok_or(LyraError::InvalidInput("queue is empty"))?;
+            (idx as i64, item)
+        } else {
+            let next_index = current.queue_index.saturating_add(1);
+            let fallback = current.queue_index;
+            let (idx, item) = if queue_items.get(next_index as usize).is_some() {
+                (next_index, &queue_items[next_index as usize])
+            } else {
+                (0.max(fallback), queue_items.first().ok_or(LyraError::InvalidInput("queue is empty"))?)
+            };
+            (idx, item)
+        };
+
         let track =
             library::get_track_by_id(&conn, item.track_id)?.ok_or(LyraError::NotFound("track"))?;
         let mut controller = self.playback.lock().map_err(|_| LyraError::LockPoisoned)?;
         let mut next = controller.play_track(track, current.volume)?;
-        next.queue_index = if queue_items.get(next_index as usize).is_some() {
-            next_index
-        } else {
-            0.max(fallback)
-        };
+        next.queue_index = chosen_index;
+        next.shuffle = current.shuffle;
+        next.repeat_mode = current.repeat_mode;
         state::save_playback_state(&conn, &next)?;
         Ok(next)
     }
@@ -552,6 +600,66 @@ impl LyraCore {
         let conn = self.conn()?;
         providers::reset_provider_health(&conn, &provider_key)?;
         providers::list_provider_health(&conn)
+    }
+
+    pub fn validate_provider(
+        &self,
+        provider_key: String,
+    ) -> LyraResult<ProviderValidationResult> {
+        let conn = self.conn()?;
+        providers::validate_provider(&conn, &provider_key)
+    }
+
+    /// Save a provider secret to the OS keychain.
+    pub fn keyring_save(
+        &self,
+        provider_key: String,
+        key_name: String,
+        secret: String,
+    ) -> Result<(), String> {
+        providers::keyring_save(&provider_key, &key_name, &secret)
+    }
+
+    /// Load a provider secret from the OS keychain.
+    pub fn keyring_load(
+        &self,
+        provider_key: String,
+        key_name: String,
+    ) -> Result<Option<String>, String> {
+        providers::keyring_load(&provider_key, &key_name)
+    }
+
+    /// Delete a provider secret from the OS keychain.
+    pub fn keyring_delete(
+        &self,
+        provider_key: String,
+        key_name: String,
+    ) -> Result<(), String> {
+        providers::keyring_delete(&provider_key, &key_name)
+    }
+
+    /// Scan a `.env` file and save all credential-like values to the OS keychain.
+    /// Returns (saved_count, skipped_count).
+    pub fn backup_env_to_keychain(&self, env_path: String) -> Result<(usize, usize), String> {
+        providers::backup_env_to_keychain(&env_path)
+    }
+
+    /// Load a single env credential from the keychain (stored as env:{KEY_NAME}).
+    pub fn load_env_credential(&self, key_name: String) -> Result<Option<String>, String> {
+        providers::load_env_credential(&key_name)
+    }
+
+    /// Authenticate Last.fm with username/password to obtain a session key.
+    /// The session key is stored in the lastfm provider config automatically.
+    pub fn lastfm_get_session(
+        &self,
+        api_key: String,
+        api_secret: String,
+        username: String,
+        password: String,
+    ) -> Result<String, String> {
+        let conn = self.conn().map_err(|e| e.to_string())?;
+        providers::lastfm_get_session(&conn, &api_key, &api_secret, &username, &password)
     }
 
     pub fn find_duplicates(&self) -> LyraResult<Vec<DuplicateCluster>> {
@@ -935,6 +1043,28 @@ impl LyraCore {
         taste::get_taste_profile(&conn)
     }
 
+    /// Returns up to `limit` tracks recommended by the oracle based on the current taste profile.
+    pub fn get_recommendations(&self, limit: usize) -> LyraResult<Vec<RecommendationResult>> {
+        let conn = self.conn()?;
+        let taste = taste::get_taste_profile(&conn)?;
+        let broker = oracle::RecommendationBroker::new(&conn);
+        let scored = broker.recommend_scored(&taste, limit);
+        let mut results = Vec::with_capacity(scored.len());
+        for (track_id, score) in scored {
+            if let Some(track) = library::get_track_by_id(&conn, track_id)? {
+                results.push(RecommendationResult { track, score });
+            }
+        }
+        Ok(results)
+    }
+
+    /// Returns a human-readable explanation for why a track matches the current taste profile.
+    pub fn explain_recommendation(&self, track_id: i64) -> LyraResult<ExplainPayload> {
+        let conn = self.conn()?;
+        let taste = taste::get_taste_profile(&conn)?;
+        Ok(oracle::explain_track(&conn, track_id, &taste))
+    }
+
     pub fn get_acquisition_queue(
         &self,
         status_filter: Option<String>,
@@ -973,12 +1103,39 @@ impl LyraCore {
         acquisition::list_acquisition_queue(&conn, None)
     }
 
+    /// Process the next pending acquisition queue item.
+    /// Returns true if an item was processed, false if queue was empty.
+    pub fn process_acquisition_queue(&self) -> LyraResult<bool> {
+        acquisition_dispatcher::process_next_queue_item(&self.paths)
+    }
+
+    /// Start the background acquisition worker.
+    pub fn start_acquisition_worker(&self) -> LyraResult<bool> {
+        Ok(acquisition_worker::start_worker(self.paths.clone()))
+    }
+
+    /// Stop the background acquisition worker.
+    pub fn stop_acquisition_worker(&self) -> LyraResult<()> {
+        acquisition_worker::stop_worker();
+        Ok(())
+    }
+
+    /// Check if the acquisition worker is running.
+    pub fn acquisition_worker_status(&self) -> LyraResult<bool> {
+        Ok(acquisition_worker::is_running())
+    }
+
+    /// Run system diagnostics and return health report.
+    pub fn run_diagnostics(&self) -> LyraResult<diagnostics::DiagnosticsReport> {
+        diagnostics::run_diagnostics(&self.paths)
+    }
+
     pub fn list_playback_history(&self, limit: Option<i64>) -> LyraResult<Vec<PlaybackEvent>> {
         let conn = self.conn()?;
         let limit = limit.unwrap_or(100).min(1000);
         let mut stmt = conn.prepare(
-            "SELECT id, track_id, played_at, context, completion_rate, skipped
-             FROM playback_history ORDER BY played_at DESC LIMIT ?1",
+            "SELECT id, track_id, ts, context, completion_rate, skipped
+             FROM playback_history ORDER BY ts DESC LIMIT ?1",
         )?;
         let rows = stmt.query_map(params![limit], |row| {
             Ok(PlaybackEvent {
@@ -993,6 +1150,34 @@ impl LyraCore {
         Ok(rows.filter_map(Result::ok).collect())
     }
 
+    pub fn list_recent_plays(&self, limit: Option<i64>) -> LyraResult<Vec<commands::RecentPlayRecord>> {
+        let conn = self.conn()?;
+        let limit = limit.unwrap_or(20).min(200);
+        let mut stmt = conn.prepare(
+            "
+            SELECT ph.id, ph.track_id,
+                   COALESCE(ar.name, ''), COALESCE(t.title, ''),
+                   ph.ts, ph.completion_rate, ph.skipped
+            FROM playback_history ph
+            LEFT JOIN tracks t ON t.id = ph.track_id
+            LEFT JOIN artists ar ON ar.id = t.artist_id
+            ORDER BY ph.ts DESC LIMIT ?1
+            ",
+        )?;
+        let rows = stmt.query_map(params![limit], |row| {
+            Ok(commands::RecentPlayRecord {
+                id: row.get(0)?,
+                track_id: row.get(1)?,
+                artist: row.get(2)?,
+                title: row.get(3)?,
+                ts: row.get(4)?,
+                completion_rate: row.get(5)?,
+                skipped: row.get::<_, i64>(6)? != 0,
+            })
+        })?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
     pub fn record_playback_event(
         &self,
         track_id: i64,
@@ -1000,17 +1185,36 @@ impl LyraCore {
         context: Option<String>,
     ) -> LyraResult<()> {
         let conn = self.conn()?;
+        let now = Utc::now();
         conn.execute(
-            "INSERT INTO playback_history (track_id, played_at, context, completion_rate, skipped)
+            "INSERT INTO playback_history (track_id, ts, context, completion_rate, skipped)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
                 track_id,
-                Utc::now().to_rfc3339(),
+                now.to_rfc3339(),
                 context.unwrap_or_else(|| "player".to_string()),
                 completion_rate,
                 completion_rate < 0.1,
             ],
         )?;
+        // Update taste profile based on the completion signal.
+        let _ = taste::update_taste_from_completion(&conn, track_id, completion_rate);
+        // Scrobble to Last.fm if track was played to completion (>=50%).
+        if completion_rate >= 0.5 {
+            if let Ok(Some(track)) = library::get_track_by_id(&conn, track_id) {
+                let duration_secs = track.duration_seconds as u64;
+                let ts_unix = now.timestamp();
+                let conn2 = self.conn();
+                let artist = track.artist.clone();
+                let title = track.title.clone();
+                let album = track.album.clone();
+                std::thread::spawn(move || {
+                    if let Ok(c) = conn2 {
+                        scrobble::scrobble(&c, &artist, &title, &album, ts_unix, duration_secs);
+                    }
+                });
+            }
+        }
         Ok(())
     }
 
@@ -1027,7 +1231,30 @@ impl LyraCore {
         let conn = self.conn()?;
         let track =
             library::get_track_by_id(&conn, track_id)?.ok_or(LyraError::NotFound("track"))?;
-        let dispatcher = enrichment::EnrichmentDispatcher::default();
+        let dispatcher = enrichment::EnrichmentDispatcher::new(&conn);
+        dispatcher.dispatch(&conn, track_id, &track.artist, &track.title, &track.path)
+    }
+
+    /// Force-clear the enrich cache for a track across all providers, then re-dispatch.
+    /// Returns the fresh enrichment result.
+    pub fn refresh_track_enrichment(&self, track_id: i64) -> LyraResult<Value> {
+        let conn = self.conn()?;
+        let track =
+            library::get_track_by_id(&conn, track_id)?.ok_or(LyraError::NotFound("track"))?;
+
+        // Build the lookup keys used per provider and delete cached entries.
+        let normalized_key = format!(
+            "{}::{}",
+            track.artist.trim().to_ascii_lowercase(),
+            track.title.trim().to_ascii_lowercase()
+        );
+        // Delete all provider cache rows for this track
+        conn.execute(
+            "DELETE FROM enrich_cache WHERE lookup_key = ?1 OR lookup_key = ?2",
+            params![normalized_key, track.path],
+        )?;
+
+        let dispatcher = enrichment::EnrichmentDispatcher::new(&conn);
         dispatcher.dispatch(&conn, track_id, &track.artist, &track.title, &track.path)
     }
 
@@ -1058,7 +1285,9 @@ impl LyraCore {
             .filter_map(|r| r.ok())
             .collect();
 
-        let dispatcher = enrichment::EnrichmentDispatcher::default();
+        // Background pass: only MusicBrainz + AcoustID so no credential DB reads are needed
+        // and the rate-limit sleep below is sufficient for both providers.
+        let dispatcher = enrichment::EnrichmentDispatcher::background();
         let mut dispatched = 0_usize;
         for (track_id, artist, title, path) in rows {
             // Check if already cached (dispatcher is cache-first, but we want to know if we

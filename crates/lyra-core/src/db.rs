@@ -213,6 +213,7 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
         ("legacy_status", "TEXT"),
         ("bpm", "REAL"),
         ("key_signature", "TEXT"),
+        ("liked_at", "TEXT"),
     ] {
         let _ = conn.execute(
             &format!("ALTER TABLE tracks ADD COLUMN {col} {typedef}"),
