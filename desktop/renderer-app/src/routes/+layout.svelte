@@ -60,8 +60,28 @@
     shell.update((state) => ({ ...state, playback }));
   }
 
+  async function setVolume(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const volume = parseFloat(target.value);
+    const playback = await api.setVolume(volume);
+    shell.update((state) => ({ ...state, playback }));
+  }
+
+  async function seek(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const position = parseFloat(target.value);
+    const playback = await api.seekTo(position);
+    shell.update((state) => ({ ...state, playback }));
+  }
+
   function active(href: string): boolean {
     return page.url.pathname === href;
+  }
+
+  function formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 </script>
 
@@ -127,21 +147,44 @@
 </div>
 
 <footer class="transport">
-  <div>
+  <div class="now-playing">
     <p class="eyebrow">Now Playing</p>
     <strong>{$shell.playback.currentTrack?.title ?? "Nothing loaded"}</strong>
     <small>{$shell.playback.currentTrack?.artist ?? "Pick something from Library or Playlists."}</small>
   </div>
-  <div class="transport-actions">
-    <button on:click={() => transport("previous")}>Previous</button>
-    <button class="accent" on:click={() => transport("toggle")}>
-      {$shell.playback.status === "playing" ? "Pause" : "Play"}
-    </button>
-    <button on:click={() => transport("next")}>Next</button>
+  <div class="playback-controls">
+    <div class="transport-actions">
+      <button on:click={() => transport("previous")}>⏮</button>
+      <button class="accent play-pause" on:click={() => transport("toggle")}>
+        {$shell.playback.status === "playing" ? "⏸" : "▶"}
+      </button>
+      <button on:click={() => transport("next")}>⏭</button>
+    </div>
+    <div class="progress-bar">
+      <span class="time">{formatTime($shell.playback.positionSeconds)}</span>
+      <input
+        type="range"
+        min="0"
+        max={$shell.playback.durationSeconds || 100}
+        value={$shell.playback.positionSeconds}
+        on:input={seek}
+        class="seek-slider"
+      />
+      <span class="time">{formatTime($shell.playback.durationSeconds)}</span>
+    </div>
   </div>
-  <div class="transport-status">
-    <span>{Math.round($shell.playback.positionSeconds)}s</span>
-    <span>{Math.round($shell.playback.durationSeconds)}s</span>
+  <div class="volume-control">
+    <span>🔊</span>
+    <input
+      type="range"
+      min="0"
+      max="1"
+      step="0.01"
+      value={$shell.playback.volume}
+      on:input={setVolume}
+      class="volume-slider"
+    />
+    <span class="volume-label">{Math.round($shell.playback.volume * 100)}%</span>
   </div>
 </footer>
 
@@ -179,17 +222,118 @@
   }
   .eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.16em; color: #9cb2c7; }
   .muted, small { color: #9cb2c7; }
+  
   .transport {
     display: grid;
-    grid-template-columns: 1.4fr auto auto;
+    grid-template-columns: 1.4fr auto 280px;
     align-items: center;
-    gap: 16px;
+    gap: 24px;
     padding: 16px 24px;
     background: rgba(6, 10, 14, 0.94);
     border-top: 1px solid rgba(255,255,255,0.08);
   }
-  .transport-actions { display: flex; gap: 12px; }
-  .transport-status { display: flex; gap: 12px; color: #9cb2c7; }
+  
+  .now-playing {
+    min-width: 0;
+  }
+  
+  .now-playing strong,
+  .now-playing small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .playback-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 400px;
+  }
+  
+  .transport-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  
+  .transport-actions button {
+    font-size: 1.2rem;
+    min-width: 48px;
+    height: 48px;
+    padding: 0;
+  }
+  
+  .transport-actions button.play-pause {
+    min-width: 64px;
+    height: 64px;
+    font-size: 1.8rem;
+  }
+  
+  .progress-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+  }
+  
+  .time {
+    font-size: 0.85rem;
+    color: #9cb2c7;
+    min-width: 40px;
+    text-align: center;
+  }
+  
+  .seek-slider,
+  .volume-slider {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.15);
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  
+  .seek-slider::-webkit-slider-thumb,
+  .volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: linear-gradient(120deg, #cbff6b 0%, #7affc6 100%);
+    cursor: pointer;
+  }
+  
+  .seek-slider::-moz-range-thumb,
+  .volume-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: linear-gradient(120deg, #cbff6b 0%, #7affc6 100%);
+    cursor: pointer;
+    border: none;
+  }
+  
+  .volume-control {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .volume-control .volume-slider {
+    width: 120px;
+  }
+  
+  .volume-label {
+    min-width: 42px;
+    font-size: 0.9rem;
+    color: #9cb2c7;
+  }
+  
   label { display: grid; gap: 6px; }
   input {
     padding: 10px 12px;
@@ -205,8 +349,27 @@
     border: 1px solid rgba(255, 92, 92, 0.32);
     border-radius: 16px;
   }
+  @media (max-width: 1400px) {
+    .app-shell { grid-template-columns: 240px minmax(0, 1fr) 280px; }
+    .nav-rail, .queue-panel { padding: 16px; }
+  }
+  
   @media (max-width: 1100px) {
+    .app-shell { grid-template-columns: 200px minmax(0, 1fr); }
+    .queue-panel { display: none; }
+    .transport { grid-template-columns: 1fr auto; }
+    .volume-control { display: none; }
+    .playback-controls { min-width: 300px; }
+  }
+  
+  @media (max-width: 768px) {
     .app-shell { grid-template-columns: 1fr; }
-    .transport { grid-template-columns: 1fr; }
+    .nav-rail { display: none; }
+    .transport {
+      grid-template-columns: 1fr;
+      padding: 12px 16px;
+    }
+    .playback-controls { min-width: 100%; }
+    .now-playing { text-align: center; }
   }
 </style>

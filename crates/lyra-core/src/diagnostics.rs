@@ -147,7 +147,7 @@ fn check_library_roots(paths: &AppPaths) -> ComponentHealth {
     match Connection::open(&paths.db_path) {
         Ok(conn) => {
             match conn.query_row(
-                "SELECT COUNT(*) FROM library_roots WHERE removed_at IS NULL",
+                "SELECT COUNT(*) FROM library_roots",
                 [],
                 |row| row.get::<_, i64>(0),
             ) {
@@ -155,7 +155,7 @@ fn check_library_roots(paths: &AppPaths) -> ComponentHealth {
                 Ok(count) => {
                     // Check if roots are accessible
                     let mut stmt = match conn.prepare(
-                        "SELECT path FROM library_roots WHERE removed_at IS NULL"
+                        "SELECT path FROM library_roots"
                     ) {
                         Ok(s) => s,
                         Err(e) => return ComponentHealth::error("Failed to prepare query", e),
@@ -210,7 +210,7 @@ fn gather_stats(paths: &AppPaths) -> LyraResult<SystemStats> {
         |row| row.get(0),
     )?;
     let library_roots = conn.query_row(
-        "SELECT COUNT(*) FROM library_roots WHERE removed_at IS NULL",
+        "SELECT COUNT(*) FROM library_roots",
         [],
         |row| row.get(0),
     )?;
