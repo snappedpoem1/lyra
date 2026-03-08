@@ -8,11 +8,11 @@ use std::time::Duration;
 mod smtc;
 
 use lyra_core::commands::{
-    AcquisitionQueueItem, AppShellState, AudioOutputDevice, BootstrapPayload, DuplicateCluster,
-    ExplainPayload, LegacyImportReport, NativeCapabilities, PlaybackEvent, PlaybackState,
-    PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth, ProviderValidationResult,
-    QueueItemRecord, RecentPlayRecord, RecommendationResult, ScanJobRecord, SettingsPayload,
-    TasteProfile, TrackDetail, TrackRecord, TrackScores,
+    AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
+    DuplicateCluster, ExplainPayload, LegacyImportReport, NativeCapabilities, PlaybackEvent,
+    PlaybackState, PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
+    ProviderValidationResult, QueueItemRecord, RecentPlayRecord, RecommendationResult,
+    ScanJobRecord, SettingsPayload, TasteProfile, TrackDetail, TrackRecord, TrackScores,
 };
 use lyra_core::logging::initialize_logging;
 use lyra_core::LyraCore;
@@ -599,6 +599,10 @@ fn clear_queue(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<QueueIt
         .clear_queue()
         .map_err(|error| error.to_string())?;
     emit_queue(&app, &payload);
+    if let Ok(playback) = state.core.get_playback_state() {
+        emit_playback(&app, &playback);
+    }
+    emit_shell(&app, &state.core);
     Ok(payload)
 }
 
@@ -621,6 +625,37 @@ fn play_track(
         .play_track(track_id)
         .map_err(|error| error.to_string())?;
     emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn play_artist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    artist_name: String,
+) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .play_artist(artist_name)
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn play_album(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    artist_name: String,
+    album_title: String,
+) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .play_album(artist_name, album_title)
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    emit_shell(&app, &state.core);
     Ok(payload)
 }
 
@@ -991,6 +1026,17 @@ fn get_track_detail(
 }
 
 #[tauri::command]
+fn get_artist_profile(
+    state: State<'_, AppState>,
+    artist_name: String,
+) -> Result<Option<ArtistProfile>, String> {
+    state
+        .core
+        .get_artist_profile(artist_name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn find_duplicates(state: State<'_, AppState>) -> Result<Vec<DuplicateCluster>, String> {
     state.core.find_duplicates().map_err(|e| e.to_string())
 }
@@ -1246,6 +1292,8 @@ fn main() {
             clear_queue,
             get_playback_state,
             play_track,
+            play_artist,
+            play_album,
             play_queue_index,
             toggle_playback,
             stop_playback,
@@ -1279,6 +1327,7 @@ fn main() {
             list_playback_history,
             record_playback_event,
             get_track_detail,
+            get_artist_profile,
             find_duplicates,
             list_provider_health,
             get_provider_health,

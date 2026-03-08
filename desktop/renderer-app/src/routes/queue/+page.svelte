@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { goto } from "$app/navigation";
   import { shell } from "$lib/stores/lyra";
   import { api } from "$lib/tauri";
@@ -32,6 +32,11 @@
     shell.update((state) => ({ ...state, queue }));
   }
 
+  async function playQueueIndex(index: number): Promise<void> {
+    const playback = await api.playQueueIndex(index);
+    shell.update((state) => ({ ...state, playback }));
+  }
+
   async function saveAsPlaylist() {
     if (!saveAsName.trim()) return;
     const playlist = await api.createPlaylistFromQueue(saveAsName.trim());
@@ -46,7 +51,7 @@
     <h2>Current session</h2>
   </div>
   <div class="row">
-    <input bind:value={saveAsName} placeholder="Save queue as playlist…" />
+    <input bind:value={saveAsName} placeholder="Save queue as playlist..." />
     <button on:click={saveAsPlaylist}>Save</button>
     <button on:click={clear}>Clear Queue</button>
   </div>
@@ -55,7 +60,11 @@
 <section class="current">
   <div class="current-info">
     <strong>{currentTrack?.title ?? "Nothing playing"}</strong>
-    <small>{currentTrack?.artist ?? "Queue a track to begin."}{currentTrack?.album ? ` · ${currentTrack.album}` : ''}</small>
+    {#if currentTrack?.artist}
+      <small><a class="artist-link" href={`/artists/${encodeURIComponent(currentTrack.artist)}`}>{currentTrack.artist}</a>{currentTrack?.album ? ` · ${currentTrack.album}` : ''}</small>
+    {:else}
+      <small>Queue a track to begin.</small>
+    {/if}
     <span>Status: {$shell.playback.status}</span>
   </div>
   {#if currentTrack}
@@ -69,11 +78,11 @@
     <article>
       <div>
         <strong>{item.title}</strong>
-        <small>{item.artist}</small>
+        <small><a class="artist-link" href={`/artists/${encodeURIComponent(item.artist)}`}>{item.artist}</a></small>
       </div>
       <div class="row">
         <button disabled={index === 0} on:click={() => move(item.id, index - 1)}>Up</button>
-        <button on:click={() => api.playQueueIndex(index)}>Play</button>
+        <button on:click={() => playQueueIndex(index)}>Play</button>
         <button on:click={() => remove(item.id)}>Remove</button>
       </div>
     </article>
@@ -84,6 +93,7 @@
   .eyebrow, small, span { color: #9cb2c7; }
   .eyebrow { text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.72rem; }
   .page-head, .row, .queue-list, article { display: flex; gap: 12px; }
+  .artist-link { color: #a8c4e0; text-decoration: underline; }
   .page-head { justify-content: space-between; align-items: end; margin-bottom: 20px; }
   .current, article {
     padding: 18px;
@@ -105,3 +115,4 @@
     color: inherit;
   }
 </style>
+

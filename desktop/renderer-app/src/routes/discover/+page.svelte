@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { onMount } from "svelte";
   import { api } from "$lib/tauri";
   import { shell } from "$lib/stores/lyra";
@@ -50,6 +50,8 @@
   let recsError = "";
   let recsLoaded = false;
   let expandedExplain: Record<number, ExplainPayload | "loading"> = {};
+  let aiPlaylistBusy = false;
+  let aiPlaylistMessage = "";
 
   const STATUS_COLORS: Record<string, string> = {
     pending:   "rgba(203,255,107,0.18)",
@@ -126,6 +128,34 @@
     await loadQueue();
   }
 
+  async function buildAiPlaylist(): Promise<void> {
+    if (aiPlaylistBusy) return;
+    aiPlaylistBusy = true;
+    aiPlaylistMessage = "";
+    try {
+      if (!recsLoaded) {
+        await loadRecommendations();
+      }
+      if (!recommendations.length) {
+        aiPlaylistMessage = "No recommendations available yet.";
+        return;
+      }
+      const now = new Date();
+      const name = `AI Mix ${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      const playlist = await api.createPlaylist(name);
+      const topTracks = recommendations.slice(0, 25).map((r) => r.track.id);
+      for (const trackId of topTracks) {
+        await api.addTrackToPlaylist(playlist.id, trackId);
+      }
+      aiPlaylistMessage = `Created \"${name}\" with ${topTracks.length} tracks.`;
+      await load();
+    } catch (e) {
+      aiPlaylistMessage = e instanceof Error ? e.message : "Failed to build AI playlist.";
+    } finally {
+      aiPlaylistBusy = false;
+    }
+  }
+
   function scoreBar(score: number): string {
     const pct = Math.round(score * 100);
     return `${pct}%`;
@@ -176,10 +206,10 @@
             <span class="hist-ts">{formatTs(ev.ts)}</span>
             <span class="hist-completion" class:skipped={ev.skipped}
               title={ev.skipped ? "Skipped" : `${Math.round((ev.completionRate ?? 0) * 100)}% played`}>
-              {ev.skipped ? '⏭' : '▶'}
+              {ev.skipped ? 'Skip' : 'Play'}
             </span>
             <span class="hist-title">{ev.title}</span>
-            <span class="hist-artist">{ev.artist}</span>
+            <a class="hist-artist" href={`/artists/${encodeURIComponent(ev.artist)}`}>{ev.artist}</a>
           </div>
         {/each}
       </div>
@@ -191,10 +221,18 @@
 <div class="recs-panel">
   <div class="panel-head-row">
     <p class="panel-head eyebrow">For You</p>
-    <button class="load-btn" on:click={loadRecommendations} disabled={recsLoading}>
-      {recsLoading ? "Loading…" : recsLoaded ? "Refresh" : "Load recommendations"}
-    </button>
+    <div class="rec-head-actions">
+      <button class="load-btn" on:click={loadRecommendations} disabled={recsLoading}>
+        {recsLoading ? "Loading..." : recsLoaded ? "Refresh" : "Load recommendations"}
+      </button>
+      <button class="load-btn" on:click={buildAiPlaylist} disabled={aiPlaylistBusy || recsLoading}>
+        {aiPlaylistBusy ? "Building..." : "Build AI Playlist"}
+      </button>
+    </div>
   </div>
+  {#if aiPlaylistMessage}
+    <p class="muted">{aiPlaylistMessage}</p>
+  {/if}
 
   {#if recsError}
     <p class="error">{recsError}</p>
@@ -208,7 +246,7 @@
         <div class="rec-card">
           <div class="rec-meta">
             <strong class="rec-title">{rec.track.title}</strong>
-            <span class="rec-artist">{rec.track.artist}</span>
+            <a class="rec-artist" href={`/artists/${encodeURIComponent(rec.track.artist)}`}>{rec.track.artist}</a>
             {#if rec.track.album}<span class="rec-album">{rec.track.album}</span>{/if}
             <div class="score-row">
               <div class="score-bar-bg">
@@ -226,7 +264,7 @@
           {#if expandedExplain[rec.track.id]}
             <div class="explain-panel">
               {#if expandedExplain[rec.track.id] === "loading"}
-                <p class="muted">Loading…</p>
+                <p class="muted">Loading...</p>
               {:else}
                 {@const ep = expandedExplain[rec.track.id] as import('$lib/types').ExplainPayload}
                 {#each ep.reasons as reason}
@@ -295,7 +333,7 @@
         <div class="acq-row" style="border-left: 3px solid {STATUS_COLORS[item.status] ?? 'transparent'}">
           <div class="acq-info">
             <strong>{item.title}</strong>
-            <small>{item.artist}{item.album ? ` · ${item.album}` : ''}</small>
+            <small><a class="hist-artist" href={`/artists/${encodeURIComponent(item.artist)}`}>{item.artist}</a>{item.album ? ` · ${item.album}` : ''}</small>
             <span class="badge" style="background:{STATUS_COLORS[item.status] ?? 'rgba(255,255,255,0.08)'}">
               {item.status}
             </span>
@@ -338,6 +376,7 @@
   /* Recommendations */
   .recs-panel { margin-bottom: 24px; display: flex; flex-direction: column; gap: 12px; }
   .load-btn { padding: 6px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.07); color: inherit; cursor: pointer; font: inherit; }
+  .rec-head-actions { display: flex; gap: 8px; }
   .recs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
   .rec-card {
     padding: 14px 16px;
@@ -428,3 +467,4 @@
   select { font: inherit; color: inherit; }
   @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
 </style>
+

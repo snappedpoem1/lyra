@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -17,6 +17,8 @@
 
   let newPlaylistName = "";
   let rootPath = "";
+  let nowPlayingArt: string | null = null;
+  let lastArtTrackId: number | null = null;
   let dispose: () => void = () => {};
 
   onMount(() => {
@@ -60,6 +62,21 @@
     shell.update((state) => ({ ...state, playback }));
   }
 
+  async function setShuffle(enabled: boolean): Promise<void> {
+    const playback = await api.setShuffle(enabled);
+    shell.update((state) => ({ ...state, playback }));
+  }
+
+  async function setRepeatMode(mode: "off" | "all" | "one"): Promise<void> {
+    const playback = await api.setRepeatMode(mode);
+    shell.update((state) => ({ ...state, playback }));
+  }
+
+  async function playQueueFromPanel(index: number): Promise<void> {
+    const playback = await api.playQueueIndex(index);
+    shell.update((state) => ({ ...state, playback }));
+  }
+
   async function setVolume(event: Event) {
     const target = event.target as HTMLInputElement;
     const volume = parseFloat(target.value);
@@ -83,6 +100,32 @@
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
+
+  async function refreshNowPlayingArt(trackId: number | null | undefined): Promise<void> {
+    if (!trackId) {
+      nowPlayingArt = null;
+      return;
+    }
+    if (trackId === lastArtTrackId) {
+      return;
+    }
+    lastArtTrackId = trackId;
+    try {
+      const result = await api.enrichTrack(trackId);
+      const providers = (result.providers ?? {}) as Record<string, unknown>;
+      const genius = providers.genius as Record<string, unknown> | undefined;
+      const discogs = providers.discogs as Record<string, unknown> | undefined;
+      const geniusPayload = genius?.payload as Record<string, unknown> | undefined;
+      const discogsPayload = discogs?.payload as Record<string, unknown> | undefined;
+      nowPlayingArt = (geniusPayload?.artUrl as string | undefined)
+        ?? (discogsPayload?.coverImage as string | undefined)
+        ?? null;
+    } catch {
+      nowPlayingArt = null;
+    }
+  }
+
+  $: void refreshNowPlayingArt($shell.playback.currentTrackId);
 </script>
 
 <svelte:head>
@@ -131,7 +174,7 @@
         <p class="muted">Queue is empty.</p>
       {/if}
       {#each $shell.queue as item, index}
-        <button class:current={index === $shell.playback.queueIndex} on:click={() => api.playQueueIndex(index)}>
+        <button class:current={index === $shell.playback.queueIndex} on:click={() => playQueueFromPanel(index)}>
           <span>{item.title}</span>
           <small>{item.artist}</small>
         </button>
@@ -149,16 +192,32 @@
 <footer class="transport">
   <div class="now-playing">
     <p class="eyebrow">Now Playing</p>
-    <strong>{$shell.playback.currentTrack?.title ?? "Nothing loaded"}</strong>
-    <small>{$shell.playback.currentTrack?.artist ?? "Pick something from Library or Playlists."}</small>
+    <div class="now-playing-meta">
+      {#if nowPlayingArt}
+        <img class="now-playing-art" src={nowPlayingArt} alt={$shell.playback.currentTrack?.title ?? "Now playing"} />
+      {:else}
+        <div class="now-playing-art fallback">♪</div>
+      {/if}
+      <div>
+        <strong>{$shell.playback.currentTrack?.title ?? "Nothing loaded"}</strong>
+        {#if $shell.playback.currentTrack?.artist}
+          <small><a href={`/artists/${encodeURIComponent($shell.playback.currentTrack.artist)}`}>{$shell.playback.currentTrack.artist}</a></small>
+        {:else}
+          <small>Pick something from Library or Playlists.</small>
+        {/if}
+      </div>
+    </div>
   </div>
   <div class="playback-controls">
     <div class="transport-actions">
-      <button on:click={() => transport("previous")}>⏮</button>
+      <button on:click={() => transport("previous")}>Prev</button>
       <button class="accent play-pause" on:click={() => transport("toggle")}>
-        {$shell.playback.status === "playing" ? "⏸" : "▶"}
+        {$shell.playback.status === "playing" ? "Pause" : "Play"}
       </button>
-      <button on:click={() => transport("next")}>⏭</button>
+      <button on:click={() => transport("next")}>Next</button>
+      <button class:active-toggle={$shell.playback.shuffle} on:click={() => setShuffle(!$shell.playback.shuffle)}>Shuffle</button>
+      <button class:active-toggle={$shell.playback.repeatMode === "one"} on:click={() => setRepeatMode($shell.playback.repeatMode === "one" ? "off" : "one")}>Repeat 1</button>
+      <button class:active-toggle={$shell.playback.repeatMode === "all"} on:click={() => setRepeatMode($shell.playback.repeatMode === "all" ? "off" : "all")}>Repeat All</button>
     </div>
     <div class="progress-bar">
       <span class="time">{formatTime($shell.playback.positionSeconds)}</span>
@@ -174,7 +233,7 @@
     </div>
   </div>
   <div class="volume-control">
-    <span>🔊</span>
+    <span>Vol</span>
     <input
       type="range"
       min="0"
@@ -197,10 +256,11 @@
   }
   :global(a) { color: inherit; text-decoration: none; }
   :global(button), :global(input) { font: inherit; }
+  :global(html), :global(body) { height: 100%; overflow: hidden; }
   .app-shell {
     display: grid;
     grid-template-columns: 260px minmax(0, 1fr) 320px;
-    min-height: calc(100vh - 88px);
+    height: calc(100vh - 96px);
   }
   .nav-rail, .queue-panel, .center-panel { padding: 24px; box-sizing: border-box; }
   .nav-rail, .queue-panel { background: rgba(10, 14, 19, 0.72); backdrop-filter: blur(20px); }
@@ -236,6 +296,9 @@
   .now-playing {
     min-width: 0;
   }
+  .now-playing-meta { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .now-playing-art { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+  .now-playing-art.fallback { display: grid; place-items: center; background: rgba(255,255,255,0.1); font-size: 1.2rem; }
   
   .now-playing strong,
   .now-playing small {
@@ -260,16 +323,20 @@
   }
   
   .transport-actions button {
-    font-size: 1.2rem;
-    min-width: 48px;
+    font-size: 0.9rem;
+    min-width: 56px;
     height: 48px;
-    padding: 0;
+    padding: 0 10px;
   }
   
   .transport-actions button.play-pause {
-    min-width: 64px;
+    min-width: 80px;
     height: 64px;
-    font-size: 1.8rem;
+    font-size: 1rem;
+  }
+  .transport-actions button.active-toggle {
+    border-color: rgba(122, 255, 198, 0.5);
+    background: rgba(122, 255, 198, 0.15);
   }
   
   .progress-bar {
@@ -371,5 +438,8 @@
     }
     .playback-controls { min-width: 100%; }
     .now-playing { text-align: center; }
+    .now-playing-meta { justify-content: center; }
   }
 </style>
+
+

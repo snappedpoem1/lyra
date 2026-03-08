@@ -24,6 +24,7 @@ import type {
   ScanJobRecord,
   SettingsPayload,
   TasteProfile,
+  ArtistProfile,
   TrackDetail,
   TrackRecord,
   TrackScores
@@ -56,6 +57,9 @@ export const api = {
   clearQueue: () => invoke<QueueItemRecord[]>("clear_queue"),
   playback: () => invoke<PlaybackState>("get_playback_state"),
   playTrack: (trackId: number) => invoke<PlaybackState>("play_track", { trackId }),
+  playArtist: (artistName: string) => invoke<PlaybackState>("play_artist", { artistName }),
+  playAlbum: (artistName: string, albumTitle: string) =>
+    invoke<PlaybackState>("play_album", { artistName, albumTitle }),
   playQueueIndex: (index: number) => invoke<PlaybackState>("play_queue_index", { index }),
   togglePlayback: () => invoke<PlaybackState>("toggle_playback"),
   playNext: () => invoke<PlaybackState>("play_next"),
@@ -96,6 +100,7 @@ export const api = {
   recordPlaybackEvent: (trackId: number, completionRate: number, context?: string) =>
     invoke<void>("record_playback_event", { trackId, completionRate, context }),
   trackDetail: (trackId: number) => invoke<TrackDetail | null>("get_track_detail", { trackId }),
+  getArtistProfile: (artistName: string) => invoke<ArtistProfile | null>("get_artist_profile", { artistName }),
   // --- duplicates + provider health ---
   findDuplicates: () => invoke<DuplicateCluster[]>("find_duplicates"),
   listProviderHealth: () => invoke<ProviderHealth[]>("list_provider_health"),
@@ -142,4 +147,3 @@ export const api = {
     return listen<T>(event, (message) => callback(message.payload));
   }
 };
-

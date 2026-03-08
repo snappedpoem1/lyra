@@ -181,6 +181,45 @@ pub fn get_track_by_id(conn: &Connection, track_id: i64) -> LyraResult<Option<Tr
     .map_err(Into::into)
 }
 
+pub fn list_track_ids_for_artist(conn: &Connection, artist_name: &str, limit: i64) -> LyraResult<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "
+        SELECT t.id
+        FROM tracks t
+        LEFT JOIN artists ar ON ar.id = t.artist_id
+        LEFT JOIN albums al ON al.id = t.album_id
+        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
+        ORDER BY al.title ASC, t.title ASC
+        LIMIT ?2
+        ",
+    )?;
+    let rows = stmt.query_map(params![artist_name, limit], |row| row.get::<_, i64>(0))?;
+    Ok(rows.filter_map(Result::ok).collect())
+}
+
+pub fn list_track_ids_for_album(
+    conn: &Connection,
+    artist_name: &str,
+    album_title: &str,
+    limit: i64,
+) -> LyraResult<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "
+        SELECT t.id
+        FROM tracks t
+        LEFT JOIN artists ar ON ar.id = t.artist_id
+        LEFT JOIN albums al ON al.id = t.album_id
+        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
+          AND lower(trim(COALESCE(al.title, ''))) = lower(trim(?2))
+        ORDER BY t.title ASC
+        LIMIT ?3
+        ",
+    )?;
+    let rows =
+        stmt.query_map(params![artist_name, album_title, limit], |row| row.get::<_, i64>(0))?;
+    Ok(rows.filter_map(Result::ok).collect())
+}
+
 pub fn create_scan_job(conn: &Connection) -> LyraResult<ScanJobRecord> {
     conn.execute(
         "INSERT INTO scan_jobs (status, started_at) VALUES ('queued', ?1)",

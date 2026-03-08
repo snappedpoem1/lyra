@@ -49,11 +49,11 @@ Not imported now:
 
 ## Remaining Migration Work
 
-1. implement real Rust audio backend
-2. improve library metadata import quality
-3. port secure provider credential handling
-4. port selected acquisition providers
-5. port selected enrichment providers
-6. rebuild oracle/recommendation features on Rust-owned contracts
-7. harden packaged desktop distribution after runtime stabilization
+1. close acquisition workflow parity (stage->scan->organize visibility, queue lifecycle controls)
+2. complete enrichment workflow parity (source provenance, confidence, MBID-first views)
+3. implement curation workflows (duplicate resolution, cleanup preview/apply, rollback metadata)
+4. expand playlist intelligence (act-based generation + persisted reason payloads)
+5. deepen discovery/artist graph workflows (play similar, bridge artists, source-aware discovery modes)
+6. harden packaged desktop distribution after runtime stabilization
 
+See `docs/WORKFLOW_NEEDS.md` for concrete workflow-level requirements.

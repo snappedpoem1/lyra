@@ -244,3 +244,20 @@ export type RecommendationResult = {
   score: number;
 };
 
+export type ArtistConnection = {
+  artist: string;
+  score: number;
+};
+
+export type ArtistProfile = {
+  artist: string;
+  trackCount: number;
+  albumCount: number;
+  albums: string[];
+  genres: string[];
+  bio?: string | null;
+  imageUrl?: string | null;
+  lastfmUrl?: string | null;
+  topTracks: TrackRecord[];
+  connections: ArtistConnection[];
+};

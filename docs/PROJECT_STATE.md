@@ -112,6 +112,15 @@ Implemented:
   - Base64 auth helper for HTTP Basic authentication in provider probes
   - UTF-8 BOM handling in `.env` file parsing (strips EF BB BF before dotenvy parse)
   - All acquisition functions restored via Python subprocess delegation (battle-tested waterfall preserved)
+- **Wave X**: UI/runtime reconnection pass:
+  - New canonical artist profile surface: `get_artist_profile` Rust API + Tauri command + `/artists/[name]` Svelte route
+  - Artist links wired across Library, Queue, Discover, and now-playing transport metadata
+  - Transport bar now includes shuffle and repeat controls (`off`/`one`/`all`) wired to Rust playback commands
+  - Queue play actions now update playback state in both queue page and right queue panel
+  - Discover page supports AI playlist generation from current recommendation results (creates playlist and adds top scored tracks)
+  - Now-playing panel shows enrichment-derived artwork fallback and remains visible with viewport-fit shell sizing
+  - Legacy parity port: native `play_artist` and `play_album` commands added and wired into artist page actions
+  - Legacy/ChatGPT artifact sweep completed (including `C:\chatgpt` export); workflow-level parity needs captured in `docs/WORKFLOW_NEEDS.md`
 
 Scaffolded / honest baseline:
 
@@ -158,4 +167,3 @@ Waves A–V are complete. Remaining high-value targets:
 - Scrobble session auth UX: surface session key status in Settings (show whether session_key is present)
 - 4-hour audio soak
 - History panel track resolution: show artist/title instead of track # (requires join or a lookup on demand)
-

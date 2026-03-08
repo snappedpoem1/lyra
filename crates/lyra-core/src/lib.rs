@@ -25,11 +25,12 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use commands::{
-    AcquisitionQueueItem, AudioOutputDevice, BootstrapPayload, DuplicateCluster, ExplainPayload,
-    LegacyImportReport, LibraryOverview, LibraryRootRecord, NativeCapabilities, PlaybackEvent,
-    PlaybackState, PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
-    ProviderValidationResult, QueueItemRecord, RecommendationResult, ScanJobRecord, SettingsPayload,
-    TasteProfile, TrackDetail, TrackRecord, TrackScores,
+    AcquisitionQueueItem, ArtistConnection, ArtistProfile, AudioOutputDevice, BootstrapPayload,
+    DuplicateCluster, ExplainPayload, LegacyImportReport, LibraryOverview, LibraryRootRecord,
+    NativeCapabilities, PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary,
+    ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
+    RecommendationResult, ScanJobRecord, SettingsPayload, TasteProfile, TrackDetail, TrackRecord,
+    TrackScores,
 };
 use config::AppPaths;
 use db::{connect, init_database};
@@ -333,7 +334,10 @@ impl LyraCore {
     pub fn clear_queue(&self) -> LyraResult<Vec<QueueItemRecord>> {
         let conn = self.conn()?;
         queue::clear_queue(&conn)?;
-        state::save_playback_state(&conn, &self.get_playback_state()?)?;
+        let current = state::load_playback_state(&conn)?;
+        let mut controller = self.playback.lock().map_err(|_| LyraError::LockPoisoned)?;
+        let next = controller.stop(current.volume);
+        state::save_playback_state(&conn, &next)?;
         Ok(Vec::new())
     }
 
@@ -413,10 +417,12 @@ impl LyraCore {
     /// Transition to "stopped" and persist so the ticker does not loop.
     pub fn stop_playback(&self) -> LyraResult<PlaybackState> {
         let conn = self.conn()?;
-        let mut current = state::load_playback_state(&conn)?;
-        current.status = "stopped".to_string();
-        state::save_playback_state(&conn, &current)?;
-        Ok(current)
+        let current = state::load_playback_state(&conn)?;
+        let mut controller = self.playback.lock().map_err(|_| LyraError::LockPoisoned)?;
+        let mut next = controller.stop(current.volume);
+        next.status = "stopped".to_string();
+        state::save_playback_state(&conn, &next)?;
+        Ok(next)
     }
 
     /// Persist the live playback position to SQLite for accurate session restore.
@@ -1225,6 +1231,230 @@ impl LyraCore {
         };
         let scores = scores::get_track_scores(&conn, track_id)?;
         Ok(Some(TrackDetail { track, scores }))
+    }
+
+    pub fn get_artist_profile(&self, artist_name: String) -> LyraResult<Option<ArtistProfile>> {
+        let conn = self.conn()?;
+        let artist_name = artist_name.trim().to_string();
+        if artist_name.is_empty() {
+            return Ok(None);
+        }
+
+        let track_count: i64 = conn.query_row(
+            "SELECT COUNT(*)
+             FROM tracks t
+             LEFT JOIN artists ar ON ar.id = t.artist_id
+             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))",
+            params![artist_name.as_str()],
+            |row| row.get(0),
+        )?;
+        if track_count == 0 {
+            return Ok(None);
+        }
+
+        let album_count: i64 = conn.query_row(
+            "SELECT COUNT(DISTINCT al.id)
+             FROM tracks t
+             LEFT JOIN artists ar ON ar.id = t.artist_id
+             LEFT JOIN albums al ON al.id = t.album_id
+             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))",
+            params![artist_name.as_str()],
+            |row| row.get(0),
+        )?;
+
+        let mut albums_stmt = conn.prepare(
+            "SELECT COALESCE(al.title, ''), COUNT(*) AS c
+             FROM tracks t
+             LEFT JOIN artists ar ON ar.id = t.artist_id
+             LEFT JOIN albums al ON al.id = t.album_id
+             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
+               AND trim(COALESCE(al.title, '')) != ''
+             GROUP BY al.title
+             ORDER BY c DESC, al.title ASC
+             LIMIT 12",
+        )?;
+        let albums = albums_stmt
+            .query_map(params![artist_name.as_str()], |row| row.get::<_, String>(0))?
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+
+        let mut top_tracks_stmt = conn.prepare(
+            "SELECT t.id, t.title, COALESCE(ar.name, ''), COALESCE(al.title, ''), t.path,
+                    COALESCE(t.duration_seconds, 0), t.genre, t.year, t.bpm, t.key_signature,
+                    t.liked_at
+             FROM tracks t
+             LEFT JOIN artists ar ON ar.id = t.artist_id
+             LEFT JOIN albums al ON al.id = t.album_id
+             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
+             ORDER BY t.id DESC
+             LIMIT 16",
+        )?;
+        let top_tracks = top_tracks_stmt
+            .query_map(params![artist_name.as_str()], |row| {
+                Ok(TrackRecord {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    artist: row.get(2)?,
+                    album: row.get(3)?,
+                    path: row.get(4)?,
+                    duration_seconds: row.get(5)?,
+                    genre: row.get(6)?,
+                    year: row.get(7)?,
+                    bpm: row.get(8)?,
+                    key_signature: row.get(9)?,
+                    liked: row.get::<_, Option<String>>(10)?.is_some(),
+                    liked_at: row.get(10)?,
+                })
+            })?
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+
+        let mut genres_stmt = conn.prepare(
+            "SELECT t.genre, COUNT(*) AS c
+             FROM tracks t
+             LEFT JOIN artists ar ON ar.id = t.artist_id
+             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
+               AND t.genre IS NOT NULL
+               AND trim(t.genre) != ''
+             GROUP BY t.genre
+             ORDER BY c DESC
+             LIMIT 8",
+        )?;
+        let genres = genres_stmt
+            .query_map(params![artist_name.as_str()], |row| row.get::<_, String>(0))?
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+
+        let mut bio: Option<String> = None;
+        let mut image_url: Option<String> = None;
+        let mut lastfm_url: Option<String> = None;
+
+        let mut enrich_stmt = conn.prepare(
+            "SELECT ec.provider, ec.payload_json
+             FROM tracks t
+             LEFT JOIN artists ar ON ar.id = t.artist_id
+             JOIN enrich_cache ec
+               ON ec.lookup_key = lower(trim(COALESCE(ar.name, ''))) || '::' || lower(trim(COALESCE(t.title, '')))
+               OR ec.lookup_key = COALESCE(t.path, '')
+             WHERE (
+                    lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
+                   )
+             ORDER BY ec.fetched_at DESC
+             LIMIT 250",
+        )?;
+        let enrich_rows = enrich_stmt.query_map(params![artist_name.as_str()], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in enrich_rows.filter_map(Result::ok) {
+            let (provider, payload_json) = row;
+            let Ok(payload) = serde_json::from_str::<Value>(&payload_json) else {
+                continue;
+            };
+            if provider == "lastfm" {
+                if bio.is_none() {
+                    bio = payload
+                        .get("summary")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|v| !v.is_empty())
+                        .map(ToOwned::to_owned);
+                }
+                if lastfm_url.is_none() {
+                    lastfm_url = payload
+                        .get("url")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|v| !v.is_empty())
+                        .map(ToOwned::to_owned);
+                }
+            }
+            if provider == "genius" && image_url.is_none() {
+                image_url = payload
+                    .get("artUrl")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                    .map(ToOwned::to_owned);
+            }
+            if provider == "discogs" && image_url.is_none() {
+                image_url = payload
+                    .get("coverImage")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
+                    .map(ToOwned::to_owned);
+            }
+            if bio.is_some() && image_url.is_some() && lastfm_url.is_some() {
+                break;
+            }
+        }
+
+        let mut conn_stmt = conn.prepare(
+            "SELECT COALESCE(ar2.name, ''), COUNT(*) AS strength
+             FROM playback_history p1
+             JOIN playback_history p2
+               ON p1.id != p2.id
+              AND abs(strftime('%s', p1.ts) - strftime('%s', p2.ts)) <= 1800
+             JOIN tracks t1 ON t1.id = p1.track_id
+             LEFT JOIN artists ar1 ON ar1.id = t1.artist_id
+             JOIN tracks t2 ON t2.id = p2.track_id
+             LEFT JOIN artists ar2 ON ar2.id = t2.artist_id
+             WHERE lower(trim(COALESCE(ar1.name, ''))) = lower(trim(?1))
+               AND lower(trim(COALESCE(ar2.name, ''))) != lower(trim(?1))
+               AND trim(COALESCE(ar2.name, '')) != ''
+             GROUP BY ar2.name
+             ORDER BY strength DESC
+             LIMIT 12",
+        )?;
+        let connections = conn_stmt
+            .query_map(params![artist_name.as_str()], |row| {
+                Ok(ArtistConnection {
+                    artist: row.get(0)?,
+                    score: row.get(1)?,
+                })
+            })?
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+
+        Ok(Some(ArtistProfile {
+            artist: artist_name,
+            track_count,
+            album_count,
+            albums,
+            genres,
+            bio,
+            image_url,
+            lastfm_url,
+            top_tracks,
+            connections,
+        }))
+    }
+
+    pub fn play_artist(&self, artist_name: String) -> LyraResult<PlaybackState> {
+        let conn = self.conn()?;
+        let track_ids = library::list_track_ids_for_artist(&conn, artist_name.as_str(), 500)?;
+        let first = track_ids
+            .first()
+            .copied()
+            .ok_or(LyraError::NotFound("artist tracks"))?;
+        queue::replace_queue(&conn, &track_ids)?;
+        self.play_track(first)
+    }
+
+    pub fn play_album(&self, artist_name: String, album_title: String) -> LyraResult<PlaybackState> {
+        let conn = self.conn()?;
+        let track_ids = library::list_track_ids_for_album(
+            &conn,
+            artist_name.as_str(),
+            album_title.as_str(),
+            500,
+        )?;
+        let first = track_ids
+            .first()
+            .copied()
+            .ok_or(LyraError::NotFound("album tracks"))?;
+        queue::replace_queue(&conn, &track_ids)?;
+        self.play_track(first)
     }
 
     pub fn enrich_track(&self, track_id: i64) -> LyraResult<Value> {

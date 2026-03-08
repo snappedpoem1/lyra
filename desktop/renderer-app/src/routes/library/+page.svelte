@@ -158,7 +158,8 @@
       <div class="track-info">
         <strong>{track.title}</strong>
         <small>
-          {track.artist} • {track.album}{track.year ? ` · ${track.year}` : ''}{track.genre ? ` · ${track.genre}` : ''}
+          <a class="artist-link" href={`/artists/${encodeURIComponent(track.artist)}`}>{track.artist}</a>
+          • {track.album}{track.year ? ` · ${track.year}` : ''}{track.genre ? ` · ${track.genre}` : ''}
           {#if track.bpm}<span class="pill">{Math.round(track.bpm)} BPM</span>{/if}
         </small>
       </div>
@@ -328,6 +329,7 @@
     gap: 12px;
   }
   .track-info { display: grid; gap: 4px; flex: 1; min-width: 0; }
+  .artist-link { color: #a8c4e0; text-decoration: underline; }
   .actions { display: flex; gap: 8px; flex-shrink: 0; }
   .pill {
     display: inline-block;
@@ -438,4 +440,3 @@
   .dup-artist { color: #9cb2c7; min-width: 120px; }
   .dup-path { flex: 1; font-size: 0.72rem; color: #6a8aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
-

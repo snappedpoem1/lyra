@@ -310,3 +310,25 @@ pub struct RecommendationResult {
     pub track: TrackRecord,
     pub score: f64,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistConnection {
+    pub artist: String,
+    pub score: i64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistProfile {
+    pub artist: String,
+    pub track_count: i64,
+    pub album_count: i64,
+    pub albums: Vec<String>,
+    pub genres: Vec<String>,
+    pub bio: Option<String>,
+    pub image_url: Option<String>,
+    pub lastfm_url: Option<String>,
+    pub top_tracks: Vec<TrackRecord>,
+    pub connections: Vec<ArtistConnection>,
+}

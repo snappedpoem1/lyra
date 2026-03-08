@@ -1,4 +1,4 @@
-# Lyra Gap Registry
+﻿# Lyra Gap Registry
 
 Last audited: March 8, 2026
 
@@ -8,17 +8,18 @@ This file tracks active gaps only.
 
 | ID | Area | Status | Evidence | What Needs To Happen |
 | --- | --- | --- | --- | --- |
-| G-050 | Rust playback backend | partial | Command-complete playback surface exists in Rust, but wave 1 currently uses an honest playback stub instead of production-grade audio output | Implement a real Rust audio backend and keep the current command contract stable |
-| G-051 | Scan/import metadata depth | partial | Library root persistence and first-pass scan/import are live, but metadata extraction is still shallow and duration detection is not yet robust | Add richer file metadata parsing, duration detection, and normalization |
-| G-052 | Playlist editing depth | partial | Playlist creation, detail, and queue-from-playlist are live, but editing and sequencing actions are still minimal | Add add/remove/reorder flows and queue-to-playlist actions |
-| G-053 | Provider migration depth | partial | Supported `.env` provider keys are imported into Rust-owned provider config records, but provider validation and secure secret handling are still minimal | Add provider-specific validation, protection strategy, and first live Rust provider adapters |
-| G-054 | Enrichment/oracle migration | partial | Rust-owned acquisition, enrichment, and oracle contracts now exist architecturally, but runtime parity with legacy Python systems is not yet implemented | Port selected enrichers and recommendation/oracle flows into Rust-owned modules |
-| G-055 | Packaged desktop confidence | partial | Rust core, SvelteKit frontend, and Tauri host build locally, but packaged installer validation and long-session hardening remain open | Run packaged desktop build validation and installer smoke once playback is hardened |
+| G-060 | Acquisition workflow parity | partial | Acquisition queue and worker exist, but full staged lifecycle visibility (acquire -> stage -> scan -> organize -> index) is not surfaced end-to-end in canonical UI | Add explicit per-item lifecycle states/events and queue lifecycle controls (retry/clear completed/prioritize) |
+| G-061 | Enrichment provenance and confidence | partial | Enrichment providers run and panels exist, but source confidence and MBID-first identity views are not consistently surfaced | Add confidence/provenance payloads to commands and render them in Library/Artist views |
+| G-062 | Curation workflows | partial | Duplicate detection exists, but no canonical review/apply workflow for duplicate resolution, naming cleanup preview, or rollback metadata | Implement curation plan surfaces and safe apply/rollback flow |
+| G-063 | Playlist intelligence parity | partial | Recommendations + AI playlist seed are present, but act-based playlist generation and persisted reason payloads are not restored to canonical runtime | Add run-based generation with track-level reason persistence and explainability UI |
+| G-064 | Discovery graph depth | partial | Artist profile and simple local connections exist, but play-similar/bridge and richer graph-driven discovery modes are still missing | Add graph-backed related artist actions and deeper discovery modes |
+| G-065 | Packaged desktop confidence | partial | Local checks pass, but installer and long-session proof remain open for latest workflow additions | Run packaged build + blank-machine installer + soak after workflow parity hardens |
 
 ## Execution Order
 
-1. Replace the playback stub with real Rust audio.
-2. Improve scan/import quality and playlist editing.
-3. Expand provider migration quality and secret handling.
-4. Port selected enrichment and oracle features.
-5. Reopen packaged desktop validation once runtime behavior stabilizes.
+1. Acquisition workflow parity (G-060)
+2. Enrichment provenance and MBID-first surfaces (G-061)
+3. Curation workflow implementation (G-062)
+4. Playlist intelligence parity (G-063)
+5. Discovery graph depth (G-064)
+6. Packaged validation and soak (G-065)
