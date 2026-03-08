@@ -88,6 +88,7 @@ When touching a capability above:
 3. Preserve the solved semantics that matter to users.
 4. Reuse existing provider/env/config plumbing.
 5. Do not claim a feature is complete in docs unless the canonical runtime actually exposes it.
+6. Record which legacy source informed the canonical implementation.
 
 ## What Not To Recreate Blindly
 

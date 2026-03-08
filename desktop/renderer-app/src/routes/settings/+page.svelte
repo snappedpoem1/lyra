@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { api } from "$lib/tauri";
   import { legacyImportReport, shell } from "$lib/stores/lyra";
+  import { setWorkspacePage } from "$lib/stores/workspace";
   import type { AudioOutputDevice, DiagnosticsReport, ProviderHealth, ProviderValidationResult, SettingsPayload } from "$lib/types";
 
   let form: SettingsPayload = get(shell).settings;
@@ -23,6 +24,12 @@
   let workerRunning = false;
 
   onMount(async () => {
+    setWorkspacePage(
+      "Settings",
+      "Runtime and provider controls",
+      "Manage provider trust, diagnostics, acquisition worker behavior, and native playback settings inside the canonical shell.",
+      "context"
+    );
     try {
       audioDevices = await api.listAudioDevices();
     } catch (e) {
@@ -121,7 +128,7 @@
   }
 
   async function lastfmAuthenticate() {
-    lastfmAuthStatus = "authenticating…";
+    lastfmAuthStatus = "Authenticating...";
     try {
       const sk = await api.lastfmGetSession(
         lastfmAuthForm.apiKey,
@@ -129,20 +136,20 @@
         lastfmAuthForm.username,
         lastfmAuthForm.password,
       );
-      lastfmAuthStatus = `✓ Session key obtained (${sk.slice(0, 8)}…) — saved to Last.fm config`;
+      lastfmAuthStatus = `Session key obtained (${sk.slice(0, 8)}...) - saved to Last.fm config`;
       lastfmAuthForm.password = "";
     } catch (e) {
-      lastfmAuthStatus = `✗ ${String(e)}`;
+      lastfmAuthStatus = `Error: ${String(e)}`;
     }
   }
 
   async function backupEnvToKeychain() {
-    envBackupStatus = "scanning…";
+    envBackupStatus = "Scanning...";
     try {
       const result = await api.backupEnvToKeychain(envBackupPath);
-      envBackupStatus = `✓ Saved ${result.saved} credentials to OS keychain (${result.skipped} non-credential entries skipped)`;
+      envBackupStatus = `Saved ${result.saved} credentials to OS keychain (${result.skipped} non-credential entries skipped)`;
     } catch (e) {
-      envBackupStatus = `✗ ${String(e)}`;
+      envBackupStatus = `Error: ${String(e)}`;
     }
   }
 
@@ -231,17 +238,17 @@
 
   <article>
     <p class="eyebrow">Last.fm Scrobbling</p>
-    <p class="settings-hint">Enter your Last.fm credentials to obtain a session key. Scrobbling fires automatically on ≥50% completion once the session key is saved in the Last.fm provider config.</p>
+    <p class="settings-hint">Enter your Last.fm credentials to obtain a session key. Scrobbling fires automatically on >=50% completion once the session key is saved in the Last.fm provider config.</p>
     <label>API Key <input type="text" bind:value={lastfmAuthForm.apiKey} placeholder="xxxxxxxxxxxxxxxx" /></label>
     <label>API Secret <input type="password" bind:value={lastfmAuthForm.apiSecret} placeholder="xxxxxxxxxxxxxxxx" /></label>
     <label>Username <input type="text" bind:value={lastfmAuthForm.username} placeholder="your-lastfm-username" /></label>
-    <label>Password <input type="password" bind:value={lastfmAuthForm.password} placeholder="••••••••" /></label>
+    <label>Password <input type="password" bind:value={lastfmAuthForm.password} placeholder="password" /></label>
     <button on:click={lastfmAuthenticate}>Authenticate</button>
     {#if lastfmAuthStatus}<div class="auth-status">{lastfmAuthStatus}</div>{/if}
   </article>
 
   <article>
-    <p class="eyebrow">Keychain — .env Backup</p>
+    <p class="eyebrow">Keychain - .env Backup</p>
     <p class="settings-hint">Save all credential-like values from a .env file to the OS keychain (Windows Credential Manager). Keys containing API_KEY, SECRET, TOKEN, PASSWORD, EMAIL are saved.</p>
     <label>.env path <input type="text" bind:value={envBackupPath} /></label>
     <button on:click={backupEnvToKeychain}>Save credentials to keychain</button>
@@ -264,10 +271,10 @@
       <div class="provider-card">
         <div>
           <strong>{provider.displayName}</strong>
-          <small>{provider.capabilities.join(" • ")}</small>
+          <small>{provider.capabilities.join(" | ")}</small>
           {#if healthLoaded && healthMap[provider.providerKey]}
             {@const h = healthMap[provider.providerKey]}
-            <span class="health-badge" style="color:{statusColor(h.status)}">● {h.status}{h.circuitOpen ? " [tripped]" : ""}</span>
+            <span class="health-badge" style="color:{statusColor(h.status)}">Status: {h.status}{h.circuitOpen ? " [tripped]" : ""}</span>
             {#if h.failureCount > 0}
               <span class="health-meta">failures: {h.failureCount}</span>
               <button class="reset-btn" on:click={() => resetHealth(provider.providerKey)}>Reset</button>
@@ -280,12 +287,12 @@
           <button on:click={() => saveProvider(provider.providerKey, provider.enabled)}>Save</button>
           <button class="validate-btn" on:click={() => validateProvider(provider.providerKey)}
             disabled={validationResults[provider.providerKey] === 'pending'}>
-            {validationResults[provider.providerKey] === 'pending' ? 'Checking…' : 'Validate'}
+            {validationResults[provider.providerKey] === 'pending' ? 'Checking...' : 'Validate'}
           </button>
           <button class="keychain-btn" on:click={() => saveToKeychain(provider.providerKey)}
-            title="Save credentials to OS keychain">🔐 Keychain</button>
+            title="Save credentials to OS keychain">Keychain</button>
           <button class="keychain-btn" on:click={() => loadFromKeychain(provider.providerKey)}
-            title="Load credentials from OS keychain">↑ Load</button>
+            title="Load credentials from OS keychain">Load</button>
         </div>
         {#if keyringStatus[provider.providerKey]}
           <div class="keyring-status">{keyringStatus[provider.providerKey]}</div>
@@ -293,10 +300,10 @@
         {#if validationResults[provider.providerKey] && validationResults[provider.providerKey] !== 'pending'}
           {@const vr = validationResults[provider.providerKey] as import('$lib/types').ProviderValidationResult}
           <div class="validation-result" style="color:{vr.valid ? '#34cfab' : '#e55'}">
-            {vr.valid ? '✓ Valid' : '✗ Invalid'}
-            {vr.latencyMs ? ` · ${vr.latencyMs}ms` : ''}
-            {vr.detail ? ` · ${vr.detail}` : ''}
-            {vr.error ? ` — ${vr.error}` : ''}
+            {vr.valid ? 'Valid' : 'Invalid'}
+            {vr.latencyMs ? ` - ${vr.latencyMs}ms` : ''}
+            {vr.detail ? ` - ${vr.detail}` : ''}
+            {vr.error ? ` - ${vr.error}` : ''}
           </div>
         {/if}
       </div>
@@ -348,7 +355,7 @@
             <div class="check-item">
               <div class="check-header">
                 <span class="check-icon" style="color:{check.status === 'ok' ? '#34cfab' : check.status === 'warning' ? '#f0b429' : check.status === 'error' ? '#e55' : '#888'}">
-                  {check.status === 'ok' ? '✓' : check.status === 'warning' ? '⚠' : check.status === 'error' ? '✗' : '○'}
+                  {check.status === 'ok' ? 'OK' : check.status === 'warning' ? 'WARN' : check.status === 'error' ? 'ERR' : 'N/A'}
                 </span>
                 <strong>{key}</strong>
               </div>

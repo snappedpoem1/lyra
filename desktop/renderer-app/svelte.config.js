@@ -6,7 +6,8 @@ const config = {
       fallback: "index.html"
     }),
     prerender: {
-      handleHttpError: "warn"
+      handleHttpError: "warn",
+      handleUnseenRoutes: "warn"
     },
     alias: {
       $lib: "./src/lib"

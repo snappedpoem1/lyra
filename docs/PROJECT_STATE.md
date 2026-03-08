@@ -2,117 +2,132 @@
 
 Last audited: March 8, 2026
 
-## Runtime Truth
+## Canonical Runtime Truth
 
-- Canonical runtime is:
-  - Tauri 2 desktop shell
-  - SvelteKit SPA renderer
-  - Rust application core in `crates/lyra-core`
-  - Rust-owned SQLite local store
-- Python is not part of canonical startup, playback, queue, library, or normal app operation.
-- Legacy Python/oracle surfaces remain in-repo as migration-source logic and reference material.
+Lyra's canonical runtime is:
 
-## Honest Product State
+- Tauri 2 desktop shell
+- SvelteKit SPA renderer
+- Rust application core in `crates/lyra-core`
+- Rust-owned SQLite local store
 
-Lyra's native foundation is ahead of its user-facing product identity layer.
+Python is not part of canonical startup, playback, queue, library, or normal app operation.
+Legacy Python and oracle surfaces remain in-repo as migration-source logic, not as the active runtime.
 
-What is strong already:
+## Product Reality
+
+Lyra's native foundation is real.
+The remaining challenge is product identity depth, not whether a desktop shell can launch.
+
+Implemented now:
+
+- Python-free desktop boot path
+- direct Tauri invoke path into Rust
+- Rust-owned SQLite init, migrations, and session state
+- library roots, scan/import, playlists, queue, settings, and playback
+- Windows SMTC and audio device selection
+- provider config records, validation hooks, env import, and secret storage paths
+- canonical app shell with collapsible left and right rails, persistent mini player, and persistent Lyra composer line
+- acquisition workflow baseline with staged lifecycle visibility, queue controls, preflight checks, diagnostics, and shell-integrated activity surfaces
+- partial artist, enrichment, recommendation, and taste surfaces, including shell-visible provenance, MBID identity summaries, and connected discovery/playlist evidence hooks
+
+Partial or scaffolded:
+
+- explainability coverage across the product
+- enrichment provenance and confidence visibility across the full product, especially for saved playlists, deep recommendation flows, and broader explanation coverage
+- playlist authorship and narrative generation
+- graph and constellation discovery depth
+- visible taste tooling and dimensional steering
+- curation workflows with rollback and undo
+- packaged desktop release confidence
+- final acquisition trust hardening around transitional bridge semantics and a dedicated backend event stream
+
+## Implemented Now
+
+The canonical app already behaves like a credible native local player and library tool:
 
 - native playback and session behavior
 - local library scan/import
 - playlists, queue, settings, and now-playing surfaces
-- provider config records, env import, validation hooks, and secret storage paths
-- acquisition baseline and diagnostics
+- one connected oracle shell with shared context, provenance, bridge, queue, and acquisition rails
+- provider plumbing and secure secret handling
+- acquisition workflow baseline and diagnostics
+- track-level and artist-level provenance summaries with MBID-first identity surfaces
+- discovery and generated-playlist surfaces that can publish provenance and reason context into the shared shell
 - early recommendation, artist, taste, and enrichment surfaces
 
-What is still incomplete:
+## Still Missing
 
-- explainability is partial and not yet pervasive
-- playlist authorship and narrative generation are not yet a first-class canonical experience
-- graph and constellation discovery are still thin relative to intended product shape
-- provenance and confidence visibility are inconsistent
-- dimensional and emotional scoring exists only in partial or non-portable form
-- the canonical UI/runtime still undersells Lyra as an intelligence and curation system
+Lyra still undersells its intended identity in the canonical runtime.
+The biggest missing pieces are:
 
-## Landed Native Foundation
+- explainable recommendation that is visible, durable, and broad
+- playlist-first authored journeys with reason payloads
+- bridge-track and related-artist discovery depth
+- provenance-aware enrichment with confidence visibility
+- visible, steerable taste and dimensional signals
+- deeper trust semantics for transitional acquisition execution and backend-driven lifecycle event streaming
 
-Implemented in the Rust/Tauri/Svelte runtime:
+## Legacy Migration Source Reality
 
-- Python-free Tauri boot path
-- direct Rust command bridge
-- Rust-owned SQLite init and migrations
-- library roots persistence
-- file scan/import with lofty metadata extraction
-- playlist CRUD and queue persistence
-- settings persistence
-- provider config records and capability registry
-- legacy `.env` and legacy DB import path
-- native playback, seek, repeat/shuffle, and session restore
-- SMTC integration on Windows
-- audio device selection
-- enrichment adapter baseline in Rust
-- recommendation and taste-profile baseline surfaces
-- artist profile route and acquisition queue UI
+Useful product logic still exists in Python.
+That code must be inspected before recreating missing canonical features.
 
-## Product-Identity Gap
+High-value legacy logic includes:
 
-The repo is no longer blocked on "can Lyra be a native local desktop app."
-That baseline exists.
+- acquisition waterfall, prioritization, guard, validator, and ingest confidence
+- recommendation broker and explainability flows
+- playlist and vibe generation behavior
+- taste updates and backfill
+- graph builder and scout discovery logic
+- unified enrichment, MBID identity, credits, and biography
+- duplicate handling, curation workflows, and worker sequencing
 
-The main remaining gap is whether the canonical product actually delivers its differentiator:
+Obsolete runtime scaffolding also exists there.
+Agents must separate scaffolding from durable product behavior before porting.
 
-- explainable recommendation
-- authored playlist journeys
-- visible taste tooling
-- bridge and related-artist discovery
-- provenance-aware enrichment
-- graph-driven exploration
+## Legacy-to-Canonical Port Rule
 
-Those capabilities are only partially present today.
-Some are early Rust ports.
-Some still live mainly in Python implementation surfaces.
-Some are missing from the canonical UI even when lower-level logic exists.
+Before implementing a missing canonical feature:
 
-## Python Migration-Source Reality
+1. Inspect the relevant legacy Python and oracle-era logic first.
+2. Recover the solved workflow, state machine, retry behavior, payload shape, or ranking semantics.
+3. Port that behavior deliberately into Rust, Tauri, and Svelte.
+4. Do not recreate solved logic from memory.
+5. Do not bring back the legacy runtime architecture.
+6. Record the legacy-to-canonical mapping in docs or the session log.
 
-Valuable implemented logic still exists in Python and should be treated as migration source, not discarded noise.
+## Current Priority Order
 
-Important Python areas with meaningful logic include:
+The active execution order is:
 
-- acquisition waterfall and prioritization
-- recommendation broker and explainability
-- vibe/playlist generation and reason enrichment
-- taste profile updates and backfill
-- graph builder and scout discovery
-- unified enrichment flows, MBID identity, credits, and artist biography
-- duplicate handling, curation workflows, and ingest lifecycle logic
-- worker/process sequencing around graph, taste, enrichment, and acquisition maintenance
+1. `G-060` Acquisition workflow parity
+2. `G-061` Enrichment provenance and confidence
+3. `G-063` Playlist intelligence parity
+4. `G-064` Discovery graph depth
+5. `G-062` Curation workflows
+6. `G-065` Packaged desktop confidence
 
-Obsolete runtime scaffolding also exists there, but agents should distinguish scaffolding from business logic before replacing anything.
+This ordering is deliberate:
+
+- workflow visibility and trust first
+- provenance and identity confidence second
+- playlist and oracle intelligence third
+- graph and bridge discovery fourth
+- curation safety fifth
+- packaging and soak last as a release gate
 
 ## Configuration And Credential Reality
 
-Provider/API configuration already exists in the repo and local environment.
+Provider and API configuration already exists in the repo and local environment.
 This is not a greenfield configuration problem.
 
-Grounded facts in the current codebase:
+Grounded facts:
 
-- Python loads `.env` from repo-root-oriented config modules such as `oracle/config.py`, `oracle/api/app.py`, and other integration entry points
+- Python loads `.env` from established config modules
 - Rust imports `.env` data through `crates/lyra-core/src/providers.rs`
-- Rust persists provider config records in SQLite `provider_configs`
+- Rust persists provider config records in SQLite
 - Rust already maintains provider capability metadata and validation flows
 - Rust already supports OS keyring storage and retrieval for provider secrets
 
 Do not expose secret values in docs, logs, or summaries.
-
-## Current Execution Truth
-
-The most important next work is not "more generic player correctness."
-The most important next work is porting and surfacing Lyra's actual intelligence and curation identity while keeping the native runtime stable.
-
-That means:
-
-- port real Python process logic where it already exists
-- surface reasons, provenance, confidence, and taste signals in the canonical UI
-- prioritize playlist intelligence and discovery depth earlier in the roadmap
-- keep release/stability work honest and bounded instead of letting it erase product intent

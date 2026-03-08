@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== PLAYBACK FUNCTIONALITY TEST ===\n");
     
     println!("Finding a track to play...");
-    let tracks = lyra.list_tracks(None)?;
+    let tracks = lyra.list_tracks(None, None)?;
     
     if tracks.is_empty() {
         eprintln!("ERROR: No tracks found!");

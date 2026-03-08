@@ -1,10 +1,21 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { shell } from "$lib/stores/lyra";
+  import { setWorkspacePage } from "$lib/stores/workspace";
 
   $: taste = $shell.tasteProfile;
   $: topDims = Object.entries(taste?.dimensions ?? {})
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
+
+  onMount(() => {
+    setWorkspacePage(
+      "Oracle Home",
+      "Your library, your signal",
+      "See the current library shape, taste confidence, and the next lane for curation and discovery.",
+      "context"
+    );
+  });
 </script>
 
 <section>
@@ -38,7 +49,7 @@
   {#if taste && taste.totalSignals > 0}
     <div class="taste-section">
       <p class="eyebrow">Your taste profile</p>
-      <small class="muted">{taste.totalSignals} signals · confidence {Math.round(taste.confidence * 100)}%</small>
+<small class="muted">{taste.totalSignals} signals - confidence {Math.round(taste.confidence * 100)}%</small>
       <div class="dims">
         {#each topDims as [dim, val]}
           <div class="dim-row">

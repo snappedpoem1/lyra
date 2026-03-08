@@ -6,10 +6,14 @@ import type {
   AppShellState,
   AudioOutputDevice,
   BootstrapPayload,
+  CurationLogEntry,
   DiagnosticsReport,
+  DiscoverySession,
   DuplicateCluster,
   ExplainPayload,
+  GeneratedPlaylist,
   LegacyImportReport,
+  LibraryCleanupPreview,
   LibraryOverview,
   LibraryRootRecord,
   PlaybackEvent,
@@ -22,11 +26,13 @@ import type {
   QueueItemRecord,
   RecentPlayRecord,
   RecommendationResult,
+  RelatedArtist,
   ScanJobRecord,
   SettingsPayload,
   TasteProfile,
   ArtistProfile,
   TrackDetail,
+  TrackEnrichmentResult,
   TrackRecord,
   TrackScores
 } from "$lib/types";
@@ -34,7 +40,7 @@ import type {
 export const api = {
   bootstrap: () => invoke<BootstrapPayload>("bootstrap_app"),
   shell: () => invoke<AppShellState>("get_app_shell_state"),
-  tracks: (query?: string) => invoke<TrackRecord[]>("list_tracks", { query }),
+  tracks: (query?: string, sort?: string) => invoke<TrackRecord[]>("list_tracks", { query, sort }),
   libraryOverview: () => invoke<LibraryOverview>("get_library_overview"),
   libraryRoots: () => invoke<LibraryRootRecord[]>("list_library_roots"),
   addLibraryRoot: (path: string) => invoke<LibraryRootRecord[]>("add_library_root", { path }),
@@ -91,6 +97,8 @@ export const api = {
     invoke<boolean>("process_acquisition_queue"),
   clearCompletedAcquisition: () =>
     invoke<number>("clear_completed_acquisition"),
+  retryFailedAcquisition: () =>
+    invoke<number>("retry_failed_acquisition"),
   setAcquisitionPriority: (id: number, priorityScore: number) =>
     invoke<AcquisitionQueueItem[]>("set_acquisition_priority", { id, priorityScore }),
   acquisitionPreflight: () =>
@@ -150,6 +158,27 @@ export const api = {
   // --- env keychain backup ---
   backupEnvToKeychain: (envPath: string) => invoke<{ saved: number; skipped: number }>("backup_env_to_keychain", { envPath }),
   loadEnvCredential: (keyName: string) => invoke<string | null>("load_env_credential", { keyName }),
+  // --- G-061: Enrichment Provenance ---
+  getTrackEnrichment: (trackId: number) => invoke<TrackEnrichmentResult>("get_track_enrichment", { trackId }),
+  // --- G-062: Curation Workflows ---
+  resolveDuplicateCluster: (keepTrackId: number, removeTrackIds: number[]) =>
+    invoke<void>("resolve_duplicate_cluster", { keepTrackId, removeTrackIds }),
+  getCurationLog: () => invoke<CurationLogEntry[]>("get_curation_log"),
+  undoCuration: (logId: number) => invoke<void>("undo_curation", { logId }),
+  previewLibraryCleanup: () => invoke<LibraryCleanupPreview>("preview_library_cleanup"),
+  // --- G-063: Playlist Intelligence ---
+  generateActPlaylist: (intent: string, trackCount: number) =>
+    invoke<GeneratedPlaylist>("generate_act_playlist", { intent, trackCount }),
+  saveGeneratedPlaylist: (name: string, playlist: GeneratedPlaylist) =>
+    invoke<PlaylistDetail>("save_generated_playlist", { name, playlist }),
+  getPlaylistTrackReasons: (playlistId: number) =>
+    invoke<[number, string][]>("get_playlist_track_reasons", { playlistId }),
+  // --- G-064: Discovery Graph Depth ---
+  getRelatedArtists: (artistName: string, limit: number) =>
+    invoke<RelatedArtist[]>("get_related_artists", { artistName, limit }),
+  playSimilarToArtist: (artistName: string, limit: number) =>
+    invoke<QueueItemRecord[]>("play_similar_to_artist", { artistName, limit }),
+  getDiscoverySession: () => invoke<DiscoverySession>("get_discovery_session"),
   on<T>(event: string, callback: (payload: T) => void) {
     return listen<T>(event, (message) => callback(message.payload));
   }

@@ -2,10 +2,20 @@
   import { onMount } from "svelte";
   import { api } from "$lib/tauri";
   import { shell } from "$lib/stores/lyra";
-  import type { AcquisitionQueueItem, ExplainPayload, PlaylistSummary, RecentPlayRecord, RecommendationResult } from "$lib/types";
+  import {
+    setWorkspaceBridgeActions,
+    setWorkspaceExplanation,
+    setWorkspacePage,
+    setWorkspaceProvenance,
+    setWorkspaceTrack
+  } from "$lib/stores/workspace";
+  import type { AcquisitionQueueItem, DiscoverySession, ExplainPayload, PlaylistSummary, RecentPlayRecord, RecommendationResult, TrackEnrichmentResult } from "$lib/types";
 
   let vibePlaylists: PlaylistSummary[] = [];
   let acquisitionQueue: AcquisitionQueueItem[] = [];
+  // G-064: Discovery session
+  let discoverySession: DiscoverySession | null = null;
+  let discoveryLoaded = false;
   let statusFilter = "all";
   let addArtist = "";
   let addTitle = "";
@@ -50,6 +60,7 @@
   let recsError = "";
   let recsLoaded = false;
   let expandedExplain: Record<number, ExplainPayload | "loading"> = {};
+  let expandedProvenance: Record<number, TrackEnrichmentResult | "loading"> = {};
   let aiPlaylistBusy = false;
   let aiPlaylistMessage = "";
 
@@ -64,6 +75,26 @@
     const all = await api.playlists();
     vibePlaylists = all.filter((p) => p.name.startsWith("[Vibe]"));
     await loadQueue();
+    // G-064: load discovery session in background
+    loadDiscoverySession();
+  }
+
+  async function loadDiscoverySession() {
+    try {
+      discoverySession = await api.getDiscoverySession();
+      discoveryLoaded = true;
+      if (discoverySession.recent.length > 0) {
+        setWorkspaceBridgeActions(
+          discoverySession.recent.slice(0, 3).map((interaction) => ({
+            label: interaction.artistName,
+            href: `/artists/${encodeURIComponent(interaction.artistName)}`,
+            detail: interaction.action.replace(/_/g, " "),
+          })),
+        );
+      }
+    } catch {
+      discoveryLoaded = true;
+    }
   }
 
   async function loadQueue() {
@@ -95,6 +126,7 @@
     try {
       const payload = await api.explainRecommendation(trackId);
       expandedExplain = { ...expandedExplain, [trackId]: payload };
+      setWorkspaceExplanation(payload, recommendations.find((rec) => rec.track.id === trackId)?.track ?? null);
     } catch (e) {
       const next = { ...expandedExplain };
       delete next[trackId];
@@ -110,6 +142,26 @@
   async function enqueueRec(trackId: number) {
     const updated = await api.enqueueTracks([trackId]);
     shell.update((s) => ({ ...s, queue: updated }));
+    setWorkspaceTrack(recommendations.find((rec) => rec.track.id === trackId)?.track ?? null);
+  }
+
+  async function toggleProvenance(trackId: number) {
+    if (expandedProvenance[trackId]) {
+      const next = { ...expandedProvenance };
+      delete next[trackId];
+      expandedProvenance = next;
+      return;
+    }
+    expandedProvenance = { ...expandedProvenance, [trackId]: "loading" };
+    try {
+      const result = await api.getTrackEnrichment(trackId);
+      expandedProvenance = { ...expandedProvenance, [trackId]: result };
+      setWorkspaceProvenance(result.entries, recommendations.find((rec) => rec.track.id === trackId)?.track ?? null);
+    } catch {
+      const next = { ...expandedProvenance };
+      delete next[trackId];
+      expandedProvenance = next;
+    }
   }
 
   async function submitAdd() {
@@ -161,12 +213,20 @@
     return `${pct}%`;
   }
 
-  onMount(load);
+  onMount(() => {
+    setWorkspacePage(
+      "Discover",
+      "Oracle discovery workspace",
+      "Follow recommendations, bridge leads, taste signals, and acquisition candidates without leaving the shell.",
+      "bridge"
+    );
+    load();
+  });
 </script>
 
 <section>
   <p class="eyebrow">Discover</p>
-  <h2>For You · Vibes · Acquisition</h2>
+  <h2>For You - Vibes - Acquisition</h2>
 </section>
 
 <!-- Taste profile panel -->
@@ -174,7 +234,7 @@
 <div class="taste-panel">
   <div class="taste-head">
     <p class="panel-head eyebrow">Your taste profile</p>
-    <span class="taste-meta">{tasteProfile.totalSignals} signals · confidence {Math.round(tasteProfile.confidence * 100)}%</span>
+    <span class="taste-meta">{tasteProfile.totalSignals} signals - confidence {Math.round(tasteProfile.confidence * 100)}%</span>
   </div>
   <div class="taste-bars">
     {#each tasteDimsList as { dim, val, color }}
@@ -257,8 +317,11 @@
           </div>
           <div class="rec-actions">
             <button on:click={() => enqueueRec(rec.track.id)}>+ Queue</button>
+            <button class="provenance-btn" on:click={() => toggleProvenance(rec.track.id)}>
+              {expandedProvenance[rec.track.id] ? "Hide Proof" : "Proof"}
+            </button>
             <button class="explain-btn" on:click={() => toggleExplain(rec.track.id)}>
-              {expandedExplain[rec.track.id] ? "▲" : "Why?"}
+              {expandedExplain[rec.track.id] ? "Hide" : "Why?"}
             </button>
           </div>
           {#if expandedExplain[rec.track.id]}
@@ -274,11 +337,51 @@
               {/if}
             </div>
           {/if}
+          {#if expandedProvenance[rec.track.id]}
+            <div class="provenance-panel">
+              {#if expandedProvenance[rec.track.id] === "loading"}
+                <p class="muted">Loading provenance...</p>
+              {:else}
+                {@const proof = expandedProvenance[rec.track.id] as TrackEnrichmentResult}
+                <div class="proof-head">
+                  <span class="proof-state">{proof.enrichmentState}</span>
+                  {#if proof.primaryMbid}
+                    <code>{proof.primaryMbid}</code>
+                  {/if}
+                </div>
+                {#each proof.entries.slice(0, 3) as entry}
+                  <div class="proof-row">
+                    <strong>{entry.provider}</strong>
+                    <span>{entry.status} - {Math.round(entry.confidence * 100)}%</span>
+                  </div>
+                {/each}
+              {/if}
+            </div>
+          {/if}
         </div>
       {/each}
     </div>
   {/if}
 </div>
+
+<!-- G-064: Recent Discovery panel -->
+{#if discoveryLoaded && discoverySession && discoverySession.recent.length > 0}
+<div class="discovery-panel">
+  <p class="panel-head eyebrow">Recent Discovery</p>
+  <div class="discovery-rows">
+    {#each discoverySession.recent as interaction}
+      <div class="discovery-row">
+        <span class="disc-action">{interaction.action.replace(/_/g, ' ')}</span>
+        <a class="disc-artist" href={`/artists/${encodeURIComponent(interaction.artistName)}`}>
+          {interaction.artistName}
+        </a>
+        <span class="disc-ts muted">{interaction.createdAt.slice(0, 16).replace('T', ' ')}</span>
+        <a class="go-btn" href={`/artists/${encodeURIComponent(interaction.artistName)}`}>Go</a>
+      </div>
+    {/each}
+  </div>
+</div>
+{/if}
 
 <div class="two-col">
   <!-- Vibe playlists panel -->
@@ -333,7 +436,7 @@
         <div class="acq-row" style="border-left: 3px solid {STATUS_COLORS[item.status] ?? 'transparent'}">
           <div class="acq-info">
             <strong>{item.title}</strong>
-            <small><a class="hist-artist" href={`/artists/${encodeURIComponent(item.artist)}`}>{item.artist}</a>{item.album ? ` · ${item.album}` : ''}</small>
+            <small><a class="hist-artist" href={`/artists/${encodeURIComponent(item.artist)}`}>{item.artist}</a>{item.album ? ` - ${item.album}` : ''}</small>
             <span class="badge" style="background:{STATUS_COLORS[item.status] ?? 'rgba(255,255,255,0.08)'}">
               {item.status}
             </span>
@@ -364,7 +467,7 @@
   .panel-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
   /* Recent plays */
-  .recent-panel { margin-bottom: 20px; padding: 14px 18px; border-radius: 18px; background: rgba(255,255,255,0.04); display: flex; flex-direction: column; gap: 8px; }
+  .recent-panel { margin-bottom: 20px; padding: 14px 18px; border-radius: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)); border: 1px solid rgba(255,255,255,0.1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06); display: flex; flex-direction: column; gap: 8px; }
   .history-rows { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
   .history-row { display: flex; align-items: center; gap: 12px; font-size: 0.78rem; }
   .hist-ts { color: #9cb2c7; min-width: 140px; flex-shrink: 0; }
@@ -381,7 +484,9 @@
   .rec-card {
     padding: 14px 16px;
     border-radius: 16px;
-    background: rgba(255,255,255,0.05);
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.035));
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 18px 40px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.06);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -396,20 +501,35 @@
   .score-label { font-size: 0.68rem; color: #9cb2c7; width: 32px; text-align: right; }
   .rec-actions { display: flex; gap: 6px; }
   .explain-btn { color: #a8c4e0; }
+  .provenance-btn { color: #d6f07b; }
   .explain-panel {
     padding: 10px 12px;
     border-radius: 10px;
-    background: rgba(255,255,255,0.04);
+    background: rgba(7, 15, 23, 0.5);
+    border: 1px solid rgba(255,255,255,0.08);
     font-size: 0.78rem;
     display: flex;
     flex-direction: column;
     gap: 4px;
   }
+  .provenance-panel {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(6, 18, 16, 0.45);
+    border: 1px solid rgba(122,255,198,0.12);
+    font-size: 0.78rem;
+    display: grid;
+    gap: 6px;
+  }
+  .proof-head, .proof-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .proof-state { text-transform: uppercase; letter-spacing: 0.12em; color: #9cb2c7; font-size: 0.68rem; }
+  .proof-head code { font-size: 0.72rem; color: #a8c4e0; }
+  .proof-row span { color: #9cb2c7; }
   .reason { color: #c0d8ea; line-height: 1.4; }
   .confidence-line { color: #9cb2c7; margin-top: 4px; }
 
   /* Taste profile */
-  .taste-panel { margin-bottom: 20px; padding: 16px 18px; border-radius: 18px; background: rgba(255,255,255,0.05); }
+  .taste-panel { margin-bottom: 20px; padding: 16px 18px; border-radius: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.035)); border: 1px solid rgba(255,255,255,0.1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06); }
   .taste-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .taste-meta { font-size: 0.72rem; color: #9cb2c7; }
   .taste-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
@@ -427,7 +547,8 @@
     gap: 12px;
     padding: 12px 14px;
     border-radius: 14px;
-    background: rgba(255,255,255,0.05);
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.035));
+    border: 1px solid rgba(255,255,255,0.08);
   }
   .acq-row { border-radius: 0 14px 14px 0; }
   .acq-info { display: grid; gap: 4px; flex: 1; min-width: 0; }
@@ -466,5 +587,32 @@
   .queue-rows { display: flex; flex-direction: column; gap: 4px; }
   select { font: inherit; color: inherit; }
   @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* G-064: Recent Discovery panel */
+  .discovery-panel {
+    margin-bottom: 20px;
+    padding: 14px 18px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .discovery-rows { display: flex; flex-direction: column; gap: 4px; }
+  .discovery-row { display: flex; align-items: center; gap: 12px; font-size: 0.82rem; }
+  .disc-action { color: #6a8aab; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; min-width: 90px; flex-shrink: 0; }
+  .disc-artist { color: #a8c4e0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .disc-ts { font-size: 0.68rem; min-width: 130px; text-align: right; flex-shrink: 0; }
+  .go-btn {
+    padding: 3px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: #a8c4e0;
+    font-size: 0.72rem;
+    text-decoration: none;
+    flex-shrink: 0;
+  }
 </style>
 

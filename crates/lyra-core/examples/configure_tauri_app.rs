@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Show sample tracks
     println!("\n🎵 Sample Tracks:");
-    let tracks = lyra.list_tracks(None)?;
+    let tracks = lyra.list_tracks(None, None)?;
     for (i, track) in tracks.iter().take(10).enumerate() {
         println!("   {}. {} - {} ({})", 
             i + 1, 

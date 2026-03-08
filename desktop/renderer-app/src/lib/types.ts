@@ -271,6 +271,93 @@ export type ArtistProfile = {
   bio?: string | null;
   imageUrl?: string | null;
   lastfmUrl?: string | null;
+  primaryMbid?: string | null;
+  identityConfidence: number;
+  provenance: EnrichmentEntry[];
   topTracks: TrackRecord[];
   connections: ArtistConnection[];
+};
+
+// G-061: Enrichment Provenance
+export type EnrichmentEntry = {
+  provider: string;
+  status: string;
+  confidence: number;
+  note?: string | null;
+  mbid?: string | null;
+  releaseMbid?: string | null;
+  releaseTitle?: string | null;
+  releaseDate?: string | null;
+  matchScore?: number | null;
+  listeners?: number | null;
+  playCount?: number | null;
+  tags: string[];
+  wikiSummary?: string | null;
+  year?: number | null;
+  genres: string[];
+  label?: string | null;
+  lyricsUrl?: string | null;
+  hasLrc?: boolean | null;
+};
+
+export type TrackEnrichmentResult = {
+  trackId: number;
+  enrichmentState: string;
+  entries: EnrichmentEntry[];
+  primaryMbid?: string | null;
+  identityConfidence: number;
+  degradedProviders: string[];
+};
+
+// G-062: Curation Workflows
+export type CurationLogEntry = {
+  logId: number;
+  action: string;
+  trackIds: number[];
+  detail: string;
+  createdAt: string;
+  undone: boolean;
+};
+
+export type CleanupIssue = {
+  issueType: string;
+  trackId: number;
+  currentValue: string;
+  suggestedValue: string;
+  severity: string;
+};
+
+export type LibraryCleanupPreview = {
+  issues: CleanupIssue[];
+};
+
+// G-063: Playlist Intelligence
+export type PlaylistTrackWithReason = {
+  track: TrackRecord;
+  reason: string;
+  position: number;
+};
+
+export type GeneratedPlaylist = {
+  name: string;
+  intent: string;
+  tracks: PlaylistTrackWithReason[];
+};
+
+// G-064: Discovery Graph Depth
+export type RelatedArtist = {
+  name: string;
+  connectionStrength: number;
+  connectionType: string;
+  localTrackCount: number;
+};
+
+export type DiscoveryInteraction = {
+  artistName: string;
+  action: string;
+  createdAt: string;
+};
+
+export type DiscoverySession = {
+  recent: DiscoveryInteraction[];
 };

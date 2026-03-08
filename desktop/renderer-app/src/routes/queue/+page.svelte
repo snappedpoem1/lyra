@@ -1,21 +1,36 @@
-﻿<script lang="ts">
+<script lang="ts">
+  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { shell } from "$lib/stores/lyra";
   import { api } from "$lib/tauri";
+  import { setInspectorTab, setWorkspacePage, setWorkspaceTrack } from "$lib/stores/workspace";
 
   let saveAsName = "";
-  let likedOverride: boolean | null = null; // optimistic update until shell refreshes
+  let likedOverride: boolean | null = null;
 
   $: currentTrack = $shell.playback.currentTrack;
   $: isLiked = likedOverride !== null ? likedOverride : (currentTrack?.liked ?? false);
+  $: if (currentTrack?.id) {
+    likedOverride = null;
+    setWorkspaceTrack(currentTrack);
+  }
+
+  onMount(() => {
+    setWorkspacePage(
+      "Queue",
+      "Current session",
+      "Keep now playing, queue order, and playlist capture inside the same canonical shell.",
+      "queue"
+    );
+    setInspectorTab("queue");
+  });
 
   async function toggleLikeCurrentTrack() {
     if (!currentTrack) return;
     const nowLiked = await api.toggleLike(currentTrack.id);
     likedOverride = nowLiked;
+    setWorkspaceTrack(currentTrack);
   }
-
-  $: if (currentTrack?.id) likedOverride = null; // reset override when track changes
 
   async function move(queueItemId: number, newPosition: number) {
     const queue = await api.moveQueueItem(queueItemId, newPosition);
@@ -35,6 +50,7 @@
   async function playQueueIndex(index: number): Promise<void> {
     const playback = await api.playQueueIndex(index);
     shell.update((state) => ({ ...state, playback }));
+    setWorkspaceTrack(playback.currentTrack ?? null);
   }
 
   async function saveAsPlaylist() {
@@ -61,7 +77,7 @@
   <div class="current-info">
     <strong>{currentTrack?.title ?? "Nothing playing"}</strong>
     {#if currentTrack?.artist}
-      <small><a class="artist-link" href={`/artists/${encodeURIComponent(currentTrack.artist)}`}>{currentTrack.artist}</a>{currentTrack?.album ? ` · ${currentTrack.album}` : ''}</small>
+      <small><a class="artist-link" href={`/artists/${encodeURIComponent(currentTrack.artist)}`}>{currentTrack.artist}</a>{currentTrack?.album ? ` - ${currentTrack.album}` : ""}</small>
     {:else}
       <small>Queue a track to begin.</small>
     {/if}
@@ -69,7 +85,7 @@
   </div>
   {#if currentTrack}
     <button class="like-btn" class:liked={isLiked} on:click={toggleLikeCurrentTrack}
-      title={isLiked ? 'Unlike' : 'Like this track'}>{isLiked ? '♥' : '♡'}</button>
+      title={isLiked ? "Unlike" : "Like this track"}>{isLiked ? "Liked" : "Like"}</button>
   {/if}
 </section>
 
@@ -115,4 +131,3 @@
     color: inherit;
   }
 </style>
-

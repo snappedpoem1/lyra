@@ -13,8 +13,10 @@ Quality: FLAC hi-res (T1/T2) -> FLAC (T3/T4) -> 320k MP3 (T5)
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -24,6 +26,11 @@ from oracle.db.schema import get_connection, get_write_mode
 
 logger = logging.getLogger(__name__)
 MIN_GUARD_CONFIDENCE = 0.30
+
+
+def _emit(event: Dict[str, Any]) -> None:
+    """Emit a structured JSON phase event to stdout for Rust to consume."""
+    print(json.dumps(event), flush=True)
 
 
 @dataclass
@@ -607,6 +614,7 @@ def acquire(
     """
     skip_tiers = skip_tiers or []
     attempts: List[AcquisitionResult] = []
+    waterfall_start = time.perf_counter()
 
     logger.info(f"[Waterfall] {artist} - {title}")
 
@@ -618,6 +626,7 @@ def acquire(
 
     if not guard.get("allowed"):
         logger.warning(f"  [GUARD REJECTED] {guard.get('reason')}")
+        _emit({"event": "failure", "error": f"Guard rejected: {guard.get('reason')}", "elapsed": time.perf_counter() - waterfall_start})
         return AcquisitionResult(
             success=False,
             tier=0,
@@ -641,10 +650,13 @@ def acquire(
     # Tier 1: Qobuz (hi-fi FLAC -- priority, authenticated, reliable)
     if 1 not in skip_tiers and max_tier >= 1:
         logger.info("  [T1] Trying Qobuz...")
+        _emit({"event": "phase", "stage": "acquire", "progress": 0.1, "note": "Trying T1 Qobuz..."})
         result = _try_tier1_qobuz(artist, title)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T1 SUCCESS ({result.elapsed:.1f}s)")
+            _emit({"event": "phase", "stage": "stage", "progress": 0.8, "note": "Staging file..."})
+            _emit({"event": "success", "path": result.path or "", "tier": "T1", "elapsed": time.perf_counter() - waterfall_start})
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T1: {result.error}")
@@ -652,10 +664,13 @@ def acquire(
     # Tier 2: Streamrip (alternative hi-fi fallback)
     if 2 not in skip_tiers and max_tier >= 2:
         logger.info("  [T2] Trying Streamrip...")
+        _emit({"event": "phase", "stage": "acquire", "progress": 0.25, "note": "Trying T2 Streamrip..."})
         result = _try_tier2_streamrip(artist, title, album)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T2 SUCCESS ({result.elapsed:.1f}s)")
+            _emit({"event": "phase", "stage": "stage", "progress": 0.8, "note": "Staging file..."})
+            _emit({"event": "success", "path": result.path or "", "tier": "T2", "elapsed": time.perf_counter() - waterfall_start})
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T2: {result.error}")
@@ -663,10 +678,13 @@ def acquire(
     # Tier 3: Slskd (P2P FLAC)
     if 3 not in skip_tiers and max_tier >= 3:
         logger.info("  [T3] Trying Slskd...")
+        _emit({"event": "phase", "stage": "acquire", "progress": 0.4, "note": "Trying T3 Slskd..."})
         result = _try_tier3_slskd(artist, title)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T3 SUCCESS ({result.elapsed:.1f}s)")
+            _emit({"event": "phase", "stage": "stage", "progress": 0.8, "note": "Staging file..."})
+            _emit({"event": "success", "path": result.path or "", "tier": "T3", "elapsed": time.perf_counter() - waterfall_start})
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T3: {result.error}")
@@ -674,10 +692,13 @@ def acquire(
     # Tier 4: Real-Debrid (Prowlarr + cached torrents)
     if 4 not in skip_tiers and max_tier >= 4:
         logger.info("  [T4] Trying Real-Debrid...")
+        _emit({"event": "phase", "stage": "acquire", "progress": 0.55, "note": "Trying T4 Real-Debrid..."})
         result = _try_tier4_realdebrid(artist, title, album)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T4 SUCCESS ({result.elapsed:.1f}s)")
+            _emit({"event": "phase", "stage": "stage", "progress": 0.8, "note": "Staging file..."})
+            _emit({"event": "success", "path": result.path or "", "tier": "T4", "elapsed": time.perf_counter() - waterfall_start})
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T4: {result.error}")
@@ -685,10 +706,13 @@ def acquire(
     # Tier 5: SpotDL (YouTube 320k fallback)
     if 5 not in skip_tiers and max_tier >= 5:
         logger.info("  [T5] Trying SpotDL...")
+        _emit({"event": "phase", "stage": "acquire", "progress": 0.7, "note": "Trying T5 SpotDL..."})
         result = _try_tier5_spotdl(artist, title, spotify_uri)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T5 SUCCESS ({result.elapsed:.1f}s)")
+            _emit({"event": "phase", "stage": "stage", "progress": 0.8, "note": "Staging file..."})
+            _emit({"event": "success", "path": result.path or "", "tier": "T5", "elapsed": time.perf_counter() - waterfall_start})
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T5: {result.error}")
@@ -697,8 +721,11 @@ def acquire(
     logger.warning(f"  [FAIL] All tiers failed for: {artist} - {title}")
 
     if attempts:
-        return attempts[-1]
+        last = attempts[-1]
+        _emit({"event": "failure", "error": last.error or "Not found in any tier", "elapsed": time.perf_counter() - waterfall_start})
+        return last
 
+    _emit({"event": "failure", "error": "All acquisition tiers skipped or failed", "elapsed": time.perf_counter() - waterfall_start})
     return AcquisitionResult(
         success=False,
         tier=0,
@@ -775,12 +802,24 @@ def get_tier_status() -> Dict[str, Dict[str, Any]]:
 
 
 if __name__ == "__main__":
-    import sys
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
+
+    # Subcommand dispatch: "acquire <artist> <title> [--album ALBUM] [--max-tier N]"
+    if len(sys.argv) >= 2 and sys.argv[1] == "acquire":
+        import argparse
+        parser = argparse.ArgumentParser(prog="waterfall acquire")
+        parser.add_argument("artist")
+        parser.add_argument("title")
+        parser.add_argument("--album", default=None)
+        parser.add_argument("--max-tier", type=int, default=5)
+        args = parser.parse_args(sys.argv[2:])
+        acquire(args.artist, args.title, album=args.album, max_tier=args.max_tier)
+        sys.exit(0)
 
     if len(sys.argv) < 3:
         print("\nLyra Acquisition Waterfall\n")
         print("Usage: python -m oracle.acquirers.waterfall <artist> <title> [album]")
+        print("       python -m oracle.acquirers.waterfall acquire <artist> <title> [--album ALBUM]")
         print("\nTier status:")
         for tier, info in get_tier_status().items():
             avail = "[OK]" if info.get("available") else "[--]"

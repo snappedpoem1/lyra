@@ -5,7 +5,7 @@ use chrono::Utc;
 use lofty::prelude::{Accessor, AudioFile, TaggedFileExt};
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::commands::{DuplicateCluster, LibraryOverview, LibraryRootRecord, ScanJobRecord, TrackRecord};
+use crate::commands::{CleanupIssue, CurationLogEntry, DuplicateCluster, LibraryCleanupPreview, LibraryOverview, LibraryRootRecord, ScanJobRecord, TrackRecord};
 use crate::errors::LyraResult;
 
 pub fn is_supported_audio_file(path: &Path) -> bool {
@@ -50,9 +50,26 @@ pub fn get_library_overview(conn: &Connection) -> LyraResult<LibraryOverview> {
     })
 }
 
-pub fn list_tracks(conn: &Connection, query: Option<String>) -> LyraResult<Vec<TrackRecord>> {
+pub fn list_tracks(conn: &Connection, query: Option<String>, sort: Option<String>) -> LyraResult<Vec<TrackRecord>> {
     let q = query.unwrap_or_default();
     if q.trim().is_empty() {
+        // Recently-added sort: most recently imported tracks first
+        if sort.as_deref() == Some("recently_added") {
+            let mut stmt = conn.prepare(
+                "
+                SELECT t.id, t.title, COALESCE(ar.name, ''), COALESCE(al.title, ''), t.path, t.duration_seconds,
+                       t.genre, t.year, t.bpm, t.key_signature, t.liked_at
+                FROM tracks t
+                LEFT JOIN artists ar ON ar.id = t.artist_id
+                LEFT JOIN albums al ON al.id = t.album_id
+                ORDER BY t.imported_at DESC
+                LIMIT 200
+                ",
+            )?;
+            let rows = stmt.query_map([], map_track)?;
+            return Ok(rows.filter_map(Result::ok).collect());
+        }
+
         let mut stmt = conn.prepare(
             "
             SELECT t.id, t.title, COALESCE(ar.name, ''), COALESCE(al.title, ''), t.path, t.duration_seconds,
@@ -99,7 +116,7 @@ pub fn list_tracks(conn: &Connection, query: Option<String>) -> LyraResult<Vec<T
     let mut stmt = conn.prepare(
         "
         SELECT t.id, t.title, COALESCE(ar.name, ''), COALESCE(al.title, ''), t.path, t.duration_seconds,
-               t.genre, t.year, t.bpm, t.key_signature
+               t.genre, t.year, t.bpm, t.key_signature, t.liked_at
         FROM tracks t
         LEFT JOIN artists ar ON ar.id = t.artist_id
         LEFT JOIN albums al ON al.id = t.album_id
@@ -426,6 +443,171 @@ pub fn list_liked_tracks(conn: &Connection) -> LyraResult<Vec<TrackRecord>> {
     )?;
     let rows = stmt.query_map([], map_track)?;
     Ok(rows.filter_map(Result::ok).collect())
+}
+
+/// Mark a set of tracks as quarantined (resolved duplicate). Logs the action.
+pub fn resolve_duplicate_cluster(
+    conn: &Connection,
+    keep_track_id: i64,
+    remove_track_ids: Vec<i64>,
+) -> LyraResult<()> {
+    // Ensure quarantined column exists (idempotent)
+    let _ = conn.execute("ALTER TABLE tracks ADD COLUMN quarantined INTEGER DEFAULT 0", []);
+
+    for &tid in &remove_track_ids {
+        conn.execute(
+            "UPDATE tracks SET quarantined = 1 WHERE id = ?1",
+            params![tid],
+        )?;
+    }
+
+    // Log the action
+    let now = Utc::now().to_rfc3339();
+    let all_ids = remove_track_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
+    let detail = format!("Kept track {keep_track_id}, quarantined: {all_ids}");
+    let track_ids_json = serde_json::to_string(&remove_track_ids).unwrap_or_default();
+    conn.execute(
+        "INSERT INTO curation_log (action, track_ids_json, detail, created_at, undone)
+         VALUES (?1, ?2, ?3, ?4, 0)",
+        params!["resolve_duplicate", track_ids_json, detail, now],
+    )?;
+    Ok(())
+}
+
+/// Return recent curation log entries.
+pub fn get_curation_log(conn: &Connection) -> LyraResult<Vec<CurationLogEntry>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, action, track_ids_json, detail, created_at, undone
+         FROM curation_log ORDER BY created_at DESC LIMIT 50",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, i64>(5)?,
+        ))
+    })?;
+    let mut entries = Vec::new();
+    for row in rows.filter_map(Result::ok) {
+        let (log_id, action, track_ids_json, detail, created_at, undone) = row;
+        let track_ids: Vec<i64> = serde_json::from_str(&track_ids_json).unwrap_or_default();
+        entries.push(CurationLogEntry {
+            log_id,
+            action,
+            track_ids,
+            detail,
+            created_at,
+            undone: undone != 0,
+        });
+    }
+    Ok(entries)
+}
+
+/// Undo a curation action by restoring quarantined tracks.
+pub fn undo_curation(conn: &Connection, log_id: i64) -> LyraResult<()> {
+    let track_ids_json: Option<String> = conn.query_row(
+        "SELECT track_ids_json FROM curation_log WHERE id = ?1 AND undone = 0",
+        params![log_id],
+        |row| row.get(0),
+    ).optional()?;
+
+    if let Some(json) = track_ids_json {
+        let track_ids: Vec<i64> = serde_json::from_str(&json).unwrap_or_default();
+        for tid in track_ids {
+            conn.execute(
+                "UPDATE tracks SET quarantined = 0 WHERE id = ?1",
+                params![tid],
+            )?;
+        }
+        conn.execute(
+            "UPDATE curation_log SET undone = 1 WHERE id = ?1",
+            params![log_id],
+        )?;
+    }
+    Ok(())
+}
+
+/// Scan the library for naming issues and return a preview of proposed fixes.
+pub fn preview_library_cleanup(conn: &Connection) -> LyraResult<LibraryCleanupPreview> {
+    let mut issues = Vec::new();
+
+    // Missing artist
+    let mut stmt = conn.prepare(
+        "SELECT t.id, t.title, COALESCE(ar.name, '')
+         FROM tracks t
+         LEFT JOIN artists ar ON ar.id = t.artist_id
+         WHERE trim(COALESCE(ar.name, '')) = '' OR COALESCE(ar.name, '') = 'Unknown Artist'
+         LIMIT 100",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+    })?;
+    for row in rows.filter_map(Result::ok) {
+        let (track_id, title, current_value) = row;
+        issues.push(CleanupIssue {
+            issue_type: "missing_artist".to_string(),
+            track_id,
+            current_value: current_value.clone(),
+            suggested_value: "Tag from filename or enrich".to_string(),
+            severity: "high".to_string(),
+        });
+        let _ = title;
+    }
+
+    // Missing album
+    let mut stmt = conn.prepare(
+        "SELECT t.id, COALESCE(al.title, '')
+         FROM tracks t
+         LEFT JOIN albums al ON al.id = t.album_id
+         WHERE trim(COALESCE(al.title, '')) = '' OR COALESCE(al.title, '') = 'Unknown Album'
+         LIMIT 100",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    })?;
+    for row in rows.filter_map(Result::ok) {
+        let (track_id, current_value) = row;
+        issues.push(CleanupIssue {
+            issue_type: "missing_album".to_string(),
+            track_id,
+            current_value,
+            suggested_value: "Tag from folder name or enrich".to_string(),
+            severity: "medium".to_string(),
+        });
+    }
+
+    // Suspected duplicates (same title+artist, multiple entries)
+    let mut stmt = conn.prepare(
+        "SELECT t.id, t.title, COALESCE(ar.name, '')
+         FROM tracks t
+         LEFT JOIN artists ar ON ar.id = t.artist_id
+         WHERE (LOWER(t.title), LOWER(COALESCE(ar.name, ''))) IN (
+             SELECT LOWER(t2.title), LOWER(COALESCE(ar2.name, ''))
+             FROM tracks t2
+             LEFT JOIN artists ar2 ON ar2.id = t2.artist_id
+             GROUP BY LOWER(t2.title), LOWER(COALESCE(ar2.name, ''))
+             HAVING COUNT(*) > 1
+         )
+         LIMIT 100",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+    })?;
+    for row in rows.filter_map(Result::ok) {
+        let (track_id, title, artist) = row;
+        issues.push(CleanupIssue {
+            issue_type: "suspected_duplicate".to_string(),
+            track_id,
+            current_value: format!("{artist} - {title}"),
+            suggested_value: "Review and resolve in Duplicates panel".to_string(),
+            severity: "medium".to_string(),
+        });
+    }
+
+    Ok(LibraryCleanupPreview { issues })
 }
 
 fn ensure_artist(conn: &Connection, name: &str) -> LyraResult<i64> {

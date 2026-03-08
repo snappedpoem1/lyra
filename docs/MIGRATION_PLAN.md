@@ -126,6 +126,17 @@ The codebase already contains:
 Migration work should consolidate those paths into the canonical runtime.
 Do not replace them with fake placeholder config models.
 
+## Legacy-To-Canonical Port Rule
+
+For every missing canonical feature:
+
+1. Inspect the relevant legacy Python and oracle-era implementation first.
+2. Identify already-solved workflow behavior, retry semantics, payload shapes, ranking logic, and state machines.
+3. Port the proven behavior deliberately into Rust, Tauri, and Svelte.
+4. Do not recreate solved behavior from memory.
+5. Do not clone the legacy runtime architecture into the canonical app.
+6. Record the source mapping in the relevant session log or truth doc.
+
 ## Execution References
 
 - `docs/ROADMAP_ENGINE_TO_ENTITY.md` for sequencing

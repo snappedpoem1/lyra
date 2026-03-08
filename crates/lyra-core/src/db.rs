@@ -186,6 +186,29 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
         BEGIN
           DELETE FROM tracks_fts WHERE rowid = old.id;
         END;
+        CREATE TABLE IF NOT EXISTS curation_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          action TEXT NOT NULL,
+          track_ids_json TEXT NOT NULL DEFAULT '[]',
+          detail TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          undone INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS playlist_track_reasons (
+          playlist_id INTEGER NOT NULL,
+          track_id INTEGER NOT NULL,
+          reason TEXT NOT NULL DEFAULT '',
+          position INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (playlist_id, track_id),
+          FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
+          FOREIGN KEY (track_id) REFERENCES tracks(id)
+        );
+        CREATE TABLE IF NOT EXISTS discovery_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          artist_name TEXT NOT NULL,
+          action TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS provider_health (
           provider_key TEXT PRIMARY KEY,
           status TEXT NOT NULL DEFAULT 'healthy',
@@ -224,6 +247,9 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
             [],
         );
     }
+    // Extend tracks with quarantine column
+    let _ = conn.execute("ALTER TABLE tracks ADD COLUMN quarantined INTEGER DEFAULT 0", []);
+
     for (col, typedef) in &[
         ("lifecycle_stage", "TEXT"),
         ("lifecycle_progress", "REAL"),

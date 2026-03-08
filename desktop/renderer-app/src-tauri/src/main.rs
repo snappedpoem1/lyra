@@ -9,10 +9,11 @@ mod smtc;
 
 use lyra_core::commands::{
     AcquisitionPreflight, AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
-    DuplicateCluster, ExplainPayload, LegacyImportReport, NativeCapabilities, PlaybackEvent,
+    CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist,
+    LegacyImportReport, LibraryCleanupPreview, NativeCapabilities, PlaybackEvent,
     PlaybackState, PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
-    ProviderValidationResult, QueueItemRecord, RecentPlayRecord, RecommendationResult,
-    ScanJobRecord, SettingsPayload, TasteProfile, TrackDetail, TrackRecord, TrackScores,
+    ProviderValidationResult, QueueItemRecord, RecentPlayRecord, RecommendationResult, RelatedArtist,
+    ScanJobRecord, SettingsPayload, TasteProfile, TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
 };
 use lyra_core::logging::initialize_logging;
 use lyra_core::LyraCore;
@@ -263,10 +264,11 @@ fn get_app_shell_state(state: State<'_, AppState>) -> Result<AppShellState, Stri
 fn list_tracks(
     state: State<'_, AppState>,
     query: Option<String>,
+    sort: Option<String>,
 ) -> Result<Vec<TrackRecord>, String> {
     state
         .core
-        .list_tracks(query)
+        .list_tracks(query, sort)
         .map_err(|error| error.to_string())
 }
 
@@ -964,6 +966,19 @@ fn clear_completed_acquisition(
 }
 
 #[tauri::command]
+fn retry_failed_acquisition(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<i64, String> {
+    let retried = state
+        .core
+        .retry_failed_acquisition()
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(retried)
+}
+
+#[tauri::command]
 fn set_acquisition_priority(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1161,6 +1176,106 @@ fn reorder_playlist_item(
     Ok(payload)
 }
 
+// ── G-061: Enrichment Provenance ─────────────────────────────────────────────
+
+#[tauri::command]
+fn get_track_enrichment(
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<TrackEnrichmentResult, String> {
+    state.core.get_track_enrichment(track_id).map_err(|e| e.to_string())
+}
+
+// ── G-062: Curation Workflows ─────────────────────────────────────────────────
+
+#[tauri::command]
+fn resolve_duplicate_cluster(
+    state: State<'_, AppState>,
+    keep_track_id: i64,
+    remove_track_ids: Vec<i64>,
+) -> Result<(), String> {
+    state.core.resolve_duplicate_cluster(keep_track_id, remove_track_ids)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_curation_log(state: State<'_, AppState>) -> Result<Vec<CurationLogEntry>, String> {
+    state.core.get_curation_log().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn undo_curation(state: State<'_, AppState>, log_id: i64) -> Result<(), String> {
+    state.core.undo_curation(log_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn preview_library_cleanup(state: State<'_, AppState>) -> Result<LibraryCleanupPreview, String> {
+    state.core.preview_library_cleanup().map_err(|e| e.to_string())
+}
+
+// ── G-063: Playlist Intelligence ─────────────────────────────────────────────
+
+#[tauri::command]
+fn generate_act_playlist(
+    state: State<'_, AppState>,
+    intent: String,
+    track_count: usize,
+) -> Result<GeneratedPlaylist, String> {
+    state.core.generate_act_playlist(intent, track_count).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_generated_playlist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+    playlist: GeneratedPlaylist,
+) -> Result<PlaylistDetail, String> {
+    let payload = state.core.save_generated_playlist(name, playlist)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn get_playlist_track_reasons(
+    state: State<'_, AppState>,
+    playlist_id: i64,
+) -> Result<Vec<(i64, String)>, String> {
+    state.core.get_playlist_track_reasons(playlist_id).map_err(|e| e.to_string())
+}
+
+// ── G-064: Discovery Graph Depth ─────────────────────────────────────────────
+
+#[tauri::command]
+fn get_related_artists(
+    state: State<'_, AppState>,
+    artist_name: String,
+    limit: usize,
+) -> Result<Vec<RelatedArtist>, String> {
+    state.core.get_related_artists(artist_name, limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn play_similar_to_artist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    artist_name: String,
+    limit: usize,
+) -> Result<Vec<QueueItemRecord>, String> {
+    let queue = state.core.play_similar_to_artist(artist_name, limit)
+        .map_err(|e| e.to_string())?;
+    emit_queue(&app, &queue);
+    Ok(queue)
+}
+
+#[tauri::command]
+fn get_discovery_session(state: State<'_, AppState>) -> Result<DiscoverySession, String> {
+    state.core.get_discovery_session().map_err(|e| e.to_string())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 #[tauri::command]
 fn create_playlist_from_queue(
     app: AppHandle,
@@ -1356,6 +1471,7 @@ fn main() {
             update_acquisition_item,
             process_acquisition_queue,
             clear_completed_acquisition,
+            retry_failed_acquisition,
             set_acquisition_priority,
             acquisition_preflight,
             start_acquisition_worker,
@@ -1378,7 +1494,22 @@ fn main() {
             get_sleep_timer,
             list_recent_plays,
             backup_env_to_keychain,
-            load_env_credential
+            load_env_credential,
+            // G-061: Enrichment Provenance
+            get_track_enrichment,
+            // G-062: Curation Workflows
+            resolve_duplicate_cluster,
+            get_curation_log,
+            undo_curation,
+            preview_library_cleanup,
+            // G-063: Playlist Intelligence
+            generate_act_playlist,
+            save_generated_playlist,
+            get_playlist_track_reasons,
+            // G-064: Discovery Graph Depth
+            get_related_artists,
+            play_similar_to_artist,
+            get_discovery_session
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

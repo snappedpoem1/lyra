@@ -193,6 +193,23 @@ pub fn clear_completed(conn: &Connection) -> LyraResult<i64> {
     Ok(affected as i64)
 }
 
+pub fn retry_failed(conn: &Connection) -> LyraResult<i64> {
+    let affected = conn.execute(
+        "UPDATE acquisition_queue
+         SET status='pending',
+             error=NULL,
+             completed_at=NULL,
+             retry_count=retry_count + 1,
+             lifecycle_stage='acquire',
+             lifecycle_progress=0.0,
+             lifecycle_note='Retry queued',
+             updated_at=?1
+         WHERE status='failed'",
+        params![Utc::now().to_rfc3339()],
+    )?;
+    Ok(affected as i64)
+}
+
 pub fn set_priority(conn: &Connection, id: i64, priority_score: f64) -> LyraResult<()> {
     conn.execute(
         "UPDATE acquisition_queue SET priority_score=?1, updated_at=?2 WHERE id=?3",

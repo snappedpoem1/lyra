@@ -7,24 +7,51 @@
 /// - Streamrip (tier 2, multi-source)
 /// - Prowlarr + Real-Debrid (tier 3, torrent→instant)
 /// - SpotDL (tier 4, YouTube fallback)
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use rusqlite::{params, OptionalExtension};
+use serde::Deserialize;
 use tracing::{info, warn};
 
 use crate::config::AppPaths;
 use crate::errors::LyraResult;
 use crate::acquisition;
 
+/// A structured phase event emitted by the Python waterfall to stdout.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+enum WaterfallEvent {
+    Phase {
+        stage: String,
+        progress: f64,
+        note: String,
+    },
+    Success {
+        path: String,
+        tier: String,
+        elapsed: f64,
+    },
+    Failure {
+        error: String,
+        elapsed: f64,
+    },
+}
+
 /// Attempt to acquire a track using the Python waterfall dispatcher.
 ///
-/// This invokes `python -m oracle.acquirers.waterfall acquire <artist> <title>`.
+/// Invokes `python -m oracle.acquirers.waterfall acquire <artist> <title>`,
+/// streams stdout line-by-line, parses JSON phase events, and updates the
+/// acquisition lifecycle in the DB in real-time.
+///
 /// Returns the path to the downloaded file on success.
 pub fn acquire_track(
     paths: &AppPaths,
     artist: &str,
     title: &str,
     album: Option<&str>,
+    queue_id: Option<i64>,
+    conn: Option<&rusqlite::Connection>,
 ) -> LyraResult<Option<PathBuf>> {
     let workspace_root = paths
         .app_data_dir
@@ -54,42 +81,96 @@ pub fn acquire_track(
 
     cmd.current_dir(workspace_root);
     cmd.env("PYTHONPATH", workspace_root);
+    // Capture stdout for JSON events; stderr flows through to our logs.
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::inherit());
 
-    let output = cmd.output();
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("Failed to spawn acquisition process: {}", e);
+            return Ok(None);
+        }
+    };
 
-    match output {
-        Ok(result) if result.status.success() => {
-            let stdout = String::from_utf8_lossy(&result.stdout);
-            // The waterfall script should print the downloaded file path on success.
-            // Parse it from stdout (look for "Downloaded: <path>").
-            for line in stdout.lines() {
-                if line.starts_with("Downloaded:") || line.starts_with("SUCCESS:") {
-                    let path_str = line
+    let stdout = child.stdout.take().expect("stdout was piped");
+    let reader = BufReader::new(stdout);
+
+    let mut result_path: Option<PathBuf> = None;
+    let mut acquisition_failed = false;
+
+    for line_result in reader.lines() {
+        let line = match line_result {
+            Ok(l) => l,
+            Err(e) => {
+                warn!("Error reading waterfall stdout: {}", e);
+                break;
+            }
+        };
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        match serde_json::from_str::<WaterfallEvent>(trimmed) {
+            Ok(WaterfallEvent::Phase { stage, progress, note }) => {
+                info!("[waterfall] phase stage={} progress={:.2} note={}", stage, progress, note);
+                if let (Some(id), Some(db)) = (queue_id, conn) {
+                    let _ = acquisition::update_lifecycle(db, id, &stage, progress, Some(&note));
+                }
+            }
+            Ok(WaterfallEvent::Success { path, tier, elapsed }) => {
+                info!("[waterfall] success tier={} path={} elapsed={:.1}s", tier, path, elapsed);
+                let p = PathBuf::from(&path);
+                if p.exists() {
+                    result_path = Some(p);
+                } else {
+                    warn!("[waterfall] success event path does not exist on disk: {}", path);
+                }
+            }
+            Ok(WaterfallEvent::Failure { error, elapsed }) => {
+                warn!("[waterfall] failure error={} elapsed={:.1}s", error, elapsed);
+                acquisition_failed = true;
+            }
+            Err(_) => {
+                // Non-JSON line — could be a legacy "Downloaded:" or "SUCCESS:" prefix
+                // from older waterfall versions, or other informational output.
+                if trimmed.starts_with("Downloaded:") || trimmed.starts_with("SUCCESS:") {
+                    let path_str = trimmed
                         .split_once(':')
                         .map(|(_, p)| p.trim())
                         .unwrap_or("");
                     if !path_str.is_empty() {
-                        let path = PathBuf::from(path_str);
-                        if path.exists() {
-                            info!("Acquisition successful: {:?}", path);
-                            return Ok(Some(path));
+                        let p = PathBuf::from(path_str);
+                        if p.exists() {
+                            result_path = Some(p);
                         }
                     }
                 }
+                // Other non-JSON lines are silently ignored (e.g. progress bars).
             }
-            warn!("Acquisition command succeeded but no file path found in output");
-            Ok(None)
-        }
-        Ok(result) => {
-            let stderr = String::from_utf8_lossy(&result.stderr);
-            warn!("Acquisition failed: {}", stderr);
-            Ok(None)
-        }
-        Err(e) => {
-            warn!("Failed to spawn acquisition process: {}", e);
-            Ok(None)
         }
     }
+
+    // Wait for the subprocess to finish before returning.
+    match child.wait() {
+        Ok(status) if !status.success() && result_path.is_none() => {
+            warn!("Acquisition process exited with status: {}", status);
+        }
+        Err(e) => {
+            warn!("Failed to wait for acquisition process: {}", e);
+        }
+        _ => {}
+    }
+
+    if let Some(ref path) = result_path {
+        info!("Acquisition successful: {:?}", path);
+    } else if !acquisition_failed {
+        warn!("Acquisition command completed but no file path found in output");
+    }
+
+    Ok(result_path)
 }
 
 /// Process the next pending acquisition queue item.
@@ -123,12 +204,11 @@ pub fn process_next_queue_item(paths: &AppPaths) -> LyraResult<bool> {
         "UPDATE acquisition_queue SET status = 'in_progress' WHERE id = ?1",
         params![id],
     )?;
-    let _ = acquisition::update_lifecycle(&conn, id, "acquire", 0.1, Some("Starting provider waterfall"));
+    let _ = acquisition::update_lifecycle(&conn, id, "acquire", 0.0, Some("Starting provider waterfall"));
 
-    // Attempt acquisition
-    match acquire_track(paths, &artist, &title, album.as_deref()) {
+    // Attempt acquisition — pass conn and queue_id so phase events update the DB in real-time.
+    match acquire_track(paths, &artist, &title, album.as_deref(), Some(id), Some(&conn)) {
         Ok(Some(path)) => {
-            let _ = acquisition::update_lifecycle(&conn, id, "stage", 0.35, Some("Downloaded; staging file"));
             let _ = acquisition::update_lifecycle(&conn, id, "scan", 0.55, Some("Triggering scan"));
             let _ = acquisition::update_lifecycle(&conn, id, "organize", 0.75, Some("Organizing into library"));
             let _ = acquisition::update_lifecycle(&conn, id, "index", 0.92, Some("Indexing metadata"));

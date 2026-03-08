@@ -47,6 +47,22 @@ pub struct LyraCore {
 }
 
 impl LyraCore {
+    fn workspace_root_from_paths(&self) -> Option<PathBuf> {
+        self.paths
+            .app_data_dir
+            .parent()
+            .and_then(Path::parent)
+            .map(Path::to_path_buf)
+    }
+
+    fn command_available(command: &str) -> bool {
+        std::process::Command::new("where")
+            .arg(command)
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
+
     pub fn new(app_data_dir: PathBuf) -> LyraResult<Self> {
         let paths = AppPaths::new(app_data_dir)?;
         let conn = connect(&paths)?;
@@ -123,9 +139,9 @@ impl LyraCore {
         })
     }
 
-    pub fn list_tracks(&self, query: Option<String>) -> LyraResult<Vec<TrackRecord>> {
+    pub fn list_tracks(&self, query: Option<String>, sort: Option<String>) -> LyraResult<Vec<TrackRecord>> {
         let conn = self.conn()?;
-        library::list_tracks(&conn, query)
+        library::list_tracks(&conn, query, sort)
     }
 
     pub fn list_liked_tracks(&self) -> LyraResult<Vec<TrackRecord>> {
@@ -673,6 +689,30 @@ impl LyraCore {
         library::find_duplicates(&conn)
     }
 
+    pub fn resolve_duplicate_cluster(
+        &self,
+        keep_track_id: i64,
+        remove_track_ids: Vec<i64>,
+    ) -> LyraResult<()> {
+        let conn = self.conn()?;
+        library::resolve_duplicate_cluster(&conn, keep_track_id, remove_track_ids)
+    }
+
+    pub fn get_curation_log(&self) -> LyraResult<Vec<commands::CurationLogEntry>> {
+        let conn = self.conn()?;
+        library::get_curation_log(&conn)
+    }
+
+    pub fn undo_curation(&self, log_id: i64) -> LyraResult<()> {
+        let conn = self.conn()?;
+        library::undo_curation(&conn, log_id)
+    }
+
+    pub fn preview_library_cleanup(&self) -> LyraResult<commands::LibraryCleanupPreview> {
+        let conn = self.conn()?;
+        library::preview_library_cleanup(&conn)
+    }
+
     pub fn run_legacy_import(
         &self,
         env_path: Option<String>,
@@ -1064,6 +1104,68 @@ impl LyraCore {
         Ok(results)
     }
 
+    /// Generate an act-based playlist from a user intent.
+    pub fn generate_act_playlist(
+        &self,
+        intent: String,
+        track_count: usize,
+    ) -> LyraResult<commands::GeneratedPlaylist> {
+        let conn = self.conn()?;
+        playlists::generate_act_playlist(&intent, track_count, &conn)
+    }
+
+    /// Save a generated playlist and store per-track reasons.
+    pub fn save_generated_playlist(
+        &self,
+        name: String,
+        playlist: commands::GeneratedPlaylist,
+    ) -> LyraResult<PlaylistDetail> {
+        let conn = self.conn()?;
+        let playlist_id = playlists::save_generated_playlist(&name, &playlist, &conn)?;
+        self.get_playlist_detail(playlist_id)
+    }
+
+    /// Return (track_id, reason) pairs for a playlist.
+    pub fn get_playlist_track_reasons(
+        &self,
+        playlist_id: i64,
+    ) -> LyraResult<Vec<(i64, String)>> {
+        let conn = self.conn()?;
+        playlists::get_playlist_track_reasons(&conn, playlist_id)
+    }
+
+    /// Get related artists for a given artist name.
+    pub fn get_related_artists(
+        &self,
+        artist_name: String,
+        limit: usize,
+    ) -> LyraResult<Vec<commands::RelatedArtist>> {
+        let conn = self.conn()?;
+        oracle::record_discovery_interaction(&artist_name, "view_related", &conn);
+        Ok(oracle::get_related_artists(&artist_name, limit, &conn))
+    }
+
+    /// Queue tracks from artists similar to the given artist.
+    pub fn play_similar_to_artist(
+        &self,
+        artist_name: String,
+        limit: usize,
+    ) -> LyraResult<Vec<QueueItemRecord>> {
+        let conn = self.conn()?;
+        oracle::record_discovery_interaction(&artist_name, "play_similar", &conn);
+        let track_ids = oracle::play_similar_to_artist(&artist_name, limit, &conn);
+        if !track_ids.is_empty() {
+            queue::enqueue_tracks(&conn, &track_ids)?;
+        }
+        self.get_queue()
+    }
+
+    /// Return the last 10 discovery interactions.
+    pub fn get_discovery_session(&self) -> LyraResult<commands::DiscoverySession> {
+        let conn = self.conn()?;
+        Ok(oracle::get_discovery_session(&conn))
+    }
+
     /// Returns a human-readable explanation for why a track matches the current taste profile.
     pub fn explain_recommendation(&self, track_id: i64) -> LyraResult<ExplainPayload> {
         let conn = self.conn()?;
@@ -1114,6 +1216,11 @@ impl LyraCore {
         acquisition::clear_completed(&conn)
     }
 
+    pub fn retry_failed_acquisition(&self) -> LyraResult<i64> {
+        let conn = self.conn()?;
+        acquisition::retry_failed(&conn)
+    }
+
     pub fn set_acquisition_priority(&self, id: i64, priority_score: f64) -> LyraResult<Vec<AcquisitionQueueItem>> {
         let conn = self.conn()?;
         acquisition::set_priority(&conn, id, priority_score)?;
@@ -1122,14 +1229,22 @@ impl LyraCore {
 
     pub fn acquisition_preflight(&self) -> LyraResult<AcquisitionPreflight> {
         let required_bytes: i64 = 500 * 1024 * 1024;
-        let python_path = self
-            .paths
-            .app_data_dir
-            .parent()
-            .and_then(|p| p.parent())
+        let workspace_root = self.workspace_root_from_paths();
+        let python_path = workspace_root
+            .as_ref()
             .map(|root| root.join(".venv").join("Scripts").join("python.exe"));
         let python_available = python_path.as_ref().is_some_and(|p| p.exists());
-        let downloader_available = python_available;
+        let waterfall_script = workspace_root
+            .as_ref()
+            .map(|root| root.join("oracle").join("acquirers").join("waterfall.py"));
+        let waterfall_available = waterfall_script.as_ref().is_some_and(|p| p.exists());
+        let downloader_tools = [
+            ("spotdl", Self::command_available("spotdl")),
+            ("streamrip", Self::command_available("rip")),
+            ("slskd", Self::command_available("slskd")),
+        ];
+        let downloader_available =
+            python_available && waterfall_available && downloader_tools.iter().any(|(_, ok)| *ok);
 
         let mut free_bytes: i64 = 0;
         if let Some(downloads) = self.paths.app_data_dir.parent() {
@@ -1141,6 +1256,19 @@ impl LyraCore {
         let mut notes = Vec::new();
         if !python_available {
             notes.push("Python runtime not found in .venv".to_string());
+        }
+        if !waterfall_available {
+            notes.push("Legacy waterfall bridge not found at oracle/acquirers/waterfall.py".to_string());
+        }
+        if !downloader_available {
+            notes.push("No supported acquisition downloader tool detected on PATH".to_string());
+        } else {
+            let available_tools = downloader_tools
+                .iter()
+                .filter_map(|(tool, ok)| ok.then_some(*tool))
+                .collect::<Vec<_>>()
+                .join(", ");
+            notes.push(format!("Detected downloader tools: {available_tools}"));
         }
         if !disk_ok {
             notes.push(format!(
@@ -1284,6 +1412,203 @@ impl LyraCore {
         };
         let scores = scores::get_track_scores(&conn, track_id)?;
         Ok(Some(TrackDetail { track, scores }))
+    }
+
+    fn build_track_enrichment_result(
+        &self,
+        conn: &rusqlite::Connection,
+        track: &TrackRecord,
+    ) -> LyraResult<commands::TrackEnrichmentResult> {
+        use crate::commands::{EnrichmentEntry, TrackEnrichmentResult};
+
+        let normalized_key = format!(
+            "{}::{}",
+            track.artist.trim().to_ascii_lowercase(),
+            track.title.trim().to_ascii_lowercase()
+        );
+        let lookup_keys = if track.path.trim().is_empty() {
+            vec![normalized_key]
+        } else {
+            vec![normalized_key, track.path.clone()]
+        };
+
+        let mut best_by_provider: std::collections::HashMap<String, EnrichmentEntry> =
+            std::collections::HashMap::new();
+
+        for lookup_key in lookup_keys {
+            let mut stmt = conn.prepare(
+                "SELECT provider, payload_json
+                 FROM enrich_cache
+                 WHERE lookup_key = ?1",
+            )?;
+            let rows = stmt.query_map(params![lookup_key], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+
+            for row in rows.filter_map(Result::ok) {
+                let (provider, payload_json) = row;
+                let Ok(payload) = serde_json::from_str::<Value>(&payload_json) else {
+                    continue;
+                };
+
+                let status = payload
+                    .get("status")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown")
+                    .to_string();
+                let match_score_raw = payload
+                    .get("matchScore")
+                    .and_then(Value::as_f64)
+                    .or_else(|| payload.get("score").and_then(Value::as_f64));
+                let confidence = match match_score_raw {
+                    Some(score) if score > 1.0 => (score / 100.0).min(1.0) as f32,
+                    Some(score) => score as f32,
+                    None if status == "ok" => 1.0,
+                    _ => 0.0,
+                };
+                let note = payload
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .or_else(|| payload.get("reason").and_then(Value::as_str))
+                    .or_else(|| payload.get("message").and_then(Value::as_str))
+                    .map(ToOwned::to_owned);
+                let year = payload
+                    .get("year")
+                    .and_then(|value| match value {
+                        Value::Number(number) => number.as_i64().map(|raw| raw as i32),
+                        Value::String(text) => text.parse::<i32>().ok(),
+                        _ => None,
+                    });
+                let entry = EnrichmentEntry {
+                    provider: provider.clone(),
+                    status: status.clone(),
+                    confidence,
+                    note,
+                    mbid: payload
+                        .get("recordingMbid")
+                        .or_else(|| payload.get("mbid"))
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned),
+                    release_mbid: payload
+                        .get("releaseMbid")
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned),
+                    release_title: payload
+                        .get("releaseTitle")
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned),
+                    release_date: payload
+                        .get("releaseDate")
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned),
+                    match_score: match_score_raw.map(|score| if score > 1.0 { (score / 100.0) as f32 } else { score as f32 }),
+                    listeners: payload.get("listeners").and_then(Value::as_i64),
+                    play_count: payload
+                        .get("playcount")
+                        .or_else(|| payload.get("playCount"))
+                        .and_then(Value::as_i64),
+                    tags: payload
+                        .get("tags")
+                        .or_else(|| payload.get("top_tags"))
+                        .and_then(Value::as_array)
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.as_str().map(ToOwned::to_owned))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default(),
+                    wiki_summary: payload
+                        .get("summary")
+                        .or_else(|| payload.get("wikiSummary"))
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned),
+                    year,
+                    genres: payload
+                        .get("genres")
+                        .and_then(Value::as_array)
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.as_str().map(ToOwned::to_owned))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default(),
+                    label: payload
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned),
+                    lyrics_url: payload
+                        .get("url")
+                        .and_then(Value::as_str)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned),
+                    has_lrc: (provider == "lrc_sidecar").then_some(status == "ok"),
+                };
+
+                let should_replace = match best_by_provider.get(&provider) {
+                    None => true,
+                    Some(existing) => {
+                        let existing_rank = ((existing.status == "ok") as i32, (existing.confidence * 1000.0) as i32);
+                        let next_rank = ((entry.status == "ok") as i32, (entry.confidence * 1000.0) as i32);
+                        next_rank > existing_rank
+                    }
+                };
+                if should_replace {
+                    best_by_provider.insert(provider, entry);
+                }
+            }
+        }
+
+        let mut entries = best_by_provider.into_values().collect::<Vec<_>>();
+        entries.sort_by(|left, right| {
+            right
+                .confidence
+                .partial_cmp(&left.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.provider.cmp(&right.provider))
+        });
+
+        let primary_mbid = entries
+            .iter()
+            .find(|entry| entry.provider == "musicbrainz" && entry.mbid.is_some())
+            .and_then(|entry| entry.mbid.clone())
+            .or_else(|| entries.iter().find_map(|entry| entry.mbid.clone()));
+        let degraded_providers = entries
+            .iter()
+            .filter(|entry| entry.status != "ok")
+            .map(|entry| entry.provider.clone())
+            .collect::<Vec<_>>();
+        let identity_confidence = entries
+            .iter()
+            .filter(|entry| entry.mbid.is_some() || entry.provider == "musicbrainz" || entry.provider == "acoustid")
+            .map(|entry| entry.confidence)
+            .fold(0.0_f32, f32::max);
+        let has_ok = entries.iter().any(|entry| entry.status == "ok");
+        let enrichment_state = if entries.is_empty() {
+            "not_enriched".to_string()
+        } else if has_ok && !degraded_providers.is_empty() {
+            "degraded".to_string()
+        } else if has_ok {
+            "enriched".to_string()
+        } else {
+            "failed".to_string()
+        };
+
+        Ok(TrackEnrichmentResult {
+            track_id: track.id,
+            enrichment_state,
+            entries,
+            primary_mbid,
+            identity_confidence,
+            degraded_providers,
+        })
     }
 
     pub fn get_artist_profile(&self, artist_name: String) -> LyraResult<Option<ArtistProfile>> {
@@ -1469,6 +1794,45 @@ impl LyraCore {
             .filter_map(Result::ok)
             .collect::<Vec<_>>();
 
+        let mut provenance_by_provider: std::collections::HashMap<String, commands::EnrichmentEntry> =
+            std::collections::HashMap::new();
+        let mut primary_mbid: Option<String> = None;
+        let mut identity_confidence = 0.0_f32;
+        for track in top_tracks.iter().take(8) {
+            let enrichment = self.build_track_enrichment_result(&conn, track)?;
+            if primary_mbid.is_none() {
+                primary_mbid = enrichment.primary_mbid.clone();
+            }
+            identity_confidence = identity_confidence.max(enrichment.identity_confidence);
+            for entry in enrichment.entries {
+                let should_replace = match provenance_by_provider.get(&entry.provider) {
+                    None => true,
+                    Some(existing) => {
+                        let existing_rank = ((existing.status == "ok") as i32, (existing.confidence * 1000.0) as i32);
+                        let next_rank = ((entry.status == "ok") as i32, (entry.confidence * 1000.0) as i32);
+                        next_rank > existing_rank
+                    }
+                };
+                if should_replace {
+                    provenance_by_provider.insert(entry.provider.clone(), entry);
+                }
+            }
+        }
+        let mut provenance = provenance_by_provider.into_values().collect::<Vec<_>>();
+        provenance.sort_by(|left, right| {
+            right
+                .confidence
+                .partial_cmp(&left.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.provider.cmp(&right.provider))
+        });
+        if bio.is_none() {
+            bio = provenance
+                .iter()
+                .find_map(|entry| entry.wiki_summary.clone())
+                .filter(|value| !value.is_empty());
+        }
+
         Ok(Some(ArtistProfile {
             artist: artist_name,
             track_count,
@@ -1478,6 +1842,9 @@ impl LyraCore {
             bio,
             image_url,
             lastfm_url,
+            primary_mbid,
+            identity_confidence,
+            provenance,
             top_tracks,
             connections,
         }))
@@ -1508,6 +1875,18 @@ impl LyraCore {
             .ok_or(LyraError::NotFound("album tracks"))?;
         queue::replace_queue(&conn, &track_ids)?;
         self.play_track(first)
+    }
+
+    /// Return structured enrichment data for a single track, grouped by provider with
+    /// confidence + MBID metadata extracted from cached payloads.
+    pub fn get_track_enrichment(
+        &self,
+        track_id: i64,
+    ) -> LyraResult<commands::TrackEnrichmentResult> {
+        let conn = self.conn()?;
+        let track = library::get_track_by_id(&conn, track_id)?
+            .ok_or(LyraError::NotFound("track"))?;
+        self.build_track_enrichment_result(&conn, &track)
     }
 
     pub fn enrich_track(&self, track_id: i64) -> LyraResult<Value> {
