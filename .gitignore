@@ -41,6 +41,7 @@ dist/
 build/
 node_modules/
 .lyra-build/
+artifacts/
 runtime/bin/*.exe
 .tmp/pyinstaller-runtime/
 desktop/renderer-app/src-tauri/target/
