@@ -25,6 +25,7 @@ User-reported UX/runtime gaps did not match prior docs claims: missing artist pa
 - [x] Added "Build AI Playlist" in Discover to create a playlist from top recommendations.
 - [x] Added native `play_artist` and `play_album` command flows and artist-page controls.
 - [x] Audited legacy/spec artifacts plus `C:\chatgpt` export and documented workflow parity requirements.
+- [x] Authored execution-grade roadmap (`docs/EXECUTION_PLAN.md`) with wave deliverables, DoD, dependencies, and learning loop.
 - [x] Ran validation checks.
 
 ---
@@ -51,6 +52,7 @@ User-reported UX/runtime gaps did not match prior docs claims: missing artist pa
 - `desktop/renderer-app/src/routes/discover/+page.svelte` - artist links.
 - `crates/lyra-core/src/library.rs` - artist/album track-id queries for queue/play flows.
 - `docs/WORKFLOW_NEEDS.md` - workflow-level parity requirements from legacy/spec/chatgpt artifacts.
+- `docs/EXECUTION_PLAN.md` - detailed goal-completion playbook with wave-by-wave implementation and acceptance checks.
 - `docs/MISSING_FEATURES_REGISTRY.md` - active gaps rewritten around workflow parity.
 - `docs/MIGRATION_PLAN.md` - remaining migration work updated to workflow-first sequencing.
 

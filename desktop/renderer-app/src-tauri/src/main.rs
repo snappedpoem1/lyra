@@ -8,7 +8,7 @@ use std::time::Duration;
 mod smtc;
 
 use lyra_core::commands::{
-    AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
+    AcquisitionPreflight, AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
     DuplicateCluster, ExplainPayload, LegacyImportReport, NativeCapabilities, PlaybackEvent,
     PlaybackState, PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
     ProviderValidationResult, QueueItemRecord, RecentPlayRecord, RecommendationResult,
@@ -951,6 +951,41 @@ fn process_acquisition_queue(
 }
 
 #[tauri::command]
+fn clear_completed_acquisition(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<i64, String> {
+    let removed = state
+        .core
+        .clear_completed_acquisition()
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(removed)
+}
+
+#[tauri::command]
+fn set_acquisition_priority(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    priority_score: f64,
+) -> Result<Vec<AcquisitionQueueItem>, String> {
+    let payload = state
+        .core
+        .set_acquisition_priority(id, priority_score)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn acquisition_preflight(
+    state: State<'_, AppState>,
+) -> Result<AcquisitionPreflight, String> {
+    state.core.acquisition_preflight().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn start_acquisition_worker(
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
@@ -1320,6 +1355,9 @@ fn main() {
             add_to_acquisition_queue,
             update_acquisition_item,
             process_acquisition_queue,
+            clear_completed_acquisition,
+            set_acquisition_priority,
+            acquisition_preflight,
             start_acquisition_worker,
             stop_acquisition_worker,
             acquisition_worker_status,

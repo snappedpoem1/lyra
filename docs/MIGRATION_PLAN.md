@@ -49,7 +49,7 @@ Not imported now:
 
 ## Remaining Migration Work
 
-1. close acquisition workflow parity (stage->scan->organize visibility, queue lifecycle controls)
+1. close acquisition workflow parity final contention (authoritative stage events from waterfall/native pipeline; UI controls are now wired)
 2. complete enrichment workflow parity (source provenance, confidence, MBID-first views)
 3. implement curation workflows (duplicate resolution, cleanup preview/apply, rollback metadata)
 4. expand playlist intelligence (act-based generation + persisted reason payloads)
@@ -57,3 +57,4 @@ Not imported now:
 6. harden packaged desktop distribution after runtime stabilization
 
 See `docs/WORKFLOW_NEEDS.md` for concrete workflow-level requirements.
+Execution sequencing, dependencies, and wave acceptance criteria are defined in `docs/EXECUTION_PLAN.md`.

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
   AcquisitionQueueItem,
+  AcquisitionPreflight,
   AppShellState,
   AudioOutputDevice,
   BootstrapPayload,
@@ -88,6 +89,12 @@ export const api = {
     invoke<AcquisitionQueueItem[]>("update_acquisition_item", { id, status, error }),
   processAcquisitionQueue: () =>
     invoke<boolean>("process_acquisition_queue"),
+  clearCompletedAcquisition: () =>
+    invoke<number>("clear_completed_acquisition"),
+  setAcquisitionPriority: (id: number, priorityScore: number) =>
+    invoke<AcquisitionQueueItem[]>("set_acquisition_priority", { id, priorityScore }),
+  acquisitionPreflight: () =>
+    invoke<AcquisitionPreflight>("acquisition_preflight"),
   startAcquisitionWorker: () =>
     invoke<boolean>("start_acquisition_worker"),
   stopAcquisitionWorker: () =>

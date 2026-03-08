@@ -14,6 +14,7 @@ use tracing::{info, warn};
 
 use crate::config::AppPaths;
 use crate::errors::LyraResult;
+use crate::acquisition;
 
 /// Attempt to acquire a track using the Python waterfall dispatcher.
 ///
@@ -122,16 +123,22 @@ pub fn process_next_queue_item(paths: &AppPaths) -> LyraResult<bool> {
         "UPDATE acquisition_queue SET status = 'in_progress' WHERE id = ?1",
         params![id],
     )?;
+    let _ = acquisition::update_lifecycle(&conn, id, "acquire", 0.1, Some("Starting provider waterfall"));
 
     // Attempt acquisition
     match acquire_track(paths, &artist, &title, album.as_deref()) {
         Ok(Some(path)) => {
+            let _ = acquisition::update_lifecycle(&conn, id, "stage", 0.35, Some("Downloaded; staging file"));
+            let _ = acquisition::update_lifecycle(&conn, id, "scan", 0.55, Some("Triggering scan"));
+            let _ = acquisition::update_lifecycle(&conn, id, "organize", 0.75, Some("Organizing into library"));
+            let _ = acquisition::update_lifecycle(&conn, id, "index", 0.92, Some("Indexing metadata"));
             // Success: mark completed and optionally trigger a library scan
             conn.execute(
                 "UPDATE acquisition_queue SET status = 'completed', completed_at = datetime('now'), error = NULL
                  WHERE id = ?1",
                 params![id],
             )?;
+            let _ = acquisition::update_lifecycle(&conn, id, "index", 1.0, Some("Complete"));
             info!("Acquisition completed: {:?}", path);
             // TODO: Trigger incremental library scan of the download folder
             Ok(true)
@@ -147,6 +154,7 @@ pub fn process_next_queue_item(paths: &AppPaths) -> LyraResult<bool> {
                 .unwrap_or(0);
 
             if retry_count >= 2 {
+                let _ = acquisition::update_lifecycle(&conn, id, "acquire", 1.0, Some("Failed"));
                 conn.execute(
                     "UPDATE acquisition_queue SET status = 'failed', completed_at = datetime('now'),
                      error = 'Max retries exceeded', retry_count = retry_count + 1
@@ -155,6 +163,7 @@ pub fn process_next_queue_item(paths: &AppPaths) -> LyraResult<bool> {
                 )?;
                 warn!("Acquisition failed after retries: {} - {}", artist, title);
             } else {
+                let _ = acquisition::update_lifecycle(&conn, id, "acquire", 0.0, Some("Retrying"));
                 conn.execute(
                     "UPDATE acquisition_queue SET status = 'pending', retry_count = retry_count + 1
                      WHERE id = ?1",
@@ -165,6 +174,7 @@ pub fn process_next_queue_item(paths: &AppPaths) -> LyraResult<bool> {
             Ok(true)
         }
         Err(e) => {
+            let _ = acquisition::update_lifecycle(&conn, id, "acquire", 1.0, Some("Error"));
             conn.execute(
                 "UPDATE acquisition_queue SET status = 'failed', completed_at = datetime('now'),
                  error = ?2, retry_count = retry_count + 1

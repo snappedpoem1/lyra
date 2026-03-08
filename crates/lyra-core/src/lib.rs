@@ -25,7 +25,7 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use commands::{
-    AcquisitionQueueItem, ArtistConnection, ArtistProfile, AudioOutputDevice, BootstrapPayload,
+    AcquisitionPreflight, AcquisitionQueueItem, ArtistConnection, ArtistProfile, AudioOutputDevice, BootstrapPayload,
     DuplicateCluster, ExplainPayload, LegacyImportReport, LibraryOverview, LibraryRootRecord,
     NativeCapabilities, PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary,
     ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
@@ -1107,6 +1107,59 @@ impl LyraCore {
         let conn = self.conn()?;
         acquisition::update_acquisition_status(&conn, id, &status, error.as_deref())?;
         acquisition::list_acquisition_queue(&conn, None)
+    }
+
+    pub fn clear_completed_acquisition(&self) -> LyraResult<i64> {
+        let conn = self.conn()?;
+        acquisition::clear_completed(&conn)
+    }
+
+    pub fn set_acquisition_priority(&self, id: i64, priority_score: f64) -> LyraResult<Vec<AcquisitionQueueItem>> {
+        let conn = self.conn()?;
+        acquisition::set_priority(&conn, id, priority_score)?;
+        acquisition::list_acquisition_queue(&conn, None)
+    }
+
+    pub fn acquisition_preflight(&self) -> LyraResult<AcquisitionPreflight> {
+        let required_bytes: i64 = 500 * 1024 * 1024;
+        let python_path = self
+            .paths
+            .app_data_dir
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|root| root.join(".venv").join("Scripts").join("python.exe"));
+        let python_available = python_path.as_ref().is_some_and(|p| p.exists());
+        let downloader_available = python_available;
+
+        let mut free_bytes: i64 = 0;
+        if let Some(downloads) = self.paths.app_data_dir.parent() {
+            if let Ok(space) = fs2::available_space(downloads) {
+                free_bytes = space as i64;
+            }
+        }
+        let disk_ok = free_bytes >= required_bytes;
+        let mut notes = Vec::new();
+        if !python_available {
+            notes.push("Python runtime not found in .venv".to_string());
+        }
+        if !disk_ok {
+            notes.push(format!(
+                "Insufficient free space: {} MB available, {} MB required",
+                free_bytes / (1024 * 1024),
+                required_bytes / (1024 * 1024)
+            ));
+        }
+        if notes.is_empty() {
+            notes.push("Preflight checks passed".to_string());
+        }
+        Ok(AcquisitionPreflight {
+            python_available,
+            downloader_available,
+            disk_ok,
+            free_bytes,
+            required_bytes,
+            notes,
+        })
     }
 
     /// Process the next pending acquisition queue item.

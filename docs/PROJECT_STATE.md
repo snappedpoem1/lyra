@@ -1,6 +1,6 @@
 # Lyra Project State
 
-Last audited: March 8, 2026 — Wave W (Acquisition Provider Restoration)
+Last audited: March 8, 2026 - Wave Y checkpoint (Acquisition Workflow Parity)
 
 ## Runtime Truth
 
@@ -167,3 +167,12 @@ Waves A–V are complete. Remaining high-value targets:
 - Scrobble session auth UX: surface session key status in Settings (show whether session_key is present)
 - 4-hour audio soak
 - History panel track resolution: show artist/title instead of track # (requires join or a lookup on demand)
+
+
+## Wave Y Checkpoint Update (March 8, 2026)
+- Acquisition lifecycle fields are now persisted per queue item (lifecycle_stage, lifecycle_progress, lifecycle_note, updated_at).
+- Acquisition UI now shows lifecycle stage/progress/note and supports retry failed, clear completed/skipped, and per-item priority.
+- Preflight checks are wired end-to-end: python presence, downloader presence, and disk-space threshold.
+- Retry semantics fixed: failed -> pending increments retry count and clears stale error/completed metadata.
+- Remaining contention: lifecycle transitions remain best-effort while execution is delegated to Python waterfall subprocesses.
+

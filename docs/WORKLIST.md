@@ -1,6 +1,6 @@
 ﻿# Worklist
 
-Last updated: March 8, 2026
+Last updated: March 8, 2026 (Wave Y checkpoint)
 
 ## Current State
 
@@ -8,6 +8,7 @@ Last updated: March 8, 2026
 - Python/oracle runtime surfaces are preserved as legacy reference only.
 - Wave W delivered: full acquisition provider restoration with Python waterfall bridge.
 - Wave X delivered: artist profile route, now-playing transport controls (shuffle/repeat), queue-play state sync, AI playlist build from recommendations, and artist play/album commands.
+- Wave Y delivered (checkpoint): acquisition lifecycle visibility + controls (retry/clear/prioritize/preflight).
 
 ## Completed Waves (this session)
 
@@ -19,21 +20,31 @@ Last updated: March 8, 2026
   - Transport controls for shuffle + repeat modes
   - Queue play actions now update playback state consistently
   - Discover can build an AI playlist from top recommendations
+- Wave Y: Acquisition workflow parity checkpoint
+  - Lifecycle fields persisted per queue item (`lifecycle_stage`, `lifecycle_progress`, `lifecycle_note`, `updated_at`)
+  - Lifecycle visualization in Acquisition UI (stage label + progress bar + note)
+  - Queue controls implemented: retry failed, clear completed/skipped, set priority
+  - Preflight checks exposed in UI: Python availability, downloader availability, disk-space threshold
+  - Retry semantics fixed: failed -> pending increments `retry_count`, clears stale error/completed timestamp, resets lifecycle seed
+  - Known contention: stage transitions are best-effort while core acquisition remains delegated to Python waterfall subprocesses
 
 ## Next Up (Prioritized by Impact)
 
+Execution details for all waves are tracked in `docs/EXECUTION_PLAN.md`.
+
 ### Wave Y: Acquisition Workflow Parity (G-060) - HIGH PRIORITY
 **Goal**: Complete end-to-end acquisition visibility and controls
-- [ ] Add staged lifecycle states (acquire → stage → scan → organize → index)
-- [ ] Implement per-item progress and error state UI
-- [ ] Add queue lifecycle controls:
+- [x] Add staged lifecycle states (acquire → stage → scan → organize → index)
+- [x] Implement per-item progress and error state UI
+- [x] Add queue lifecycle controls:
   - Retry failed items
   - Clear completed items
   - Prioritize items
-- [ ] Add preflight checks:
+- [x] Add preflight checks:
   - Disk space validation before processing
   - Downloader/tool availability checks
-- [ ] Surface lifecycle events in Acquisition UI
+- [x] Surface lifecycle events in Acquisition UI
+- [ ] Close remaining contention: replace best-effort subprocess lifecycle transitions with authoritative phase events from waterfall or native Rust pipeline
 
 ### Wave Z: Enrichment Provenance & Confidence (G-061) - HIGH PRIORITY
 **Goal**: Make enrichment sources and confidence transparent

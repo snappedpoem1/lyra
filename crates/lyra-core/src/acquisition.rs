@@ -35,11 +35,11 @@ pub fn list_acquisition_queue(
 ) -> LyraResult<Vec<AcquisitionQueueItem>> {
     let sql = if status_filter.is_some() {
         "SELECT id, artist, title, album, status, priority_score, source, added_at,
-                completed_at, error, retry_count
+                completed_at, error, retry_count, lifecycle_stage, lifecycle_progress, lifecycle_note, updated_at
          FROM acquisition_queue WHERE status = ?1 ORDER BY priority_score DESC, id ASC"
     } else {
         "SELECT id, artist, title, album, status, priority_score, source, added_at,
-                completed_at, error, retry_count
+                completed_at, error, retry_count, lifecycle_stage, lifecycle_progress, lifecycle_note, updated_at
          FROM acquisition_queue ORDER BY priority_score DESC, id ASC"
     };
 
@@ -57,6 +57,10 @@ pub fn list_acquisition_queue(
             completed_at: row.get(8)?,
             error: row.get(9)?,
             retry_count: row.get(10)?,
+            lifecycle_stage: row.get(11)?,
+            lifecycle_progress: row.get(12)?,
+            lifecycle_note: row.get(13)?,
+            updated_at: row.get(14)?,
         })
     };
 
@@ -79,8 +83,9 @@ pub fn add_acquisition_item(
 ) -> LyraResult<AcquisitionQueueItem> {
     let now = Utc::now().to_rfc3339();
     conn.execute(
-        "INSERT INTO acquisition_queue (artist, title, album, status, priority_score, source, added_at)
-         VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6)",
+        "INSERT INTO acquisition_queue
+         (artist, title, album, status, priority_score, source, added_at, lifecycle_stage, lifecycle_progress, lifecycle_note, updated_at)
+         VALUES (?1, ?2, ?3, 'pending', ?4, ?5, ?6, 'acquire', 0.0, 'Queued', ?6)",
         params![artist, title, album, priority, source, now],
     )?;
     let id = conn.last_insert_rowid();
@@ -92,10 +97,14 @@ pub fn add_acquisition_item(
         status: "pending".to_string(),
         priority_score: priority,
         source: source.map(String::from),
-        added_at: now,
+        added_at: now.clone(),
         completed_at: None,
         error: None,
         retry_count: 0,
+        lifecycle_stage: Some("acquire".to_string()),
+        lifecycle_progress: Some(0.0),
+        lifecycle_note: Some("Queued".to_string()),
+        updated_at: Some(now),
     })
 }
 
@@ -106,20 +115,33 @@ pub fn update_acquisition_status(
     error: Option<&str>,
 ) -> LyraResult<Option<AcquisitionQueueItem>> {
     let now = Utc::now().to_rfc3339();
-    let completed_at = if status == "completed" || status == "failed" {
+    let completed_at = if status == "completed" || status == "failed" || status == "skipped" {
         Some(now.clone())
     } else {
         None
     };
+    let lifecycle_note = if status == "pending" {
+        Some("Retry queued")
+    } else {
+        None
+    };
     conn.execute(
-        "UPDATE acquisition_queue SET status=?1, error=?2, completed_at=COALESCE(?3, completed_at)
-         WHERE id=?4",
-        params![status, error, completed_at, id],
+        "UPDATE acquisition_queue
+         SET status=?1,
+             error=CASE WHEN ?1='pending' THEN NULL ELSE ?2 END,
+             completed_at=CASE WHEN ?3 IS NULL THEN NULL ELSE ?3 END,
+             retry_count=CASE WHEN ?1='pending' AND status='failed' THEN retry_count + 1 ELSE retry_count END,
+             lifecycle_stage=CASE WHEN ?1='pending' THEN 'acquire' ELSE lifecycle_stage END,
+             lifecycle_progress=CASE WHEN ?1='pending' THEN 0.0 ELSE lifecycle_progress END,
+             lifecycle_note=CASE WHEN ?1='pending' THEN ?6 ELSE lifecycle_note END,
+             updated_at=?4
+         WHERE id=?5",
+        params![status, error, completed_at, now, id, lifecycle_note],
     )?;
     let item = conn
         .query_row(
             "SELECT id, artist, title, album, status, priority_score, source, added_at,
-                    completed_at, error, retry_count
+                    completed_at, error, retry_count, lifecycle_stage, lifecycle_progress, lifecycle_note, updated_at
              FROM acquisition_queue WHERE id=?1",
             params![id],
             |row| {
@@ -135,11 +157,48 @@ pub fn update_acquisition_status(
                     completed_at: row.get(8)?,
                     error: row.get(9)?,
                     retry_count: row.get(10)?,
+                    lifecycle_stage: row.get(11)?,
+                    lifecycle_progress: row.get(12)?,
+                    lifecycle_note: row.get(13)?,
+                    updated_at: row.get(14)?,
                 })
             },
         )
         .optional()?;
     Ok(item)
+}
+
+pub fn update_lifecycle(
+    conn: &Connection,
+    id: i64,
+    stage: &str,
+    progress: f64,
+    note: Option<&str>,
+) -> LyraResult<()> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE acquisition_queue
+         SET lifecycle_stage=?1, lifecycle_progress=?2, lifecycle_note=?3, updated_at=?4
+         WHERE id=?5",
+        params![stage, progress, note, now, id],
+    )?;
+    Ok(())
+}
+
+pub fn clear_completed(conn: &Connection) -> LyraResult<i64> {
+    let affected = conn.execute(
+        "DELETE FROM acquisition_queue WHERE status='completed' OR status='skipped'",
+        [],
+    )?;
+    Ok(affected as i64)
+}
+
+pub fn set_priority(conn: &Connection, id: i64, priority_score: f64) -> LyraResult<()> {
+    conn.execute(
+        "UPDATE acquisition_queue SET priority_score=?1, updated_at=?2 WHERE id=?3",
+        params![priority_score, Utc::now().to_rfc3339(), id],
+    )?;
+    Ok(())
 }
 
 pub fn pending_count(conn: &Connection) -> i64 {
@@ -302,7 +361,10 @@ pub fn import_spotify_library_as_queue(
 mod tests {
     use rusqlite::{params, Connection};
 
-    use super::{list_acquisition_sources, summarize_acquisition_queue};
+    use super::{
+        add_acquisition_item, list_acquisition_sources, summarize_acquisition_queue,
+        update_acquisition_status,
+    };
 
     fn setup_conn() -> Connection {
         let conn = Connection::open_in_memory().expect("in-memory sqlite");
@@ -319,7 +381,11 @@ mod tests {
               added_at TEXT NOT NULL,
               completed_at TEXT,
               error TEXT,
-              retry_count INTEGER NOT NULL DEFAULT 0
+              retry_count INTEGER NOT NULL DEFAULT 0,
+              lifecycle_stage TEXT,
+              lifecycle_progress REAL,
+              lifecycle_note TEXT,
+              updated_at TEXT
             );
             ",
         )
@@ -388,5 +454,30 @@ mod tests {
         assert_eq!(sources[1].total_count, 2);
         assert_eq!(sources[1].completed_count, 1);
         assert_eq!(sources[1].pending_count, 1);
+    }
+
+    #[test]
+    fn retrying_failed_item_increments_retry_and_clears_error() {
+        let conn = setup_conn();
+        let item = add_acquisition_item(&conn, "A", "One", None, Some("manual"), 0.8)
+            .expect("item inserted");
+        let failed = update_acquisition_status(&conn, item.id, "failed", Some("boom"))
+            .expect("failed update")
+            .expect("item present");
+        assert_eq!(failed.status, "failed");
+        assert_eq!(failed.retry_count, 0);
+        assert_eq!(failed.error.as_deref(), Some("boom"));
+        assert!(failed.completed_at.is_some());
+
+        let retried = update_acquisition_status(&conn, item.id, "pending", None)
+            .expect("retry update")
+            .expect("item present");
+        assert_eq!(retried.status, "pending");
+        assert_eq!(retried.retry_count, 1);
+        assert_eq!(retried.error, None);
+        assert_eq!(retried.completed_at, None);
+        assert_eq!(retried.lifecycle_stage.as_deref(), Some("acquire"));
+        assert_eq!(retried.lifecycle_progress, Some(0.0));
+        assert_eq!(retried.lifecycle_note.as_deref(), Some("Retry queued"));
     }
 }

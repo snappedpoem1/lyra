@@ -1,7 +1,7 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { onMount } from "svelte";
   import { api } from "$lib/tauri";
-  import type { AcquisitionQueueItem } from "$lib/types";
+  import type { AcquisitionPreflight, AcquisitionQueueItem } from "$lib/types";
 
   let items: AcquisitionQueueItem[] = [];
   let statusFilter: string | undefined = undefined;
@@ -9,27 +9,29 @@
   let processing = false;
   let workerRunning = false;
   let workerLoading = false;
+  let preflight: AcquisitionPreflight | null = null;
+  let preflightLoading = false;
+  let clearBusy = false;
 
-  // Form for adding new items
   let newArtist = "";
   let newTitle = "";
   let newAlbum = "";
-  let newSource = "";
+  let newSource = "manual";
 
-  let statusOptions = [
+  const statusOptions = [
     { value: undefined, label: "All" },
     { value: "pending", label: "Pending" },
     { value: "in_progress", label: "In Progress" },
     { value: "completed", label: "Completed" },
-    { value: "failed", label: "Failed" }
+    { value: "failed", label: "Failed" },
+    { value: "skipped", label: "Skipped" },
   ];
 
-  onMount(() => {
-    loadQueue();
-    checkWorkerStatus();
+  onMount(async () => {
+    await Promise.all([loadQueue(), checkWorkerStatus(), loadPreflight()]);
   });
 
-  async function loadQueue() {
+  async function loadQueue(): Promise<void> {
     loading = true;
     try {
       items = await api.acquisitionQueue(statusFilter);
@@ -38,7 +40,16 @@
     }
   }
 
-  async function checkWorkerStatus() {
+  async function loadPreflight(): Promise<void> {
+    preflightLoading = true;
+    try {
+      preflight = await api.acquisitionPreflight();
+    } finally {
+      preflightLoading = false;
+    }
+  }
+
+  async function checkWorkerStatus(): Promise<void> {
     try {
       workerRunning = await api.acquisitionWorkerStatus();
     } catch (err) {
@@ -46,35 +57,27 @@
     }
   }
 
-  async function startWorker() {
+  async function startWorker(): Promise<void> {
     workerLoading = true;
     try {
       const started = await api.startAcquisitionWorker();
-      if (started) {
-        workerRunning = true;
-      } else {
-        alert("Worker is already running");
-      }
-    } catch (err) {
-      alert(`Failed to start worker: ${err}`);
+      if (started) workerRunning = true;
     } finally {
       workerLoading = false;
     }
   }
 
-  async function stopWorker() {
+  async function stopWorker(): Promise<void> {
     workerLoading = true;
     try {
       await api.stopAcquisitionWorker();
       workerRunning = false;
-    } catch (err) {
-      alert(`Failed to stop worker: ${err}`);
     } finally {
       workerLoading = false;
     }
   }
 
-  async function addItem() {
+  async function addItem(): Promise<void> {
     if (!newArtist.trim() || !newTitle.trim()) return;
     loading = true;
     try {
@@ -87,29 +90,23 @@
       newArtist = "";
       newTitle = "";
       newAlbum = "";
-      newSource = "";
+      await loadPreflight();
     } finally {
       loading = false;
     }
   }
 
-  async function processNext() {
+  async function processNext(): Promise<void> {
     processing = true;
     try {
       const processed = await api.processAcquisitionQueue();
-      if (processed) {
-        await loadQueue();
-      } else {
-        alert("Queue is empty");
-      }
-    } catch (err) {
-      alert(`Error: ${err}`);
+      if (processed) await loadQueue();
     } finally {
       processing = false;
     }
   }
 
-  async function retryItem(id: number) {
+  async function retryItem(id: number): Promise<void> {
     loading = true;
     try {
       items = await api.updateAcquisitionItem(id, "pending");
@@ -118,13 +115,29 @@
     }
   }
 
-  async function deleteItem(id: number) {
+  async function skipItem(id: number): Promise<void> {
     loading = true;
     try {
       items = await api.updateAcquisitionItem(id, "skipped");
     } finally {
       loading = false;
     }
+  }
+
+  async function clearCompleted(): Promise<void> {
+    clearBusy = true;
+    try {
+      await api.clearCompletedAcquisition();
+      await loadQueue();
+    } finally {
+      clearBusy = false;
+    }
+  }
+
+  async function updatePriority(item: AcquisitionQueueItem, value: string): Promise<void> {
+    const parsed = Number.parseFloat(value);
+    if (!Number.isFinite(parsed)) return;
+    items = await api.setAcquisitionPriority(item.id, parsed);
   }
 
   function getStatusBadgeClass(status: string): string {
@@ -137,8 +150,19 @@
     }
   }
 
-  $: {
-    void loadQueue();
+  function stageLabel(item: AcquisitionQueueItem): string {
+    const stage = item.lifecycleStage ?? "acquire";
+    const note = item.lifecycleNote ?? "";
+    return `${stage}${note ? `: ${note}` : ""}`;
+  }
+
+  function stagePct(item: AcquisitionQueueItem): number {
+    return Math.round((item.lifecycleProgress ?? 0) * 100);
+  }
+
+  function formatBytes(bytes: number): string {
+    const mb = bytes / (1024 * 1024);
+    return `${mb.toFixed(0)} MB`;
   }
 </script>
 
@@ -146,29 +170,48 @@
   <header>
     <h1>Acquisition Queue</h1>
     <div class="actions">
-      <button onclick={processNext} disabled={processing || loading}>
+      <button on:click={processNext} disabled={processing || loading}>
         {processing ? "Processing..." : "Process Next"}
       </button>
-      <button onclick={loadQueue} disabled={loading}>Refresh</button>
+      <button on:click={clearCompleted} disabled={clearBusy || loading}>
+        {clearBusy ? "Clearing..." : "Clear Completed"}
+      </button>
+      <button on:click={loadQueue} disabled={loading}>Refresh</button>
     </div>
   </header>
+
+  <section class="preflight">
+    <div class="preflight-head">
+      <h2>Preflight</h2>
+      <button on:click={loadPreflight} disabled={preflightLoading}>{preflightLoading ? "Checking..." : "Recheck"}</button>
+    </div>
+    {#if preflight}
+      <div class="preflight-grid">
+        <span class:ok={preflight.pythonAvailable} class:bad={!preflight.pythonAvailable}>Python: {preflight.pythonAvailable ? "OK" : "Missing"}</span>
+        <span class:ok={preflight.downloaderAvailable} class:bad={!preflight.downloaderAvailable}>Downloader: {preflight.downloaderAvailable ? "OK" : "Missing"}</span>
+        <span class:ok={preflight.diskOk} class:bad={!preflight.diskOk}>Disk: {preflight.diskOk ? "OK" : "Low"}</span>
+        <span>Free: {formatBytes(preflight.freeBytes)} / Required: {formatBytes(preflight.requiredBytes)}</span>
+      </div>
+      <ul>
+        {#each preflight.notes as note}
+          <li>{note}</li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
 
   <section class="worker-control">
     <h2>Background Worker</h2>
     <div class="worker-status">
       <span class="status-indicator {workerRunning ? 'running' : 'stopped'}">
-        {workerRunning ? "● Running" : "○ Stopped"}
+        {workerRunning ? "Running" : "Stopped"}
       </span>
       {#if workerRunning}
-        <button onclick={stopWorker} disabled={workerLoading}>
-          {workerLoading ? "Stopping..." : "Stop Worker"}
-        </button>
+        <button on:click={stopWorker} disabled={workerLoading}>{workerLoading ? "Stopping..." : "Stop Worker"}</button>
       {:else}
-        <button onclick={startWorker} disabled={workerLoading}>
-          {workerLoading ? "Starting..." : "Start Worker"}
-        </button>
+        <button on:click={startWorker} disabled={workerLoading}>{workerLoading ? "Starting..." : "Start Worker"}</button>
       {/if}
-      <button onclick={checkWorkerStatus} disabled={workerLoading}>Check Status</button>
+      <button on:click={checkWorkerStatus} disabled={workerLoading}>Check Status</button>
     </div>
   </section>
 
@@ -178,17 +221,15 @@
       <input type="text" bind:value={newArtist} placeholder="Artist *" />
       <input type="text" bind:value={newTitle} placeholder="Title *" />
       <input type="text" bind:value={newAlbum} placeholder="Album (optional)" />
-      <input type="text" bind:value={newSource} placeholder="Source (optional)" />
-      <button onclick={addItem} disabled={!newArtist.trim() || !newTitle.trim() || loading}>
-        + Add
-      </button>
+      <input type="text" bind:value={newSource} placeholder="Source" />
+      <button on:click={addItem} disabled={!newArtist.trim() || !newTitle.trim() || loading}>+ Add</button>
     </div>
   </section>
 
   <section class="filter-bar">
     <label>
       Status:
-      <select bind:value={statusFilter}>
+      <select bind:value={statusFilter} on:change={loadQueue}>
         {#each statusOptions as opt}
           <option value={opt.value}>{opt.label}</option>
         {/each}
@@ -207,11 +248,9 @@
         <tr>
           <th>Artist</th>
           <th>Title</th>
-          <th>Album</th>
           <th>Status</th>
+          <th>Lifecycle</th>
           <th>Priority</th>
-          <th>Source</th>
-          <th>Added</th>
           <th>Error</th>
           <th>Actions</th>
         </tr>
@@ -221,33 +260,29 @@
           <tr>
             <td>{item.artist}</td>
             <td>{item.title}</td>
-            <td>{item.album || '—'}</td>
+            <td><span class="badge {getStatusBadgeClass(item.status)}">{item.status}</span></td>
             <td>
-              <span class="badge {getStatusBadgeClass(item.status)}">
-                {item.status}
-              </span>
+              <div class="lifecycle-cell">
+                <small>{stageLabel(item)}</small>
+                <div class="bar-bg"><div class="bar-fill" style="width: {stagePct(item)}%"></div></div>
+                <small>{stagePct(item)}%</small>
+              </div>
             </td>
-            <td>{item.priorityScore?.toFixed(2) || '0.00'}</td>
-            <td>{item.source || '—'}</td>
             <td>
-              {new Date(item.addedAt).toLocaleDateString()}
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={item.priorityScore}
+                on:change={(e) => updatePriority(item, (e.currentTarget as HTMLInputElement).value)}
+              />
+              <small>{item.priorityScore.toFixed(2)}</small>
             </td>
-            <td class="error-cell">
-              {#if item.error}
-                <span class="error-text" title={item.error}>
-                  {item.error.substring(0, 50)}{item.error.length > 50 ? '...' : ''}
-                </span>
-              {:else}
-                —
-              {/if}
-            </td>
+            <td class="error-cell">{item.error || "-"}</td>
             <td class="actions-cell">
-              {#if item.status === "failed"}
-                <button class="btn-small" onclick={() => retryItem(item.id)}>Retry</button>
-              {/if}
-              {#if item.status === "pending" || item.status === "failed"}
-                <button class="btn-small btn-danger" onclick={() => deleteItem(item.id)}>Skip</button>
-              {/if}
+              {#if item.status === "failed"}<button class="btn-small" on:click={() => retryItem(item.id)}>Retry</button>{/if}
+              {#if item.status === "pending" || item.status === "failed"}<button class="btn-small btn-danger" on:click={() => skipItem(item.id)}>Skip</button>{/if}
             </td>
           </tr>
         {/each}
@@ -257,214 +292,32 @@
 </div>
 
 <style>
-  .page-acquisition {
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-  }
-
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-  }
-
-  .actions {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .worker-control {
-    background: rgba(100, 150, 255, 0.1);
-    padding: 1.5rem;
-    border-radius: 8px;
-    margin-bottom: 2rem;
-    border: 1px solid rgba(100, 150, 255, 0.3);
-  }
-
-  .worker-control h2 {
-    margin-top: 0;
-    margin-bottom: 1rem;
-    font-size: 1.1rem;
-  }
-
-  .worker-status {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .status-indicator {
-    font-weight: 600;
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-  }
-
-  .status-indicator.running {
-    background: rgba(46, 204, 113, 0.2);
-    color: #2ecc71;
-  }
-
-  .status-indicator.stopped {
-    background: rgba(255, 87, 87, 0.2);
-    color: #ff5757;
-  }
-
-  .add-form {
-    background: rgba(255, 255, 255, 0.05);
-    padding: 1.5rem;
-    border-radius: 8px;
-    margin-bottom: 2rem;
-  }
-
-  .form-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr auto;
-    gap: 0.75rem;
-    margin-top: 1rem;
-  }
-
-  .form-grid input {
-    padding: 0.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
-    background: rgba(0, 0, 0, 0.3);
-    color: #fff;
-  }
-
-  .filter-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-    padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 4px;
-  }
-
-  .filter-bar label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .filter-bar select {
-    padding: 0.25rem 0.5rem;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
-    color: #fff;
-  }
-
-  .count {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 0.9rem;
-  }
-
-  .queue-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-
-  .queue-table thead {
-    background: rgba(0, 0, 0, 0.3);
-  }
-
-  .queue-table th {
-    padding: 0.75rem;
-    text-align: left;
-    font-weight: 600;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .queue-table td {
-    padding: 0.75rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  }
-
-  .queue-table tbody tr:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .badge {
-    display: inline-block;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .badge-pending {
-    background: rgba(100, 149, 237, 0.3);
-    color: #6495ed;
-  }
-
-  .badge-progress {
-    background: rgba(255, 165, 0, 0.3);
-    color: #ffa500;
-  }
-
-  .badge-success {
-    background: rgba(34, 197, 94, 0.3);
-    color: #22c55e;
-  }
-
-  .badge-error {
-    background: rgba(239, 68, 68, 0.3);
-    color: #ef4444;
-  }
-
-  .error-cell {
-    max-width: 200px;
-  }
-
-  .error-text {
-    color: #ef4444;
-    font-size: 0.9rem;
-  }
-
-  .actions-cell {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .btn-small {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.8rem;
-    border-radius: 4px;
-    background: rgba(100, 149, 237, 0.3);
-    border: 1px solid rgba(100, 149, 237, 0.5);
-    color: #6495ed;
-    cursor: pointer;
-  }
-
-  .btn-small:hover {
-    background: rgba(100, 149, 237, 0.5);
-  }
-
-  .btn-danger {
-    background: rgba(239, 68, 68, 0.3);
-    border-color: rgba(239, 68, 68, 0.5);
-    color: #ef4444;
-  }
-
-  .btn-danger:hover {
-    background: rgba(239, 68, 68, 0.5);
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 3rem;
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  .page-acquisition { padding: 1.25rem; max-width: 1400px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .actions { display: flex; gap: 0.5rem; }
+  .preflight, .worker-control, .add-form { background: rgba(255, 255, 255, 0.05); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+  .preflight-head { display: flex; justify-content: space-between; align-items: center; }
+  .preflight-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin: 0.5rem 0; }
+  .ok { color: #22c55e; }
+  .bad { color: #ef4444; }
+  .worker-status { display: flex; align-items: center; gap: 1rem; }
+  .status-indicator.running { color: #22c55e; }
+  .status-indicator.stopped { color: #ef4444; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 0.75rem; margin-top: 0.75rem; }
+  .form-grid input { padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; background: rgba(0,0,0,0.3); color: #fff; }
+  .filter-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(255,255,255,0.05); border-radius: 4px; }
+  .queue-table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.05); border-radius: 8px; overflow: hidden; }
+  .queue-table th, .queue-table td { padding: 0.6rem; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .badge { padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.75rem; text-transform: uppercase; }
+  .badge-pending { background: rgba(100,149,237,0.3); color: #6495ed; }
+  .badge-progress { background: rgba(255,165,0,0.3); color: #ffa500; }
+  .badge-success { background: rgba(34,197,94,0.3); color: #22c55e; }
+  .badge-error { background: rgba(239,68,68,0.3); color: #ef4444; }
+  .lifecycle-cell { display: grid; gap: 4px; min-width: 180px; }
+  .bar-bg { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.12); }
+  .bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #34cfab, #5ad1ff); }
+  .actions-cell { display: flex; gap: 0.5rem; }
+  .btn-small { padding: 0.25rem 0.5rem; border-radius: 4px; }
+  .btn-danger { color: #ef4444; }
+  .empty-state { text-align: center; padding: 2rem; opacity: 0.6; }
 </style>

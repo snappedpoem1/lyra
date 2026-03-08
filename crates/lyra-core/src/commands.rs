@@ -200,6 +200,21 @@ pub struct AcquisitionQueueItem {
     pub completed_at: Option<String>,
     pub error: Option<String>,
     pub retry_count: i64,
+    pub lifecycle_stage: Option<String>,
+    pub lifecycle_progress: Option<f64>,
+    pub lifecycle_note: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcquisitionPreflight {
+    pub python_available: bool,
+    pub downloader_available: bool,
+    pub disk_ok: bool,
+    pub free_bytes: i64,
+    pub required_bytes: i64,
+    pub notes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

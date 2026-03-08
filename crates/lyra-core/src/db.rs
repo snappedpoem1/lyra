@@ -150,7 +150,11 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
           added_at TEXT NOT NULL,
           completed_at TEXT,
           error TEXT,
-          retry_count INTEGER NOT NULL DEFAULT 0
+          retry_count INTEGER NOT NULL DEFAULT 0,
+          lifecycle_stage TEXT,
+          lifecycle_progress REAL,
+          lifecycle_note TEXT,
+          updated_at TEXT
         );
         CREATE TABLE IF NOT EXISTS enrich_cache (
           provider TEXT NOT NULL,
@@ -217,6 +221,17 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
     ] {
         let _ = conn.execute(
             &format!("ALTER TABLE tracks ADD COLUMN {col} {typedef}"),
+            [],
+        );
+    }
+    for (col, typedef) in &[
+        ("lifecycle_stage", "TEXT"),
+        ("lifecycle_progress", "REAL"),
+        ("lifecycle_note", "TEXT"),
+        ("updated_at", "TEXT"),
+    ] {
+        let _ = conn.execute(
+            &format!("ALTER TABLE acquisition_queue ADD COLUMN {col} {typedef}"),
             [],
         );
     }

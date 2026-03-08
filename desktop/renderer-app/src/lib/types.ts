@@ -163,6 +163,19 @@ export type AcquisitionQueueItem = {
   completedAt?: string | null;
   error?: string | null;
   retryCount: number;
+  lifecycleStage?: string | null;
+  lifecycleProgress?: number | null;
+  lifecycleNote?: string | null;
+  updatedAt?: string | null;
+};
+
+export type AcquisitionPreflight = {
+  pythonAvailable: boolean;
+  downloaderAvailable: boolean;
+  diskOk: boolean;
+  freeBytes: number;
+  requiredBytes: number;
+  notes: string[];
 };
 
 export type PlaybackEvent = {
