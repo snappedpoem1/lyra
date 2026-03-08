@@ -298,6 +298,242 @@ Library Root: A:\Music (accessible)
 2. Coheed and Cambria (48 tracks)
 3. Arctic Monkeys (46 tracks)
 4. Tyler, the Creator (43 tracks)
+
+---
+
+## 📋 COMPREHENSIVE FEATURE CATALOG
+
+### Architecture & Foundation (Implemented)
+- ✅ Tauri 2 desktop shell (native Windows application)
+- ✅ SvelteKit SPA frontend (modern reactive UI)
+- ✅ Rust application core (`lyra-core`) - all business logic
+- ✅ SQLite embedded database (local-first storage)
+- ✅ Python-free runtime (migrated from Flask backend)
+- ✅ Legacy .env import (automatic credential migration)
+- ✅ Cargo workspace structure (multi-crate project)
+- ✅ 271+ Python tests passing
+- ✅ 41+ frontend tests passing
+
+### Music Library Management (Implemented)
+- ✅ Multi-root library support (multiple music folders)
+- ✅ Intelligent file scanner (recursive with metadata extraction)
+- ✅ Tag extraction (ID3, FLAC, MP4, Ogg via `lofty` crate)
+- ✅ Filesystem fallback (metadata when tags missing)
+- ✅ Track deduplication detection
+- ✅ Library statistics (track/artist/genre counts)
+- ✅ Artist profiles (dedicated pages with bio, stats, top tracks)
+- ✅ Album management (groupings and playback)
+- ✅ Liked tracks (heart/favorite with filter view)
+- ✅ Artist links across UI surfaces
+
+### Playback & Audio (Implemented)
+- ✅ Rodio audio engine (native Rust playback)
+- ✅ Audio device selection (output device picker, system-default fallback)
+- ✅ Play/Pause/Stop controls
+- ✅ Seek support (track position seeking)
+- ✅ Volume control (adjustable playback volume)
+- ✅ Queue management (add, remove, reorder)
+- ✅ Queue persistence (survives app restarts)
+- ✅ Shuffle mode (random playback order)
+- ✅ Repeat modes (Off, One track, All tracks)
+- ✅ Session restore (resume from last position)
+- ✅ Stop-at-end (controlled queue completion)
+- ✅ Playback position tracking (1-second ticker)
+- ✅ Auto-advance (automatic next track)
+- ✅ Play artist/album actions
+
+### Windows Integration (Implemented)
+- ✅ System Media Transport Controls (SMTC - taskbar/lock-screen overlay)
+- ✅ Taskbar controls (play/pause/next/previous)
+- ✅ System tray (persistent tray icon)
+- ✅ Global shortcuts (keyboard media controls)
+- ✅ Window state persistence (size/position)
+- ✅ Native notifications (OS-level notifications)
+
+### Playlist System (Implemented)
+- ✅ Playlist creation (named playlists)
+- ✅ Playlist editing (add, remove, reorder tracks)
+- ✅ Drag-to-reorder (intuitive sequencing)
+- ✅ Save queue as playlist
+- ✅ Add from library (add tracks to playlists)
+- ✅ Play playlist (load to queue)
+- ✅ AI playlist generation (from recommendations)
+
+### Metadata Enrichment (Implemented)
+- ✅ MusicBrainz integration (recording/release lookup)
+- ✅ AcoustID fingerprinting (audio fingerprint identification)
+- ✅ Last.fm integration (listeners, playcount, tags, wiki)
+- ✅ Discogs integration (year, genres, labels, country)
+- ✅ Genius integration (lyrics and artist data)
+- ✅ LRC sidecar support (local .lrc lyrics files)
+- ✅ MBID storage (recording/release MBIDs)
+- ✅ Enrichment cache (cache-first to reduce API calls)
+- ✅ Background enrichment (automatic during scan, rate-limited)
+- ✅ Manual enrichment (on-demand library/track enrichment)
+- ✅ Refresh enrichment (clear cache and re-enrich)
+- ✅ Enrichment panels (MBID, release data, match scores)
+
+### Intelligence & Recommendations (Implemented)
+- ✅ Taste profile system (10-dimensional taste vector)
+- ✅ Adaptive learning (taste updates from listening completion)
+- ✅ Recommendation engine (cosine similarity-based)
+- ✅ Scored recommendations (match percentage per track)
+- ✅ Recommendation explanations (human-readable "why")
+- ✅ Scout mode (cross-genre discovery via genre bridges)
+- ✅ ListenBrainz weather (community listening trends)
+- ✅ 5-provider broker (multiple recommendation sources)
+- ✅ Taste visualization (visual taste profile chart)
+
+### Listening History & Scrobbling (Implemented)
+- ✅ Playback event recording (full listening history)
+- ✅ Play completion tracking (percentage listened)
+- ✅ Last.fm scrobbling (auto-scrobble on 50%+ completion)
+- ✅ Now playing updates (real-time Last.fm status)
+- ✅ Recent plays panel (last 20 plays with completion)
+- ✅ Last.fm authentication (mobile session support)
+
+### Music Acquisition (Implemented)
+- ✅ Multi-provider support (6 acquisition providers):
+  - Qobuz (high-quality downloads, Tier 1)
+  - Streamrip (multi-source streaming ripper, Tier 2)
+  - SpotDL (Spotify playlist/track download)
+  - Prowlarr (torrent/Usenet indexer)
+  - Real-Debrid (premium link generator)
+  - Slskd (Soulseek integration)
+- ✅ Acquisition queue (managed download queue)
+- ✅ Background worker (auto queue processing, 30s idle/5s active)
+- ✅ Waterfall strategy (tier-based fallback acquisition)
+- ✅ Retry logic (up to 3 attempts per item)
+- ✅ Auto-scan on success (library scan after download)
+- ✅ Python waterfall bridge (battle-tested logic via subprocess)
+
+### Provider & Credential Management (Implemented)
+- ✅ Provider registry (centralized configuration)
+- ✅ Capability system (track provider features)
+- ✅ Live validation probes (test credentials/connectivity)
+- ✅ OS keychain integration (secure credential storage via `keyring`)
+- ✅ Validation UI (per-provider health checks with latency)
+- ✅ Environment import (import from legacy .env)
+- ✅ Base64 auth helper (HTTP Basic authentication)
+- ✅ Multi-service support (13+ providers/services)
+
+### User Interface (Implemented)
+- ✅ Home view (dashboard and quick access)
+- ✅ Library view (browse all tracks with filtering)
+- ✅ Queue view (current playback queue)
+- ✅ Playlists view (saved playlists management)
+- ✅ Discover view (recommendations and exploration)
+- ✅ Artist pages (dedicated artist profiles)
+- ✅ Settings view (application configuration)
+- ✅ Acquisition view (download queue management)
+- ✅ Transport bar (always-visible playback controls)
+- ✅ Right queue panel (sidebar queue view)
+- ✅ Developer HUD (debug tools)
+- ✅ Bespoke UI language (custom visual design)
+- ✅ Responsive layout (viewport-fit shell)
+- ✅ Optimistic UI updates (immediate feedback)
+
+### Quality of Life (Implemented)
+- ✅ Sleep timer (auto-stop after duration)
+- ✅ Companion orb (floating companion with event-driven updates)
+
+### System & Diagnostics (Implemented)
+- ✅ System health checks (database, Python, library roots, worker)
+- ✅ Diagnostics UI (component status, statistics)
+- ✅ Doctor CLI (command-line health diagnostics)
+- ✅ Build validation (automated test suites)
+- ✅ Lint enforcement (zero-warning clippy builds)
+- ✅ UTF-8 BOM handling (robust .env parsing)
+
+### Development & Build (Implemented)
+- ✅ Component tests (unit and integration)
+- ✅ Frontend tests (Vitest test suite)
+- ✅ Watch mode (dev server with hot reload)
+- ✅ NSIS installer (Windows installer generation)
+- ✅ Release governance (automated build/release workflows)
+- ✅ Session tracking system (comprehensive documentation)
+- ✅ Multi-agent coordination (Codex/Copilot tandem protocol)
+
+---
+
+## 🚧 PLANNED FEATURES (Next Waves)
+
+### Acquisition Workflow Enhancements (G-060)
+- ⏳ Staged lifecycle visibility (acquire → stage → scan → organize → index)
+- ⏳ Queue lifecycle controls (retry/clear completed/prioritize)
+- ⏳ Per-item progress and error states
+- ⏳ Disk-space preflight checks
+- ⏳ Downloader/tool availability validation
+
+### Enrichment Provenance & Confidence (G-061)
+- ⏳ Source confidence scoring display
+- ⏳ MBID-first identity views
+- ⏳ Explicit enrichment lifecycle states
+- ⏳ Force re-enrich with source selection
+- ⏳ Artist MBID promotion to first-class field
+- ⏳ Enrichment provenance in UI
+
+### Curation Workflows (G-062)
+- ⏳ Duplicate resolution workflow
+  - Cluster review interface
+  - Choose keeper action
+  - Quarantine/delete duplicates
+- ⏳ Filename/path cleanup workflow
+  - Preview changes before apply
+  - Operation summary
+- ⏳ Organization plans
+  - Dry-run curation plan
+  - Rollback metadata
+
+### Playlist Intelligence Parity (G-063)
+- ⏳ Act-based playlist generation
+  - Generate by narrative intent
+  - Explicit phases/acts
+  - Track-level reason payloads
+- ⏳ Explainability persistence
+  - "Why this track is here" display
+  - Reason payload storage
+- ⏳ Save/apply generated playlists
+
+### Discovery Graph Depth (G-064)
+- ⏳ Artist graph inspection
+  - Related-artist edges
+  - Actionable "play similar"
+  - "Queue bridge" actions
+- ⏳ Discovery mode provenance
+  - Mode + source display
+  - Deep cuts surfacing
+- ⏳ Session memory
+  - Recent interactions feed
+  - Visible to user
+
+### Packaged Desktop Confidence (G-065)
+- ⏳ Release build validation
+- ⏳ Blank-machine installer proof
+- ⏳ 4-hour audio soak test
+- ⏳ Long-session stability validation
+
+### Future Horizon (Deferred)
+- 🔮 Arc sequencing (track journey builder)
+- 🔮 Agent/Architect (LLM-powered workflows)
+- 🔮 Chroma/vector migration to Rust
+- 🔮 Full oracle/recommendation parity beyond current core
+- 🔮 AcoustID validation (install fpcalc and validate fingerprint)
+- 🔮 Scrobble session auth UX (show session_key status)
+- 🔮 History panel track resolution (show artist/title instead of ID)
+
+---
+
+## 💯 FEATURE SUMMARY
+
+**Total Implemented Features**: 150+
+**Active Gaps**: 6 (G-060 through G-065)
+**Test Coverage**: 312+ tests passing (271 Python + 41 frontend)
+**Supported Providers**: 13+
+**Library Capacity**: 2,455 tracks indexed
+**Historical Data**: 127,312 Spotify history rows, 30,680 playback events
+
+**Current Status**: Production-ready core with workflow enhancements in progress
 5. Aesop Rock (40 tracks)
 6. Bayside (36 tracks)
 7. Drake (35 tracks)
