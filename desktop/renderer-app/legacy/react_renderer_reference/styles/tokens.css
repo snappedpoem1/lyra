@@ -1,0 +1,102 @@
+:root {
+  /* Surfaces */
+  --bg:          #0c0f13;
+  --bg-elevated: rgba(30, 34, 40, 0.98);
+  --bg-soft:     rgba(42, 47, 54, 0.85);
+  --bg-glass:    rgba(18, 22, 28, 0.72);
+
+  /* Borders */
+  --panel-border:   rgba(160, 170, 185, 0.16);
+  --border-subtle:  rgba(160, 170, 185, 0.09);
+  --border-soft:    rgba(160, 170, 185, 0.22);
+  --border-divider: rgba(160, 170, 185, 0.12);
+
+  /* Layout constants — scaled for 42" 4K TV */
+  --sidebar-width:      280px;
+  --right-rail-width:   440px;
+  --transport-height:    96px;
+  --topbar-height:       52px;
+
+  /* Spacing scale */
+  --space-xs:   6px;
+  --space-sm:   8px;
+  --space-md:  10px;
+  --space-lg:  16px;
+  --space-xl:  22px;
+  --space-2xl: 32px;
+  --space-3xl: 48px;
+
+  /* Type scale */
+  --text-2xs: 0.65rem;
+  --text-xs:  0.72rem;
+  --text-sm:  0.78rem;
+  --text-base: 0.88rem;
+  --text-md:  0.94rem;
+  --text-lg:  1.1rem;
+  --text-xl:  1.3rem;
+  --text-2xl: 1.65rem;
+
+  /* Motion */
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:   cubic-bezier(0.45, 0, 0.55, 1);
+  --duration-fast: 100ms;
+  --duration-med:  200ms;
+  --duration-slow: 400ms;
+
+  /* Text */
+  --text:      #e8edf4;
+  --text-soft: #7e8ea4;
+  --text-dim:  #4a5568;
+
+  /* Accent: lime green */
+  --accent:        #8cd94a;
+  --accent-bright: #c8ff82;
+  --accent-glow:   rgba(140, 217, 74, 0.12);
+  --accent-subtle: rgba(140, 217, 74, 0.06);
+
+  /* Amber (warm state accents) */
+  --amber:     rgba(255, 178, 72, 0.92);
+  --amber-dim: rgba(255, 178, 72, 0.10);
+
+  /* State */
+  --warning: #d98a30;
+  --error:   #d95151;
+
+  /* Shadows */
+  --shadow:    rgba(0, 0, 0, 0.72);
+  --shadow-sm: rgba(0, 0, 0, 0.35);
+  --deck-glow: rgba(140, 217, 74, 0.12);
+  --deck-surface: linear-gradient(180deg, rgba(26, 31, 38, 0.94), rgba(15, 19, 24, 0.96) 50%, rgba(12, 15, 19, 0.98) 100%);
+
+  /* Geometry */
+  --radius-xl:   12px;
+  --radius-lg:    8px;
+  --radius-md:    6px;
+  --radius-sm:    4px;
+  --radius-xs:    3px;
+  --radius-pill: 999px;
+
+  /* Typography */
+  --font-ui:      "Segoe UI Variable", "Segoe UI", "Tahoma", system-ui, sans-serif;
+  --font-display: "Bahnschrift SemiCondensed", "Segoe UI", "Tahoma", system-ui, sans-serif;
+  --font-mono:    "Cascadia Code", "Consolas", ui-monospace, monospace;
+}
+
+/* UHD layout scaling for 42" 4K displays. */
+@media (min-width: 2560px) and (min-height: 1400px) {
+  :root {
+    --sidebar-width:    360px;
+    --right-rail-width: 560px;
+    --transport-height: 120px;
+    --topbar-height:     64px;
+    --space-lg:          22px;
+    --space-xl:          30px;
+    --space-2xl:         44px;
+    --text-xs:         0.82rem;
+    --text-sm:         0.92rem;
+    --text-base:       1.04rem;
+    --text-md:         1.12rem;
+    --text-lg:         1.28rem;
+    --text-xl:         1.5rem;
+  }
+}

@@ -50,6 +50,8 @@ desktop/renderer-app/src-tauri/bin/*.exe
 desktop/renderer-app/src-tauri/bin/
 desktop/renderer-app/src-tauri/bin/runtime/bin/*.exe
 desktop/renderer-app/src-tauri/gen/
+desktop/renderer-app/.svelte-kit/
+target/
 
 # Runtime Data (large / machine-generated / personal)
 chroma_storage/
