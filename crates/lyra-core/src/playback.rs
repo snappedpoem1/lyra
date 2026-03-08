@@ -40,6 +40,7 @@ pub fn enumerate_output_devices() -> Vec<AudioOutputDevice> {
 
 enum AudioCommand {
     Play { path: String, volume: f32 },
+    Stop,
     Pause,
     Resume,
     SetVolume(f32),
@@ -107,6 +108,15 @@ impl AudioHandle {
                                     Err(e) => {
                                         error!("lyra-audio: file open failed for {path}: {e}")
                                     }
+                                }
+                            }
+                            AudioCommand::Stop => {
+                                if let Some(old) = current_sink.take() {
+                                    old.stop();
+                                }
+                                if let Ok(mut s) = state_clone.lock() {
+                                    s.position_seconds = 0.0;
+                                    s.finished = false;
                                 }
                             }
                             AudioCommand::Pause => {
@@ -217,6 +227,23 @@ impl PlaybackController {
             repeat_mode: "off".to_string(),
             seek_supported: true,
         })
+    }
+
+    pub fn stop(&mut self, volume: f64) -> PlaybackState {
+        self.audio.send(AudioCommand::Stop);
+        self.current_track = None;
+        PlaybackState {
+            status: "idle".to_string(),
+            current_track_id: None,
+            current_track: None,
+            queue_index: 0,
+            position_seconds: 0.0,
+            duration_seconds: 0.0,
+            volume,
+            shuffle: false,
+            repeat_mode: "off".to_string(),
+            seek_supported: true,
+        }
     }
 
     pub fn toggle(&mut self, mut current: PlaybackState) -> LyraResult<PlaybackState> {
