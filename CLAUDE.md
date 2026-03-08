@@ -6,10 +6,11 @@ Keep this file synchronized with current repo truth.
 
 1. `AGENTS.md`
 2. `docs/ROADMAP_ENGINE_TO_ENTITY.md`
-3. `docs/PROJECT_STATE.md`
-4. `docs/MISSING_FEATURES_REGISTRY.md`
-5. `docs/WORKLIST.md`
-6. `docs/SESSION_INDEX.md`
+3. `docs/LEGACY_MIGRATION_REGISTRY.md`
+4. `docs/PROJECT_STATE.md`
+5. `docs/MISSING_FEATURES_REGISTRY.md`
+6. `docs/WORKLIST.md`
+7. `docs/SESSION_INDEX.md`
 
 ## Project Identity
 

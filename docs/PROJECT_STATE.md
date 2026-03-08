@@ -1,126 +1,114 @@
-# Lyra Oracle Project State
+# Lyra Project State
 
-Last audited: March 7, 2026 (America/New_York)
+Last audited: March 8, 2026 (America/New_York)
 
-This is the current repo/runtime snapshot verified from this workspace.
+## Runtime Truth
 
-## 1) Repository State
+- Canonical runtime is now:
+  - Tauri 2 desktop shell
+  - SvelteKit SPA renderer
+  - Rust application core in `crates/lyra-core`
+  - Rust-owned SQLite local store
+- Python is not part of canonical startup, playback, queue, library, or normal player operation.
+- The old Python/oracle runtime remains preserved as legacy reference and migration source only.
 
-- Branch: `main`
-- Working tree: docs-only reconciliation updates pending for `S-20260307-20`
-- Latest committed baseline before this audit: `a34b6fb` (`S-20260307-18` Wave 14 saved playlist UI surface)
-- Program state:
-  - the governance-first split modernization sequence is aligned through Wave 2
-  - Wave 3 (`LYRA_DATA_ROOT` and mutable-data authority) is locally closed through the runtime contract plus explicit migrate-now/defer actions
-  - Wave 4 desktop stack modernization is locally landed through the Tauri 2 host/runtime upgrade and acceptance pass
-  - Wave 5 (Provider Contract and Recommendation Core) is locally landed
-  - Wave 6 (Product Explainability Surfaces) is locally landed
-  - Wave 7 (Release-Gate Closure) is locally landed in dev-validation mode; blank-machine proof remains blocked-external and the 4-hour soak remains deferred
-  - Wave 8 (Ingest Confidence + Normalization) is locally landed
-  - Wave 9 (Scout + Community Weather) is locally landed
-  - Wave 10 (MBID Identity Spine) is locally landed
-  - Wave 11 (Companion Pulse) is locally landed
-  - Wave 12 (Oracle Action Breadth) is locally landed
-  - Wave 13 (Playlist Intelligence) is locally landed
-  - Wave 14 (Saved Playlist UI) is locally landed
-  - Wave 15 (Copilot lane: biographer stats fix, revelations metric, duplicates module, vibe→saved_playlists bridge) is locally landed
-  - Wave 16 (One Player governance: canonical/compatibility/legacy surface labels, Waves 17-21 defined) is locally landed
-  - Wave 17 (Core Legibility: explainability engine, explanation chips, feedback effects, why-this/why-now/what-next across Oracle/Home/Queue/Transport) is locally landed
-  - `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` is landed as a docs-only UI structure authority for future route and shell work
-  - `docs/PHASE_EXECUTION_COMPANION.md` remains the execution-grade phase sequence companion
-- Governance state:
-  - root `AGENTS.md` plus scoped lane briefs and nearest-directory `AGENTS.md` files exist
-  - `docs/agent_briefs/tandem-wave-protocol.md` defines the standing two-agent split protocol
-  - Tauri is the only active desktop build authority
-  - Windows-first CI/release governance is defined in:
-    - `.github/workflows/windows-pr.yml`
-    - `.github/workflows/windows-release-governance.yml`
+## Implemented In This Pass
 
-## 2) Architecture State
+- Root Rust workspace created with `crates/lyra-core` and the Tauri app crate.
+- `crates/lyra-core` now owns:
+  - config paths
+  - SQLite schema/init
+  - library roots and scan jobs
+  - track import and library queries
+  - playlist persistence
+  - queue persistence
+  - playback state surface
+  - settings persistence
+  - provider config/capability registry
+  - legacy `.env` and SQLite import path
+- `desktop/renderer-app` is now a SvelteKit app with real views for:
+  - Home
+  - Library
+  - Playlists
+  - Queue / Now Playing
+  - Settings
+- Tauri host no longer launches a Python sidecar and instead invokes Rust-owned commands directly.
+- Native desktop hooks implemented:
+  - tray
+  - menu
+  - global shortcuts
+  - window state persistence
 
-- Backend:
-  - Python 3.12 + Flask (`lyra_api.py`, `oracle/api/*`)
-- Stores:
-  - SQLite registry default: `LYRA_DATA_ROOT\db\lyra_registry.db`
-  - Chroma storage default: `LYRA_DATA_ROOT\chroma\`
-- Desktop runtime:
-  - Tauri 2 host in `desktop/renderer-app/src-tauri/`
-  - React/Vite renderer in `desktop/renderer-app/`
-  - Mantine remains infrastructure; the main user-facing routes are progressively restyled into a bespoke shell language
-  - `docs/specs/SPEC-009_UI_STRUCTURE_SYSTEM.md` is the structural authority for route archetypes, shell-region responsibilities, semantic UI blocks, and explainability placement
-  - Playlists now expose first-class saved-playlist creation and browsing through the active route surface
-- Playback authority:
-  - canonical backend player domain in `oracle/player/*`
-  - persisted `player_state` and `player_queue` tables
-  - API surface: `/api/player/*`
-  - SSE stream: `/ws/player`
-- Oracle and recommendation state:
-  - recommendation broker contract is exposed through `POST /api/recommendations/oracle`, `POST /api/recommendations/oracle/feedback`, `GET /api/recommendations/feedback-effects`, and `GET /api/recommendations/providers/health`
-  - `oracle/explainability.py` is the reusable explanation generation module for explanation text, chips, why-now, what-next, and feedback effect descriptions
-  - broker fuses local radio, Last.fm similar-track signals, ListenBrainz community top-recording signals, Scout cross-genre bridge leads, and ListenBrainz community weather signals
-  - provider health registry and degraded-state reporting are live
-- Acquisition and runtime packaging:
-  - `LYRA_DATA_ROOT` is the config-owned writable-data authority
-  - `.lyra-build` remains build/runtime artifact staging only
-  - explicit migration flow exists in both CLI and runtime API
-  - packaged proof and validation scripts are active:
-    - `scripts/validate_clean_machine_install.ps1`
-    - `scripts/validate_packaged_streamrip.ps1`
-    - `scripts/packaged_host_smoke.ps1`
-    - `scripts/validate_installed_runtime.ps1`
-    - `scripts/parity_hardening_acceptance.ps1`
-- Frozen-runtime hardening:
-  - frozen `PROJECT_ROOT` resolves from `sys.executable`
-  - generated cache/log/tmp/runtime-state roots resolve from config-owned paths
-  - sidecar packaging includes the broader Flask blueprint surface
+## Implemented vs Scaffolded
 
-## 3) Runtime Metrics
+Implemented:
 
-From `.venv\Scripts\python.exe -m oracle.status` on this workstation after the Wave 7 and later follow-up passes:
+- Python-free Tauri boot path
+- direct Rust command bridge
+- Rust-owned SQLite init
+- library roots persistence
+- file scan/import with lofty tag extraction (title, artist, album, duration from ID3/FLAC/MP4/Ogg tags; filesystem fallback)
+- playlist CRUD + full editing (add/remove/reorder tracks, create from queue)
+- queue persistence, reorder, remove, clear
+- settings persistence
+- provider config records and capability registry
+- legacy `.env` and legacy DB import
+- real rodio audio backend: `OutputStream` actor thread, `Sink` play/pause/seek/volume, `get_pos()` position tracking
+- playback position ticker in Tauri: emits `lyra://playback-updated` every second while playing, auto-advances queue on track end (respects repeat-mode)
+- seek enabled (`seek_supported: true`, `Sink::try_seek`)
+- `+ Playlist` action in Library view (modal playlist picker)
+- drag-to-reorder + remove in Playlist detail view
+- `Save queue as playlist` action in Queue view
+- session restore on relaunch: playback state normalized to `paused` on restart; cold-resume via `toggle_playback` re-seeks to saved position; `stop_playback` and `sync_playback_state` added to core
+- stop-at-end: when `repeat_mode=off` and queue is exhausted, ticker transitions to `stopped` and persists state so it does not re-trigger
+- Windows SMTC (System Media Transport Controls): taskbar/lock-screen media overlay wired via `ISystemMediaTransportControlsInterop`; button events drive core commands directly; track metadata (title/artist/album) and playback status updated each ticker tick
+- audio device enumeration and selection: `cpal` direct dep enumerates output devices by name; `preferred_output_device` in settings persists across restarts; `list_audio_devices` and `set_output_device` Tauri commands wired
+- SvelteKit settings page: audio device picker dropdown with system-default fallback; loads `AudioOutputDevice[]` on mount; calls `set_output_device` on selection change
+- live MusicBrainz enrichment adapter: `MusicBrainzAdapter` (ureq HTTP, recording search endpoint) replaces the null stub in `EnrichmentDispatcher::default()`; cache-first via `enrich_cache` table; returns structured `recordingMbid`/`releaseMbid`/`matchScore`/`releaseDate` payload
+- `enrich_track(track_id)` Tauri command exposed to the frontend via `LyraCore::enrich_track()`
+- background enrichment on scan: after each `start_library_scan` completes, up to 30 unenriched tracks are dispatched via MusicBrainz at 1.1 s/request (rate-limit safe) in the scan background thread
+- `enrich_library` Tauri command: enriches up to 50 unenriched tracks on demand (UI button), fires-and-forgets in its own thread
+- Library UI: "Enrich Library" button in the header; per-track ✧ toggle shows enrichment panel (MBID, release title, release date, match score, release MBID)
 
-- the dev data root at `%LOCALAPPDATA%\Lyra\dev` is now the active migrated library root
-- the full library data is present under the active data root, so `LYRA_USE_LEGACY_DATA_ROOT` is no longer required for normal dev validation
-- the legacy repo-root layout remains compatibility-only state rather than the silent default
+Scaffolded / honest baseline:
 
-## 4) Verification Results (Current High-Water Marks)
+- acquisition contracts are declared in Rust but not fully ported
+- AcoustID, Discogs, LastFm enrichment adapters remain null stubs
+- oracle/recommendation contracts are declared in Rust but not fully ported
 
-- `.venv\Scripts\python.exe -m pytest -q` -> success (`300 passed`) after Wave 17
-- `cd desktop\renderer-app; npx vitest run` -> success (`41 passed`) after Wave 17
-- `cd desktop\renderer-app; npm run build` -> success after Wave 17
-- `cd desktop\renderer-app; npx tsc --noEmit` -> success after Wave 6 frontend plumbing
-- `powershell -ExecutionPolicy Bypass -File scripts/validate_clean_machine_install.ps1` -> success (local artifact/layout proof)
-- `powershell -ExecutionPolicy Bypass -File scripts/validate_packaged_streamrip.ps1 -LiveAcquire` -> success
-- `powershell -ExecutionPolicy Bypass -File scripts/packaged_host_smoke.ps1 -HealthTimeoutSeconds 45` -> success
-- `powershell -ExecutionPolicy Bypass -File scripts/validate_installed_runtime.ps1 -InstalledRoot desktop\renderer-app\src-tauri\target\debug -HealthTimeoutSeconds 45` -> success
-- `powershell -ExecutionPolicy Bypass -File scripts/parity_hardening_acceptance.ps1 -SkipSidecarBuild -SkipInstallerProof -UseLegacyDataRoot -SoakSeconds 60 -StartupTimeoutSeconds 90` -> success
-- `powershell -ExecutionPolicy Bypass -File scripts/check_docs_state.ps1` -> success
+## Boot Path
 
-## 5) Documentation Truth Status
+1. Tauri launches the desktop window.
+2. Tauri initializes `LyraCore` with app-data directories.
+3. Rust opens or creates the local SQLite database and seeds provider capability metadata.
+4. SvelteKit bootstraps through Tauri commands, not HTTP.
+5. Native tray/menu/shortcut wiring binds to Rust command handlers.
 
-- Tracked markdown files: 112 (`git ls-files "*.md"`)
-- Relative markdown link check across tracked docs: passing
-- Forward plan authority: `docs/ROADMAP_ENGINE_TO_ENTITY.md`
-- Execution companion: `docs/PHASE_EXECUTION_COMPANION.md`
-- Session ledger: `docs/SESSION_INDEX.md`
-- Current governance wave:
-  - Waves 1 through 17 are now represented as locally landed or explicitly release-gated
-  - a standing tandem-wave protocol defines how Codex and Copilot split future waves without overlapping file ownership
-  - the execution companion remains the iteration-level reference while the roadmap stays forward-plan authority
+## Legacy Status
 
-## 6) Active Gaps
+- `oracle/`, `lyra_api.py`, and Python-sidecar scripts are no longer canonical runtime paths.
+- `desktop/renderer-app/legacy/react_renderer_reference/` preserves the old React renderer as reference.
+- Legacy artifacts such as `.env`, `lyra_registry.db`, and `chroma_storage/` are preserved and not overwritten.
 
-1. Blank-machine installer install-and-launch validation is still pending outside this workstation and is blocked by the lack of a clean Windows machine or VM.
-2. Native audio (`miniaudio`) full 4-hour production soak is intentionally deferred until a later release-gate window; bounded parity runs pass in dev-validation mode.
-3. `SPEC-009` adoption is not complete across every remaining route or panel.
-4. Wave 8 ingest confidence rows are written for new lifecycle events going forward; startup backfill covers existing placed tracks, but historical normalized/enriched states are not reconstructed.
+## Validation Snapshot
 
-## 7) Immediate Next Pass
+Validated in this pass:
 
-1. Continue `oracle mbid resolve` passes until recording MBID coverage clears the practical threshold for broad credit enrichment, then run `oracle credits enrich --limit 500`.
-2. Continue Wave 15 Codex lane: native OS notifications, global shortcuts, state persistence (Wave 11-11C backlog).
-3. Run blank-machine installer install-and-launch proof once a clean Windows machine or VM is available.
-4. Run full 4-hour parity/audio soak when the release-gate lane is reopened.
+- `cargo check --workspace` EXIT:0
+- `cargo clippy --workspace --all-targets -- -D warnings` EXIT:0 (zero warnings)
+- `cargo test --workspace` EXIT:0
+- `cargo build --manifest-path desktop/renderer-app/src-tauri/Cargo.toml` EXIT:0
+- `cd desktop/renderer-app; npm run check` EXIT:0 (0 errors, 0 warnings)
+- `cd desktop/renderer-app; npm run build` EXIT:0 (renderer static bundle)
+- App launches: `lyra_tauri.exe` runs, SMTC bridge initialises
 
-## 8) Forward Governance
+Not yet run:
 
-After Wave 15, the next wave is **Wave 16: One Player** — a docs/governance/product-shape and repository cleanup wave. Wave 16 sharpens the canonical product identity (library + player + Lyra Core), defines surface labels, removes obsolete direction artifacts, and sets ordered follow-on waves (17 through 21). It is not a broad implementation spree. See `docs/ROADMAP_ENGINE_TO_ENTITY.md` § Wave 16 and `docs/WORKLIST.md` for the full definition.
+- `npm run tauri build` (full release bundle with NSIS)
+- blank-machine installer proof
+- 4-hour audio soak
+
+## Immediate Next Truth
+
+The repo is aligned around Rust/Svelte/Tauri as the single active runtime direction. The next wave should harden session-restore/resume semantics, add taskbar/media-session hooks, expand native integration, and begin porting provider and enrichment/oracle systems into the Rust-owned capability surfaces.
+

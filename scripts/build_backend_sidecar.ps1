@@ -68,6 +68,7 @@ $excludeModules = @(
 $hiddenImports = @(
     "oracle.api",
     "oracle.api.app",
+    "oracle.api.cors",
     "oracle.api.registry",
     "oracle.api.blueprints",
     "oracle.api.blueprints.core",
@@ -83,7 +84,8 @@ $hiddenImports = @(
     "oracle.api.blueprints.agent",
     "oracle.api.blueprints.pipeline",
     "oracle.api.blueprints.enrich",
-    "oracle.api.blueprints.discovery"
+    "oracle.api.blueprints.discovery",
+    "flask_cors"
 )
 # Collect all oracle subpackages so dynamic blueprint/player/acquirer imports
 # are always available in the frozen binary on a clean install (no venv).

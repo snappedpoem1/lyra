@@ -2,23 +2,19 @@
   "name": "lyra-desktop",
   "private": true,
   "version": "1.0.0",
-  "description": "Windows-first Tauri desktop wrapper for Lyra Oracle",
+  "description": "Windows-first Tauri desktop wrapper for Lyra",
   "author": "Christian Wilson",
   "engines": {
     "node": ">=22 <23"
   },
   "packageManager": "npm@10.9.2",
   "scripts": {
-    "start:unified": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\start_lyra_unified.ps1 -Mode dev",
     "start": "npm --prefix renderer-app run tauri:dev",
     "dev": "npm --prefix renderer-app run tauri:dev",
     "dev:renderer": "npm --prefix renderer-app run dev",
-    "llm:check": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\check_llm_config.ps1",
-    "llm:fix": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\fix_lmstudio.ps1",
     "build": "npm --prefix renderer-app run tauri:build",
     "build:renderer": "npm --prefix renderer-app run build",
-    "dist": "npm run build",
-    "installer:update": "powershell -ExecutionPolicy Bypass -File .\\install_or_update.ps1",
-    "installer:update:build": "npm run build && npm run installer:update"
+    "check": "npm --prefix renderer-app run check",
+    "test": "npm --prefix renderer-app run test"
   }
 }

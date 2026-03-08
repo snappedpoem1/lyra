@@ -96,8 +96,11 @@ if (Test-Path "docs/ROADMAP_ENGINE_TO_ENTITY.md") {
     if ($roadmap -notmatch "Tauri") {
         Add-Issue -Issues ([ref]$issues) -Message "docs/ROADMAP_ENGINE_TO_ENTITY.md must mention Tauri"
     }
-    if ($roadmap -notmatch "/ws/player") {
-        Add-Issue -Issues ([ref]$issues) -Message "docs/ROADMAP_ENGINE_TO_ENTITY.md must mention /ws/player stream contract"
+    if ($roadmap -notmatch "Rust") {
+        Add-Issue -Issues ([ref]$issues) -Message "docs/ROADMAP_ENGINE_TO_ENTITY.md must mention Rust runtime ownership"
+    }
+    if ($roadmap -notmatch "SvelteKit") {
+        Add-Issue -Issues ([ref]$issues) -Message "docs/ROADMAP_ENGINE_TO_ENTITY.md must mention SvelteKit"
     }
 }
 

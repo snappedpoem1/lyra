@@ -77,9 +77,11 @@ def _auth_config() -> dict:
 
 
 def _cors_config() -> dict:
+    from oracle.api.cors import DEFAULT_ALLOWED_ORIGINS
+
     raw = os.getenv(
         "CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173,null",
+        ",".join(DEFAULT_ALLOWED_ORIGINS),
     )
     origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
     if not origins or origins == ["*"]:

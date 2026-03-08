@@ -1,32 +1,34 @@
 # Renderer AGENTS
 
-Read the repo-root `AGENTS.md` first. This file narrows the renderer lane.
+Read the repo-root `AGENTS.md` first.
 
 ## Scope
 
-- React/Tauri renderer work under `desktop/renderer-app/`
-- UI surfaces that expose real backend/recommendation/player state
-- provenance/explainability presentation after prerequisite waves are unblocked
+- SvelteKit frontend work under `desktop/renderer-app/`
+- Tauri command/event integration from the UI layer
+- Playlist-first desktop shell behavior
 
 ## Rules
 
-- Preserve Tauri as the only supported desktop host path
-- Keep Mantine as infrastructure, not the visible design authority, unless an existing surface already depends on it
-- Prefer bespoke Lyra shell language over generic dashboard patterns
-- Keep route and API truth aligned with backend contracts
+- Treat SvelteKit as the canonical UI framework
+- Do not reintroduce React runtime surfaces
+- Do not assume HTTP, SSE, or localhost APIs
+- Use Tauri invoke/events for app interactions
+- Preserve the desktop shell structure:
+  left rail, center content, right queue/context, bottom transport
 
 ## Do Not Do From This Lane
 
-- Do not rewrite build/runtime authority from renderer code
-- Do not start detached cosmetic churn that is not tied to user-visible value
-- Do not touch installer/release-gate scripts from this lane
+- Do not revive Python-backed bootstrap behavior
+- Do not add browser-server assumptions or SSR dependency
 - Do not revert unrelated dirty-tree changes
 
 ## Validation
 
 ```powershell
 cd desktop\renderer-app
+npm run check
 npm run test
 npm run build
-powershell -ExecutionPolicy Bypass -File scripts\check_docs_state.ps1
+cargo check --manifest-path src-tauri\Cargo.toml
 ```

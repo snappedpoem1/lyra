@@ -1,60 +1,24 @@
-# Lyra Oracle Gap Registry
+# Lyra Gap Registry
 
-Last audited: March 7, 2026
+Last audited: March 8, 2026
 
 This file tracks active gaps only.
-Closed items stay in git history and session logs.
-
-## Status Legend
-
-- `live`: implemented and usable
-- `partial`: implemented but not fully validated or populated
-- `missing`: absent
-- `blocked-external`: depends on external runtime or session proof
 
 ## Active Gap Matrix
 
 | ID | Area | Status | Evidence | What Needs To Happen |
 | --- | --- | --- | --- | --- |
-| G-039 | Docker elimination / packaged runtime | blocked-external | Core app no longer requires Docker, legacy-service bootstrap is opt-in only, bundled acquisition-runtime builders exist, clean-machine artifact proof passes locally, debug packaged-host boot reaches a healthy backend state, installed-layout validation passes locally, and live Qobuz acquisition via bundled `rip.exe` is confirmed; remaining gap is true blank-machine installer validation, but no clean Windows machine or VM is currently available for that proof | Acquire a clean Windows machine or VM and confirm first launch from the Lyra installer EXE |
-| G-030 | Similarity coverage depth | partial | Staged `similar` edge growth exists but incomplete full-library coverage; current `similar` edge count is 1,762 and a bounded 40-artist Last.fm pass added no new local-target edges | Continue bounded similarity runs and quality checks |
-| G-031 | Credit enrichment depth | partial | Credit population is still low (`48` total credit rows); Wave 10 MBID identity spine is now landed, `CreditMapper.map_batch()` uses `recording_mbid`, and the batch MBID resolver is running; once recording MBID population reaches a practical threshold, credits will be available via MBID-direct lookup | Run `oracle mbid resolve --limit 2000` to completion, then `oracle credits enrich --limit 500` for MBID-backed credits |
-| G-032 | Structure analysis coverage | partial | Structure table continues to grow; latest bounded run increased analyzed tracks from `159` to `172` while difficult-file warnings still fall back through librosa/audioread | Continue bounded analyze runs and harden difficult-file handling |
-| G-034 | Streamrip runtime availability | live | Bundled `rip.exe` resolves correctly, streamrip 2.x command syntax is fixed, static proof passes, and `validate_packaged_streamrip.ps1 -LiveAcquire` succeeded against Qobuz | Expand only if future provider/runtime regressions appear |
-| G-035 | Tauri sidecar packaging completeness | partial | Clean-machine artifact proof passes, simulated install layout proof passes, installed-layout validation passes against rebuilt local layouts, frozen runtime roots are hardened, packaged runtime-root resolution now handles installed layouts more defensibly, the frozen sidecar explicitly bundles `oracle.api.blueprints.*`, and backend CORS now includes packaged Tauri origins plus `/ws/*`; however, the rebuilt real installer still reproduced a frontend `Failed to fetch` bootstrap failure for the user on this workstation, so packaged runtime behavior is not yet trustworthy enough to close | Capture the failing installed-app host/backend logs from the user’s real installer run, then reconcile the remaining delta between local installed-layout proof and the real installed frontend bootstrap path |
-| G-036 | Native audio production confidence | partial | `miniaudio` path exists with fallback, parity hardening performs restart recovery plus mutating soak checkpoints/logging, bounded parity runs pass, and Wave 4 host modernization stayed green on Tauri 2; the full 4-hour long-session matrix is still deferred | Reopen the release-gate lane and validate a full 4-hour soak plus real-device pause/seek/repeat/resume reliability |
-| G-038 | Recommendation feedback loop | live | Brokered recommendations persist accept/queue/skip/replay/acquire-request outcomes and apply that data as a ranking bias; Wave 17 added feedback effect descriptions, recent feedback effects API, and direction summaries visible on Oracle/Home surfaces | Expand passive playback-derived reinforcement if needed |
+| G-050 | Rust playback backend | partial | Command-complete playback surface exists in Rust, but wave 1 currently uses an honest playback stub instead of production-grade audio output | Implement a real Rust audio backend and keep the current command contract stable |
+| G-051 | Scan/import metadata depth | partial | Library root persistence and first-pass scan/import are live, but metadata extraction is still shallow and duration detection is not yet robust | Add richer file metadata parsing, duration detection, and normalization |
+| G-052 | Playlist editing depth | partial | Playlist creation, detail, and queue-from-playlist are live, but editing and sequencing actions are still minimal | Add add/remove/reorder flows and queue-to-playlist actions |
+| G-053 | Provider migration depth | partial | Supported `.env` provider keys are imported into Rust-owned provider config records, but provider validation and secure secret handling are still minimal | Add provider-specific validation, protection strategy, and first live Rust provider adapters |
+| G-054 | Enrichment/oracle migration | partial | Rust-owned acquisition, enrichment, and oracle contracts now exist architecturally, but runtime parity with legacy Python systems is not yet implemented | Port selected enrichers and recommendation/oracle flows into Rust-owned modules |
+| G-055 | Packaged desktop confidence | partial | Rust core, SvelteKit frontend, and Tauri host build locally, but packaged installer validation and long-session hardening remain open | Run packaged desktop build validation and installer smoke once playback is hardened |
 
-## Closed Or Cancelled (Reference Only)
+## Execution Order
 
-- `G-009` Spotify export
-  Cancelled. Spotify export is out of scope for the current local-first product direction.
-- `G-037` Oracle action breadth
-  Closed in Wave 12.
-- `G-040` Named playlist intelligence
-  Closed in Wave 13.
-- `G-041` Saved playlist UI surface
-  Closed in Wave 14.
-- `G-042` Biographer stats `UnboundLocalError`
-  Closed in Wave 15 (S-20260307-21). Fixed import scope in `oracle/cli.py`.
-- `G-043` Revelations metric endpoint
-  Closed in Wave 15 (S-20260307-21). `GET /api/stats/revelations` added to `core.py`; returns count_this_window, count_all_time, and detail list.
-- `G-044` Duplicate detection module
-  Closed in Wave 15 (S-20260307-21). `oracle/duplicates.py` created with exact-hash, metadata-fuzzy, and path strategies. API at `GET /api/duplicates` and `GET /api/duplicates/summary`.
-- `G-045` Vibe → saved_playlists orphan
-  Closed in Wave 15 (S-20260307-21). `save_vibe()` in `oracle/vibes.py` now mirrors every vibe save into `saved_playlists` + `saved_playlist_tracks` using a deterministic UUID5 so re-saves are idempotent.
-
-## Explicitly Not Cancelled
-
-- Spotify-history-to-local-track matching quality improvements
-- Graph richness improvements
-- Credits and structure depth work
-- Runtime/source separation cleanup
-- Sidecar packaging hardening
-- Oracle action depth expansion
-
-## Execution Order (Easy -> Hard)
-
-1. Continue graph, credits, and structure coverage work.
-2. Resume blank-machine installer verification when a clean Windows machine or VM exists.
-3. Reopen native audio soak validation when the release-gate lane is back in scope.
+1. Replace the playback stub with real Rust audio.
+2. Improve scan/import quality and playlist editing.
+3. Expand provider migration quality and secret handling.
+4. Port selected enrichment and oracle features.
+5. Reopen packaged desktop validation once runtime behavior stabilizes.

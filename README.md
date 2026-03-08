@@ -1,104 +1,73 @@
-# Lyra Oracle
+# Lyra
 
-Lyra is a local-first media library and player for personally owned libraries, powered by Lyra Core.
+Lyra is a native desktop music player with:
 
-Tagline:
+- Tauri 2 shell
+- SvelteKit frontend
+- Rust application core
+- SQLite local-first storage
 
-- Lyra: music oracle is what I am.
-- Yeah its a music player, but I dont think you get it.
+The canonical app runtime is Python-free.
 
-## Architecture Lock
+## Current Runtime
 
-- Tauri is the only supported desktop host path.
-- Backend player (`oracle/player/*`) is canonical playback source of truth.
-- UI transport controls call `/api/player/*`.
-- `/ws/player` is an SSE event stream contract.
-- Docker services are optional acquisition support, not required for daily local playback.
-- Packaged builds now stage bundled acquisition helpers (`streamrip`, `spotdl`, `ffmpeg`, `ffprobe`) alongside the backend sidecar.
+- Desktop shell: `desktop/renderer-app/src-tauri/`
+- Frontend: `desktop/renderer-app/src/routes/`
+- Rust core: `crates/lyra-core/`
+- Local database: app-data SQLite owned by Rust
 
-`docs/PROJECT_STATE.md` is the only audited runtime snapshot and source of truth for current metrics, validated commands, and repo state.
+Legacy Python/oracle material remains in-repo as reference and migration source only. It is not part of normal startup, playback, queue, or library flow.
 
-## Core Capabilities
-
-- Local scan/index/search/scoring
-- Saved vibes and playlust generation
-- Artist enrichment and graph discovery
-- Acquisition waterfall orchestration
-- Canonical backend player with queue/state persistence
-- Unified modular player shell (Library, Now Playing, Queue, Oracle)
-
-## Quick Start (Windows)
-
-```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-Copy-Item .env.template .env
-.venv\Scripts\python.exe -m oracle db migrate
-```
-
-Run unified app (backend + frontend, no Docker dependency):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\start_lyra_unified.ps1 -Mode dev
-```
-
-Alternative dev-only path (Tauri directly):
+## Quick Start
 
 ```powershell
 cd desktop\renderer-app
 npm install
+npm run check
+npm run build
 npm run tauri:dev
 ```
 
-### Runbook: What starts
-
-- Tauri dev host (frontend runtime)
-- Backend sidecar/API (health-gated via `/api/health`)
-- Acquisition tier availability snapshot (best-effort, non-blocking)
-- Packaged runtime builder (`scripts\build_packaged_runtime.ps1`) for sidecar + acquisition helper staging
-
-### Runbook: What does not start
-
-- Docker Desktop
-- `scripts\ensure_workspace_docker.ps1`
-- Any mandatory acquisition container bootstrap
-
-## Validation Commands
+Rust validation from repo root:
 
 ```powershell
-python -m pytest -q
-cd desktop\renderer-app
-npm run test:ci
-npm run build
-powershell -ExecutionPolicy Bypass -File scripts\smoke_desktop.ps1 -AllowLlmFailure
-powershell -ExecutionPolicy Bypass -File scripts\check_docs_state.ps1
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-## Build Governance
+## What Works Now
 
-- Desktop host authority is Tauri-only. `desktop/package.json` is now a wrapper around `desktop/renderer-app` and no longer carries Electron build metadata.
-- Toolchain authority is pinned via `.python-version` (`3.12`), `.node-version` (`22`), and `rust-toolchain.toml` (`1.85.0`).
-- Windows PR governance lives in `.github/workflows/windows-pr.yml`.
-- Windows nightly/release governance lives in `.github/workflows/windows-release-governance.yml`.
-- Build provenance is emitted by `scripts/write_build_manifest.ps1` to `.lyra-build/manifests/`.
+- Tauri launches without Python
+- SvelteKit desktop shell renders
+- Rust command bridge owns app state
+- SQLite init/open is Rust-owned
+- Library roots persist locally
+- Scan jobs import tracks into the Rust-owned catalog
+- Playlists, queue, settings, provider config records, and legacy import path are wired
+- Tray, menu, global shortcut, and window-state hooks exist in the native shell
 
-## Session Protocol
+## Legacy Import
 
-Every behavior-changing session must start with:
+Lyra can import supported provider settings from `.env` and selected content from `lyra_registry.db` into the Rust-owned runtime store.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/new_session.ps1 -Slug "my-work" -Goal "What I am doing"
-```
+Imported now:
 
-Use session-prefixed commits:
+- supported provider/API keys
+- tracks
+- saved playlists where shape is compatible
+- queue/session state where available
 
-`[S-YYYYMMDD-NN] <type>: <description>`
+Preserved but not migrated now:
 
-## Key Docs
+- Chroma/vector state
+- Python enrich cache internals
+- acquisition job history
+- oracle/recommendation internals
 
-- `docs/ROADMAP_ENGINE_TO_ENTITY.md` - single forward plan authority
-- `docs/PROJECT_STATE.md` - audited current truth
-- `docs/WORKLIST.md` - active execution list
-- `docs/MISSING_FEATURES_REGISTRY.md` - active gaps
-- `docs/SESSION_INDEX.md` - session table of record
+## Docs
+
+- `docs/PROJECT_STATE.md`
+- `docs/WORKLIST.md`
+- `docs/ARCHITECTURE.md`
+- `docs/MIGRATION_PLAN.md`
+- `docs/CANONICAL_PATHS.md`

@@ -1,547 +1,88 @@
-use serde::Serialize;
-use serde_json::{json, Value};
-use std::env;
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+
+#[cfg(target_os = "windows")]
+mod smtc;
+
+use lyra_core::commands::{
+    AcquisitionQueueItem, AppShellState, AudioOutputDevice, BootstrapPayload, DuplicateCluster,
+    LegacyImportReport, NativeCapabilities, PlaybackEvent, PlaybackState, PlaylistDetail,
+    PlaylistSummary, ProviderConfigRecord, ProviderHealth, QueueItemRecord, ScanJobRecord,
+    SettingsPayload, TasteProfile, TrackDetail, TrackRecord, TrackScores,
+};
+use lyra_core::logging::initialize_logging;
+use lyra_core::LyraCore;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-#[derive(Clone, Serialize)]
-struct BootStatus {
-    phase: String,
-    message: String,
-    ready: bool,
-}
-
+#[derive(Clone)]
 struct AppState {
-    backend_process: Mutex<Option<Child>>,
+    core: LyraCore,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum BackendLaunchMode {
-    Auto,
-    Dev,
-    Packaged,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowStateRecord {
+    width: f64,
+    height: f64,
+    x: i32,
+    y: i32,
+    maximized: bool,
 }
 
-fn boot_log_path() -> PathBuf {
-    if let Ok(path) = env::var("LYRA_HOST_BOOT_LOG") {
-        let trimmed = path.trim();
-        if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
-        }
-    }
-    env::temp_dir().join("lyra-host-boot.log")
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProviderUpdatePayload {
+    provider_key: String,
+    enabled: bool,
+    values: Value,
 }
 
-fn write_boot_log(message: &str) {
-    let path = boot_log_path();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
-        let _ = writeln!(file, "{message}");
-    }
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyImportPayload {
+    env_path: Option<String>,
+    legacy_db_path: Option<String>,
 }
 
-fn emit_boot_status(app: &AppHandle, phase: &str, message: &str, ready: bool) {
-    write_boot_log(&format!("[boot-status] phase={phase} ready={ready} message={message}"));
-    let payload = BootStatus {
-        phase: phase.to_string(),
-        message: message.to_string(),
-        ready,
-    };
-    let _ = app.emit("lyra://boot-status", payload);
-}
-
-fn backend_base_url() -> String {
-    let default_url = env::var("LYRA_PORT")
+fn window_state_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path()
+        .app_data_dir()
         .ok()
-        .and_then(|value| value.trim().parse::<u16>().ok())
-        .map(|port| format!("http://127.0.0.1:{port}"))
-        .unwrap_or_else(|| "http://127.0.0.1:5000".to_string());
-
-    env::var("LYRA_BACKEND_URL")
-        .unwrap_or(default_url)
-        .trim_end_matches('/')
-        .to_string()
+        .map(|path| path.join("window-state.json"))
 }
 
-#[tauri::command]
-fn get_backend_base_url() -> String {
-    backend_base_url()
+fn emit_payload<T: Serialize + ?Sized>(app: &AppHandle, event: &str, payload: &T) {
+    let _ = app.emit(event, payload);
 }
 
-fn parse_backend_launch_mode() -> BackendLaunchMode {
-    let raw = env::var("LYRA_BACKEND_MODE")
-        .unwrap_or_else(|_| "auto".to_string())
-        .trim()
-        .to_lowercase();
-    match raw.as_str() {
-        "dev" => BackendLaunchMode::Dev,
-        "packaged" | "sidecar" => BackendLaunchMode::Packaged,
-        _ => BackendLaunchMode::Auto,
+fn emit_shell(app: &AppHandle, core: &LyraCore) {
+    if let Ok(shell) = core.get_app_shell_state() {
+        emit_payload(app, "lyra://bootstrap", &shell);
     }
 }
 
-fn env_truthy(value: &str) -> bool {
-    matches!(value.trim().to_lowercase().as_str(), "1" | "true" | "yes" | "on")
+fn emit_queue(app: &AppHandle, payload: &[QueueItemRecord]) {
+    emit_payload(app, "lyra://queue-updated", payload);
 }
 
-fn is_tauri_dev_runtime() -> bool {
-    if let Ok(value) = env::var("TAURI_DEV") {
-        if env_truthy(&value) {
-            return true;
-        }
-    }
-    if let Ok(value) = env::var("LYRA_TAURI_DEV") {
-        if env_truthy(&value) {
-            return true;
-        }
-    }
-    false
+fn emit_playback(app: &AppHandle, payload: &PlaybackState) {
+    emit_payload(app, "lyra://playback-updated", payload);
 }
 
-fn health_ready(base_url: &str) -> bool {
-    let url = format!("{base_url}/api/health");
-    let request = ureq::get(&url).timeout(Duration::from_millis(900));
-
-    match request.call() {
-        Ok(response) => {
-            if response.status() != 200 {
-                return false;
-            }
-            let body = response.into_string().unwrap_or_default();
-            if body.trim().is_empty() {
-                return false;
-            }
-            match serde_json::from_str::<Value>(&body) {
-                Ok(payload) => payload
-                    .get("status")
-                    .and_then(Value::as_str)
-                    .map(|status| status.eq_ignore_ascii_case("ok"))
-                    .unwrap_or(false),
-                Err(_) => false,
-            }
-        }
-        Err(_) => false,
-    }
+fn emit_settings(app: &AppHandle, payload: &SettingsPayload) {
+    emit_payload(app, "lyra://settings-updated", payload);
 }
 
-fn resolve_project_root() -> Option<PathBuf> {
-    if let Ok(root) = env::var("LYRA_PROJECT_ROOT") {
-        let candidate = PathBuf::from(root);
-        if candidate.join("lyra_api.py").exists() {
-            write_boot_log(&format!(
-                "[resolve-project-root] using LYRA_PROJECT_ROOT={}",
-                candidate.display()
-            ));
-            return Some(candidate);
-        }
-    }
-
-    if let Ok(cwd) = env::current_dir() {
-        for dir in cwd.ancestors() {
-            if dir.join("lyra_api.py").exists() {
-                write_boot_log(&format!(
-                    "[resolve-project-root] discovered from cwd={}",
-                    dir.display()
-                ));
-                return Some(dir.to_path_buf());
-            }
-        }
-    }
-
-    None
-}
-
-fn resolve_packaged_backend_exe() -> Option<PathBuf> {
-    if let Ok(path) = env::var("LYRA_BACKEND_EXE") {
-        if !path.trim().is_empty() {
-            let candidate = PathBuf::from(path);
-            if candidate.exists() {
-                write_boot_log(&format!(
-                    "[resolve-packaged-backend] using LYRA_BACKEND_EXE={}",
-                    candidate.display()
-                ));
-                return Some(candidate);
-            }
-        }
-    }
-
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(parent) = current_exe.parent() {
-            let candidates = [
-                parent.join("lyra_backend.exe"),
-                parent.join("bin").join("lyra_backend.exe"),
-                parent.join("resources").join("lyra_backend.exe"),
-                parent.join("resources").join("bin").join("lyra_backend.exe"),
-            ];
-            for candidate in candidates {
-                if candidate.exists() {
-                    write_boot_log(&format!(
-                        "[resolve-packaged-backend] using bundled candidate={}",
-                        candidate.display()
-                    ));
-                    return Some(candidate);
-                }
-            }
-        }
-    }
-
-    None
-}
-
-fn resolve_python_exe(project_root: &Path) -> String {
-    if let Ok(python) = env::var("LYRA_PYTHON_EXE") {
-        if !python.trim().is_empty() {
-            return python;
-        }
-    }
-
-    let venv_python = project_root.join(".venv").join("Scripts").join("python.exe");
-    if venv_python.exists() {
-        return venv_python.to_string_lossy().to_string();
-    }
-
-    "python".to_string()
-}
-
-fn resolve_runtime_root(project_root: &Path) -> PathBuf {
-    if project_root
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| name.eq_ignore_ascii_case("runtime"))
-        .unwrap_or(false)
-    {
-        project_root.to_path_buf()
-    } else {
-        project_root.join("runtime")
-    }
-}
-
-fn resolve_packaged_runtime_anchor(sidecar_exe: &Path) -> PathBuf {
-    if let Ok(runtime_root) = env::var("LYRA_RUNTIME_ROOT") {
-        let trimmed = runtime_root.trim();
-        if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
-        }
-    }
-
-    let fallback = sidecar_exe
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Some(parent) = sidecar_exe.parent() {
-        candidates.push(parent.to_path_buf());
-        candidates.push(parent.join("runtime"));
-        if let Some(grandparent) = parent.parent() {
-            candidates.push(grandparent.to_path_buf());
-            candidates.push(grandparent.join("runtime"));
-            if let Some(great_grandparent) = grandparent.parent() {
-                candidates.push(great_grandparent.join("runtime"));
-            }
-        }
-    }
-
-    for candidate in candidates {
-        if candidate
-            .file_name()
-            .and_then(|name| name.to_str())
-            .map(|name| name.eq_ignore_ascii_case("runtime"))
-            .unwrap_or(false)
-        {
-            if candidate.join("bin").exists() {
-                write_boot_log(&format!(
-                    "[resolve-runtime-anchor] using runtime root={}",
-                    candidate.display()
-                ));
-                return candidate;
-            }
-        } else if candidate.join("runtime").join("bin").exists() {
-            write_boot_log(&format!(
-                "[resolve-runtime-anchor] using app root={}",
-                candidate.display()
-            ));
-            return candidate;
-        } else if candidate.join("bin").exists() && candidate.join("lyra_backend.exe").exists() {
-            write_boot_log(&format!(
-                "[resolve-runtime-anchor] using sidecar parent root={}",
-                candidate.display()
-            ));
-            return candidate;
-        }
-    }
-
-    write_boot_log(&format!(
-        "[resolve-runtime-anchor] fallback={}",
-        fallback.display()
-    ));
-    fallback
-}
-
-fn runtime_bin_dirs(project_root: &Path) -> Vec<PathBuf> {
-    let runtime_root = resolve_runtime_root(project_root);
-    vec![
-        runtime_root.join("bin"),
-        runtime_root.join("tools"),
-        runtime_root.join("acquisition-tools"),
-    ]
-}
-
-fn apply_runtime_environment(command: &mut Command, project_root: &Path) {
-    let runtime_root = resolve_runtime_root(project_root);
-    command.env(
-        "LYRA_RUNTIME_ROOT",
-        runtime_root.to_string_lossy().to_string(),
-    );
-    write_boot_log(&format!(
-        "[runtime-env] project_root={} runtime_root={}",
-        project_root.display(),
-        runtime_root.display()
-    ));
-
-    let mut paths: Vec<PathBuf> = runtime_bin_dirs(project_root)
-        .into_iter()
-        .filter(|path| path.exists())
-        .collect();
-    if let Some(existing_path) = env::var_os("PATH") {
-        paths.extend(env::split_paths(&existing_path));
-    }
-    if let Ok(joined_path) = env::join_paths(paths) {
-        command.env("PATH", joined_path);
-    }
-}
-
-fn launch_dev_backend_process() -> Result<Child, String> {
-    let project_root = resolve_project_root()
-        .ok_or_else(|| "LYRA dev backend launch failed: project root was not found".to_string())?;
-    let python_exe = resolve_python_exe(&project_root);
-    write_boot_log(&format!(
-        "[launch-dev-backend] python={} cwd={}",
-        python_exe,
-        project_root.display()
-    ));
-    let mut command = Command::new(&python_exe);
-    command
-        .arg("lyra_api.py")
-        .current_dir(&project_root)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    apply_runtime_environment(&mut command, &project_root);
-    command
-        .spawn()
-        .map_err(|error| format!("LYRA dev backend launch failed: {error}"))
-}
-
-fn launch_packaged_backend_process() -> Result<Child, String> {
-    let sidecar_exe = resolve_packaged_backend_exe().ok_or_else(|| {
-        "LYRA packaged backend launch failed: lyra_backend.exe was not found".to_string()
-    })?;
-    let runtime_root = if let Ok(project_root) = env::var("LYRA_PROJECT_ROOT") {
-        let trimmed = project_root.trim();
-        if trimmed.is_empty() {
-            resolve_packaged_runtime_anchor(&sidecar_exe)
-        } else {
-            PathBuf::from(trimmed)
-        }
-    } else {
-        resolve_packaged_runtime_anchor(&sidecar_exe)
-    };
-    write_boot_log(&format!(
-        "[launch-packaged-backend] exe={} cwd={}",
-        sidecar_exe.display(),
-        runtime_root.display()
-    ));
-
-    let mut command = Command::new(sidecar_exe);
-    command
-        .current_dir(&runtime_root)
-        .env("LYRA_SKIP_VENV_REEXEC", "1")
-        .env("LYRA_PROJECT_ROOT", runtime_root.to_string_lossy().to_string());
-    apply_runtime_environment(&mut command, &runtime_root);
-
-    if env::var("LYRA_DB_PATH").ok().map(|value| value.trim().is_empty()).unwrap_or(true) {
-        command.env(
-            "LYRA_DB_PATH",
-            runtime_root.join("lyra_registry.db").to_string_lossy().to_string(),
-        );
-    }
-    if env::var("CHROMA_PATH").ok().map(|value| value.trim().is_empty()).unwrap_or(true) {
-        command.env(
-            "CHROMA_PATH",
-            runtime_root.join("chroma_storage").to_string_lossy().to_string(),
-        );
-    }
-    if env::var("LIBRARY_BASE").ok().map(|value| value.trim().is_empty()).unwrap_or(true) {
-        command.env(
-            "LIBRARY_BASE",
-            runtime_root.join("library").to_string_lossy().to_string(),
-        );
-    }
-
-    command
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|error| format!("LYRA packaged backend launch failed: {error}"))
-}
-
-fn launch_backend_process() -> Result<Child, String> {
-    let mode = parse_backend_launch_mode();
-    write_boot_log(&format!("[launch-backend] mode={mode:?}"));
-    match mode {
-        BackendLaunchMode::Dev => launch_dev_backend_process(),
-        BackendLaunchMode::Packaged => launch_packaged_backend_process(),
-        BackendLaunchMode::Auto => {
-            if is_tauri_dev_runtime() {
-                launch_dev_backend_process().or_else(|dev_error| {
-                    launch_packaged_backend_process().map_err(|packaged_error| {
-                        format!("{dev_error}; {packaged_error}")
-                    })
-                })
-            } else {
-                launch_packaged_backend_process().or_else(|packaged_error| {
-                    launch_dev_backend_process().map_err(|dev_error| {
-                        format!("{packaged_error}; {dev_error}")
-                    })
-                })
-            }
-        }
-    }
-}
-
-fn start_backend_sidecar(app: AppHandle) {
-    let base_url = backend_base_url();
-    write_boot_log(&format!("[start-backend-sidecar] base_url={base_url}"));
-    if health_ready(&base_url) {
-        emit_boot_status(&app, "backend", "Backend already running", true);
-        return;
-    }
-
-    emit_boot_status(&app, "backend", "Starting Lyra backend (attempt 1/3)...", false);
-
-    let mut last_error = String::new();
-    let mut launched = None;
-    for attempt in 1..=3 {
-        match launch_backend_process() {
-            Ok(process) => {
-                launched = Some(process);
-                break;
-            }
-            Err(error) => {
-                last_error = error;
-                emit_boot_status(
-                    &app,
-                    "backend",
-                    &format!("Backend launch attempt {attempt}/3 failed: {last_error}"),
-                    false,
-                );
-                thread::sleep(Duration::from_millis(350 * attempt as u64));
-            }
-        }
-    }
-
-    let Some(process) = launched else {
-        emit_boot_status(
-            &app,
-            "backend",
-            &format!("Failed to start backend after retries: {last_error}"),
-            false,
-        );
-        return;
-    };
-
-    if let Ok(mut guard) = app.state::<AppState>().backend_process.lock() {
-        *guard = Some(process);
-    }
-
-    let app_handle = app.clone();
-    thread::spawn(move || {
-        let mut sleep_ms = 250_u64;
-        for _ in 0..32 {
-            if health_ready(&base_url) {
-                emit_boot_status(&app_handle, "backend", "Backend ready", true);
-                return;
-            }
-            thread::sleep(Duration::from_millis(sleep_ms));
-            sleep_ms = (sleep_ms * 2).min(2_000);
-        }
-        emit_boot_status(
-            &app_handle,
-            "backend",
-            "Backend health timeout; open retry in UI or restart app",
-            false,
-        );
-    });
-}
-
-fn post_player_command(base_url: &str, path: &str, body: Value) -> Result<(), String> {
-    let url = format!("{base_url}{path}");
-    let response = ureq::post(&url)
-        .set("Content-Type", "application/json")
-        .send_string(&body.to_string());
-
-    match response {
-        Ok(_) => Ok(()),
-        Err(error) => Err(error.to_string()),
-    }
-}
-
-fn get_player_status(base_url: &str) -> Result<String, String> {
-    let url = format!("{base_url}/api/player/state");
-    let response = ureq::get(&url)
-        .timeout(Duration::from_millis(1200))
-        .call()
-        .map_err(|error| error.to_string())?;
-
-    let text = response.into_string().map_err(|error| error.to_string())?;
-    let payload: Value = serde_json::from_str(&text).map_err(|error| error.to_string())?;
-    Ok(payload
-        .get("status")
-        .and_then(Value::as_str)
-        .unwrap_or("idle")
-        .to_string())
-}
-
-fn dispatch_transport_to_backend(app: &AppHandle, action: &str) {
-    let base_url = backend_base_url();
-    if !health_ready(&base_url) {
-        emit_boot_status(app, "backend", "Backend unavailable for transport command", false);
-        return;
-    }
-
-    let result = match action {
-        "play-pause" => {
-            let status = get_player_status(&base_url).unwrap_or_else(|_| "idle".to_string());
-            if status == "playing" {
-                post_player_command(&base_url, "/api/player/pause", json!({}))
-            } else {
-                post_player_command(&base_url, "/api/player/play", json!({}))
-            }
-        }
-        "next" => post_player_command(&base_url, "/api/player/next", json!({})),
-        "previous" => post_player_command(&base_url, "/api/player/previous", json!({})),
-        _ => Ok(()),
-    };
-
-    if let Err(error) = result {
-        emit_boot_status(
-            app,
-            "backend",
-            &format!("Player command failed: {error}"),
-            false,
-        );
-    }
+fn emit_providers(app: &AppHandle, payload: &[ProviderConfigRecord]) {
+    emit_payload(app, "lyra://provider-updated", payload);
 }
 
 fn toggle_main_window(app: &AppHandle) {
@@ -555,68 +96,108 @@ fn toggle_main_window(app: &AppHandle) {
     }
 }
 
-fn register_media_shortcuts(app: &AppHandle) {
-    let shortcuts = [
-        ("MediaPlayPause", "play-pause"),
-        ("MediaNextTrack", "next"),
-        ("MediaPreviousTrack", "previous"),
-    ];
-
-    for (accelerator, action) in shortcuts {
-        let app_handle = app.clone();
-        let result = app.global_shortcut().on_shortcut(
-            accelerator,
-            move |shortcut_app, _shortcut, event| {
-                if event.state() == ShortcutState::Pressed {
-                    dispatch_transport_to_backend(shortcut_app, action);
-                }
-            },
-        );
-
-        if let Err(error) = result {
-            emit_boot_status(
-                &app_handle,
-                "shortcuts",
-                &format!("Could not register media shortcut {accelerator}: {error}"),
-                false,
-            );
+fn persist_window_state(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(size) = window.outer_size() else {
+        return;
+    };
+    let Ok(position) = window.outer_position() else {
+        return;
+    };
+    let record = WindowStateRecord {
+        width: size.width as f64,
+        height: size.height as f64,
+        x: position.x,
+        y: position.y,
+        maximized: window.is_maximized().unwrap_or(false),
+    };
+    if let Some(path) = window_state_path(app) {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if let Ok(contents) = serde_json::to_string_pretty(&record) {
+            let _ = fs::write(path, contents);
         }
     }
 }
 
-fn unregister_media_shortcuts(app: &AppHandle) {
-    let _ = app.global_shortcut().unregister_all();
+fn restore_window_state(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let Some(path) = window_state_path(app) else {
+        return;
+    };
+    let Ok(contents) = fs::read_to_string(path) else {
+        return;
+    };
+    let Ok(record) = serde_json::from_str::<WindowStateRecord>(&contents) else {
+        return;
+    };
+    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+        width: record.width.max(960.0) as u32,
+        height: record.height.max(720.0) as u32,
+    }));
+    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+        x: record.x,
+        y: record.y,
+    }));
+    if record.maximized {
+        let _ = window.maximize();
+    }
 }
 
-fn create_tray_icon(app: &AppHandle) -> tauri::Result<()> {
+fn create_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let show = MenuItem::with_id(app, "show", "Show / Hide", true, None::<&str>)?;
     let play_pause = MenuItem::with_id(app, "play_pause", "Play / Pause", true, None::<&str>)?;
     let previous = MenuItem::with_id(app, "previous", "Previous", true, None::<&str>)?;
     let next = MenuItem::with_id(app, "next", "Next", true, None::<&str>)?;
-    let separator = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let tray_menu = Menu::with_items(app, &[&show, &play_pause, &previous, &next, &separator, &quit])?;
-    let icon = app.default_window_icon().cloned();
+    let separator = PredefinedMenuItem::separator(app)?;
+    Menu::with_items(
+        app,
+        &[&show, &play_pause, &previous, &next, &separator, &quit],
+    )
+}
 
+fn create_tray(app: &AppHandle, state: &AppState) -> tauri::Result<()> {
+    let tray_menu = create_menu(app)?;
+    let icon = app.default_window_icon().cloned();
     let mut builder = TrayIconBuilder::with_id("lyra-tray").menu(&tray_menu);
     if let Some(icon) = icon {
         builder = builder.icon(icon);
     }
-
+    let state_clone = state.clone();
     let _tray = builder
-        .on_menu_event(|app, event| match event.id().as_ref() {
+        .on_menu_event(move |app, event| match event.id().as_ref() {
             "show" => toggle_main_window(app),
-            "play_pause" => dispatch_transport_to_backend(app, "play-pause"),
-            "previous" => dispatch_transport_to_backend(app, "previous"),
-            "next" => dispatch_transport_to_backend(app, "next"),
-            "quit" => {
-                stop_backend_process(app);
-                app.exit(0);
+            "play_pause" => {
+                if let Ok(playback) = state_clone.core.toggle_playback() {
+                    emit_playback(app, &playback);
+                }
             }
+            "previous" => {
+                if let Ok(playback) = state_clone.core.play_previous() {
+                    emit_playback(app, &playback);
+                }
+            }
+            "next" => {
+                if let Ok(playback) = state_clone.core.play_next() {
+                    emit_playback(app, &playback);
+                }
+            }
+            "quit" => app.exit(0),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { button, button_state, .. } = event {
+            if let TrayIconEvent::Click {
+                button,
+                button_state,
+                ..
+            } = event
+            {
                 if button == tauri::tray::MouseButton::Left
                     && button_state == tauri::tray::MouseButtonState::Up
                 {
@@ -625,44 +206,862 @@ fn create_tray_icon(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
-
     Ok(())
 }
 
-fn stop_backend_process(app: &AppHandle) {
-    if let Ok(mut guard) = app.state::<AppState>().backend_process.lock() {
-        if let Some(mut child) = guard.take() {
-            let _ = child.kill();
-        }
+fn register_shortcuts(app: &AppHandle, state: &AppState) {
+    let shortcuts = [
+        ("MediaPlayPause", "play-pause"),
+        ("MediaNextTrack", "next"),
+        ("MediaPreviousTrack", "previous"),
+    ];
+    for (accelerator, action) in shortcuts {
+        let state_clone = state.clone();
+        let _ = app
+            .global_shortcut()
+            .on_shortcut(accelerator, move |shortcut_app, _, event| {
+                if event.state() != ShortcutState::Pressed {
+                    return;
+                }
+                let playback = match action {
+                    "play-pause" => state_clone.core.toggle_playback(),
+                    "next" => state_clone.core.play_next(),
+                    "previous" => state_clone.core.play_previous(),
+                    _ => return,
+                };
+                if let Ok(payload) = playback {
+                    emit_payload(
+                        shortcut_app,
+                        "lyra://native-action",
+                        &serde_json::json!({ "action": action }),
+                    );
+                    emit_playback(shortcut_app, &payload);
+                }
+            });
     }
 }
 
+#[tauri::command]
+fn bootstrap_app(state: State<'_, AppState>) -> Result<BootstrapPayload, String> {
+    state
+        .core
+        .bootstrap_app()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_app_shell_state(state: State<'_, AppState>) -> Result<AppShellState, String> {
+    state
+        .core
+        .get_app_shell_state()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn list_tracks(
+    state: State<'_, AppState>,
+    query: Option<String>,
+) -> Result<Vec<TrackRecord>, String> {
+    state
+        .core
+        .list_tracks(query)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_library_overview(
+    state: State<'_, AppState>,
+) -> Result<lyra_core::commands::LibraryOverview, String> {
+    state
+        .core
+        .get_library_overview()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn list_library_roots(
+    state: State<'_, AppState>,
+) -> Result<Vec<lyra_core::commands::LibraryRootRecord>, String> {
+    state
+        .core
+        .list_library_roots()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn add_library_root(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<Vec<lyra_core::commands::LibraryRootRecord>, String> {
+    let payload = state
+        .core
+        .add_library_root(path)
+        .map_err(|error| error.to_string())?;
+    emit_payload(&app, "lyra://library-updated", &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn remove_library_root(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    root_id: i64,
+) -> Result<Vec<lyra_core::commands::LibraryRootRecord>, String> {
+    let payload = state
+        .core
+        .remove_library_root(root_id)
+        .map_err(|error| error.to_string())?;
+    emit_payload(&app, "lyra://library-updated", &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn start_library_scan(app: AppHandle, state: State<'_, AppState>) -> Result<ScanJobRecord, String> {
+    let job = state
+        .core
+        .create_scan_job()
+        .map_err(|error| error.to_string())?;
+    let core = state.core.clone();
+    let app_handle = app.clone();
+    let event_handle = app.clone();
+    thread::spawn(move || {
+        let _ = core.run_scan_job(job.id, move |event, payload| {
+            let _ = event_handle.emit(event, payload);
+        });
+        emit_shell(&app_handle, &core);
+        // Background enrichment pass: enrich up to 30 newly-imported tracks.
+        // Runs after the shell has already been updated, fully in the background.
+        let _ = core.enrich_unenriched_tracks(30);
+    });
+    Ok(job)
+}
+
+#[tauri::command]
+fn enrich_library(state: State<'_, AppState>) -> Result<(), String> {
+    let core = state.core.clone();
+    thread::spawn(move || {
+        let _ = core.enrich_unenriched_tracks(50);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn get_scan_jobs(state: State<'_, AppState>) -> Result<Vec<ScanJobRecord>, String> {
+    state
+        .core
+        .get_scan_jobs()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn list_playlists(state: State<'_, AppState>) -> Result<Vec<PlaylistSummary>, String> {
+    state
+        .core
+        .list_playlists()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_playlist_detail(
+    state: State<'_, AppState>,
+    playlist_id: i64,
+) -> Result<PlaylistDetail, String> {
+    state
+        .core
+        .get_playlist_detail(playlist_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn create_playlist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<PlaylistDetail, String> {
+    let payload = state
+        .core
+        .create_playlist(name)
+        .map_err(|error| error.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn rename_playlist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    playlist_id: i64,
+    name: String,
+) -> Result<PlaylistDetail, String> {
+    let payload = state
+        .core
+        .rename_playlist(playlist_id, name)
+        .map_err(|error| error.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn delete_playlist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    playlist_id: i64,
+) -> Result<Vec<PlaylistSummary>, String> {
+    let payload = state
+        .core
+        .delete_playlist(playlist_id)
+        .map_err(|error| error.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn enqueue_playlist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    playlist_id: i64,
+) -> Result<Vec<QueueItemRecord>, String> {
+    let payload = state
+        .core
+        .enqueue_playlist(playlist_id)
+        .map_err(|error| error.to_string())?;
+    emit_queue(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn enqueue_tracks(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_ids: Vec<i64>,
+) -> Result<Vec<QueueItemRecord>, String> {
+    let payload = state
+        .core
+        .enqueue_tracks(track_ids)
+        .map_err(|error| error.to_string())?;
+    emit_queue(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn get_queue(state: State<'_, AppState>) -> Result<Vec<QueueItemRecord>, String> {
+    state.core.get_queue().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn move_queue_item(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    queue_item_id: i64,
+    new_position: i64,
+) -> Result<Vec<QueueItemRecord>, String> {
+    let payload = state
+        .core
+        .move_queue_item(queue_item_id, new_position)
+        .map_err(|error| error.to_string())?;
+    emit_queue(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn remove_queue_item(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    queue_item_id: i64,
+) -> Result<Vec<QueueItemRecord>, String> {
+    let payload = state
+        .core
+        .remove_queue_item(queue_item_id)
+        .map_err(|error| error.to_string())?;
+    emit_queue(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn clear_queue(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<QueueItemRecord>, String> {
+    let payload = state
+        .core
+        .clear_queue()
+        .map_err(|error| error.to_string())?;
+    emit_queue(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn get_playback_state(state: State<'_, AppState>) -> Result<PlaybackState, String> {
+    state
+        .core
+        .get_playback_state()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn play_track(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .play_track(track_id)
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn play_queue_index(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    index: i64,
+) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .play_queue_index(index)
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn toggle_playback(app: AppHandle, state: State<'_, AppState>) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .toggle_playback()
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn stop_playback(app: AppHandle, state: State<'_, AppState>) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .stop_playback()
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn list_audio_devices(state: State<'_, AppState>) -> Vec<AudioOutputDevice> {
+    state.core.list_audio_devices()
+}
+
+#[tauri::command]
+fn set_output_device(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    device_name: Option<String>,
+) -> Result<SettingsPayload, String> {
+    let payload = state
+        .core
+        .set_output_device(device_name)
+        .map_err(|e| e.to_string())?;
+    emit_settings(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn enrich_track(
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<serde_json::Value, String> {
+    state.core.enrich_track(track_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn play_next(app: AppHandle, state: State<'_, AppState>) -> Result<PlaybackState, String> {
+    let payload = state.core.play_next().map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn play_previous(app: AppHandle, state: State<'_, AppState>) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .play_previous()
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn seek_to(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    position_seconds: f64,
+) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .seek_to(position_seconds)
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn set_volume(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    volume: f64,
+) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .set_volume(volume)
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn set_repeat_mode(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    repeat_mode: String,
+) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .set_repeat_mode(repeat_mode)
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn set_shuffle(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    shuffle: bool,
+) -> Result<PlaybackState, String> {
+    let payload = state
+        .core
+        .set_shuffle(shuffle)
+        .map_err(|error| error.to_string())?;
+    emit_playback(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn get_settings(state: State<'_, AppState>) -> Result<SettingsPayload, String> {
+    state.core.get_settings().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn update_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    settings: SettingsPayload,
+) -> Result<SettingsPayload, String> {
+    let payload = state
+        .core
+        .update_settings(settings)
+        .map_err(|error| error.to_string())?;
+    emit_settings(&app, &payload);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn list_provider_configs(state: State<'_, AppState>) -> Result<Vec<ProviderConfigRecord>, String> {
+    state
+        .core
+        .list_provider_configs()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn update_provider_config(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    payload: ProviderUpdatePayload,
+) -> Result<Vec<ProviderConfigRecord>, String> {
+    let providers = state
+        .core
+        .update_provider_config(payload.provider_key, payload.enabled, payload.values)
+        .map_err(|error| error.to_string())?;
+    emit_providers(&app, &providers);
+    Ok(providers)
+}
+
+#[tauri::command]
+fn run_legacy_import(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    payload: LegacyImportPayload,
+) -> Result<LegacyImportReport, String> {
+    let report = state
+        .core
+        .run_legacy_import(payload.env_path, payload.legacy_db_path)
+        .map_err(|error| error.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(report)
+}
+
+#[tauri::command]
+fn get_native_capabilities(state: State<'_, AppState>) -> NativeCapabilities {
+    state.core.get_native_capabilities()
+}
+
+#[tauri::command]
+fn get_track_scores(
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<Option<TrackScores>, String> {
+    state
+        .core
+        .get_track_scores(track_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_taste_profile(state: State<'_, AppState>) -> Result<TasteProfile, String> {
+    state.core.get_taste_profile().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_acquisition_queue(
+    state: State<'_, AppState>,
+    status_filter: Option<String>,
+) -> Result<Vec<AcquisitionQueueItem>, String> {
+    state
+        .core
+        .get_acquisition_queue(status_filter)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn add_to_acquisition_queue(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    artist: String,
+    title: String,
+    album: Option<String>,
+    source: Option<String>,
+) -> Result<Vec<AcquisitionQueueItem>, String> {
+    let payload = state
+        .core
+        .add_to_acquisition_queue(artist, title, album, source)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn update_acquisition_item(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    status: String,
+    error: Option<String>,
+) -> Result<Vec<AcquisitionQueueItem>, String> {
+    let payload = state
+        .core
+        .update_acquisition_item(id, status, error)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn list_playback_history(
+    state: State<'_, AppState>,
+    limit: Option<i64>,
+) -> Result<Vec<PlaybackEvent>, String> {
+    state
+        .core
+        .list_playback_history(limit)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn record_playback_event(
+    state: State<'_, AppState>,
+    track_id: i64,
+    completion_rate: f64,
+    context: Option<String>,
+) -> Result<(), String> {
+    state
+        .core
+        .record_playback_event(track_id, completion_rate, context)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_track_detail(
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<Option<TrackDetail>, String> {
+    state
+        .core
+        .get_track_detail(track_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn find_duplicates(state: State<'_, AppState>) -> Result<Vec<DuplicateCluster>, String> {
+    state.core.find_duplicates().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_provider_health(state: State<'_, AppState>) -> Result<Vec<ProviderHealth>, String> {
+    state.core.list_provider_health().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_provider_health(
+    state: State<'_, AppState>,
+    provider_key: String,
+) -> Result<ProviderHealth, String> {
+    state
+        .core
+        .get_provider_health(provider_key)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn record_provider_event(
+    state: State<'_, AppState>,
+    provider_key: String,
+    success: bool,
+) -> Result<ProviderHealth, String> {
+    state
+        .core
+        .record_provider_event(provider_key, success)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn reset_provider_health(
+    state: State<'_, AppState>,
+    provider_key: String,
+) -> Result<Vec<ProviderHealth>, String> {
+    state
+        .core
+        .reset_provider_health(provider_key)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn add_track_to_playlist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    playlist_id: i64,
+    track_id: i64,
+) -> Result<PlaylistDetail, String> {
+    let payload = state
+        .core
+        .add_track_to_playlist(playlist_id, track_id)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn remove_track_from_playlist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    playlist_id: i64,
+    track_id: i64,
+) -> Result<PlaylistDetail, String> {
+    let payload = state
+        .core
+        .remove_track_from_playlist(playlist_id, track_id)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn reorder_playlist_item(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    playlist_id: i64,
+    track_id: i64,
+    new_position: i64,
+) -> Result<PlaylistDetail, String> {
+    let payload = state
+        .core
+        .reorder_playlist_item(playlist_id, track_id, new_position)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn create_playlist_from_queue(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<PlaylistDetail, String> {
+    let payload = state
+        .core
+        .create_playlist_from_queue(name)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
 fn main() {
-    write_boot_log("[main] starting tauri host");
-    let state = AppState {
-        backend_process: Mutex::new(None),
-    };
+    initialize_logging();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
-        .manage(state)
-        .invoke_handler(tauri::generate_handler![get_backend_base_url])
         .setup(|app| {
-            write_boot_log("[main] setup entered");
-            let app_handle = app.handle();
-            start_backend_sidecar(app_handle.clone());
-            register_media_shortcuts(&app_handle);
-            create_tray_icon(&app_handle)?;
+            let app_data_dir = app.path().app_data_dir()?;
+            fs::create_dir_all(&app_data_dir)?;
+            let core = LyraCore::new(app_data_dir)
+                .map_err(|error| tauri::Error::Anyhow(anyhow::anyhow!(error.to_string())))?;
+            let state = AppState { core };
+            restore_window_state(app.handle());
+            create_tray(app.handle(), &state)?;
+            register_shortcuts(app.handle(), &state);
+            if let Ok(settings) = state.core.get_settings() {
+                if settings.start_minimized {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
+                }
+            }
+            app.manage(state.clone());
+
+            // Windows SMTC: register the bridge against the main window.
+            #[cfg(target_os = "windows")]
+            let smtc_bridge: Option<Arc<smtc::SmtcBridge>> = app
+                .get_webview_window("main")
+                .and_then(|w| smtc::SmtcBridge::new(&w, state.core.clone()))
+                .map(Arc::new);
+            #[cfg(not(target_os = "windows"))]
+            let smtc_bridge: Option<()> = None;
+
+            // Playback position ticker — emits state + handles auto-advance every second
+            let core_tick = state.core.clone();
+            let app_tick = app.handle().clone();
+            #[cfg(target_os = "windows")]
+            let smtc_tick = smtc_bridge.clone();
+            thread::spawn(move || {
+                let mut tick: u32 = 0;
+                loop {
+                    thread::sleep(Duration::from_secs(1));
+                    tick = tick.wrapping_add(1);
+                    let Ok(playback) = core_tick.get_playback_state() else {
+                        continue;
+                    };
+                    // Keep SMTC in sync with live playback state.
+                    #[cfg(target_os = "windows")]
+                    if let Some(smtc) = &smtc_tick {
+                        smtc.update(&playback);
+                    }
+                    if playback.status == "playing" {
+                        emit_playback(&app_tick, &playback);
+                        // Persist live position every 5 ticks for accurate session restore.
+                        if tick % 5 == 0 {
+                            let _ = core_tick.sync_playback_state();
+                        }
+                        if core_tick.playback_finished() {
+                            let queue_len = core_tick.get_queue().map(|q| q.len()).unwrap_or(0);
+                            let next_idx = (playback.queue_index + 1) as usize;
+                            let should_advance =
+                                playback.repeat_mode == "all" || next_idx < queue_len;
+                            // Record completion for the track that just finished
+                            if let Some(track_id) = playback.current_track_id {
+                                let duration = playback.duration_seconds.max(1.0);
+                                let completion =
+                                    (playback.position_seconds / duration).min(1.0);
+                                let _ = core_tick.record_playback_event(
+                                    track_id,
+                                    completion,
+                                    Some("player".to_string()),
+                                );
+                            }
+                            if should_advance {
+                                if let Ok(next) = core_tick.play_next() {
+                                    emit_playback(&app_tick, &next);
+                                }
+                            } else {
+                                // Persist the stopped state so the ticker does not
+                                // fire this branch on every subsequent tick.
+                                if let Ok(stopped) = core_tick.stop_playback() {
+                                    emit_playback(&app_tick, &stopped);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![
+            bootstrap_app,
+            get_app_shell_state,
+            list_tracks,
+            get_library_overview,
+            list_library_roots,
+            add_library_root,
+            remove_library_root,
+            start_library_scan,
+            get_scan_jobs,
+            enrich_library,
+            list_playlists,
+            get_playlist_detail,
+            create_playlist,
+            rename_playlist,
+            delete_playlist,
+            add_track_to_playlist,
+            remove_track_from_playlist,
+            reorder_playlist_item,
+            create_playlist_from_queue,
+            enqueue_playlist,
+            enqueue_tracks,
+            get_queue,
+            move_queue_item,
+            remove_queue_item,
+            clear_queue,
+            get_playback_state,
+            play_track,
+            play_queue_index,
+            toggle_playback,
+            stop_playback,
+            list_audio_devices,
+            set_output_device,
+            enrich_track,
+            play_next,
+            play_previous,
+            seek_to,
+            set_volume,
+            set_repeat_mode,
+            set_shuffle,
+            get_settings,
+            update_settings,
+            list_provider_configs,
+            update_provider_config,
+            run_legacy_import,
+            get_native_capabilities,
+            get_track_scores,
+            get_taste_profile,
+            get_acquisition_queue,
+            add_to_acquisition_queue,
+            update_acquisition_item,
+            list_playback_history,
+            record_playback_event,
+            get_track_detail,
+            find_duplicates,
+            list_provider_health,
+            get_provider_health,
+            record_provider_event,
+            reset_provider_health
+        ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|app_handle, run_event| {
-            if matches!(run_event, tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }) {
-                write_boot_log("[main] exit event received");
-                unregister_media_shortcuts(app_handle);
-                stop_backend_process(app_handle);
+        .run(|app, event| {
+            if matches!(
+                event,
+                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+            ) {
+                persist_window_state(app);
             }
         });
 }

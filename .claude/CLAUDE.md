@@ -8,9 +8,10 @@ This mirror exists for compatibility with older local workflows.
 1. `../CLAUDE.md`
 2. `../AGENTS.md`
 3. `../docs/ROADMAP_ENGINE_TO_ENTITY.md`
-4. `../docs/PROJECT_STATE.md`
-5. `../docs/MISSING_FEATURES_REGISTRY.md`
-6. `../docs/WORKLIST.md`
+4. `../docs/LEGACY_MIGRATION_REGISTRY.md`
+5. `../docs/PROJECT_STATE.md`
+6. `../docs/MISSING_FEATURES_REGISTRY.md`
+7. `../docs/WORKLIST.md`
 
 ## Current Direction Lock
 

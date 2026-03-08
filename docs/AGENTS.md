@@ -4,6 +4,7 @@ Read the repo-root `AGENTS.md` first. This file narrows the docs lane.
 
 ## Scope
 
+- `docs/LEGACY_MIGRATION_REGISTRY.md` — authoritative build-to list for all legacy capabilities; read first when planning a wave
 - `docs/ROADMAP_ENGINE_TO_ENTITY.md`
 - `docs/PROJECT_STATE.md`
 - `docs/WORKLIST.md`
