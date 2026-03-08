@@ -12,6 +12,17 @@ from flask import Flask
 from flask_cors import CORS
 
 
+DEFAULT_ALLOWED_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+    "tauri://localhost",
+    "app://localhost",
+    "null",
+)
+
+
 def init_cors(app: Flask) -> None:
     """Register CORS rules on *app*.
 
@@ -24,9 +35,15 @@ def init_cors(app: Flask) -> None:
     """
     raw = os.getenv(
         "CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173,null",
+        ",".join(DEFAULT_ALLOWED_ORIGINS),
     )
     origins: list[str] | str = [o.strip() for o in raw.split(",") if o.strip()]
     if not origins or origins == ["*"]:
         origins = "*"
-    CORS(app, resources={r"/api/*": {"origins": origins}})
+    CORS(
+        app,
+        resources={
+            r"/api/*": {"origins": origins},
+            r"/ws/*": {"origins": origins},
+        },
+    )

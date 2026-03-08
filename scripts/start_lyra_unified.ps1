@@ -153,6 +153,16 @@ function Set-PackagedHostEnvironment {
   return $bootLogPath
 }
 
+function Get-PackagedHostWorkingDirectory {
+  param([string]$HostExe)
+
+  if (Test-IsRawTauriBuildHost -HostExe $HostExe) {
+    return $repoRoot
+  }
+
+  return (Split-Path -Parent $HostExe)
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
 
@@ -193,8 +203,10 @@ if ($Mode -eq "dev") {
     -HostExe $hostExe `
     -UseInstalledDataRootContract:$UseInstalledDataRootContract `
     -LocalAppDataRoot $LocalAppDataRoot
+  $hostWorkingDirectory = Get-PackagedHostWorkingDirectory -HostExe $hostExe
   Write-Step "starting packaged host: $hostExe"
-  $hostProcess = Start-Process -FilePath $hostExe -WorkingDirectory $repoRoot -PassThru
+  Write-Step "packaged host working directory: $hostWorkingDirectory"
+  $hostProcess = Start-Process -FilePath $hostExe -WorkingDirectory $hostWorkingDirectory -PassThru
 }
 
 Write-Step "waiting for backend health readiness"

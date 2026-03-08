@@ -347,8 +347,16 @@ fn launch_packaged_backend_process() -> Result<Child, String> {
     let sidecar_exe = resolve_packaged_backend_exe().ok_or_else(|| {
         "LYRA packaged backend launch failed: lyra_backend.exe was not found".to_string()
     })?;
-    let runtime_root = resolve_project_root()
-        .unwrap_or_else(|| resolve_packaged_runtime_anchor(&sidecar_exe));
+    let runtime_root = if let Ok(project_root) = env::var("LYRA_PROJECT_ROOT") {
+        let trimmed = project_root.trim();
+        if trimmed.is_empty() {
+            resolve_packaged_runtime_anchor(&sidecar_exe)
+        } else {
+            PathBuf::from(trimmed)
+        }
+    } else {
+        resolve_packaged_runtime_anchor(&sidecar_exe)
+    };
     write_boot_log(&format!(
         "[launch-packaged-backend] exe={} cwd={}",
         sidecar_exe.display(),
