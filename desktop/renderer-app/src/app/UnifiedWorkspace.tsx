@@ -14,7 +14,7 @@ import {
   type ArtistShrine,
   type DeepCutCandidate,
 } from "@/services/lyraGateway/queries";
-import { listenHostBootStatus } from "@/services/host/tauriHost";
+import { getHostBackendBaseUrl, listenHostBootStatus } from "@/services/host/tauriHost";
 import {
   getPlayerQueue,
   getPlayerState,
@@ -34,6 +34,7 @@ import {
 } from "@/services/playerGateway";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useQueueStore } from "@/stores/queueStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { DIMENSIONS } from "@/types/dimensions";
 import { usePersistentState } from "@/features/native/usePersistentState";
 import type {
@@ -227,6 +228,10 @@ export function UnifiedWorkspace() {
       setBootMessage("Retrying backend connection...");
     }
     try {
+      const hostBaseUrl = await getHostBackendBaseUrl();
+      if (hostBaseUrl && useSettingsStore.getState().apiBaseUrl !== hostBaseUrl) {
+        useSettingsStore.getState().setApiBaseUrl(hostBaseUrl);
+      }
       await loadPlayerBootstrap();
       try {
         const status = await getAcquisitionBootstrapStatus();

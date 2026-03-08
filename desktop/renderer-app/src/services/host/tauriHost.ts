@@ -19,6 +19,21 @@ function isTauriRuntime(): boolean {
   );
 }
 
+export async function getHostBackendBaseUrl(): Promise<string | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const baseUrl = await invoke<string>("get_backend_base_url");
+    const trimmed = baseUrl.trim();
+    return trimmed.length > 0 ? trimmed.replace(/\/+$/, "") : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function listenHostTransport(
   handler: (payload: HostTransportPayload) => void,
 ): Promise<() => void> {

@@ -74,6 +74,11 @@ fn backend_base_url() -> String {
         .to_string()
 }
 
+#[tauri::command]
+fn get_backend_base_url() -> String {
+    backend_base_url()
+}
+
 fn parse_backend_launch_mode() -> BackendLaunchMode {
     let raw = env::var("LYRA_BACKEND_MODE")
         .unwrap_or_else(|_| "auto".to_string())
@@ -634,6 +639,7 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .manage(state)
+        .invoke_handler(tauri::generate_handler![get_backend_base_url])
         .setup(|app| {
             write_boot_log("[main] setup entered");
             let app_handle = app.handle();

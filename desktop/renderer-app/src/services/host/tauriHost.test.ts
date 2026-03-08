@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { listenHostBootStatus, listenHostTransport } from "./tauriHost";
+import { getHostBackendBaseUrl, listenHostBootStatus, listenHostTransport } from "./tauriHost";
 
 type WindowWithTauri = Record<string, unknown>;
 
@@ -12,6 +12,7 @@ describe("tauriHost", () => {
   afterEach(() => {
     delete windowAs().__TAURI_IPC__;
     delete windowAs().__TAURI_INTERNALS__;
+    vi.resetModules();
     vi.restoreAllMocks();
   });
 
@@ -31,6 +32,23 @@ describe("tauriHost", () => {
       const unlisten = await listenHostBootStatus(handler);
       expect(handler).not.toHaveBeenCalled();
       expect(typeof unlisten).toBe("function");
+    });
+  });
+
+  describe("getHostBackendBaseUrl", () => {
+    it("returns null outside Tauri runtime", async () => {
+      await expect(getHostBackendBaseUrl()).resolves.toBeNull();
+    });
+
+    it("invokes the host command in Tauri runtime", async () => {
+      windowAs().__TAURI_INTERNALS__ = {};
+      vi.doMock("@tauri-apps/api/core", () => ({
+        invoke: vi.fn().mockResolvedValue("http://127.0.0.1:5000/"),
+      }));
+
+      const result = await getHostBackendBaseUrl();
+      expect(result).toBe("http://127.0.0.1:5000");
+      vi.doUnmock("@tauri-apps/api/core");
     });
   });
 

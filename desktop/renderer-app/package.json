@@ -14,8 +14,13 @@
     "test": "vitest --passWithNoTests",
     "test:ci": "vitest run --passWithNoTests",
     "backend:build": "powershell -ExecutionPolicy Bypass -File ..\\..\\scripts\\build_packaged_runtime.ps1 -SkipLaunchCheck -SkipToolSmokeCheck",
+    "backend:reuse": "powershell -ExecutionPolicy Bypass -File ..\\..\\scripts\\build_packaged_runtime.ps1 -SkipRuntimeRebuild",
     "tauri:dev": "tauri dev",
-    "tauri:build": "npm run backend:build && tauri build"
+    "tauri:build": "npm run backend:build && tauri build",
+    "tauri:build:fast": "npm run backend:reuse && powershell -NoProfile -Command \"$env:LYRA_SKIP_FRONTEND_BUILD='1'; tauri build\"",
+    "tauri:build:nsis": "npm run backend:build && tauri build -b nsis",
+    "tauri:build:fast:nsis": "npm run backend:reuse && powershell -NoProfile -Command \"$env:LYRA_SKIP_FRONTEND_BUILD='1'; tauri build -b nsis\"",
+    "tauri:build:nobundle": "npm run backend:reuse && powershell -NoProfile -Command \"$env:LYRA_SKIP_FRONTEND_BUILD='1'; tauri build --no-bundle\""
   },
   "dependencies": {
     "@mantine/core": "^7.17.8",

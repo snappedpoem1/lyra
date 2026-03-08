@@ -24,10 +24,12 @@
 [CmdletBinding()]
 param(
     [string]$RepoRoot,
+    [string]$InstallerOutputRoot,
     [switch]$SkipBackendTests,
     [switch]$SkipFrontendTests,
     [switch]$SkipBuild,
     [switch]$SkipInstaller,
+    [switch]$SkipRuntimeRebuild,
     [switch]$SkipDocsQA,
     [switch]$AllowDirtyGit,
     [switch]$CopyInstallerToRunFolder,
@@ -238,14 +240,30 @@ $SummaryFile   = Join-Path $RunRoot   "release_summary.txt"
 $JsonSummary   = Join-Path $RunRoot   "release_summary.json"
 $ChecklistFile = Join-Path $RunRoot   "trial_checklist.txt"
 
+if (-not $InstallerOutputRoot) {
+    $InstallerOutputRoot = Join-Path $RepoRoot "installers"
+}
+else {
+    if ([System.IO.Path]::IsPathRooted($InstallerOutputRoot)) {
+        $InstallerOutputRoot = [System.IO.Path]::GetFullPath($InstallerOutputRoot)
+    }
+    else {
+        $InstallerOutputRoot = [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $InstallerOutputRoot))
+    }
+}
+$InstallerRunRoot = Join-Path $InstallerOutputRoot "release_trial_$Timestamp"
+
 New-DirIfMissing $ArtifactsRoot
 New-DirIfMissing $RunRoot
 New-DirIfMissing $LogsRoot
+New-DirIfMissing $InstallerOutputRoot
+New-DirIfMissing $InstallerRunRoot
 
 Write-Banner "Lyra Release Trial Runner"
 Write-Cass "Cap, we're doing the grown-up thing: tests, build, installer, receipts." Cyan
 Write-Cass "  Repo root:  $RepoRoot" DarkGray
 Write-Cass "  Run folder: $RunRoot" DarkGray
+Write-Cass "  Installer output: $InstallerRunRoot" DarkGray
 
 # ─── Git snapshot ────────────────────────────────────────────
 
@@ -419,9 +437,10 @@ try {
     if (-not $SkipInstaller) {
         Write-Phase "Installer lane"
         Write-Cass "Alright, now we box it up and make it presentable. This will take a while." Yellow
+        $installerCommand = if ($SkipRuntimeRebuild) { "npm run tauri:build:fast" } else { "npm run tauri:build" }
         Run-Step `
             -Name "Tauri installer build" `
-            -Command "npm run tauri:build" `
+            -Command $installerCommand `
             -WorkDir $RendererAppPath `
             -CassMsg "Building the full package: backend sidecar + Tauri bundle."
     }
@@ -464,13 +483,28 @@ if (Test-Path $RendererDist) {
     $BuildOutputPath = $RendererDist
 }
 
-# Copy installer into run folder if requested
+# Copy installers into the dedicated gitignored installer output folder
 $CopiedInstallerPath = $null
+$CopiedInstallerMsiPath = $null
+if ($InstallerPath -and (Test-Path $InstallerPath)) {
+    $installerName = Split-Path $InstallerPath -Leaf
+    $CopiedInstallerPath = Join-Path $InstallerRunRoot $installerName
+    Copy-Item -Path $InstallerPath -Destination $CopiedInstallerPath -Force
+    Write-Ok "Copied NSIS installer into installer output: $CopiedInstallerPath"
+}
+if ($InstallerMsiPath -and (Test-Path $InstallerMsiPath)) {
+    $installerMsiName = Split-Path $InstallerMsiPath -Leaf
+    $CopiedInstallerMsiPath = Join-Path $InstallerRunRoot $installerMsiName
+    Copy-Item -Path $InstallerMsiPath -Destination $CopiedInstallerMsiPath -Force
+    Write-Ok "Copied MSI installer into installer output: $CopiedInstallerMsiPath"
+}
+
+# Optional: also copy the main installer into the artifacts run folder
 if ($CopyInstallerToRunFolder -and $InstallerPath -and (Test-Path $InstallerPath)) {
     $installerName = Split-Path $InstallerPath -Leaf
-    $CopiedInstallerPath = Join-Path $RunRoot $installerName
-    Copy-Item -Path $InstallerPath -Destination $CopiedInstallerPath -Force
-    Write-Ok "Copied installer into run folder: $CopiedInstallerPath"
+    $artifactInstallerCopy = Join-Path $RunRoot $installerName
+    Copy-Item -Path $InstallerPath -Destination $artifactInstallerCopy -Force
+    Write-Ok "Copied installer into run folder: $artifactInstallerCopy"
 }
 
 # ─── QA Checklist ─────────────────────────────────────────────
@@ -553,7 +587,9 @@ $SummaryLines += "----------"
 $SummaryLines += "  Renderer dist:     $(if ($BuildOutputPath) { $BuildOutputPath } else { 'NOT FOUND' })"
 $SummaryLines += "  NSIS installer:    $(if ($InstallerPath) { $InstallerPath } else { 'NOT FOUND' })"
 $SummaryLines += "  MSI installer:     $(if ($InstallerMsiPath) { $InstallerMsiPath } else { 'NOT FOUND' })"
+$SummaryLines += "  Installer output:  $InstallerRunRoot"
 $SummaryLines += "  Copied installer:  $(if ($CopiedInstallerPath) { $CopiedInstallerPath } else { 'NOT COPIED' })"
+$SummaryLines += "  Copied MSI:        $(if ($CopiedInstallerMsiPath) { $CopiedInstallerMsiPath } else { 'NOT COPIED' })"
 $SummaryLines += "  QA checklist:      $ChecklistFile"
 $SummaryLines += ""
 $SummaryLines += "Cass notes:"
@@ -599,7 +635,9 @@ $jsonObj = [PSCustomObject]@{
     rendererBuildPath   = $BuildOutputPath
     nsisInstallerPath   = $InstallerPath
     msiInstallerPath    = $InstallerMsiPath
+    installerOutputDir  = $InstallerRunRoot
     copiedInstallerPath = $CopiedInstallerPath
+    copiedInstallerMsiPath = $CopiedInstallerMsiPath
     checklistPath       = $ChecklistFile
 }
 $jsonObj | ConvertTo-Json -Depth 6 | Out-File -FilePath $JsonSummary -Encoding utf8
