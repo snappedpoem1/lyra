@@ -47,8 +47,8 @@ Goal: make enrichment and identity trust legible inside the canonical shell.
 - [x] Add explicit provider and source display for enrichment outputs in the inspector and workspace surfaces
 - [x] Add confidence visibility where enrichment materially affects decisions in Library and Artist views
 - [x] Promote MBID-first identity fields in Library and Artist views
-- [ ] Port useful provider evidence semantics from legacy enrichment flows before recreating UI behavior
-- [ ] Reuse existing provider config and secret plumbing instead of parallel config paths
+- [x] Port useful provider evidence semantics from legacy enrichment flows before recreating UI behavior
+- [x] Reuse existing provider config and secret plumbing instead of parallel config paths
 - [x] Keep provenance and confidence visible through the canonical shell rather than isolated detail panels
 - [x] Extend first-pass provenance and confidence coverage into playlists and discovery surfaces
 - [x] Extend provenance and confidence coverage into saved playlists and broader recommendation explanation flows

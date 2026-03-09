@@ -1,6 +1,7 @@
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
+use strsim::jaro_winkler;
 use tracing::{info, warn};
 
 use crate::errors::LyraResult;
@@ -71,26 +72,29 @@ impl EnricherAdapter for MusicBrainzAdapter {
         title: &str,
         _path: &str,
     ) -> LyraResult<Option<Value>> {
+        // Port of oracle/enrichers/musicbrainz.py enrich_by_text:
+        // Evaluate top 10 results with similarity-weighted confidence.
+        // combined = (artist_sim * 0.4 + title_sim * 0.6) * (rec_score / 100)
+        // Minimum similarity gate: both artist_sim and title_sim >= 0.60.
         let url = "https://musicbrainz.org/ws/2/recording";
         let query = format!("recording:\"{title}\" AND artist:\"{artist}\"");
         let result = ureq::get(url)
             .set("User-Agent", "Lyra/0.1 (https://github.com/snappedpoem1/lyra)")
             .query("query", &query)
-            .query("limit", "1")
+            .query("limit", "10")
             .query("fmt", "json")
             .call();
 
         match result {
             Ok(response) => {
                 let body: Value = response.into_json().unwrap_or(Value::Null);
-                let recording = body
+                let recordings = body
                     .get("recordings")
-                    .and_then(|r| r.as_array())
-                    .and_then(|arr| arr.first())
+                    .and_then(Value::as_array)
                     .cloned()
-                    .unwrap_or(Value::Null);
+                    .unwrap_or_default();
 
-                if recording.is_null() {
+                if recordings.is_empty() {
                     return Ok(Some(json!({
                         "status": "not_found",
                         "provider": "musicbrainz",
@@ -99,48 +103,119 @@ impl EnricherAdapter for MusicBrainzAdapter {
                     })));
                 }
 
-                let mbid = recording
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
-                let score = recording
-                    .get("score")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(0);
-                let release = recording
-                    .get("releases")
-                    .and_then(|r| r.as_array())
-                    .and_then(|arr| arr.first())
-                    .cloned()
-                    .unwrap_or(Value::Null);
-                let release_title = release
-                    .get("title")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
-                let release_mbid = release
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
-                let release_date = release
-                    .get("date")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
+                const MIN_SIM: f64 = 0.60;
+                let artist_lower = artist.to_lowercase();
+                let title_lower = title.to_lowercase();
 
-                Ok(Some(json!({
-                    "status": "ok",
-                    "provider": "musicbrainz",
-                    "recordingMbid": mbid,
-                    "matchScore": score,
-                    "artist": artist,
-                    "title": title,
-                    "releaseMbid": release_mbid,
-                    "releaseTitle": release_title,
-                    "releaseDate": release_date,
-                })))
+                let mut best_score = 0.0_f64;
+                let mut best: Option<(String, String, String, String, String, f64)> = None;
+
+                for rec in recordings.iter().take(10) {
+                    let rec_title = rec
+                        .get("title")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let rec_score = rec
+                        .get("score")
+                        .and_then(Value::as_i64)
+                        .unwrap_or(0) as f64;
+
+                    // Reconstruct artist from artist-credit
+                    let rec_artist: String = rec
+                        .get("artist-credit")
+                        .and_then(Value::as_array)
+                        .map(|credits| {
+                            credits
+                                .iter()
+                                .flat_map(|c| {
+                                    let name = c
+                                        .get("name")
+                                        .or_else(|| {
+                                            c.get("artist").and_then(|a| a.get("name"))
+                                        })
+                                        .and_then(Value::as_str)
+                                        .unwrap_or("");
+                                    let join = c
+                                        .get("joinphrase")
+                                        .and_then(Value::as_str)
+                                        .unwrap_or("");
+                                    [name, join]
+                                })
+                                .collect::<String>()
+                        })
+                        .unwrap_or_default()
+                        .trim()
+                        .to_string();
+
+                    let title_sim = jaro_winkler(&title_lower, &rec_title.to_lowercase());
+                    let artist_sim = jaro_winkler(&artist_lower, &rec_artist.to_lowercase());
+
+                    if title_sim < MIN_SIM || artist_sim < MIN_SIM {
+                        continue;
+                    }
+
+                    let combined = (artist_sim * 0.4 + title_sim * 0.6) * (rec_score / 100.0);
+
+                    if combined > best_score {
+                        best_score = combined;
+
+                        let mbid = rec
+                            .get("id")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        let release = rec
+                            .get("releases")
+                            .and_then(Value::as_array)
+                            .and_then(|arr| arr.first())
+                            .cloned()
+                            .unwrap_or(Value::Null);
+                        let release_title = release
+                            .get("title")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        let release_mbid = release
+                            .get("id")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        let release_date = release
+                            .get("date")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        best = Some((mbid, rec_artist, release_mbid, release_title, release_date, combined));
+                    }
+                }
+
+                match best {
+                    Some((mbid, rec_artist, release_mbid, release_title, release_date, combined)) => {
+                        Ok(Some(json!({
+                            "status": "ok",
+                            "provider": "musicbrainz",
+                            "recordingMbid": mbid,
+                            // matchScore is 0-1 combined similarity score (ported from Python)
+                            "matchScore": combined,
+                            "artist": rec_artist,
+                            "title": title,
+                            "releaseMbid": release_mbid,
+                            "releaseTitle": release_title,
+                            "releaseDate": release_date,
+                        })))
+                    }
+                    None => {
+                        // No result passed the similarity gate
+                        Ok(Some(json!({
+                            "status": "not_found",
+                            "provider": "musicbrainz",
+                            "artist": artist,
+                            "title": title,
+                            "note": "No result passed similarity gate (min 0.60)",
+                        })))
+                    }
+                }
             }
             Err(e) => {
                 warn!("MusicBrainz request failed for {artist} / {title}: {e}");
