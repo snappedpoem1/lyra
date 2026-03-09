@@ -37,7 +37,8 @@ const defaultShell: AppShellState = {
     preferredOutputDevice: null,
     composerProviderPreference: "auto",
     composerDefaultTrackCount: 20,
-    composerExplanationDepth: "balanced"
+    composerExplanationDepth: "balanced",
+    composerTasteMemory: []
   },
   providers: [],
   scanJobs: [],

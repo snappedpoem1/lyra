@@ -44,7 +44,10 @@ Goal: make the Lyra composer the real front door to the product.
 - [x] Deepen prompt coverage beyond playlist drafting into recommendation, bridge, discovery, steering, and explanation flows
 - [x] Add richer iterative refinement and playlist steering loops
 - [x] Add weird-prompt evaluation coverage for action classification and deterministic fallback honesty
+- [x] Operationalize voice/persona as typed composer behavior instead of decorative copy
+- [x] Add a light taste-memory hook for recurring steer posture
 - [ ] Port stronger semantic retrieval behavior from legacy `oracle/vibes.py`, `oracle/playlust.py`, `oracle/explain.py`, and `oracle/arc.py`
+- [ ] Push persona rules deeper into provider-authored narratives and saved-playlist explanation surfaces
 
 ### G-064 Discovery Graph And Bridge Depth
 

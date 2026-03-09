@@ -38,12 +38,17 @@ Current product framing:
   - explicit provider selection and fallback mode in settings
   - deterministic retrieval, reranking, and sequencing in Rust
   - first-class composer action routing: draft, bridge, discovery, explain, steer
+  - typed Lyra framing output for posture, detail depth, confidence phrasing, fallback honesty, route comparison, and next nudges
+  - presence-aware framing for protect-the-vibe behavior, sideways temptation, and co-curator guidance
   - visible playlist phases and bridge/discovery route surfaces in the Svelte UI
   - steering controls for obviousness, adventurousness, contrast, warmth/nocturnal bias, and explanation depth
+  - companion-style UI framing that renders Lyra guidance instead of raw engine output alone
   - role-aware response behavior for recommender, coach, copilot, and oracle modes
+  - light taste-memory hook via persisted recent composer steer axes
   - track-level reason payloads
   - saved reason payload persistence in `playlist_track_reasons`
   - weird-prompt evaluation coverage for action classification and deterministic fallback honesty
+  - canonical persona docs in `docs/LYRA_VOICE_AND_PERSONA.md` and `docs/LYRA_BEHAVIOR_EXAMPLES.md`
 
 ## Still Missing
 
@@ -56,6 +61,7 @@ Major gaps remain:
 - stronger local-LLM and cloud-LLM provider breadth and credential ergonomics
 - more explicit taste steering, memory, and feedback loops
 - broader migration of legacy semantic search, graph, and explainability behavior into Rust
+- deeper persona conditioning in provider-authored narratives so cloud/local LLM narration matches Lyra's response contract
 
 ## Current Priority Order
 

@@ -6,10 +6,11 @@ use serde_json::{json, Value};
 
 use crate::commands::{
     BridgePath, BridgeStep, ComposerAction, ComposerProviderStatus, ComposerResponse,
-    ComposedPlaylistDraft, ComposedPlaylistTrack, DiscoveryDirection, DiscoveryRoute,
-    GeneratedPlaylist, PlaylistIntent, PlaylistIntentState, PlaylistPhase,
-    PlaylistTrackWithReason, SettingsPayload, SteerPayload, TasteProfile, TrackReasonPayload,
-    TrackRecord,
+    ComposedPlaylistDraft, ComposedPlaylistTrack, ConfidenceVoice, DetailDepth,
+    DiscoveryDirection, DiscoveryRoute, FallbackVoice, GeneratedPlaylist, LyraFraming,
+    PlaylistIntent, PlaylistIntentState, PlaylistPhase, PlaylistTrackWithReason,
+    ResponsePosture, RouteComparison, SettingsPayload, SteerPayload, TasteProfile,
+    TrackReasonPayload, TrackRecord,
 };
 use crate::errors::{LyraError, LyraResult};
 use crate::playlists;
@@ -36,6 +37,8 @@ struct RoleBehavior {
     silent_inference_ok: bool,
     offer_alternatives: bool,
     prefer_revision: bool,
+    protect_vibe: bool,
+    tempt_sideways: bool,
 }
 
 struct ComposeRuntime<'a> {
@@ -388,12 +391,21 @@ fn compose_draft_response(
     .or_else(|| Some(template_narrative(intent, &phases, runtime.behavior)));
     let alternatives_considered = alternatives_for_action(intent, &ComposerAction::Playlist);
     let uncertainty = uncertainty_notes(intent, runtime.provider_status, runtime.behavior);
+    let framing = build_lyra_framing(
+        prompt,
+        intent,
+        &detect_composer_action(prompt, intent),
+        runtime.provider_status,
+        runtime.behavior,
+        Some(route_comparison_for_phases(&phases)),
+    );
 
     ComposerResponse {
         action: detect_composer_action(prompt, intent),
         prompt: prompt.to_string(),
         intent: intent.clone(),
         provider_status: runtime.provider_status.clone(),
+        framing,
         draft: Some(ComposedPlaylistDraft {
             name: format!("{} Journey", title_case(prompt)),
             prompt: prompt.to_string(),
@@ -456,12 +468,21 @@ fn compose_bridge_response(
         confidence: intent.confidence,
         alternate_directions: alternatives_for_action(intent, &ComposerAction::Bridge),
     };
+    let framing = build_lyra_framing(
+        prompt,
+        intent,
+        &ComposerAction::Bridge,
+        runtime.provider_status,
+        runtime.behavior,
+        Some(route_comparison_for_bridge(&bridge)),
+    );
 
     ComposerResponse {
         action: ComposerAction::Bridge,
         prompt: prompt.to_string(),
         intent: intent.clone(),
         provider_status: runtime.provider_status.clone(),
+        framing,
         draft: None,
         bridge: Some(bridge),
         discovery: None,
@@ -494,12 +515,21 @@ fn compose_discovery_response(
         narrative: Some(template_discovery_narrative(intent)),
         confidence: intent.confidence,
     };
+    let framing = build_lyra_framing(
+        prompt,
+        intent,
+        &ComposerAction::Discovery,
+        runtime.provider_status,
+        runtime.behavior,
+        Some(route_comparison_for_discovery(&route)),
+    );
 
     ComposerResponse {
         action: ComposerAction::Discovery,
         prompt: prompt.to_string(),
         intent: intent.clone(),
         provider_status: runtime.provider_status.clone(),
+        framing,
         draft: None,
         bridge: None,
         discovery: Some(route),
@@ -521,6 +551,14 @@ fn compose_explanation_response(
         prompt: prompt.to_string(),
         intent: intent.clone(),
         provider_status: provider_status.clone(),
+        framing: build_lyra_framing(
+            prompt,
+            intent,
+            &ComposerAction::Explain,
+            provider_status,
+            behavior,
+            None,
+        ),
         draft: None,
         bridge: None,
         discovery: None,
@@ -540,6 +578,8 @@ fn role_behavior(intent: &PlaylistIntent, action: &ComposerAction) -> RoleBehavi
             silent_inference_ok: false,
             offer_alternatives: true,
             prefer_revision: matches!(action, ComposerAction::Playlist | ComposerAction::Steer),
+            protect_vibe: true,
+            tempt_sideways: false,
         },
         "copilot" => RoleBehavior {
             role,
@@ -547,6 +587,8 @@ fn role_behavior(intent: &PlaylistIntent, action: &ComposerAction) -> RoleBehavi
             silent_inference_ok: true,
             offer_alternatives: true,
             prefer_revision: true,
+            protect_vibe: true,
+            tempt_sideways: true,
         },
         "coach" => RoleBehavior {
             role,
@@ -554,6 +596,8 @@ fn role_behavior(intent: &PlaylistIntent, action: &ComposerAction) -> RoleBehavi
             silent_inference_ok: false,
             offer_alternatives: true,
             prefer_revision: true,
+            protect_vibe: true,
+            tempt_sideways: true,
         },
         _ => RoleBehavior {
             role,
@@ -561,6 +605,8 @@ fn role_behavior(intent: &PlaylistIntent, action: &ComposerAction) -> RoleBehavi
             silent_inference_ok: true,
             offer_alternatives: matches!(action, ComposerAction::Bridge | ComposerAction::Discovery),
             prefer_revision: false,
+            protect_vibe: matches!(action, ComposerAction::Bridge | ComposerAction::Steer),
+            tempt_sideways: matches!(action, ComposerAction::Discovery | ComposerAction::Bridge),
         },
     }
 }
@@ -732,7 +778,7 @@ fn heuristic_intent(conn: &Connection, prompt: &str, settings: &SettingsPayload)
         explicit_entities,
         familiarity_vs_novelty,
         discovery_aggressiveness,
-        user_steer,
+        user_steer: merge_taste_memory(&user_steer, &settings.composer_taste_memory),
         exclusions,
         explanation_depth: settings.composer_explanation_depth.clone(),
         sequencing_notes,
@@ -908,13 +954,17 @@ fn sequence_tracks(
                 let transition_fit = previous_dims
                     .map(|prev| transition_fit(prev, candidate.dims, &intent.transition_style))
                     .unwrap_or(0.64);
+                let vibe_guard_fit = vibe_guard_fit(candidate, intent, behavior);
+                let sideways_fit = sideways_fit(candidate, intent, behavior);
                 let (fit_weight, taste_weight, novelty_weight, transition_weight, entity_weight) =
                     score_weights(&behavior.role, &intent.prompt_role);
                 let score = fit * fit_weight
                     + taste_fit * taste_weight
                     + novelty_fit * novelty_weight
                     + transition_fit * transition_weight
-                    + entity_bonus * entity_weight;
+                    + entity_bonus * entity_weight
+                    + vibe_guard_fit * 0.08
+                    + sideways_fit * 0.06;
                 (score, candidate)
             })
             .filter(|(score, _)| *score >= 0.32)
@@ -1035,17 +1085,25 @@ fn apply_steer(intent: &PlaylistIntent, steer: Option<&SteerPayload>) -> Playlis
     next
 }
 
+fn merge_taste_memory(user_steer: &[String], memory: &[String]) -> Vec<String> {
+    let mut merged = user_steer.to_vec();
+    merged.extend(memory.iter().cloned());
+    merged.sort();
+    merged.dedup();
+    merged
+}
+
 fn detect_composer_action(prompt: &str, intent: &PlaylistIntent) -> ComposerAction {
     let lower = prompt.to_ascii_lowercase();
     if has_any(&lower, &["bridge from", "show me a path", "path from", "what should come after this"]) {
         ComposerAction::Bridge
-    } else if has_any(&lower, &["three ways", "leave this scene"]) {
+    } else if has_any(&lower, &["three ways", "leave this scene", "three exits", "one safe, one interesting, one dangerous"]) {
         ComposerAction::Discovery
     } else if has_any(
         &lower,
         &["adjacent", "less obvious", "three ways", "leave this scene", "discover", "something adjacent"],
     ) {
-        if has_any(&lower, &["make this", "without losing", "keep the"]) {
+        if has_any(&lower, &["make this", "without losing", "keep the", "stay in this mood"]) {
             ComposerAction::Steer
         } else {
             ComposerAction::Discovery
@@ -1080,9 +1138,9 @@ fn detect_named_entities(conn: &Connection, prompt: &str) -> Vec<String> {
 fn detect_prompt_role(lower: &str) -> String {
     if lower.contains("why") || lower.contains("explain") {
         "oracle".to_string()
-    } else if has_any(lower, &["make this", "keep the"]) {
+    } else if has_any(lower, &["make this", "keep the", "stay in this mood"]) {
         "copilot".to_string()
-    } else if has_any(lower, &["adjacent", "discover", "bridge", "path from", "come after this", "what should come after this", "three ways"]) {
+    } else if has_any(lower, &["adjacent", "discover", "bridge", "path from", "come after this", "what should come after this", "three ways", "three exits", "one safe, one interesting, one dangerous"]) {
         "recommender".to_string()
     } else {
         "coach".to_string()
@@ -1433,6 +1491,31 @@ fn entity_bonus(candidate: &CandidateTrack, entities: &[String]) -> f64 {
     }
 }
 
+fn vibe_guard_fit(candidate: &CandidateTrack, intent: &PlaylistIntent, behavior: &RoleBehavior) -> f64 {
+    if !behavior.protect_vibe {
+        return 0.5;
+    }
+    let mut score: f64 = 0.5;
+    if intent.emotional_arc.iter().any(|value| value == "ache") {
+        score += (1.0 - (candidate.dims[1] - 0.34).abs()).clamp(0.0, 1.0) * 0.2;
+        score += (1.0 - (candidate.dims[4] - 0.52).abs()).clamp(0.0, 1.0) * 0.15;
+    }
+    if has_any(&intent.prompt.to_ascii_lowercase(), &["keep", "without losing", "stay in this mood"]) {
+        score += (1.0 - (candidate.dims[9] - 0.56).abs()).clamp(0.0, 1.0) * 0.15;
+    }
+    score.clamp(0.0, 1.0)
+}
+
+fn sideways_fit(candidate: &CandidateTrack, intent: &PlaylistIntent, behavior: &RoleBehavior) -> f64 {
+    if !behavior.tempt_sideways {
+        return 0.4;
+    }
+    let novelty = novelty_score(candidate);
+    let texture_shift = candidate.dims[7];
+    let appetite = if intent.familiarity_vs_novelty == "novel leaning" { 0.72 } else { 0.52 };
+    (1.0 - (novelty - appetite).abs() + texture_shift * 0.2).clamp(0.0, 1.0)
+}
+
 fn reason_summary(
     candidate: &CandidateTrack,
     phase: &PlaylistPhase,
@@ -1628,11 +1711,19 @@ fn discovery_directions(
     intent: &PlaylistIntent,
     runtime: &ComposeRuntime<'_>,
 ) -> Vec<DiscoveryDirection> {
-    let direction_specs = [
-        ("Closer in", "Stay near the source, but sand off the obvious picks.", "balanced"),
-        ("Side door", "Move into adjacent territory with stronger novelty pressure.", "novel leaning"),
-        ("Scene break", "Keep the pulse but let the texture family change on purpose.", "familiar landing"),
-    ];
+    let direction_specs = if has_any(&prompt.to_ascii_lowercase(), &["safe", "interesting", "dangerous"]) {
+        [
+            ("Safe", "Stay emotionally faithful and keep the landmarks legible.", "familiar landing"),
+            ("Interesting", "Slip sideways into a more revealing adjacent route.", "balanced"),
+            ("Dangerous", "Break the scene harder while protecting one live wire from the original mood.", "novel leaning"),
+        ]
+    } else {
+        [
+            ("Closer in", "Stay near the source, but sand off the obvious picks.", "balanced"),
+            ("Side door", "Move into adjacent territory with stronger novelty pressure.", "novel leaning"),
+            ("Scene break", "Keep the pulse but let the texture family change on purpose.", "familiar landing"),
+        ]
+    };
     direction_specs
         .iter()
         .map(|(label, description, novelty)| {
@@ -1663,6 +1754,307 @@ fn discovery_directions(
             }
         })
         .collect()
+}
+
+fn build_lyra_framing(
+    prompt: &str,
+    intent: &PlaylistIntent,
+    action: &ComposerAction,
+    provider_status: &ComposerProviderStatus,
+    behavior: &RoleBehavior,
+    route_comparison: Option<RouteComparison>,
+) -> LyraFraming {
+    let posture = posture_for(action, &behavior.role);
+    let detail_depth = detail_depth_for(behavior, action, intent);
+    let confidence = confidence_voice(intent, provider_status, action);
+    let fallback = fallback_voice(provider_status);
+    let challenge = challenge_line(prompt, intent, action, behavior);
+    let memory = taste_memory_hint(intent);
+
+    LyraFraming {
+        posture,
+        detail_depth,
+        lead: lead_line(intent, action, behavior),
+        rationale: rationale_line(intent, action, behavior),
+        presence_note: presence_note(intent, action, behavior),
+        challenge,
+        vibe_guard: vibe_guard_line(intent, action, behavior),
+        confidence,
+        fallback,
+        route_comparison,
+        sideways_temptations: sideways_temptations(intent, action, behavior),
+        memory_hint: memory,
+        next_nudges: next_nudges(intent, action),
+    }
+}
+
+fn posture_for(action: &ComposerAction, role: &str) -> ResponsePosture {
+    match (action, role) {
+        (ComposerAction::Explain, _) | (_, "oracle") => ResponsePosture::Revelatory,
+        (ComposerAction::Steer, _) | (_, "copilot") => ResponsePosture::Collaborative,
+        (_, "coach") => ResponsePosture::Refining,
+        _ => ResponsePosture::Suggestive,
+    }
+}
+
+fn detail_depth_for(
+    behavior: &RoleBehavior,
+    action: &ComposerAction,
+    intent: &PlaylistIntent,
+) -> DetailDepth {
+    match (
+        behavior.explanation_depth.as_str(),
+        action,
+        intent.explanation_depth.as_str(),
+    ) {
+        ("deep", _, _) | (_, ComposerAction::Explain, _) | (_, ComposerAction::Bridge, "deep") => {
+            DetailDepth::Deep
+        }
+        ("light", _, _) => DetailDepth::Short,
+        _ => DetailDepth::Medium,
+    }
+}
+
+fn confidence_voice(
+    intent: &PlaylistIntent,
+    provider_status: &ComposerProviderStatus,
+    action: &ComposerAction,
+) -> ConfidenceVoice {
+    let level = if intent.confidence >= 0.8 {
+        "high"
+    } else if intent.confidence >= 0.58 {
+        "medium"
+    } else {
+        "low"
+    };
+    let phrasing = match (level, action, provider_status.provider_kind.as_str()) {
+        ("high", ComposerAction::Bridge, _) => {
+            "The route feels convincing enough to push forward without over-hedging.".to_string()
+        }
+        ("high", _, _) => "Lyra has a strong read on the move here.".to_string(),
+        ("medium", _, "deterministic") => {
+            "The shape is believable, but the language parse is still heuristic rather than semantic certainty.".to_string()
+        }
+        ("medium", _, _) => "There is a clear direction here, but Lyra is leaving room for adjacent revisions.".to_string(),
+        ("low", ComposerAction::Discovery, _) => {
+            "There are several plausible exits from this prompt, so Lyra is keeping the answer plural.".to_string()
+        }
+        ("low", _, _) => "The prompt points in a real direction, but not sharply enough to fake certainty.".to_string(),
+        _ => "Lyra has a partial read and is keeping the route steerable.".to_string(),
+    };
+
+    ConfidenceVoice {
+        level: level.to_string(),
+        phrasing,
+        should_offer_alternatives: level != "high" || matches!(action, ComposerAction::Bridge | ComposerAction::Discovery),
+    }
+}
+
+fn presence_note(intent: &PlaylistIntent, action: &ComposerAction, behavior: &RoleBehavior) -> Option<String> {
+    if behavior.role == "copilot" || behavior.role == "coach" {
+        Some(match action {
+            ComposerAction::Steer => {
+                "Lyra is staying loyal to the arc you already built and only pushing where the route got too safe.".to_string()
+            }
+            _ => format!(
+                "Lyra is reading the hidden shape of the sentence, not just the nouns: {} stays central.",
+                intent.emotional_arc.join(", ")
+            ),
+        })
+    } else {
+        None
+    }
+}
+
+fn vibe_guard_line(intent: &PlaylistIntent, action: &ComposerAction, behavior: &RoleBehavior) -> Option<String> {
+    if !behavior.protect_vibe {
+        return None;
+    }
+    Some(match action {
+        ComposerAction::Steer => "Lyra is protecting the emotional spine before it spends novelty on side moves.".to_string(),
+        ComposerAction::Bridge => "Lyra is guarding the pulse and ache so the bridge bends instead of snapping.".to_string(),
+        ComposerAction::Discovery => "Even the stranger exits keep one live wire from the original mood.".to_string(),
+        _ => format!(
+            "Lyra is protecting {} so the route does not solve the prompt by breaking its core feeling.",
+            intent.emotional_arc.join(", ")
+        ),
+    })
+}
+
+fn sideways_temptations(
+    intent: &PlaylistIntent,
+    action: &ComposerAction,
+    behavior: &RoleBehavior,
+) -> Vec<String> {
+    if !behavior.tempt_sideways {
+        return Vec::new();
+    }
+    match action {
+        ComposerAction::Discovery => vec![
+            "Slip sideways into rougher texture before changing the emotional language.".to_string(),
+            "Keep the same ache, but trade gloss for grain.".to_string(),
+        ],
+        ComposerAction::Bridge => vec![
+            "Take the more interesting road through confessional warmth instead of the cleanest handoff.".to_string(),
+        ],
+        ComposerAction::Playlist | ComposerAction::Steer if intent.familiarity_vs_novelty != "familiar leaning" => vec![
+            "There is a slightly stranger route here if you want Lyra to trade polish for nerve.".to_string(),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+fn taste_memory_hint(intent: &PlaylistIntent) -> Option<String> {
+    if intent.user_steer.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "Recent steer language is clustering around {}.",
+            intent.user_steer.join(", ")
+        ))
+    }
+}
+
+fn fallback_voice(provider_status: &ComposerProviderStatus) -> FallbackVoice {
+    if provider_status.provider_kind == "deterministic" {
+        FallbackVoice {
+            active: true,
+            label: "Heuristic read".to_string(),
+            message: "Lyra is being direct about fallback mode: the language read came from local heuristics, while retrieval and sequencing still stayed grounded in the library.".to_string(),
+        }
+    } else {
+        FallbackVoice {
+            active: false,
+            label: "Provider-assisted read".to_string(),
+            message: "A language provider helped interpret the prompt, but Lyra kept the actual selection logic local.".to_string(),
+        }
+    }
+}
+
+fn lead_line(intent: &PlaylistIntent, action: &ComposerAction, behavior: &RoleBehavior) -> String {
+    match action {
+        ComposerAction::Bridge => format!(
+            "This wants a hinge, not a leap. Lyra is threading {} into {} without dropping {}.",
+            intent.opening_state.descriptors.join(", "),
+            intent.landing_state.descriptors.join(", "),
+            intent.emotional_arc.join(", ")
+        ),
+        ComposerAction::Discovery => "There is more than one good way out of this scene, so Lyra is treating discovery as a set of directions rather than one neat answer.".to_string(),
+        ComposerAction::Steer => "Lyra is treating this as a revision pass, not a fresh command. The goal is to keep the spine and move the surface.".to_string(),
+        ComposerAction::Explain => "There is structure under this move. Lyra is naming the pressure points instead of waving at 'vibes'.".to_string(),
+        ComposerAction::Playlist => match behavior.role.as_str() {
+            "coach" => "Lyra has a read on the mood, but it is also sharpening what the prompt is really asking for.".to_string(),
+            _ => "Lyra is shaping this like a journey, not a bucket of matching tracks.".to_string(),
+        },
+    }
+}
+
+fn rationale_line(intent: &PlaylistIntent, action: &ComposerAction, behavior: &RoleBehavior) -> String {
+    match action {
+        ComposerAction::Bridge => format!(
+            "The priority is legibility: keep {} audible early, let {} emerge late, and use the middle to make the turn feel earned.",
+            intent.opening_state.descriptors.join(", "),
+            intent.landing_state.descriptors.join(", ")
+        ),
+        ComposerAction::Discovery => "Lyra is separating familiar, adjacent, and scene-breaking exits so the user can choose what kind of risk feels right.".to_string(),
+        ComposerAction::Steer => format!(
+            "Because this is {} mode, Lyra preserves the emotional thread while moving obviousness, contrast, and texture on purpose.",
+            behavior.role
+        ),
+        ComposerAction::Explain => "The explanation stays concrete: bridge logic, emotional pressure, transition readability, and where uncertainty still lives.".to_string(),
+        ComposerAction::Playlist => format!(
+            "The sequence prioritizes {} over generic genre matching, so the arc can feel authored instead of auto-filled.",
+            intent.emotional_arc.join(", ")
+        ),
+    }
+}
+
+fn challenge_line(
+    prompt: &str,
+    intent: &PlaylistIntent,
+    action: &ComposerAction,
+    behavior: &RoleBehavior,
+) -> Option<String> {
+    let lower = prompt.to_ascii_lowercase();
+    if matches!(action, ComposerAction::Steer) {
+        Some("If you want this less obvious, Lyra will protect the ache first and sacrifice the easy landmarks second.".to_string())
+    } else if behavior.role == "coach" && intent.explicit_entities.is_empty() && !has_any(&lower, &["into", "from", "after"]) {
+        Some("The prompt has mood, but not much destination. Lyra can move now, but a sharper landing would produce a stranger and better route.".to_string())
+    } else if has_any(&lower, &["obvious", "canon"]) {
+        Some("Lyra is intentionally resisting the safest canon picks here.".to_string())
+    } else {
+        None
+    }
+}
+
+fn next_nudges(intent: &PlaylistIntent, action: &ComposerAction) -> Vec<String> {
+    match action {
+        ComposerAction::Bridge => vec![
+            "Make the hinge darker.".to_string(),
+            "Keep the same destination but roughen the middle.".to_string(),
+            "Stay closer to the source scene.".to_string(),
+        ],
+        ComposerAction::Discovery => vec![
+            "Push this less obvious.".to_string(),
+            "Keep the pulse but go rougher.".to_string(),
+            "Make one route warmer and one harsher.".to_string(),
+        ],
+        ComposerAction::Steer => vec![
+            "Less obvious in the middle.".to_string(),
+            "Darker and softer.".to_string(),
+            "Rougher, less polished.".to_string(),
+        ],
+        ComposerAction::Explain => vec![
+            "Compare this route against a sharper pivot.".to_string(),
+            "Explain the hinge in more detail.".to_string(),
+        ],
+        ComposerAction::Playlist => {
+            let mut nudges = vec!["Make it less obvious.".to_string(), "Push it more nocturnal.".to_string()];
+            if intent.discovery_aggressiveness == "gentle" {
+                nudges.push("Take a bigger risk in the middle.".to_string());
+            } else {
+                nudges.push("Keep more familiar landmarks.".to_string());
+            }
+            nudges
+        }
+    }
+}
+
+fn route_comparison_for_phases(phases: &[PlaylistPhase]) -> RouteComparison {
+    let hinge = phases
+        .get(phases.len().saturating_div(2))
+        .map(|phase| phase.label.clone())
+        .unwrap_or_else(|| "middle".to_string());
+    RouteComparison {
+        headline: "Arc logic".to_string(),
+        summary: format!(
+            "The route works because the early phases establish trust, then {} changes the pressure before the landing resolves it.",
+            hinge
+        ),
+    }
+}
+
+fn route_comparison_for_bridge(bridge: &BridgePath) -> RouteComparison {
+    let hinge = bridge
+        .steps
+        .iter()
+        .find(|step| step.role == "hinge")
+        .map(|step| format!("{} by {}", step.track.title, step.track.artist))
+        .unwrap_or_else(|| "the midpoint hinge".to_string());
+    RouteComparison {
+        headline: "Why this bridge holds".to_string(),
+        summary: format!(
+            "Lyra is leaning on {} to keep the pulse from snapping while the destination mood comes into focus.",
+            hinge
+        ),
+    }
+}
+
+fn route_comparison_for_discovery(_route: &DiscoveryRoute) -> RouteComparison {
+    RouteComparison {
+        headline: "How the exits differ".to_string(),
+        summary: "Lyra separated the routes so one stays nearest the source, one slips sideways into adjacency, and one breaks scene while protecting the pulse.".to_string(),
+    }
 }
 
 fn uncertainty_notes(
@@ -2023,6 +2415,8 @@ mod tests {
         assert!(response.bridge.is_some());
         assert!(response.draft.is_none());
         assert_eq!(response.active_role, "recommender");
+        assert!(matches!(response.framing.posture, ResponsePosture::Suggestive));
+        assert!(response.framing.route_comparison.is_some());
     }
 
     #[test]
@@ -2040,6 +2434,7 @@ mod tests {
         assert!(matches!(response.action, ComposerAction::Discovery));
         assert!(response.discovery.is_some());
         assert!(response.alternatives_considered.len() >= 2);
+        assert!(response.framing.confidence.should_offer_alternatives);
     }
 
     #[test]
@@ -2057,6 +2452,8 @@ mod tests {
         assert!(matches!(response.action, ComposerAction::Steer));
         assert!(response.draft.is_some());
         assert_eq!(response.active_role, "copilot");
+        assert!(matches!(response.framing.posture, ResponsePosture::Collaborative));
+        assert!(response.framing.challenge.is_some());
     }
 
     #[test]
@@ -2073,6 +2470,8 @@ mod tests {
         .expect("compose");
         assert!(matches!(response.action, ComposerAction::Explain));
         assert!(response.explanation.as_deref().unwrap_or("").contains("Lyra is in oracle mode"));
+        assert!(matches!(response.framing.posture, ResponsePosture::Revelatory));
+        assert!(matches!(response.framing.detail_depth, DetailDepth::Deep));
     }
 
     #[test]
@@ -2096,10 +2495,107 @@ mod tests {
         .expect("compose");
         assert_eq!(response.intent.familiarity_vs_novelty, "novel leaning");
         assert_eq!(response.provider_status.provider_kind, "deterministic");
+        assert!(response.framing.fallback.active);
+        assert!(response.framing.fallback.message.contains("heuristics"));
         assert!(response
             .uncertainty
             .iter()
             .any(|note| note.contains("Heuristic fallback")));
+    }
+
+    #[test]
+    fn coach_prompt_gets_refining_posture_and_sharpening_challenge() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let response = compose_composer_response(&conn, &settings, "something good for later", 12, None)
+            .expect("compose");
+        assert_eq!(response.active_role, "coach");
+        assert!(matches!(response.framing.posture, ResponsePosture::Refining));
+        assert!(response
+            .framing
+            .challenge
+            .as_deref()
+            .unwrap_or("")
+            .contains("sharper landing"));
+    }
+
+    #[test]
+    fn roles_do_not_flatten_into_same_posture() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let playlist = compose_composer_response(
+            &conn,
+            &settings,
+            "sad bedroom static that eventually forgives me",
+            12,
+            None,
+        )
+        .expect("playlist");
+        let steer = compose_composer_response(
+            &conn,
+            &settings,
+            "make this less obvious in the middle without losing the ache",
+            12,
+            None,
+        )
+        .expect("steer");
+        let explain = compose_composer_response(
+            &conn,
+            &settings,
+            "why does this transition work better than the other one",
+            12,
+            None,
+        )
+        .expect("explain");
+
+        assert!(matches!(playlist.framing.posture, ResponsePosture::Refining));
+        assert!(matches!(steer.framing.posture, ResponsePosture::Collaborative));
+        assert!(matches!(explain.framing.posture, ResponsePosture::Revelatory));
+    }
+
+    #[test]
+    fn protect_the_vibe_behavior_surfaces_on_revision_prompt() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let response = compose_composer_response(
+            &conn,
+            &settings,
+            "I want to stay in this mood but stop repeating myself",
+            12,
+            None,
+        )
+        .expect("compose");
+        assert!(matches!(response.action, ComposerAction::Steer));
+        assert!(response
+            .framing
+            .vibe_guard
+            .as_deref()
+            .unwrap_or("")
+            .contains("protecting"));
+    }
+
+    #[test]
+    fn discovery_prompt_can_shape_safe_interesting_dangerous_routes() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let response = compose_composer_response(
+            &conn,
+            &settings,
+            "give me three exits from this scene, one safe, one interesting, one dangerous",
+            12,
+            None,
+        )
+        .expect("compose");
+        let labels = response
+            .discovery
+            .as_ref()
+            .expect("discovery")
+            .directions
+            .iter()
+            .map(|direction| direction.label.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(labels, vec!["Safe", "Interesting", "Dangerous"]);
+        assert!(response.framing.route_comparison.is_some());
     }
 
     #[test]
@@ -2124,6 +2620,8 @@ mod tests {
             assert_eq!(response.active_role, role);
             assert_eq!(format!("{:?}", response.action).to_ascii_lowercase(), action);
             assert!(!response.uncertainty.is_empty());
+            assert!(!response.framing.lead.is_empty());
+            assert!(!response.framing.rationale.is_empty());
             assert!(
                 response.draft.is_some()
                     || response.bridge.is_some()

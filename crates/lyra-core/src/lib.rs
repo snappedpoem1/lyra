@@ -1329,7 +1329,12 @@ impl LyraCore {
         steer: Option<SteerPayload>,
     ) -> LyraResult<ComposerResponse> {
         let conn = self.conn()?;
-        let settings = state::load_settings(&conn)?;
+        let mut settings = state::load_settings(&conn)?;
+        let memory = recent_taste_axes(&prompt, steer.as_ref());
+        if !memory.is_empty() {
+            settings.composer_taste_memory = merge_recent_memory(&settings.composer_taste_memory, &memory);
+            state::save_settings(&conn, &settings)?;
+        }
         intelligence::compose_composer_response(&conn, &settings, &prompt, track_count, steer.as_ref())
     }
 
@@ -2540,6 +2545,56 @@ impl LyraCore {
     }
 }
 
+fn recent_taste_axes(prompt: &str, steer: Option<&SteerPayload>) -> Vec<String> {
+    let lower = prompt.to_ascii_lowercase();
+    let mut axes = Vec::new();
+    for (needle, label) in [
+        ("less obvious", "less obvious"),
+        ("more obvious", "more obvious"),
+        ("more adventurous", "more adventurous"),
+        ("more familiar", "more familiar"),
+        ("nocturnal", "more nocturnal"),
+        ("darker", "darker"),
+        ("warmer", "warmer"),
+        ("rougher", "rougher"),
+        ("dirtier", "dirtier"),
+        ("more human", "more human"),
+        ("softer", "softer"),
+    ] {
+        if lower.contains(needle) {
+            axes.push(label.to_string());
+        }
+    }
+    if let Some(steer) = steer {
+        if steer.novelty_bias.unwrap_or(0.56) >= 0.7 {
+            axes.push("less obvious".to_string());
+        }
+        if steer.adventurousness.unwrap_or(0.56) >= 0.7 {
+            axes.push("more adventurous".to_string());
+        }
+        if steer.warmth_bias.unwrap_or(0.5) >= 0.7 {
+            axes.push("more nocturnal".to_string());
+        }
+        if steer.contrast_sharpness.unwrap_or(0.5) >= 0.7 {
+            axes.push("sharper contrast".to_string());
+        }
+    }
+    axes.sort();
+    axes.dedup();
+    axes
+}
+
+fn merge_recent_memory(existing: &[String], incoming: &[String]) -> Vec<String> {
+    let mut merged = incoming.to_vec();
+    for item in existing {
+        if !merged.contains(item) {
+            merged.push(item.clone());
+        }
+    }
+    merged.truncate(6);
+    merged
+}
+
 fn create_dir_all_if_missing(path: &Path) -> std::io::Result<()> {
     fs::create_dir_all(path)
 }
@@ -2555,5 +2610,27 @@ fn is_path_writable(path: &Path) -> bool {
             true
         }
         Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{merge_recent_memory, recent_taste_axes};
+
+    #[test]
+    fn taste_memory_extracts_and_merges_recent_axes() {
+        let axes = recent_taste_axes(
+            "make this less obvious and rougher",
+            None,
+        );
+        assert!(axes.contains(&"less obvious".to_string()));
+        assert!(axes.contains(&"rougher".to_string()));
+
+        let merged = merge_recent_memory(
+            &["more nocturnal".to_string(), "warmer".to_string()],
+            &axes,
+        );
+        assert_eq!(merged.first().map(String::as_str), Some("less obvious"));
+        assert!(merged.contains(&"more nocturnal".to_string()));
     }
 }

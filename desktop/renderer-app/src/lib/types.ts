@@ -88,6 +88,7 @@ export type SettingsPayload = {
   composerProviderPreference: string;
   composerDefaultTrackCount: number;
   composerExplanationDepth: string;
+  composerTasteMemory: string[];
 };
 
 export type ProviderConfigRecord = {
@@ -482,6 +483,43 @@ export type DiscoveryDirection = {
   why: string;
 };
 
+export type ResponsePosture = "suggestive" | "refining" | "collaborative" | "revelatory";
+
+export type DetailDepth = "short" | "medium" | "deep";
+
+export type ConfidenceVoice = {
+  level: string;
+  phrasing: string;
+  shouldOfferAlternatives: boolean;
+};
+
+export type FallbackVoice = {
+  active: boolean;
+  label: string;
+  message: string;
+};
+
+export type RouteComparison = {
+  headline: string;
+  summary: string;
+};
+
+export type LyraFraming = {
+  posture: ResponsePosture;
+  detailDepth: DetailDepth;
+  lead: string;
+  rationale: string;
+  presenceNote?: string | null;
+  challenge?: string | null;
+  vibeGuard?: string | null;
+  confidence: ConfidenceVoice;
+  fallback: FallbackVoice;
+  routeComparison?: RouteComparison | null;
+  sidewaysTemptations: string[];
+  memoryHint?: string | null;
+  nextNudges: string[];
+};
+
 export type DiscoveryRoute = {
   seedLabel: string;
   directions: DiscoveryDirection[];
@@ -503,6 +541,7 @@ export type ComposerResponse = {
   prompt: string;
   intent: PlaylistIntent;
   providerStatus: ComposerProviderStatus;
+  framing: LyraFraming;
   draft?: ComposedPlaylistDraft | null;
   bridge?: BridgePath | null;
   discovery?: DiscoveryRoute | null;

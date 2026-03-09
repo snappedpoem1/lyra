@@ -115,6 +115,7 @@ pub struct SettingsPayload {
     pub composer_provider_preference: String,
     pub composer_default_track_count: i64,
     pub composer_explanation_depth: String,
+    pub composer_taste_memory: Vec<String>,
 }
 
 impl Default for SettingsPayload {
@@ -129,6 +130,7 @@ impl Default for SettingsPayload {
             composer_provider_preference: "auto".to_string(),
             composer_default_track_count: 20,
             composer_explanation_depth: "balanced".to_string(),
+            composer_taste_memory: Vec::new(),
         }
     }
 }
@@ -516,6 +518,66 @@ pub struct DiscoveryDirection {
     pub why: String,
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponsePosture {
+    #[default]
+    Suggestive,
+    Refining,
+    Collaborative,
+    Revelatory,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DetailDepth {
+    Short,
+    #[default]
+    Medium,
+    Deep,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfidenceVoice {
+    pub level: String,
+    pub phrasing: String,
+    pub should_offer_alternatives: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FallbackVoice {
+    pub active: bool,
+    pub label: String,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteComparison {
+    pub headline: String,
+    pub summary: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyraFraming {
+    pub posture: ResponsePosture,
+    pub detail_depth: DetailDepth,
+    pub lead: String,
+    pub rationale: String,
+    pub presence_note: Option<String>,
+    pub challenge: Option<String>,
+    pub vibe_guard: Option<String>,
+    pub confidence: ConfidenceVoice,
+    pub fallback: FallbackVoice,
+    pub route_comparison: Option<RouteComparison>,
+    pub sideways_temptations: Vec<String>,
+    pub memory_hint: Option<String>,
+    pub next_nudges: Vec<String>,
+}
+
 /// Steering adjustments the user can apply post-composition.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -536,6 +598,7 @@ pub struct ComposerResponse {
     pub prompt: String,
     pub intent: PlaylistIntent,
     pub provider_status: ComposerProviderStatus,
+    pub framing: LyraFraming,
     /// Present for Playlist and Steer actions.
     pub draft: Option<ComposedPlaylistDraft>,
     /// Present for Bridge actions.

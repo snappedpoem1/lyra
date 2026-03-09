@@ -83,6 +83,11 @@
     return trimmed;
   }
 
+  async function applyNudge(nudge: string): Promise<void> {
+    prompt = `${prompt.trim()} | ${nudge}`;
+    await composeDraft();
+  }
+
   async function refresh(): Promise<void> {
     playlists = await api.playlists();
   }
@@ -198,7 +203,7 @@
     setWorkspacePage(
       "Playlists",
       "Composer-first playlist authorship",
-      "Steer Lyra across draft, bridge, discovery, and explanation outputs instead of treating composition as a one-shot playlist generator.",
+      "Lyra should feel like a companion with taste and nerve, not a machine that dumps state.",
       "bridge"
     );
     trackCount = get(shell).settings.composerDefaultTrackCount ?? 20;
@@ -234,7 +239,7 @@
     <textarea
       bind:value={prompt}
       rows="3"
-      placeholder="mall goth sprint into neon confession booth"
+      placeholder="this is close but too clean, I want it dirtier and more human"
       on:keydown={(event) => {
         if (event.key === "Enter" && !event.shiftKey) {
           event.preventDefault();
@@ -259,7 +264,7 @@
         </select>
       </label>
       <button class="gen-action-btn" on:click={composeDraft} disabled={composing}>
-        {composing ? "Interpreting + routing..." : "Ask Lyra"}
+        {composing ? "Reading + shaping..." : "Ask Lyra"}
       </button>
     </div>
 
@@ -294,7 +299,7 @@
       <div class="draft-head">
         <div>
           <strong>{draft?.name ?? composerResult.action}</strong>
-          <small>{composerResult.activeRole} • {composerResult.providerStatus.selectedProvider} • {composerResult.providerStatus.mode}</small>
+          <small>{composerResult.activeRole} | {composerResult.providerStatus.selectedProvider} | {composerResult.providerStatus.mode}</small>
         </div>
         <div class="draft-actions">
           {#if draft}
@@ -306,23 +311,82 @@
 
       <div class="intent-summary-grid">
         <article class="summary-card">
-          <span class="summary-label">Parsed intent</span>
-          <strong>{composerResult.intent.sourceEnergy} → {composerResult.intent.destinationEnergy}</strong>
-          <small>{composerResult.action} • {composerResult.intent.transitionStyle}</small>
+          <span class="summary-label">Lyra read</span>
+          <strong>{composerResult.intent.sourceEnergy} -> {composerResult.intent.destinationEnergy}</strong>
+          <small>{composerResult.action} | {composerResult.intent.transitionStyle}</small>
           <small>{composerResult.intent.textureDescriptors.join(", ")}</small>
         </article>
         <article class="summary-card">
-          <span class="summary-label">Discovery stance</span>
+          <span class="summary-label">Taste stance</span>
           <strong>{composerResult.intent.familiarityVsNovelty}</strong>
           <small>{composerResult.intent.discoveryAggressiveness}</small>
-          <small>{composerResult.uncertainty.join(" ")}</small>
+          <small>{composerResult.framing.confidence.phrasing}</small>
         </article>
         <article class="summary-card">
+          <span class="summary-label">Confidence</span>
+          <strong>{composerResult.framing.confidence.level}</strong>
+          <small>{composerResult.framing.detailDepth} detail | {composerResult.framing.posture}</small>
+          <small>{composerResult.framing.fallback.label}{composerResult.framing.memoryHint ? ` | ${composerResult.framing.memoryHint}` : ""}</small>
+        </article>
+      </div>
+
+      <div class="lyra-guidance">
+        <article class="guidance-card guidance-lead">
+          <span class="summary-label">Lyra</span>
+          <strong>{composerResult.framing.lead}</strong>
+          <small>{composerResult.framing.rationale}</small>
+        </article>
+        {#if composerResult.framing.presenceNote}
+          <article class="guidance-card">
+            <span class="summary-label">Presence</span>
+            <small>{composerResult.framing.presenceNote}</small>
+          </article>
+        {/if}
+        {#if composerResult.framing.challenge}
+          <article class="guidance-card">
+            <span class="summary-label">Push</span>
+            <small>{composerResult.framing.challenge}</small>
+          </article>
+        {/if}
+        {#if composerResult.framing.vibeGuard}
+          <article class="guidance-card">
+            <span class="summary-label">Protect the vibe</span>
+            <small>{composerResult.framing.vibeGuard}</small>
+          </article>
+        {/if}
+        {#if composerResult.framing.routeComparison}
+          <article class="guidance-card">
+            <span class="summary-label">{composerResult.framing.routeComparison.headline}</span>
+            <small>{composerResult.framing.routeComparison.summary}</small>
+          </article>
+        {/if}
+        {#if composerResult.uncertainty.length}
+          <article class="guidance-card">
+            <span class="summary-label">Uncertainty</span>
+            {#each composerResult.uncertainty as note}
+              <small>{note}</small>
+            {/each}
+          </article>
+        {/if}
+        <article class="guidance-card">
+          <span class="summary-label">Fallback</span>
+          <strong>{composerResult.framing.fallback.label}</strong>
+          <small>{composerResult.framing.fallback.message}</small>
+        </article>
+        <article class="guidance-card">
           <span class="summary-label">Provider</span>
           <strong>{composerResult.providerStatus.selectedProvider}</strong>
-          <small>{composerResult.providerStatus.providerKind} • {composerResult.providerStatus.mode}</small>
+          <small>{composerResult.providerStatus.providerKind} | {composerResult.providerStatus.mode}</small>
           <small>{composerResult.providerStatus.fallbackReason ?? "Provider assisted language only; retrieval stayed local."}</small>
         </article>
+        {#if composerResult.framing.sidewaysTemptations.length}
+          <article class="guidance-card">
+            <span class="summary-label">Better road</span>
+            {#each composerResult.framing.sidewaysTemptations as temptation}
+              <small>{temptation}</small>
+            {/each}
+          </article>
+        {/if}
       </div>
 
       {#if draft}
@@ -369,7 +433,7 @@
 
       {#if composerResult.bridge}
         <div class="route-card">
-          <strong>{composerResult.bridge.sourceLabel} → {composerResult.bridge.destinationLabel}</strong>
+          <strong>{composerResult.bridge.sourceLabel} -> {composerResult.bridge.destinationLabel}</strong>
           <small>{Math.round(composerResult.bridge.confidence * 100)}% confidence</small>
           {#each composerResult.bridge.alternateDirections as option}
             <span class="route-option">{option}</span>
@@ -440,6 +504,17 @@
           {/each}
         </div>
       {/if}
+
+      {#if composerResult.framing.nextNudges.length}
+        <div class="route-card">
+          <strong>Keep steering</strong>
+          <div class="nudge-row">
+            {#each composerResult.framing.nextNudges as nudge}
+              <button class="nudge-btn" on:click={() => applyNudge(nudge)}>{nudge}</button>
+            {/each}
+          </div>
+        </div>
+      {/if}
     {/if}
 
     {#if saveMessage}
@@ -465,14 +540,15 @@
   .eyebrow, .muted, small { color: #9cb2c7; }
   .eyebrow { text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.72rem; }
   .header { display: flex; justify-content: space-between; align-items: end; margin-bottom: 20px; gap: 12px; }
-  .create-row, .grid, .draft-head, .draft-actions, .compose-controls, .preview-actions, .proof-inline-row { display: flex; gap: 12px; }
+  .create-row, .grid, .draft-head, .draft-actions, .compose-controls, .preview-actions, .proof-inline-row, .nudge-row { display: flex; gap: 12px; }
   .grid { flex-wrap: wrap; }
   .card,
   .compose-panel,
   .summary-card,
   .phase-card,
   .preview-row,
-  .route-card {
+  .route-card,
+  .guidance-card {
     border-radius: 18px;
     background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
     border: 1px solid rgba(255,255,255,0.08);
@@ -526,7 +602,8 @@
     flex-wrap: wrap;
   }
   .intent-summary-grid,
-  .phase-strip {
+  .phase-strip,
+  .lyra-guidance {
     display: grid;
     gap: 12px;
   }
@@ -536,12 +613,19 @@
   .phase-strip {
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   }
+  .lyra-guidance {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
   .summary-card,
   .phase-card,
-  .route-card {
+  .route-card,
+  .guidance-card {
     padding: 14px;
     display: grid;
     gap: 6px;
+  }
+  .guidance-lead {
+    background: linear-gradient(180deg, rgba(122,255,198,0.10), rgba(255,255,255,0.03));
   }
   .summary-label {
     font-size: 0.68rem;
@@ -566,6 +650,13 @@
     border-radius: 999px;
     background: rgba(122,255,198,0.08);
     color: #cdeee2;
+  }
+  .nudge-row {
+    flex-wrap: wrap;
+  }
+  .nudge-btn {
+    text-align: left;
+    border-color: rgba(122,255,198,0.24);
   }
   .preview-list {
     display: grid;
