@@ -50,7 +50,29 @@ Lyra still needs much stronger user-visible intelligence, explainability, author
 
 ## Forward Roadmap
 
-### Wave 1 - Runtime Foundation And Provider Plumbing
+Wave names here map to G-IDs used in WORKLIST and MISSING_FEATURES_REGISTRY:
+
+| Wave | G-ID | Status |
+|---|---|---|
+| Wave 1 - Runtime Foundation And Provider Plumbing | G-060 + G-065 | G-060 implemented with transitional risk; G-065 open |
+| Wave 2 - Explainability And Provenance Surfaces | G-061 | partial, active |
+| Wave 3 - Playlist Intelligence And Authorship | G-063 | partial |
+| Wave 4 - Discovery Graph And Bridge Exploration | G-064 | partial |
+| Wave 5 - Visible Taste And Dimensional Scoring | (no G-ID yet) | not started |
+| Wave 6 - Curation Safety And Library Stewardship | G-062 | partial |
+| Wave 7 - Packaged Confidence And Long-Session Stability | G-065 | open |
+
+### Horizon Intelligence Subsystem (landed March 8, 2026)
+
+Prowlarr is no longer coupled to acquisition execution.
+
+- Prowlarr role: release discovery, upcoming releases, indexer health reporting
+- Code: `oracle/horizon/prowlarr_releases.py`, `/api/horizon/*`, `/routes/horizon/`
+- T4 acquisition: `oracle/acquirers/magnet_sources.py` → `realdebrid.acquire_from_magnets()`
+- Prowlarr unavailability no longer blocks T4 — waterfall continues to T5 if no magnets found
+- Horizon workspace surface added to frontend at `/horizon`
+
+### Wave 1 - Runtime Foundation And Provider Plumbing (G-060, G-065)
 
 Keep this stable, but treat it as foundation work:
 
@@ -60,7 +82,7 @@ Keep this stable, but treat it as foundation work:
 - credential import and safe storage
 - acquisition lifecycle authority, queue trust, and post-acquisition library follow-through
 
-### Wave 2 - Explainability And Provenance Surfaces
+### Wave 2 - Explainability And Provenance Surfaces (G-061)
 
 Bring the intelligence layer into view early:
 
@@ -69,7 +91,7 @@ Bring the intelligence layer into view early:
 - confidence visibility and degraded-state honesty
 - MBID-first identity surfaces where available
 
-### Wave 3 - Playlist Intelligence And Authorship
+### Wave 3 - Playlist Intelligence And Authorship (G-063)
 
 Move playlist identity forward instead of treating it as a late garnish:
 
@@ -78,7 +100,7 @@ Move playlist identity forward instead of treating it as a late garnish:
 - "Why is this track here?" surfaces
 - save/apply flows that preserve authored structure
 
-### Wave 4 - Discovery Graph And Bridge Exploration
+### Wave 4 - Discovery Graph And Bridge Exploration (G-064)
 
 Restore discovery depth as a first-class differentiator:
 
@@ -96,7 +118,7 @@ Make the internal scoring layer legible and useful:
 - confidence-aware scoring explanations
 - actions that let the user steer future recommendations
 
-### Wave 6 - Curation Safety And Library Stewardship
+### Wave 6 - Curation Safety And Library Stewardship (G-062)
 
 Support the playlist-first intelligence system with trusted maintenance tools:
 
@@ -105,7 +127,7 @@ Support the playlist-first intelligence system with trusted maintenance tools:
 - rollback-aware curation operations
 - enrichment-driven organization workflows
 
-### Wave 7 - Packaged Confidence And Long-Session Stability
+### Wave 7 - Packaged Confidence And Long-Session Stability (G-065)
 
 Keep release work in scope, but do not let it dominate product identity:
 

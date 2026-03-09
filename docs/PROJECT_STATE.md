@@ -29,6 +29,7 @@ Implemented now:
 - provider config records, validation hooks, env import, and secret storage paths
 - canonical app shell with collapsible left and right rails, persistent mini player, and persistent Lyra composer line
 - acquisition workflow with persisted lifecycle state, queue ordering, cancellation, preflight checks, backend event streaming, downstream organize/scan/index follow-through, and shell-integrated diagnostics
+- Horizon release intelligence subsystem (Prowlarr as indexer-health and release discovery authority, decoupled from T4 acquisition execution)
 - partial artist, enrichment, recommendation, and taste surfaces, including shell-visible provenance, MBID identity summaries, and connected discovery/playlist evidence hooks
 
 Partial or scaffolded:
@@ -53,6 +54,8 @@ The canonical app already behaves like a credible native local player and librar
 - provider plumbing and secure secret handling
 - acquisition workflow with event-backed lifecycle authority, detailed failure semantics, queue reordering/cancellation, and completion only after organize/scan/index follow-through
 - acquisition execution no longer hard-blocked on `.venv` Python when native `qobuz` service, `streamrip`, `slskd`, or `spotdl` providers are available; Python remains only for the remaining legacy waterfall fallback paths
+- Prowlarr decoupled from acquisition execution: Prowlarr is now horizon intelligence (release discovery, upcoming releases, indexer health) via `oracle/horizon/prowlarr_releases.py` and `/api/horizon/*`; T4 torrent tier now routes through `oracle/acquirers/magnet_sources.py` to `realdebrid.acquire_from_magnets()` without a Prowlarr gate
+- Horizon workspace surface added to the frontend at `/routes/horizon/` for release intelligence and indexer health
 - track-level and artist-level provenance summaries with MBID-first identity surfaces
 - discovery and generated-playlist surfaces that can publish provenance and reason context into the shared shell
 - early recommendation, artist, taste, and enrichment surfaces
