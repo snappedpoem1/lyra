@@ -28,7 +28,7 @@ Implemented now:
 - Windows SMTC and audio device selection
 - provider config records, validation hooks, env import, and secret storage paths
 - canonical app shell with collapsible left and right rails, persistent mini player, and persistent Lyra composer line
-- acquisition workflow baseline with staged lifecycle visibility, queue controls, preflight checks, diagnostics, and shell-integrated activity surfaces
+- acquisition workflow with persisted lifecycle state, queue ordering, cancellation, preflight checks, backend event streaming, downstream organize/scan/index follow-through, and shell-integrated diagnostics
 - partial artist, enrichment, recommendation, and taste surfaces, including shell-visible provenance, MBID identity summaries, and connected discovery/playlist evidence hooks
 
 Partial or scaffolded:
@@ -40,7 +40,7 @@ Partial or scaffolded:
 - visible taste tooling and dimensional steering
 - curation workflows with rollback and undo
 - packaged desktop release confidence
-- final acquisition trust hardening around transitional bridge semantics and a dedicated backend event stream
+- final acquisition trust hardening around external metadata validation parity and full removal of the transitional Python waterfall executor
 
 ## Implemented Now
 
@@ -51,7 +51,8 @@ The canonical app already behaves like a credible native local player and librar
 - playlists, queue, settings, and now-playing surfaces
 - one connected oracle shell with shared context, provenance, bridge, queue, and acquisition rails
 - provider plumbing and secure secret handling
-- acquisition workflow baseline and diagnostics
+- acquisition workflow with event-backed lifecycle authority, detailed failure semantics, queue reordering/cancellation, and completion only after organize/scan/index follow-through
+- acquisition execution no longer hard-blocked on `.venv` Python when native `qobuz` service, `streamrip`, `slskd`, or `spotdl` providers are available; Python remains only for the remaining legacy waterfall fallback paths
 - track-level and artist-level provenance summaries with MBID-first identity surfaces
 - discovery and generated-playlist surfaces that can publish provenance and reason context into the shared shell
 - early recommendation, artist, taste, and enrichment surfaces
@@ -66,7 +67,7 @@ The biggest missing pieces are:
 - bridge-track and related-artist discovery depth
 - provenance-aware enrichment with confidence visibility
 - visible, steerable taste and dimensional signals
-- deeper trust semantics for transitional acquisition execution and backend-driven lifecycle event streaming
+- deeper trust semantics for transitional acquisition execution, especially external metadata-validation parity and eventual Python-bridge reduction
 
 ## Legacy Migration Source Reality
 

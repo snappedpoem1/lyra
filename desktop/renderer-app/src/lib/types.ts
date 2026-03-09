@@ -157,25 +157,63 @@ export type AcquisitionQueueItem = {
   title: string;
   album?: string | null;
   status: string;
+  queuePosition: number;
   priorityScore: number;
   source?: string | null;
   addedAt: string;
+  startedAt?: string | null;
   completedAt?: string | null;
+  failedAt?: string | null;
+  cancelledAt?: string | null;
   error?: string | null;
+  statusMessage?: string | null;
+  failureStage?: string | null;
+  failureReason?: string | null;
+  failureDetail?: string | null;
   retryCount: number;
+  selectedProvider?: string | null;
+  selectedTier?: string | null;
+  workerLabel?: string | null;
+  validationConfidence?: number | null;
+  validationSummary?: string | null;
+  targetRootId?: number | null;
+  targetRootPath?: string | null;
+  outputPath?: string | null;
+  downstreamTrackId?: number | null;
+  scanCompleted: boolean;
+  organizeCompleted: boolean;
+  indexCompleted: boolean;
+  cancelRequested: boolean;
   lifecycleStage?: string | null;
   lifecycleProgress?: number | null;
   lifecycleNote?: string | null;
   updatedAt?: string | null;
 };
 
+export type AcquisitionPreflightCheck = {
+  key: string;
+  label: string;
+  status: string;
+  detail: string;
+};
+
 export type AcquisitionPreflight = {
+  ready: boolean;
   pythonAvailable: boolean;
   downloaderAvailable: boolean;
   diskOk: boolean;
+  libraryRootOk: boolean;
+  outputPathOk: boolean;
   freeBytes: number;
   requiredBytes: number;
+  checks: AcquisitionPreflightCheck[];
   notes: string[];
+};
+
+export type AcquisitionEventPayload = {
+  queue: AcquisitionQueueItem[];
+  workerRunning: boolean;
+  latestItemId?: number | null;
 };
 
 export type PlaybackEvent = {

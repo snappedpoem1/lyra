@@ -106,4 +106,3 @@ def ensure_rutracker_indexer(username: str, password: str, *, enable: bool = Tru
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
-

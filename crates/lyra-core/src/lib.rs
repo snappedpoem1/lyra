@@ -20,12 +20,13 @@ pub mod scrobble;
 pub mod state;
 pub mod taste;
 
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use commands::{
-    AcquisitionPreflight, AcquisitionQueueItem, ArtistConnection, ArtistProfile, AudioOutputDevice, BootstrapPayload,
+    AcquisitionPreflight, AcquisitionPreflightCheck, AcquisitionQueueItem, ArtistConnection, ArtistProfile, AudioOutputDevice, BootstrapPayload,
     DuplicateCluster, ExplainPayload, LegacyImportReport, LibraryOverview, LibraryRootRecord,
     NativeCapabilities, PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary,
     ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
@@ -46,6 +47,16 @@ pub struct LyraCore {
     playback: Arc<Mutex<PlaybackController>>,
 }
 
+struct ValidationAssessment {
+    artist: String,
+    title: String,
+    album: Option<String>,
+    confidence: f64,
+    summary: String,
+    detail: Option<String>,
+    duplicate_path: Option<String>,
+}
+
 impl LyraCore {
     fn workspace_root_from_paths(&self) -> Option<PathBuf> {
         self.paths
@@ -61,6 +72,202 @@ impl LyraCore {
             .output()
             .map(|output| output.status.success())
             .unwrap_or(false)
+    }
+
+    fn clean_artist_name(value: &str) -> String {
+        let mut cleaned = value.trim().to_string();
+        for suffix in [" - Topic", " VEVO", " Official"] {
+            if cleaned.to_ascii_lowercase().ends_with(&suffix.to_ascii_lowercase()) {
+                cleaned.truncate(cleaned.len().saturating_sub(suffix.len()));
+                cleaned = cleaned.trim().to_string();
+            }
+        }
+        cleaned
+    }
+
+    fn clean_track_title(value: &str) -> String {
+        value.split_whitespace().collect::<Vec<_>>().join(" ").trim().to_string()
+    }
+
+    fn validation_confidence(
+        conn: &rusqlite::Connection,
+        artist: &str,
+        title: &str,
+        album: Option<&str>,
+    ) -> LyraResult<f64> {
+        let known_artist: i64 = conn.query_row(
+            "SELECT COUNT(*)
+             FROM tracks t
+             LEFT JOIN artists ar ON ar.id = t.artist_id
+             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))",
+            params![artist],
+            |row| row.get(0),
+        )?;
+        let exact_track: i64 = conn.query_row(
+            "SELECT COUNT(*)
+             FROM tracks t
+             LEFT JOIN artists ar ON ar.id = t.artist_id
+             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
+               AND lower(trim(COALESCE(t.title, ''))) = lower(trim(?2))",
+            params![artist, title],
+            |row| row.get(0),
+        )?;
+        let mut confidence: f64 = 0.42;
+        if known_artist > 0 {
+            confidence += 0.26;
+        }
+        if album.is_some() {
+            confidence += 0.08;
+        }
+        if exact_track > 0 {
+            confidence += 0.12;
+        }
+        Ok(confidence.clamp(0.0, 0.97))
+    }
+
+    fn validate_acquisition_request(
+        conn: &rusqlite::Connection,
+        artist: &str,
+        title: &str,
+        album: Option<&str>,
+    ) -> LyraResult<ValidationAssessment> {
+        let cleaned_artist = Self::clean_artist_name(artist);
+        let cleaned_title = Self::clean_track_title(title);
+        let cleaned_album = album.map(Self::clean_track_title);
+        let combined = format!("{} {}", cleaned_artist, cleaned_title).to_ascii_lowercase();
+        let junk_needles = [
+            "karaoke",
+            "tribute",
+            "cover version",
+            "made famous",
+            "made popular",
+            "in the style of",
+            "backing track",
+            "lyrics video",
+            "audio only",
+            "nightcore",
+            "slowed",
+            "sped up",
+            "chopped and screwed",
+            "ringtone",
+            "music box",
+            "8-bit",
+            "8 bit",
+            "instrumental version",
+            "a cappella",
+            "acapella",
+            "lo-fi",
+            "lofi",
+            "epic version",
+        ];
+        if junk_needles.iter().any(|needle| combined.contains(needle)) {
+            let confidence = Self::validation_confidence(
+                conn,
+                &cleaned_artist,
+                &cleaned_title,
+                cleaned_album.as_deref(),
+            )?;
+            return Ok(ValidationAssessment {
+                artist: cleaned_artist,
+                title: cleaned_title,
+                album: cleaned_album,
+                confidence,
+                summary: "Rejected by Rust guard: likely junk, cover, or altered-version metadata".to_string(),
+                detail: Some("Queue item matched local junk-pattern checks".to_string()),
+                duplicate_path: None,
+            });
+        }
+
+        let artist_lower = cleaned_artist.to_ascii_lowercase();
+        let record_labels = [
+            "atlantic records",
+            "columbia records",
+            "interscope",
+            "def jam",
+            "universal music",
+            "sony music",
+            "warner records",
+            "vevo",
+            "topic",
+            "official video",
+            "official audio",
+            "lyrical lemonade",
+            "worldstarhiphop",
+            "monstercat",
+            "nocopyrightsounds",
+        ];
+        if record_labels
+            .iter()
+            .any(|label| artist_lower == *label || artist_lower.contains(label))
+            || artist_lower.ends_with("- topic")
+            || artist_lower.ends_with("vevo")
+            || artist_lower.contains("official channel")
+        {
+            let confidence = Self::validation_confidence(
+                conn,
+                &cleaned_artist,
+                &cleaned_title,
+                cleaned_album.as_deref(),
+            )?;
+            return Ok(ValidationAssessment {
+                artist: cleaned_artist,
+                title: cleaned_title,
+                album: cleaned_album,
+                confidence,
+                summary: "Rejected by Rust guard: artist metadata looks like a label or YouTube channel".to_string(),
+                detail: Some("Queue item matched local artist/label guard checks".to_string()),
+                duplicate_path: None,
+            });
+        }
+
+        let duplicate = conn
+            .query_row(
+                "SELECT t.path
+                 FROM tracks t
+                 LEFT JOIN artists ar ON ar.id = t.artist_id
+                 WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
+                   AND lower(trim(COALESCE(t.title, ''))) = lower(trim(?2))
+                 LIMIT 1",
+                params![cleaned_artist, cleaned_title],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        let confidence =
+            Self::validation_confidence(conn, &cleaned_artist, &cleaned_title, cleaned_album.as_deref())?;
+        let summary = if duplicate.is_some() {
+            "Rejected by Rust guard: track already exists in the library".to_string()
+        } else if confidence >= 0.75 {
+            "Validated by Rust preflight with strong local confidence".to_string()
+        } else if confidence >= 0.55 {
+            "Validated by Rust preflight with moderate local confidence".to_string()
+        } else {
+            "Validated by Rust preflight with limited local confidence".to_string()
+        };
+        Ok(ValidationAssessment {
+            artist: cleaned_artist,
+            title: cleaned_title,
+            album: cleaned_album,
+            confidence,
+            summary,
+            detail: None,
+            duplicate_path: duplicate,
+        })
+    }
+
+    fn resolve_target_root(
+        conn: &rusqlite::Connection,
+        target_root_id: Option<i64>,
+    ) -> LyraResult<(Option<i64>, Option<String>)> {
+        let Some(root_id) = target_root_id else {
+            return Ok((None, None));
+        };
+        let root = library::list_library_roots(conn)?
+            .into_iter()
+            .find(|root| root.id == root_id);
+        Ok(match root {
+            Some(root) => (Some(root.id), Some(root.path)),
+            None => (None, None),
+        })
     }
 
     pub fn new(app_data_dir: PathBuf) -> LyraResult<Self> {
@@ -1187,16 +1394,57 @@ impl LyraCore {
         title: String,
         album: Option<String>,
         source: Option<String>,
+        target_root_id: Option<i64>,
     ) -> LyraResult<Vec<AcquisitionQueueItem>> {
         let conn = self.conn()?;
-        acquisition::add_acquisition_item(
+        let validation = Self::validate_acquisition_request(&conn, &artist, &title, album.as_deref())?;
+        let (target_root_id, target_root_path) = Self::resolve_target_root(&conn, target_root_id)?;
+        let priority =
+            acquisition::compute_initial_priority(&conn, &validation.artist, &validation.title, validation.album.as_deref(), source.as_deref())?;
+        let item = acquisition::add_acquisition_item(
             &conn,
-            &artist,
-            &title,
-            album.as_deref(),
+            &validation.artist,
+            &validation.title,
+            validation.album.as_deref(),
             source.as_deref(),
-            0.5,
+            priority,
+            Some(validation.confidence),
+            Some(&validation.summary),
+            target_root_id,
+            target_root_path.as_deref(),
         )?;
+        if let Some(path) = validation.duplicate_path.as_deref() {
+            acquisition::mark_failed(
+                &conn,
+                item.id,
+                "validating",
+                "Track already exists in the library",
+                Some(path),
+            )?;
+            acquisition::apply_validation_metadata(
+                &conn,
+                item.id,
+                Some(validation.confidence),
+                Some(&validation.summary),
+            )?;
+        } else if validation.summary.starts_with("Rejected by Rust guard:") {
+            acquisition::mark_failed(
+                &conn,
+                item.id,
+                "validating",
+                &validation.summary,
+                validation
+                    .detail
+                    .as_deref()
+                    .or(Some("Queue item was blocked before the provider waterfall started")),
+            )?;
+            acquisition::apply_validation_metadata(
+                &conn,
+                item.id,
+                Some(validation.confidence),
+                Some(&validation.summary),
+            )?;
+        }
         acquisition::list_acquisition_queue(&conn, None)
     }
 
@@ -1216,6 +1464,12 @@ impl LyraCore {
         acquisition::clear_completed(&conn)
     }
 
+    pub fn cancel_acquisition_item(&self, id: i64, detail: Option<String>) -> LyraResult<Vec<AcquisitionQueueItem>> {
+        let conn = self.conn()?;
+        acquisition::request_cancel(&conn, id, detail.as_deref())?;
+        acquisition::list_acquisition_queue(&conn, None)
+    }
+
     pub fn retry_failed_acquisition(&self) -> LyraResult<i64> {
         let conn = self.conn()?;
         acquisition::retry_failed(&conn)
@@ -1227,9 +1481,38 @@ impl LyraCore {
         acquisition::list_acquisition_queue(&conn, None)
     }
 
+    pub fn move_acquisition_queue_item(&self, id: i64, new_position: i64) -> LyraResult<Vec<AcquisitionQueueItem>> {
+        let conn = self.conn()?;
+        acquisition::move_queue_item(&conn, id, new_position)?;
+        acquisition::list_acquisition_queue(&conn, None)
+    }
+
+    pub fn set_acquisition_target_root(
+        &self,
+        id: i64,
+        target_root_id: Option<i64>,
+    ) -> LyraResult<Vec<AcquisitionQueueItem>> {
+        let conn = self.conn()?;
+        let (resolved_id, target_root_path) = Self::resolve_target_root(&conn, target_root_id)?;
+        acquisition::set_target_root(&conn, id, resolved_id, target_root_path.as_deref())?;
+        acquisition::list_acquisition_queue(&conn, None)
+    }
+
     pub fn acquisition_preflight(&self) -> LyraResult<AcquisitionPreflight> {
         let required_bytes: i64 = 500 * 1024 * 1024;
         let workspace_root = self.workspace_root_from_paths();
+        let conn = self.conn()?;
+        let provider_configs = providers::list_provider_configs(&conn)?;
+        let provider_config = |key: &str, config_key: &str, env_key: &str, default: &str| {
+            provider_configs
+                .iter()
+                .find(|record| record.provider_key == key)
+                .and_then(|record| record.config.get(config_key).or_else(|| record.config.get(env_key)))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| std::env::var(env_key).ok())
+                .unwrap_or_else(|| default.to_string())
+        };
         let python_path = workspace_root
             .as_ref()
             .map(|root| root.join(".venv").join("Scripts").join("python.exe"));
@@ -1238,27 +1521,82 @@ impl LyraCore {
             .as_ref()
             .map(|root| root.join("oracle").join("acquirers").join("waterfall.py"));
         let waterfall_available = waterfall_script.as_ref().is_some_and(|p| p.exists());
+        let qobuz_service_url = provider_config("qobuz", "qobuz_service_url", "QOBUZ_SERVICE_URL", "http://localhost:7700");
+        let qobuz_service_available =
+            ureq::get(&format!("{}/health", qobuz_service_url.trim_end_matches('/')))
+                .call()
+                .is_ok();
+        let slskd_url = provider_config("slskd", "slskd_url", "SLSKD_URL", "http://localhost:5030");
+        let slskd_api_base = std::env::var("LYRA_PROTOCOL_NODE_API_BASE")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "/api/v0".to_string());
+        let slskd_application_url = format!(
+            "{}/{}/application",
+            slskd_url.trim_end_matches('/'),
+            slskd_api_base.trim_matches('/')
+        );
+        let slskd_available = match ureq::get(&slskd_application_url).call() {
+            Ok(_) => true,
+            Err(ureq::Error::Status(code, _)) => matches!(code, 401 | 403),
+            Err(_) => false,
+        };
         let downloader_tools = [
+            ("qobuz-service", qobuz_service_available),
             ("spotdl", Self::command_available("spotdl")),
             ("streamrip", Self::command_available("rip")),
-            ("slskd", Self::command_available("slskd")),
+            ("slskd", slskd_available),
         ];
-        let downloader_available =
-            python_available && waterfall_available && downloader_tools.iter().any(|(_, ok)| *ok);
+        let native_downloader_available = downloader_tools.iter().any(|(_, ok)| *ok);
+        let python_bridge_available =
+            python_available && waterfall_available && native_downloader_available;
+        let downloader_available = native_downloader_available || python_bridge_available;
 
         let mut free_bytes: i64 = 0;
-        if let Some(downloads) = self.paths.app_data_dir.parent() {
-            if let Ok(space) = fs2::available_space(downloads) {
+        let acquisition_root = std::env::var("LYRA_DATA_ROOT")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var("LOCALAPPDATA")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(PathBuf::from)
+                    .map(|root| root.join("Lyra").join("dev"))
+            })
+            .or_else(|| workspace_root.as_ref().map(|root| root.join(".lyra-data")))
+            .unwrap_or_else(|| self.paths.app_data_dir.clone());
+        let staging_dir = std::env::var("STAGING_FOLDER")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| acquisition_root.join("staging"));
+        let downloads_dir = std::env::var("DOWNLOADS_FOLDER")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| acquisition_root.join("downloads"));
+
+        if let Ok(space) = fs2::available_space(&downloads_dir) {
                 free_bytes = space as i64;
-            }
         }
         let disk_ok = free_bytes >= required_bytes;
+        let library_roots = library::list_library_roots(&conn)?;
+        let library_root_ok = !library_roots.is_empty() && library_roots.iter().any(|root| PathBuf::from(&root.path).exists());
+        let output_path_ok = create_dir_all_if_missing(&downloads_dir).is_ok()
+            && create_dir_all_if_missing(&staging_dir).is_ok()
+            && is_path_writable(&downloads_dir)
+            && is_path_writable(&staging_dir);
+
         let mut notes = Vec::new();
-        if !python_available {
+        let mut checks = Vec::new();
+        if !python_available && native_downloader_available {
+            notes.push("Python runtime not found in .venv; Rust will use native acquisition providers where possible.".to_string());
+        } else if !python_available {
             notes.push("Python runtime not found in .venv".to_string());
         }
-        if !waterfall_available {
-            notes.push("Legacy waterfall bridge not found at oracle/acquirers/waterfall.py".to_string());
+        if !waterfall_available && python_available {
+            notes.push("Legacy waterfall bridge not found at oracle/acquirers/waterfall.py; Rust native providers only.".to_string());
         }
         if !downloader_available {
             notes.push("No supported acquisition downloader tool detected on PATH".to_string());
@@ -1277,15 +1615,93 @@ impl LyraCore {
                 required_bytes / (1024 * 1024)
             ));
         }
+        if !library_root_ok {
+            notes.push("No accessible library root is configured for post-acquisition organization.".to_string());
+        }
+        if !output_path_ok {
+            notes.push(format!(
+                "Acquisition staging/download paths are not writable: {} ; {}",
+                downloads_dir.display(),
+                staging_dir.display()
+            ));
+        }
+
+        checks.push(AcquisitionPreflightCheck {
+            key: "python_runtime".to_string(),
+            label: "Python runtime".to_string(),
+            status: if python_available {
+                "ok"
+            } else if native_downloader_available {
+                "warning"
+            } else {
+                "failed"
+            }
+            .to_string(),
+            detail: python_path
+                .as_ref()
+                .map(|path| {
+                    if path.exists() {
+                        path.display().to_string()
+                    } else {
+                        format!("{} (native providers can still run)", path.display())
+                    }
+                })
+                .unwrap_or_else(|| "Python venv not configured".to_string()),
+        });
+        checks.push(AcquisitionPreflightCheck {
+            key: "provider_readiness".to_string(),
+            label: "Provider/tool readiness".to_string(),
+            status: if downloader_available { "ok" } else { "warning" }.to_string(),
+            detail: if downloader_available {
+                downloader_tools
+                    .iter()
+                    .filter_map(|(tool, ok)| ok.then_some(*tool))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            } else {
+                "No supported acquisition downloader tool detected on PATH".to_string()
+            },
+        });
+        checks.push(AcquisitionPreflightCheck {
+            key: "disk_space".to_string(),
+            label: "Disk space".to_string(),
+            status: if disk_ok { "ok" } else { "failed" }.to_string(),
+            detail: format!(
+                "{} MB free in {}",
+                free_bytes / (1024 * 1024),
+                downloads_dir.display()
+            ),
+        });
+        checks.push(AcquisitionPreflightCheck {
+            key: "library_root".to_string(),
+            label: "Library root".to_string(),
+            status: if library_root_ok { "ok" } else { "failed" }.to_string(),
+            detail: if let Some(root) = library_roots.first() {
+                root.path.clone()
+            } else {
+                "Configure at least one writable library root for organize/index completion".to_string()
+            },
+        });
+        checks.push(AcquisitionPreflightCheck {
+            key: "output_paths".to_string(),
+            label: "Staging and downloads".to_string(),
+            status: if output_path_ok { "ok" } else { "failed" }.to_string(),
+            detail: format!("downloads={} | staging={}", downloads_dir.display(), staging_dir.display()),
+        });
+
         if notes.is_empty() {
             notes.push("Preflight checks passed".to_string());
         }
         Ok(AcquisitionPreflight {
+            ready: downloader_available && disk_ok && library_root_ok && output_path_ok,
             python_available,
             downloader_available,
             disk_ok,
+            library_root_ok,
+            output_path_ok,
             free_bytes,
             required_bytes,
+            checks,
             notes,
         })
     }
@@ -1296,9 +1712,23 @@ impl LyraCore {
         acquisition_dispatcher::process_next_queue_item(&self.paths)
     }
 
+    pub fn process_acquisition_queue_with_callback<F>(&self, notify: F) -> LyraResult<bool>
+    where
+        F: Fn(i64) + Send + Sync + 'static,
+    {
+        acquisition_dispatcher::process_next_queue_item_with_callback(&self.paths, notify)
+    }
+
     /// Start the background acquisition worker.
     pub fn start_acquisition_worker(&self) -> LyraResult<bool> {
         Ok(acquisition_worker::start_worker(self.paths.clone()))
+    }
+
+    pub fn start_acquisition_worker_with_callback<F>(&self, notify: F) -> LyraResult<bool>
+    where
+        F: Fn(i64) + Send + Sync + 'static,
+    {
+        Ok(acquisition_worker::start_worker_with_callback(self.paths.clone(), notify))
     }
 
     /// Stop the background acquisition worker.
@@ -1967,5 +2397,23 @@ impl LyraCore {
             }
         }
         Ok(dispatched)
+    }
+}
+
+fn create_dir_all_if_missing(path: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(path)
+}
+
+fn is_path_writable(path: &Path) -> bool {
+    if fs::create_dir_all(path).is_err() {
+        return false;
+    }
+    let probe = path.join(".lyra-write-probe");
+    match fs::write(&probe, b"ok") {
+        Ok(()) => {
+            let _ = fs::remove_file(probe);
+            true
+        }
+        Err(_) => false,
     }
 }

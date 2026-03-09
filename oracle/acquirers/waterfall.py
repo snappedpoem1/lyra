@@ -287,17 +287,8 @@ def _try_tier2_slskd(artist: str, title: str) -> AcquisitionResult:
 
 
 def _try_tier4_realdebrid(artist: str, title: str, album: Optional[str] = None) -> AcquisitionResult:
-    """Tier 4: Prowlarr -> Real-Debrid (cached torrents, FLAC quality)."""
+    """Tier 4: Real-Debrid (cached torrents via magnet URIs from multiple sources)."""
     start = time.perf_counter()
-
-    if not _check_prowlarr_available():
-        return AcquisitionResult(
-            success=False,
-            tier=4,
-            source="real_debrid",
-            error="Prowlarr not available",
-            elapsed=time.perf_counter() - start,
-        )
 
     if not _check_realdebrid_available():
         return AcquisitionResult(
@@ -309,143 +300,64 @@ def _try_tier4_realdebrid(artist: str, title: str, album: Optional[str] = None) 
         )
 
     try:
-        from oracle.acquirers.prowlarr_rd import search_prowlarr
-        from oracle.acquirers.realdebrid import (
-            extract_hash_from_magnet,
-            probe_magnet_cached,
-        )
-        from oracle.acquirers.guard import guard_file
+        from oracle.acquirers.magnet_sources import get_magnets_for_track
+        from oracle.acquirers.realdebrid import acquire_from_magnets
 
-        # Search for release (prefer FLAC)
-        query = f"{artist} {album or title} FLAC"
-        logger.info(f"[T4] Searching Prowlarr: {query}")
-        results = search_prowlarr(query, limit=10)
-
-        if not results:
-            query = f"{artist} {title}"
-            results = search_prowlarr(query, limit=10)
-
-        if not results:
-            return AcquisitionResult(
-                success=False,
-                tier=4,
-                source="real_debrid",
-                error="No results from Prowlarr",
-                elapsed=time.perf_counter() - start,
-            )
-
-        # Build magnet list from Prowlarr results.
-        # Prowlarr field map (verified empirically):
-        #   guid      = actual magnet URI ("magnet:?xt=urn:btih:...") for TPB-style indexers
-        #   infoHash  = raw hex hash (most reliable -- use to construct magnet if guid isn't one)
-        #   magnetUrl = Prowlarr proxy URL (do NOT send this to RD; use guid/infoHash instead)
-        magnets: List[Dict] = []
-        for r in results:
-            info_hash = (r.get("infoHash") or "").strip().lower()
-            magnet = ""
-
-            guid = (r.get("guid") or "").strip()
-            if guid.lower().startswith("magnet:"):
-                magnet = guid
-                if not info_hash:
-                    info_hash = extract_hash_from_magnet(magnet) or ""
-            elif info_hash:
-                dn = (r.get("title") or "").replace(" ", "+")
-                magnet = f"magnet:?xt=urn:btih:{info_hash}&dn={dn}"
-
-            if magnet:
-                magnets.append({
-                    "magnet": magnet,
-                    "title": r.get("title", ""),
-                    "is_flac": "flac" in (r.get("title") or "").lower(),
-                    "seeders": r.get("seeders", 0) or 0,
-                })
+        # Get magnets from all available sources (prowlarr, future: DHT, manual)
+        # Source priority: prowlarr magnets with >10 seeders are boosted
+        logger.info(f"[T4] Searching for magnets: {artist} - {title}")
+        magnets = get_magnets_for_track(artist, title, album)
 
         if not magnets:
+            # Prowlarr may be unavailable, but T4 doesn't fail entirely
+            # Just return no results and let waterfall try T5
             return AcquisitionResult(
                 success=False,
                 tier=4,
                 source="real_debrid",
-                error="No usable magnets in Prowlarr results",
+                error="No magnets found from any source",
                 elapsed=time.perf_counter() - start,
             )
 
-        # Sort: FLAC first, then by seeder count descending
-        magnets.sort(key=lambda x: (not x["is_flac"], -x["seeders"]))
-
-        # RD instantAvailability is deprecated (returns 403). Instead: add each
-        # magnet, poll for 20s. Cached torrents go to "downloaded" in <5s.
-        # Non-cached ones time out -- we delete them and move on.
-        # Limit to top 3 to keep T4 bounded (<60s total before falling to T5).
-        for entry in magnets[:3]:
-            magnet = entry["magnet"]
-            label = entry["title"][:55] or magnet[:55]
-            logger.info(f"[T4] Probing RD cache: {label}")
-            try:
-                files = probe_magnet_cached(
-                    magnet,
-                    target_artist=artist,
-                    target_title=title,
-                )
-                if not files:
-                    continue
-
-                # Post-download guard: verify the file is plausibly the right track
-                audio_files = [
-                    f for f in files
-                    if f.suffix.lower() in {".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus"}
-                ]
-                if not audio_files:
-                    logger.debug("[T4] No audio files in download -- skipping")
-                    continue
-
-                best_file = audio_files[0]
-                if len(audio_files) > 1:
-                    # Pick the file whose name best matches the target
-                    from difflib import SequenceMatcher
-                    target_str = f"{artist} {title}".lower()
-                    audio_files.sort(
-                        key=lambda p: SequenceMatcher(None, target_str, p.stem.lower()).ratio(),
-                        reverse=True,
-                    )
-                    best_file = audio_files[0]
-
-                guard_result = guard_file(best_file)
-                if not guard_result.allowed:
-                    logger.info(
-                        "[T4] Guard rejected downloaded file: %s (%s)",
-                        best_file.name,
-                        guard_result.rejection_reason or "rejected",
-                    )
-                    continue
-                if guard_result.confidence < MIN_GUARD_CONFIDENCE:
-                    logger.info(
-                        "[T4] Guard low confidence %.2f for %s",
-                        guard_result.confidence,
-                        best_file.name,
-                    )
-                    continue
-
-                return AcquisitionResult(
-                    success=True,
-                    tier=4,
-                    source="real_debrid",
-                    path=str(best_file),
-                    artist=artist,
-                    title=title,
-                    elapsed=time.perf_counter() - start,
-                    metadata={"is_flac": entry["is_flac"], "files": len(files)},
-                )
-            except Exception as e:
-                logger.debug(f"[T4] probe failed: {e}")
-
-        return AcquisitionResult(
-            success=False,
-            tier=4,
-            source="real_debrid",
-            error="No cached results found in Real-Debrid",
-            elapsed=time.perf_counter() - start,
+        # Limit to top 3 magnets to keep T4 bounded (<60s total before falling to T5)
+        magnets_to_try = magnets[:3]
+        logger.info(
+            f"[T4] Found {len(magnets)} total magnets, trying top {len(magnets_to_try)}"
         )
+
+        # Try acquisition from magnet list (includes guard validation)
+        success, file_path, error = acquire_from_magnets(
+            magnets_to_try,
+            target_artist=artist,
+            target_title=title,
+        )
+
+        if success and file_path:
+            # Determine if we got FLAC
+            is_flac = file_path.suffix.lower() == ".flac"
+            
+            return AcquisitionResult(
+                success=True,
+                tier=4,
+                source="real_debrid",
+                path=str(file_path),
+                artist=artist,
+                title=title,
+                elapsed=time.perf_counter() - start,
+                metadata={
+                    "is_flac": is_flac,
+                    "magnets_tried": len(magnets_to_try),
+                    "magnets_available": len(magnets),
+                },
+            )
+        else:
+            return AcquisitionResult(
+                success=False,
+                tier=4,
+                source="real_debrid",
+                error=error or "All magnets failed (not cached or rejected by guard)",
+                elapsed=time.perf_counter() - start,
+            )
 
     except Exception as e:
         logger.exception("[T4] Real-Debrid error")
@@ -626,7 +538,7 @@ def acquire(
 
     if not guard.get("allowed"):
         logger.warning(f"  [GUARD REJECTED] {guard.get('reason')}")
-        _emit({"event": "failure", "error": f"Guard rejected: {guard.get('reason')}", "elapsed": time.perf_counter() - waterfall_start})
+        _emit({"event": "failure", "stage": "validating", "provider": "guard", "tier": "guard", "error": f"Guard rejected: {guard.get('reason')}", "elapsed": time.perf_counter() - waterfall_start})
         return AcquisitionResult(
             success=False,
             tier=0,
@@ -650,13 +562,13 @@ def acquire(
     # Tier 1: Qobuz (hi-fi FLAC -- priority, authenticated, reliable)
     if 1 not in skip_tiers and max_tier >= 1:
         logger.info("  [T1] Trying Qobuz...")
-        _emit({"event": "phase", "stage": "acquire", "progress": 0.1, "note": "Trying T1 Qobuz..."})
+        _emit({"event": "phase", "stage": "acquiring", "progress": 0.1, "note": "Trying T1 Qobuz...", "provider": "qobuz", "tier": "T1"})
         result = _try_tier1_qobuz(artist, title)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T1 SUCCESS ({result.elapsed:.1f}s)")
-            _emit({"event": "phase", "stage": "stage", "progress": 0.8, "note": "Staging file..."})
-            _emit({"event": "success", "path": result.path or "", "tier": "T1", "elapsed": time.perf_counter() - waterfall_start})
+            _emit({"event": "phase", "stage": "staging", "progress": 0.8, "note": "Staging file...", "provider": "qobuz", "tier": "T1"})
+            _emit({"event": "success", "path": result.path or "", "provider": "qobuz", "tier": "T1", "elapsed": time.perf_counter() - waterfall_start})
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T1: {result.error}")
@@ -664,13 +576,13 @@ def acquire(
     # Tier 2: Streamrip (alternative hi-fi fallback)
     if 2 not in skip_tiers and max_tier >= 2:
         logger.info("  [T2] Trying Streamrip...")
-        _emit({"event": "phase", "stage": "acquire", "progress": 0.25, "note": "Trying T2 Streamrip..."})
+        _emit({"event": "phase", "stage": "acquiring", "progress": 0.25, "note": "Trying T2 Streamrip...", "provider": "streamrip", "tier": "T2"})
         result = _try_tier2_streamrip(artist, title, album)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T2 SUCCESS ({result.elapsed:.1f}s)")
-            _emit({"event": "phase", "stage": "stage", "progress": 0.8, "note": "Staging file..."})
-            _emit({"event": "success", "path": result.path or "", "tier": "T2", "elapsed": time.perf_counter() - waterfall_start})
+            _emit({"event": "phase", "stage": "staging", "progress": 0.8, "note": "Staging file...", "provider": "streamrip", "tier": "T2"})
+            _emit({"event": "success", "path": result.path or "", "provider": "streamrip", "tier": "T2", "elapsed": time.perf_counter() - waterfall_start})
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T2: {result.error}")
@@ -678,13 +590,13 @@ def acquire(
     # Tier 3: Slskd (P2P FLAC)
     if 3 not in skip_tiers and max_tier >= 3:
         logger.info("  [T3] Trying Slskd...")
-        _emit({"event": "phase", "stage": "acquire", "progress": 0.4, "note": "Trying T3 Slskd..."})
+        _emit({"event": "phase", "stage": "acquiring", "progress": 0.4, "note": "Trying T3 Slskd...", "provider": "slskd", "tier": "T3"})
         result = _try_tier3_slskd(artist, title)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T3 SUCCESS ({result.elapsed:.1f}s)")
-            _emit({"event": "phase", "stage": "stage", "progress": 0.8, "note": "Staging file..."})
-            _emit({"event": "success", "path": result.path or "", "tier": "T3", "elapsed": time.perf_counter() - waterfall_start})
+            _emit({"event": "phase", "stage": "staging", "progress": 0.8, "note": "Staging file...", "provider": "slskd", "tier": "T3"})
+            _emit({"event": "success", "path": result.path or "", "provider": "slskd", "tier": "T3", "elapsed": time.perf_counter() - waterfall_start})
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T3: {result.error}")
@@ -692,13 +604,13 @@ def acquire(
     # Tier 4: Real-Debrid (Prowlarr + cached torrents)
     if 4 not in skip_tiers and max_tier >= 4:
         logger.info("  [T4] Trying Real-Debrid...")
-        _emit({"event": "phase", "stage": "acquire", "progress": 0.55, "note": "Trying T4 Real-Debrid..."})
+        _emit({"event": "phase", "stage": "acquiring", "progress": 0.55, "note": "Trying T4 Real-Debrid...", "provider": "real_debrid", "tier": "T4"})
         result = _try_tier4_realdebrid(artist, title, album)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T4 SUCCESS ({result.elapsed:.1f}s)")
-            _emit({"event": "phase", "stage": "stage", "progress": 0.8, "note": "Staging file..."})
-            _emit({"event": "success", "path": result.path or "", "tier": "T4", "elapsed": time.perf_counter() - waterfall_start})
+            _emit({"event": "phase", "stage": "staging", "progress": 0.8, "note": "Staging file...", "provider": "real_debrid", "tier": "T4"})
+            _emit({"event": "success", "path": result.path or "", "provider": "real_debrid", "tier": "T4", "elapsed": time.perf_counter() - waterfall_start})
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T4: {result.error}")
@@ -706,13 +618,13 @@ def acquire(
     # Tier 5: SpotDL (YouTube 320k fallback)
     if 5 not in skip_tiers and max_tier >= 5:
         logger.info("  [T5] Trying SpotDL...")
-        _emit({"event": "phase", "stage": "acquire", "progress": 0.7, "note": "Trying T5 SpotDL..."})
+        _emit({"event": "phase", "stage": "acquiring", "progress": 0.7, "note": "Trying T5 SpotDL...", "provider": "spotdl", "tier": "T5"})
         result = _try_tier5_spotdl(artist, title, spotify_uri)
         attempts.append(result)
         if result.success:
             logger.info(f"  [OK] T5 SUCCESS ({result.elapsed:.1f}s)")
-            _emit({"event": "phase", "stage": "stage", "progress": 0.8, "note": "Staging file..."})
-            _emit({"event": "success", "path": result.path or "", "tier": "T5", "elapsed": time.perf_counter() - waterfall_start})
+            _emit({"event": "phase", "stage": "staging", "progress": 0.8, "note": "Staging file...", "provider": "spotdl", "tier": "T5"})
+            _emit({"event": "success", "path": result.path or "", "provider": "spotdl", "tier": "T5", "elapsed": time.perf_counter() - waterfall_start})
             _log_acquisition(artist, title, result)
             return result
         logger.info(f"  [--] T5: {result.error}")
@@ -722,10 +634,10 @@ def acquire(
 
     if attempts:
         last = attempts[-1]
-        _emit({"event": "failure", "error": last.error or "Not found in any tier", "elapsed": time.perf_counter() - waterfall_start})
+        _emit({"event": "failure", "stage": "acquiring", "provider": last.source, "tier": f"T{last.tier}" if last.tier else None, "error": last.error or "Not found in any tier", "elapsed": time.perf_counter() - waterfall_start})
         return last
 
-    _emit({"event": "failure", "error": "All acquisition tiers skipped or failed", "elapsed": time.perf_counter() - waterfall_start})
+    _emit({"event": "failure", "stage": "acquiring", "error": "All acquisition tiers skipped or failed", "elapsed": time.perf_counter() - waterfall_start})
     return AcquisitionResult(
         success=False,
         tier=0,
@@ -785,10 +697,10 @@ def get_tier_status() -> Dict[str, Dict[str, Any]]:
             "required_for_core_app": False,
         },
         "tier4_realdebrid": {
-            "available": _check_prowlarr_available() and _check_realdebrid_available(),
+            "available": _check_realdebrid_available(),
             "prowlarr": _check_prowlarr_available(),
             "realdebrid": _check_realdebrid_available(),
-            "description": "Prowlarr + Real-Debrid (FLAC torrents)",
+            "description": "Real-Debrid cached torrents (magnet sources: prowlarr, future: DHT)",
             "packaging_mode": "hybrid_optional_external",
             "required_for_core_app": False,
         },

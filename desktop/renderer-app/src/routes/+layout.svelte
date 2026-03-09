@@ -25,6 +25,7 @@
     { href: "/discover", label: "Discover", short: "Discover" },
     { href: "/queue", label: "Queue", short: "Queue" },
     { href: "/acquisition", label: "Acquisition", short: "Acquire" },
+    { href: "/horizon", label: "Horizon", short: "Horizon" },
     { href: "/settings", label: "Settings", short: "Settings" }
   ];
 

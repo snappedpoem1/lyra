@@ -45,7 +45,7 @@ pub fn default_provider_capabilities() -> Vec<ProviderCapabilitySeed> {
         ProviderCapabilitySeed {
             provider_key: "prowlarr",
             display_name: "Prowlarr",
-            capabilities: vec!["search", "torrent-indexer"],
+            capabilities: vec!["horizon", "release-intelligence", "indexer-health"],
         },
         ProviderCapabilitySeed {
             provider_key: "realdebrid",

@@ -56,15 +56,19 @@ Goal: make enrichment and identity trust legible inside the canonical shell.
 
 ### G-060 Acquisition Workflow Parity Checkpoint
 
-Current checkpoint: usable baseline implemented in the canonical shell.
+Current checkpoint: materially implemented in the canonical shell with live backend authority.
 
-- [x] Staged lifecycle coverage across `acquire`, `stage`, `scan`, `organize`, and `index`
-- [x] Per-item progress, errors, and lifecycle notes visible in the Acquisition workspace
-- [x] Queue lifecycle controls: retry failed items, clear completed items, and prioritize items
-- [x] Preflight checks explicit for disk space and transitional downloader/tool availability
-- [x] Lifecycle events surfaced in the Acquisition workspace and shell inspector
+- [x] Staged lifecycle coverage across `queued`, `validating`, `acquiring`, `staging`, `organizing`, `scanning`, `indexing`, `completed`, `failed`, and `cancelled`
+- [x] Per-item progress, provider/tier/worker metadata, downstream completion flags, and failure diagnostics visible in the Acquisition workspace
+- [x] Queue lifecycle controls: retry failed items, clear completed items, prioritize items, reorder queue items, and cancel queued/active items where safe
+- [x] Preflight checks explicit for disk space, downloader/provider readiness, library-root sanity, and writable staging/download paths
+- [x] Lifecycle events surfaced from backend callbacks into the Acquisition workspace and shell inspector
+- [x] Per-item destination-root routing persisted in Rust and editable from the canonical Acquisition workspace
+- [x] First-pass legacy guard, duplicate detection, confidence scoring, and taste-based priority seeding ported into Rust before the Python waterfall starts
+- [x] Active waterfall cancellation now polls cancellation requests even while the subprocess is quiet
+- [x] Acquisition no longer hard-depends on `.venv` Python when native `qobuz` service, `streamrip`, `slskd`, or `spotdl` providers are available
 - [x] Legacy acquisition sources inspected before recreating queue behavior
-- [ ] Keep hardening backend-driven event authority and remaining trust semantics without reopening lower-priority branches
+- [ ] Port external metadata-validator parity and replace the remaining Python waterfall executor without reopening lower-priority branches
 
 ### G-063 Playlist Intelligence Parity
 

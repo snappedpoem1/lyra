@@ -2,6 +2,7 @@
 ///
 /// Polls the acquisition queue and processes items automatically.
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tracing::{info, warn};
@@ -19,16 +20,26 @@ static WORKER_RUNNING: AtomicBool = AtomicBool::new(false);
 ///
 /// Returns true if the worker was started, false if already running.
 pub fn start_worker(paths: AppPaths) -> bool {
+    start_worker_with_callback(paths, |_| {})
+}
+
+pub fn start_worker_with_callback<F>(paths: AppPaths, notify: F) -> bool
+where
+    F: Fn(i64) + Send + Sync + 'static,
+{
     if WORKER_RUNNING.swap(true, Ordering::SeqCst) {
         warn!("Acquisition worker already running");
         return false;
     }
 
     info!("Starting acquisition background worker");
-    
+    let notify = Arc::new(notify);
     thread::spawn(move || {
         while WORKER_RUNNING.load(Ordering::SeqCst) {
-            match acquisition_dispatcher::process_next_queue_item(&paths) {
+            match acquisition_dispatcher::process_next_queue_item_with_callback(&paths, {
+                let notify = notify.clone();
+                move |id| notify(id)
+            }) {
                 Ok(true) => {
                     info!("Processed acquisition queue item");
                     // After processing, wait a bit before checking again

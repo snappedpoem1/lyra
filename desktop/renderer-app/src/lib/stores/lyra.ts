@@ -2,6 +2,7 @@ import { browser } from "$app/environment";
 import { writable } from "svelte/store";
 import { api } from "$lib/tauri";
 import type {
+  AcquisitionEventPayload,
   AppShellState,
   BootstrapPayload,
   LegacyImportReport,
@@ -92,6 +93,14 @@ export function registerLyraEvents(): () => void {
   });
   void attach<ProviderConfigRecord[]>("lyra://provider-updated", (payload) => {
     shell.update((state) => ({ ...state, providers: payload }));
+  });
+  void attach<AcquisitionEventPayload>("lyra://acquisition-updated", (payload) => {
+    shell.update((state) => ({
+      ...state,
+      acquisitionQueuePending: payload.queue.filter((item) =>
+        ["queued", "validating", "acquiring", "staging", "scanning", "organizing", "indexing"].includes(item.status)
+      ).length
+    }));
   });
   void attach("lyra://library-updated", async () => {
     await refreshShell();

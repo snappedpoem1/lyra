@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from oracle import acquisition
+from oracle.acquirers.waterfall import AcquisitionResult
 
 
 class AcquisitionGuardPathTests(unittest.TestCase):
@@ -45,41 +46,24 @@ class AcquisitionGuardPathTests(unittest.TestCase):
         download_path = Path(self.tmp.name) / "track.mp3"
         download_path.write_bytes(b"fake-audio")
 
+        # Mock waterfall to simulate T4 real-debrid acquisition with guard rejection
+        # The new flow: waterfall.acquire → magnet_sources → realdebrid.acquire_from_magnets
+        def mock_waterfall_acquire(artist: str, title: str, **kwargs):
+            # Simulate guard rejection by returning failed result with error
+            return AcquisitionResult(
+                success=False,
+                tier=4,
+                source="realdebrid",
+                path=None,
+                error="Guard rejected: junk"
+            )
+
         with mock.patch("oracle.acquisition.get_write_mode", return_value="apply_allowed"), \
              mock.patch("oracle.acquisition.get_connection", side_effect=self._connect), \
-             mock.patch(
-                 "oracle.acquisition.guard_acquisition",
-                 return_value=SimpleNamespace(
-                     allowed=True,
-                     confidence=1.0,
-                     rejection_reason=None,
-                 ),
-             ), \
-             mock.patch("oracle.acquisition.prowlarr_rd.add_to_real_debrid", return_value="tid"), \
-             mock.patch("oracle.acquisition.prowlarr_rd.select_files"), \
-             mock.patch(
-                 "oracle.acquisition.prowlarr_rd.poll_real_debrid",
-                 return_value={"status": "downloaded"},
-             ), \
-             mock.patch(
-                 "oracle.acquisition.prowlarr_rd.download_from_real_debrid",
-                 return_value=[download_path],
-             ), \
-             mock.patch("oracle.acquisition.prowlarr_rd.move_to_staging") as move_to_staging, \
-             mock.patch(
-                 "oracle.acquisition.guard_file",
-                 return_value=SimpleNamespace(
-                     allowed=False,
-                     confidence=0.0,
-                     rejection_reason="junk",
-                     artist="",
-                     title="",
-                 ),
-             ):
+             mock.patch("oracle.acquirers.waterfall.acquire", side_effect=mock_waterfall_acquire):
             stats = acquisition.process_queue(limit=1)
 
         self.assertEqual(stats["completed"], 0)
-        move_to_staging.assert_not_called()
 
         conn = sqlite3.connect(self.db_path)
         row = conn.execute(

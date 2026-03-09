@@ -194,12 +194,33 @@ pub struct AcquisitionQueueItem {
     pub title: String,
     pub album: Option<String>,
     pub status: String,
+    pub queue_position: i64,
     pub priority_score: f64,
     pub source: Option<String>,
     pub added_at: String,
+    pub started_at: Option<String>,
     pub completed_at: Option<String>,
+    pub failed_at: Option<String>,
+    pub cancelled_at: Option<String>,
     pub error: Option<String>,
+    pub status_message: Option<String>,
+    pub failure_stage: Option<String>,
+    pub failure_reason: Option<String>,
+    pub failure_detail: Option<String>,
     pub retry_count: i64,
+    pub selected_provider: Option<String>,
+    pub selected_tier: Option<String>,
+    pub worker_label: Option<String>,
+    pub validation_confidence: Option<f64>,
+    pub validation_summary: Option<String>,
+    pub target_root_id: Option<i64>,
+    pub target_root_path: Option<String>,
+    pub output_path: Option<String>,
+    pub downstream_track_id: Option<i64>,
+    pub scan_completed: bool,
+    pub organize_completed: bool,
+    pub index_completed: bool,
+    pub cancel_requested: bool,
     pub lifecycle_stage: Option<String>,
     pub lifecycle_progress: Option<f64>,
     pub lifecycle_note: Option<String>,
@@ -208,13 +229,34 @@ pub struct AcquisitionQueueItem {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AcquisitionPreflightCheck {
+    pub key: String,
+    pub label: String,
+    pub status: String,
+    pub detail: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AcquisitionPreflight {
+    pub ready: bool,
     pub python_available: bool,
     pub downloader_available: bool,
     pub disk_ok: bool,
+    pub library_root_ok: bool,
+    pub output_path_ok: bool,
     pub free_bytes: i64,
     pub required_bytes: i64,
+    pub checks: Vec<AcquisitionPreflightCheck>,
     pub notes: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcquisitionEventPayload {
+    pub queue: Vec<AcquisitionQueueItem>,
+    pub worker_running: bool,
+    pub latest_item_id: Option<i64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

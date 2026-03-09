@@ -42,7 +42,7 @@ Python is still a major migration source for solved process logic, provider inte
 The native foundation is real and increasingly usable:
 
 - Rust/Tauri/Svelte now own the canonical runtime
-- local playback, queue, playlists, scanning, settings, provider config records, and acquisition baseline exist
+- local playback, queue, playlists, scanning, settings, provider config records, and an event-backed acquisition workflow exist
 - recommendation, artist, enrichment, and taste surfaces are partially present in the canonical app
 
 The gap is product identity, not just runtime correctness.
@@ -58,7 +58,7 @@ Keep this stable, but treat it as foundation work:
 - scan/import reliability
 - provider config records
 - credential import and safe storage
-- acquisition baseline
+- acquisition lifecycle authority, queue trust, and post-acquisition library follow-through
 
 ### Wave 2 - Explainability And Provenance Surfaces
 

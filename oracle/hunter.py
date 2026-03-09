@@ -1,12 +1,12 @@
 """
 The Hunter - Accelerated Acquisition Engine
 
-Merges Prowlarr indexer search with Real-Debrid instant downloads.
+Multi-source magnet search with Real-Debrid instant downloads.
 "Instant Gratification" mode for cached torrents.
 
 Workflow:
 1. Scout identifies targets
-2. Hunter searches Prowlarr
+2. Hunter aggregates magnets from multiple sources (prowlarr, future: DHT, manual)
 3. Magnet links sent to Real-Debrid
 4. Cached torrents = instant HTTPS download
 5. Auto-integration to library
@@ -61,7 +61,7 @@ def _read_local_prowlarr_api_key() -> str:
 
 
 class Hunter:
-    """The Accelerator - Prowlarr + Real-Debrid integration."""
+    """The Accelerator - Multi-source magnet search + Real-Debrid integration."""
     
     def __init__(self):
         self.conn = get_connection()

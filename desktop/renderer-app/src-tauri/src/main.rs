@@ -8,7 +8,7 @@ use std::time::Duration;
 mod smtc;
 
 use lyra_core::commands::{
-    AcquisitionPreflight, AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
+    AcquisitionEventPayload, AcquisitionPreflight, AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
     CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist,
     LegacyImportReport, LibraryCleanupPreview, NativeCapabilities, PlaybackEvent,
     PlaybackState, PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
@@ -74,6 +74,17 @@ fn emit_shell(app: &AppHandle, core: &LyraCore) {
 
 fn emit_queue(app: &AppHandle, payload: &[QueueItemRecord]) {
     emit_payload(app, "lyra://queue-updated", payload);
+}
+
+fn emit_acquisition(app: &AppHandle, core: &LyraCore, latest_item_id: Option<i64>) {
+    if let Ok(queue) = core.get_acquisition_queue(None) {
+        let payload = AcquisitionEventPayload {
+            queue,
+            worker_running: core.acquisition_worker_status().unwrap_or(false),
+            latest_item_id,
+        };
+        emit_payload(app, "lyra://acquisition-updated", &payload);
+    }
 }
 
 fn emit_playback(app: &AppHandle, payload: &PlaybackState) {
@@ -912,11 +923,13 @@ fn add_to_acquisition_queue(
     title: String,
     album: Option<String>,
     source: Option<String>,
+    target_root_id: Option<i64>,
 ) -> Result<Vec<AcquisitionQueueItem>, String> {
     let payload = state
         .core
-        .add_to_acquisition_queue(artist, title, album, source)
+        .add_to_acquisition_queue(artist, title, album, source, target_root_id)
         .map_err(|e| e.to_string())?;
+    emit_acquisition(&app, &state.core, payload.last().map(|item| item.id));
     emit_shell(&app, &state.core);
     Ok(payload)
 }
@@ -933,6 +946,7 @@ fn update_acquisition_item(
         .core
         .update_acquisition_item(id, status, error)
         .map_err(|e| e.to_string())?;
+    emit_acquisition(&app, &state.core, Some(id));
     emit_shell(&app, &state.core);
     Ok(payload)
 }
@@ -944,11 +958,17 @@ fn process_acquisition_queue(
 ) -> Result<bool, String> {
     let processed = state
         .core
-        .process_acquisition_queue()
+        .process_acquisition_queue_with_callback({
+            let app = app.clone();
+            let core = state.core.clone();
+            move |item_id| {
+                emit_acquisition(&app, &core, Some(item_id));
+                emit_shell(&app, &core);
+            }
+        })
         .map_err(|e| e.to_string())?;
-    if processed {
-        emit_shell(&app, &state.core);
-    }
+    emit_acquisition(&app, &state.core, None);
+    emit_shell(&app, &state.core);
     Ok(processed)
 }
 
@@ -961,6 +981,7 @@ fn clear_completed_acquisition(
         .core
         .clear_completed_acquisition()
         .map_err(|e| e.to_string())?;
+    emit_acquisition(&app, &state.core, None);
     emit_shell(&app, &state.core);
     Ok(removed)
 }
@@ -974,6 +995,7 @@ fn retry_failed_acquisition(
         .core
         .retry_failed_acquisition()
         .map_err(|e| e.to_string())?;
+    emit_acquisition(&app, &state.core, None);
     emit_shell(&app, &state.core);
     Ok(retried)
 }
@@ -989,6 +1011,55 @@ fn set_acquisition_priority(
         .core
         .set_acquisition_priority(id, priority_score)
         .map_err(|e| e.to_string())?;
+    emit_acquisition(&app, &state.core, Some(id));
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn move_acquisition_queue_item(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    new_position: i64,
+) -> Result<Vec<AcquisitionQueueItem>, String> {
+    let payload = state
+        .core
+        .move_acquisition_queue_item(id, new_position)
+        .map_err(|e| e.to_string())?;
+    emit_acquisition(&app, &state.core, Some(id));
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn set_acquisition_target_root(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    target_root_id: Option<i64>,
+) -> Result<Vec<AcquisitionQueueItem>, String> {
+    let payload = state
+        .core
+        .set_acquisition_target_root(id, target_root_id)
+        .map_err(|e| e.to_string())?;
+    emit_acquisition(&app, &state.core, Some(id));
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
+fn cancel_acquisition_item(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    detail: Option<String>,
+) -> Result<Vec<AcquisitionQueueItem>, String> {
+    let payload = state
+        .core
+        .cancel_acquisition_item(id, detail)
+        .map_err(|e| e.to_string())?;
+    emit_acquisition(&app, &state.core, Some(id));
     emit_shell(&app, &state.core);
     Ok(payload)
 }
@@ -1002,22 +1073,35 @@ fn acquisition_preflight(
 
 #[tauri::command]
 fn start_acquisition_worker(
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
-    state
+    let started = state
         .core
-        .start_acquisition_worker()
-        .map_err(|e| e.to_string())
+        .start_acquisition_worker_with_callback({
+            let app = app.clone();
+            let core = state.core.clone();
+            move |item_id| {
+                emit_acquisition(&app, &core, Some(item_id));
+                emit_shell(&app, &core);
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    emit_acquisition(&app, &state.core, None);
+    Ok(started)
 }
 
 #[tauri::command]
 fn stop_acquisition_worker(
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     state
         .core
         .stop_acquisition_worker()
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    emit_acquisition(&app, &state.core, None);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1473,6 +1557,9 @@ fn main() {
             clear_completed_acquisition,
             retry_failed_acquisition,
             set_acquisition_priority,
+            move_acquisition_queue_item,
+            set_acquisition_target_root,
+            cancel_acquisition_item,
             acquisition_preflight,
             start_acquisition_worker,
             stop_acquisition_worker,

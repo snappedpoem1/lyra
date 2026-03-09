@@ -481,6 +481,123 @@ def acquire_from_magnet(
     return download_torrent_files(torrent_id, output_dir, audio_only)
 
 
+def acquire_from_magnets(
+    magnets: List[Dict[str, Any]],
+    target_artist: str = "",
+    target_title: str = "",
+) -> tuple[bool, Optional[Path], str]:
+    """Standalone Real-Debrid acquisition from a list of magnets.
+    
+    Probes each magnet in order for cached availability. Returns the first
+    successful download after guard validation.
+    
+    Args:
+        magnets: List of magnet dicts with keys:
+            - magnet: magnet URI
+            - title: release title (for logging)
+            - seeders: seeder count (for logging)
+            - is_flac: whether this is a FLAC release
+            - source: where the magnet came from (prowlarr, manual, etc.)
+        target_artist: Expected artist name for guard validation
+        target_title: Expected track title for guard validation
+    
+    Returns:
+        (success: bool, file_path: Optional[Path], error: str)
+        - (True, path, "") if successful acquisition
+        - (False, None, error_message) if all magnets failed
+    """
+    if not magnets:
+        return False, None, "No magnets provided"
+    
+    for idx, entry in enumerate(magnets, 1):
+        magnet = entry.get("magnet", "")
+        label = entry.get("title", "")[:60] or magnet[:60]
+        seeders = entry.get("seeders", 0)
+        is_flac = entry.get("is_flac", False)
+        source = entry.get("source", "unknown")
+        
+        quality = "FLAC" if is_flac else "lossy"
+        logger.info(
+            f"[RD] Probing magnet {idx}/{len(magnets)}: {quality}, "
+            f"{seeders} seeders, source={source}"
+        )
+        logger.debug(f"[RD] Release: {label}")
+        
+        try:
+            files = probe_magnet_cached(
+                magnet,
+                target_artist=target_artist,
+                target_title=target_title,
+            )
+            
+            if not files:
+                logger.debug(f"[RD] Magnet {idx} not cached or timed out")
+                continue
+            
+            # Filter to audio files only
+            audio_files = [
+                f for f in files
+                if f.suffix.lower() in _AUDIO_EXTENSIONS
+            ]
+            
+            if not audio_files:
+                logger.debug(f"[RD] No audio files in magnet {idx}")
+                continue
+            
+            # Guard validation on the best match
+            best_file = audio_files[0]  # probe_magnet_cached already selected best
+            
+            try:
+                from oracle.acquirers.guard import guard_file
+                
+                allowed, confidence, reason = guard_file(
+                    best_file,
+                    artist=target_artist,
+                    title=target_title,
+                )
+                
+                if not allowed:
+                    logger.info(
+                        f"[RD] Guard rejected file from magnet {idx}: "
+                        f"{reason} (confidence={confidence:.2f})"
+                    )
+                    # Clean up rejected file
+                    try:
+                        best_file.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    continue
+                
+                if confidence < 0.65:
+                    logger.info(
+                        f"[RD] Low confidence match from magnet {idx}: "
+                        f"{confidence:.2f} — {reason}"
+                    )
+                    try:
+                        best_file.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    continue
+                
+                # Success!
+                logger.info(
+                    f"[RD] Acquired from magnet {idx}: {best_file.name} "
+                    f"(confidence={confidence:.2f})"
+                )
+                return True, best_file, ""
+                
+            except ImportError:
+                # Guard not available — accept the file anyway
+                logger.warning("[RD] Guard module not available; accepting file without validation")
+                return True, best_file, ""
+        
+        except Exception as e:
+            logger.debug(f"[RD] Magnet {idx} failed: {e}")
+            continue
+    
+    return False, None, f"All {len(magnets)} magnets failed (not cached or rejected by guard)"
+
+
 if __name__ == "__main__":
     load_dotenv(override=True)
     logging.basicConfig(level=logging.INFO)

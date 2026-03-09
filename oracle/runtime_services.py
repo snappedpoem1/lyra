@@ -64,14 +64,6 @@ def get_runtime_service_manifest() -> dict[str, dict[str, Any]]:
             "legacy_docker_supported": False,
             "notes": "External API provider; app integration is direct and Docker-independent.",
         },
-        "lidarr": {
-            "label": "Lidarr",
-            "category": "ecosystem",
-            "packaging_mode": "optional_external",
-            "required_for_core_app": False,
-            "legacy_docker_supported": True,
-            "notes": "Optional ecosystem companion, not required for Lyra daily-driver use.",
-        },
         "docker": {
             "label": "Docker",
             "category": "legacy_infra",

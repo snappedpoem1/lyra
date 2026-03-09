@@ -144,13 +144,30 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
           artist TEXT NOT NULL DEFAULT '',
           title TEXT NOT NULL DEFAULT '',
           album TEXT,
-          status TEXT NOT NULL DEFAULT 'pending',
+          status TEXT NOT NULL DEFAULT 'queued',
+          queue_position INTEGER NOT NULL DEFAULT 0,
           priority_score REAL NOT NULL DEFAULT 0.0,
           source TEXT,
           added_at TEXT NOT NULL,
+          started_at TEXT,
           completed_at TEXT,
+          failed_at TEXT,
+          cancelled_at TEXT,
           error TEXT,
+          status_message TEXT,
+          failure_stage TEXT,
+          failure_reason TEXT,
+          failure_detail TEXT,
           retry_count INTEGER NOT NULL DEFAULT 0,
+          selected_provider TEXT,
+          selected_tier TEXT,
+          worker_label TEXT,
+          output_path TEXT,
+          downstream_track_id INTEGER,
+          scan_completed INTEGER NOT NULL DEFAULT 0,
+          organize_completed INTEGER NOT NULL DEFAULT 0,
+          index_completed INTEGER NOT NULL DEFAULT 0,
+          cancel_requested INTEGER NOT NULL DEFAULT 0,
           lifecycle_stage TEXT,
           lifecycle_progress REAL,
           lifecycle_note TEXT,
@@ -251,6 +268,27 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
     let _ = conn.execute("ALTER TABLE tracks ADD COLUMN quarantined INTEGER DEFAULT 0", []);
 
     for (col, typedef) in &[
+        ("queue_position", "INTEGER NOT NULL DEFAULT 0"),
+        ("started_at", "TEXT"),
+        ("failed_at", "TEXT"),
+        ("cancelled_at", "TEXT"),
+        ("status_message", "TEXT"),
+        ("failure_stage", "TEXT"),
+        ("failure_reason", "TEXT"),
+        ("failure_detail", "TEXT"),
+        ("selected_provider", "TEXT"),
+        ("selected_tier", "TEXT"),
+        ("worker_label", "TEXT"),
+        ("validation_confidence", "REAL"),
+        ("validation_summary", "TEXT"),
+        ("target_root_id", "INTEGER"),
+        ("target_root_path", "TEXT"),
+        ("output_path", "TEXT"),
+        ("downstream_track_id", "INTEGER"),
+        ("scan_completed", "INTEGER NOT NULL DEFAULT 0"),
+        ("organize_completed", "INTEGER NOT NULL DEFAULT 0"),
+        ("index_completed", "INTEGER NOT NULL DEFAULT 0"),
+        ("cancel_requested", "INTEGER NOT NULL DEFAULT 0"),
         ("lifecycle_stage", "TEXT"),
         ("lifecycle_progress", "REAL"),
         ("lifecycle_note", "TEXT"),
@@ -261,6 +299,42 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
             [],
         );
     }
+    let _ = conn.execute(
+        "UPDATE acquisition_queue SET status = 'queued' WHERE status = 'pending'",
+        [],
+    );
+    let _ = conn.execute(
+        "UPDATE acquisition_queue SET status = 'acquiring' WHERE status = 'in_progress'",
+        [],
+    );
+    let _ = conn.execute(
+        "UPDATE acquisition_queue SET status = 'cancelled' WHERE status = 'skipped'",
+        [],
+    );
+    let _ = conn.execute(
+        "UPDATE acquisition_queue
+         SET queue_position = id
+         WHERE queue_position IS NULL OR queue_position = 0",
+        [],
+    );
+    let _ = conn.execute(
+        "UPDATE acquisition_queue
+         SET status_message = COALESCE(status_message, lifecycle_note)
+         WHERE status_message IS NULL AND lifecycle_note IS NOT NULL",
+        [],
+    );
+    let _ = conn.execute(
+        "UPDATE acquisition_queue
+         SET failed_at = COALESCE(failed_at, completed_at)
+         WHERE status = 'failed' AND failed_at IS NULL",
+        [],
+    );
+    let _ = conn.execute(
+        "UPDATE acquisition_queue
+         SET cancelled_at = COALESCE(cancelled_at, completed_at)
+         WHERE status = 'cancelled' AND cancelled_at IS NULL",
+        [],
+    );
     Ok(())
 }
 

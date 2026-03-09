@@ -377,14 +377,14 @@ def acquire_album(
     file_select_wait: int = 15,
     poll_interval: int = 3,
 ) -> Dict[str, Any]:
-    """Acquire a full album via Prowlarr search + Real-Debrid download.
+    """Acquire a full album via Prowlarr horizon search + Real-Debrid download.
 
     Searches for the full album torrent, downloads ALL audio files.
 
     Returns:
         Dict with 'success', 'files', 'matched', 'missing', 'error'.
     """
-    from oracle.acquirers.prowlarr_rd import search_prowlarr
+    from oracle.horizon.prowlarr_releases import search_releases
     from oracle.acquirers.realdebrid import (
         add_magnet,
         delete_torrent,
@@ -401,7 +401,7 @@ def acquire_album(
     album_dir = (project_root / "downloads" / safe_name).resolve()
     album_dir.mkdir(parents=True, exist_ok=True)
 
-    # Search Prowlarr for the full album
+    # Search Prowlarr horizon for the full album
     queries = [
         f"{artist} {album_title} FLAC",
         f"{artist} {album_title}",
@@ -410,10 +410,10 @@ def acquire_album(
     results: List[Dict] = []
     for query in queries:
         try:
-            hits = search_prowlarr(query, limit=10)
+            hits = search_releases(query, limit=10)
             results.extend(hits)
         except Exception as exc:
-            logger.warning(f"[catalog] Prowlarr search failed for '{query}': {exc}")
+            logger.warning(f"[catalog] Prowlarr horizon search failed for '{query}': {exc}")
 
     if not results:
         fallback = _acquire_album_via_qobuz(artist, album_title, expected_tracks, album_dir)

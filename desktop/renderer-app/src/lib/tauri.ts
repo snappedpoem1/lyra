@@ -89,8 +89,8 @@ export const api = {
   tasteProfile: () => invoke<TasteProfile>("get_taste_profile"),
   acquisitionQueue: (statusFilter?: string) =>
     invoke<AcquisitionQueueItem[]>("get_acquisition_queue", { statusFilter }),
-  addToAcquisitionQueue: (artist: string, title: string, album?: string, source?: string) =>
-    invoke<AcquisitionQueueItem[]>("add_to_acquisition_queue", { artist, title, album, source }),
+  addToAcquisitionQueue: (artist: string, title: string, album?: string, source?: string, targetRootId?: number) =>
+    invoke<AcquisitionQueueItem[]>("add_to_acquisition_queue", { artist, title, album, source, targetRootId }),
   updateAcquisitionItem: (id: number, status: string, error?: string) =>
     invoke<AcquisitionQueueItem[]>("update_acquisition_item", { id, status, error }),
   processAcquisitionQueue: () =>
@@ -101,6 +101,12 @@ export const api = {
     invoke<number>("retry_failed_acquisition"),
   setAcquisitionPriority: (id: number, priorityScore: number) =>
     invoke<AcquisitionQueueItem[]>("set_acquisition_priority", { id, priorityScore }),
+  moveAcquisitionQueueItem: (id: number, newPosition: number) =>
+    invoke<AcquisitionQueueItem[]>("move_acquisition_queue_item", { id, newPosition }),
+  setAcquisitionTargetRoot: (id: number, targetRootId?: number) =>
+    invoke<AcquisitionQueueItem[]>("set_acquisition_target_root", { id, targetRootId }),
+  cancelAcquisitionItem: (id: number, detail?: string) =>
+    invoke<AcquisitionQueueItem[]>("cancel_acquisition_item", { id, detail }),
   acquisitionPreflight: () =>
     invoke<AcquisitionPreflight>("acquisition_preflight"),
   startAcquisitionWorker: () =>

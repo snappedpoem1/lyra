@@ -1,5 +1,5 @@
 # Lyra Oracle — Docker Services
-# Runs: Prowlarr (indexer), rdtclient (Real-Debrid), slskd (Soulseek), Lidarr (artist monitoring)
+# Runs: Prowlarr (indexer), rdtclient (Real-Debrid), slskd (Soulseek)
 # Usage: docker-compose up -d
 # Healthcheck: oracle doctor
 

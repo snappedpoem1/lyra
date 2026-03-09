@@ -906,12 +906,12 @@ def main() -> None:
         return
 
     if args.command == "acquire" and args.acquire_command == "search":
-        from oracle.acquirers.prowlarr_rd import search_prowlarr
+        from oracle.horizon.prowlarr_releases import search_releases
         from oracle.acquisition import enqueue_url
         if args.source != "prowlarr":
             print(f"Unsupported source: {args.source}")
             return
-        results = search_prowlarr(args.query, limit=args.limit)
+        results = search_releases(args.query, limit=args.limit)
         for item in results:
             title = item.get("title") or item.get("guid") or "Unknown"
             link = (
@@ -1216,7 +1216,7 @@ def main() -> None:
         return
 
     if args.command == "prowlarr" and args.prowlarr_command == "setup-rutracker":
-        from oracle.acquirers.prowlarr_setup import ensure_rutracker_indexer
+        from oracle.horizon.prowlarr_setup import ensure_rutracker_indexer
 
         result = ensure_rutracker_indexer(
             username=args.username,

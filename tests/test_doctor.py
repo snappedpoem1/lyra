@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sqlite3
-from oracle.doctor import _check_chroma_storage, _check_lidarr
+from oracle.doctor import _check_chroma_storage
 
 
 def test_check_chroma_storage_reports_embedding_count(monkeypatch, tmp_path: Path):

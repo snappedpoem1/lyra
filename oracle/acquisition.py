@@ -12,7 +12,6 @@ import sqlite3
 from dotenv import load_dotenv
 
 from oracle.acquirers.ytdlp import YTDLPAcquirer
-from oracle.acquirers import prowlarr_rd
 from oracle.acquirers.guard import guard_acquisition, guard_file
 from oracle.db.schema import get_connection, get_write_mode
 
@@ -122,10 +121,13 @@ def process_queue(limit: int = 0) -> Dict[str, int]:
                 else:
                     raise RuntimeError("yt-dlp download failed")
             elif source == "prowlarr":
+                # Prowlarr queue items now use the standard waterfall
+                # The magnet_sources layer will handle prowlarr search
                 guard_artist = (artist or "").strip()
                 guard_title = (title or "").strip()
                 if not guard_artist or not guard_title:
-                    raise RuntimeError("Guard pre-flight requires artist and title for prowlarr queue items")
+                    raise RuntimeError("Queue items require artist and title for acquisition")
+                
                 preflight = guard_acquisition(
                     artist=guard_artist,
                     title=guard_title,
@@ -140,28 +142,29 @@ def process_queue(limit: int = 0) -> Dict[str, int]:
                     raise RuntimeError(
                         f"Guard pre-flight low confidence: {preflight.confidence:.2f}"
                     )
-
-                torrent_id = prowlarr_rd.add_to_real_debrid(url)
-                if not torrent_id:
-                    raise RuntimeError("Real-Debrid addMagnet failed")
-                prowlarr_rd.select_files(torrent_id)
-                max_wait = int(os.getenv("LYRA_RD_MAX_WAIT", "300"))
-                info = prowlarr_rd.poll_real_debrid(torrent_id, max_wait=max_wait)
-                if info.get("status") != "downloaded":
-                    raise RuntimeError(f"Real-Debrid status: {info.get('status')}")
-                files = prowlarr_rd.download_from_real_debrid(torrent_id)
-                _assert_guard_pass(files, stage="post_download")
-                staged_files = prowlarr_rd.move_to_staging(files)
-                _assert_guard_pass(staged_files, stage="post_staging")
-                _exec_write(
-                    """
-                    UPDATE acquisition_queue
-                    SET status = 'completed', completed_at = datetime('now'), error = NULL
-                    WHERE id = ?
-                    """,
-                    (row_id,),
-                )
-                stats["completed"] += 1
+                
+                # Use waterfall acquisition (will try T1-T5 including T4 Real-Debrid)
+                from oracle.acquirers.waterfall import acquire
+                
+                result = acquire(guard_artist, guard_title)
+                
+                if result.success and result.path:
+                    # Guard validation on acquired file
+                    _assert_guard_pass([Path(result.path)], stage="post_acquisition")
+                    
+                    _exec_write(
+                        """
+                        UPDATE acquisition_queue
+                        SET status = 'completed', completed_at = datetime('now'), error = NULL
+                        WHERE id = ?
+                        """,
+                        (row_id,),
+                    )
+                    stats["completed"] += 1
+                else:
+                    raise RuntimeError(
+                        result.error or "Acquisition failed (all tiers exhausted)"
+                    )
             else:
                 raise RuntimeError(f"Unknown source: {source}")
         except Exception as exc:
