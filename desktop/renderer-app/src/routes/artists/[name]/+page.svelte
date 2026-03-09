@@ -1,16 +1,19 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { api } from "$lib/tauri";
   import { shell } from "$lib/stores/lyra";
   import {
+    setComposerText,
     setWorkspaceArtist,
     setWorkspaceBridgeActions,
+    setWorkspaceExplanation,
     setWorkspacePage,
     setWorkspaceProvenance,
     setWorkspaceTrack
   } from "$lib/stores/workspace";
-  import type { ArtistProfile, RelatedArtist } from "$lib/types";
+  import type { ArtistProfile, ExplainPayload, RelatedArtist, TrackEnrichmentResult } from "$lib/types";
 
   let profile: ArtistProfile | null = null;
   let loading = true;
@@ -23,6 +26,8 @@
   let bridgeBusy = false;
   let bridgeTarget: RelatedArtist | null = null;
   let huntMessage = "";
+  let expandedExplain: Record<number, ExplainPayload | "loading"> = {};
+  let expandedProof: Record<number, TrackEnrichmentResult | "loading"> = {};
 
   async function loadProfile() {
     loading = true;
@@ -71,7 +76,7 @@
         relatedArtists.slice(0, 4).map((related) => ({
           label: related.name,
           href: `/artists/${encodeURIComponent(related.name)}`,
-          detail: `${related.connectionType} - ${Math.round(related.connectionStrength * 100)}% connection`,
+          detail: related.why,
           emphasis: related.localTrackCount > 0 ? "accent" : "default"
         })),
         artistName
@@ -205,6 +210,52 @@
     }
   }
 
+  function openLyraPrompt(prompt: string): Promise<void> {
+    const trimmed = prompt.trim();
+    setComposerText(trimmed);
+    return goto(`/playlists?compose=1&prompt=${encodeURIComponent(trimmed)}`);
+  }
+
+  async function toggleTrackExplain(trackId: number): Promise<void> {
+    if (expandedExplain[trackId]) {
+      const next = { ...expandedExplain };
+      delete next[trackId];
+      expandedExplain = next;
+      return;
+    }
+    expandedExplain = { ...expandedExplain, [trackId]: "loading" };
+    try {
+      const payload = await api.explainRecommendation(trackId);
+      expandedExplain = { ...expandedExplain, [trackId]: payload };
+      const track = profile?.topTracks.find((item) => item.id === trackId) ?? null;
+      setWorkspaceExplanation(payload, track);
+    } catch {
+      const next = { ...expandedExplain };
+      delete next[trackId];
+      expandedExplain = next;
+    }
+  }
+
+  async function toggleTrackProof(trackId: number): Promise<void> {
+    if (expandedProof[trackId]) {
+      const next = { ...expandedProof };
+      delete next[trackId];
+      expandedProof = next;
+      return;
+    }
+    expandedProof = { ...expandedProof, [trackId]: "loading" };
+    try {
+      const payload = await api.getTrackEnrichment(trackId);
+      expandedProof = { ...expandedProof, [trackId]: payload };
+      const track = profile?.topTracks.find((item) => item.id === trackId) ?? null;
+      setWorkspaceProvenance(payload.entries, track);
+    } catch {
+      const next = { ...expandedProof };
+      delete next[trackId];
+      expandedProof = next;
+    }
+  }
+
   onMount(loadProfile);
 </script>
 
@@ -233,6 +284,20 @@
         <div class="actions hero-actions">
           <button on:click={playArtist}>Play Artist</button>
           <button on:click={queueArtist}>Queue Artist</button>
+          <button on:click={() => openLyraPrompt(`bridge from ${profile!.artist} into late-night adjacency`)}>
+            Bridge with Lyra
+          </button>
+        </div>
+        <div class="route-chip-row">
+          <button class="route-chip" on:click={() => openLyraPrompt(`give me three exits from ${profile!.artist}, one safe, one interesting, one dangerous`)}>
+            Three exits
+          </button>
+          <button class="route-chip" on:click={() => openLyraPrompt(`leave this genre around ${profile!.artist}, keep the wound`)}>
+            Keep the wound
+          </button>
+          <button class="route-chip" on:click={() => openLyraPrompt(`same pulse as ${profile!.artist}, different world`)}>
+            Same pulse
+          </button>
         </div>
       </div>
     </header>
@@ -318,6 +383,10 @@
                 {:else}
                   <small class="muted">Not in library</small>
                 {/if}
+                <small class="route-why">{related.why}</small>
+                <small>Preserves: {related.preserves.join(", ")}</small>
+                <small>Changes: {related.changes.join(", ")}</small>
+                <small class="route-risk">{related.riskNote}</small>
               </div>
               <div class="related-actions">
                 {#if related.localTrackCount > 0}
@@ -328,6 +397,9 @@
                     on:click={() => queueBridge(related)}
                     title="Queue bridge: mix current artist + {related.name}">
                     {bridgeBusy && bridgeTarget?.name === related.name ? 'Working...' : 'Queue Bridge'}
+                  </button>
+                  <button class="sim-btn" on:click={() => openLyraPrompt(`bridge from ${profile!.artist} into ${related.name}, but tell me the rewarding risk`)}>
+                    Ask Lyra
                   </button>
                 {:else}
                   <button class="hunt-btn" on:click={() => huntArtist(related.name)}
@@ -366,8 +438,42 @@
             <div class="actions">
               <button on:click={() => playTrack(track.id)}>Play</button>
               <button on:click={() => queueTrack(track.id)}>Queue</button>
+              <button on:click={() => openLyraPrompt(`start from ${track.artist} - ${track.title} and take me somewhere adjacent but not the canon`)}>
+                Route
+              </button>
+              <button on:click={() => toggleTrackExplain(track.id)}>
+                {expandedExplain[track.id] ? "Hide Why" : "Why"}
+              </button>
+              <button on:click={() => toggleTrackProof(track.id)}>
+                {expandedProof[track.id] ? "Hide Proof" : "Proof"}
+              </button>
             </div>
           </div>
+          {#if expandedExplain[track.id]}
+            <div class="track-detail-panel">
+              {#if expandedExplain[track.id] === "loading"}
+                <small class="muted">Loading Lyra read...</small>
+              {:else}
+                {@const payload = expandedExplain[track.id] as ExplainPayload}
+                {#each payload.reasons as reason}
+                  <small class="route-why">{reason}</small>
+                {/each}
+                <small class="muted">Confidence {Math.round(payload.confidence * 100)}%</small>
+              {/if}
+            </div>
+          {/if}
+          {#if expandedProof[track.id]}
+            <div class="track-detail-panel proof-panel">
+              {#if expandedProof[track.id] === "loading"}
+                <small class="muted">Loading provenance...</small>
+              {:else}
+                {@const payload = expandedProof[track.id] as TrackEnrichmentResult}
+                {#each payload.entries.slice(0, 3) as entry}
+                  <small>{entry.provider}: {entry.status} - {Math.round(entry.confidence * 100)}%</small>
+                {/each}
+              {/if}
+            </div>
+          {/if}
         {/each}
       </article>
     </section>
@@ -384,6 +490,8 @@
   .eyebrow, .muted, small { color: #9cb2c7; }
   .eyebrow { text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.72rem; }
   .genres { color: #d0e8f8; margin-top: 4px; }
+  .route-chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .route-chip { padding: 6px 11px; border-radius: 999px; font-size: 0.78rem; }
   .mbid-pill { font-size: 0.72rem; color: #a8c4e0; }
   .identity-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
   .identity-card { border-radius: 10px; background: rgba(255,255,255,0.04); padding: 10px 12px; display: grid; gap: 4px; }
@@ -394,6 +502,15 @@
   .prov-copy code { font-size: 0.72rem; color: #a8c4e0; }
   .grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 16px; }
   .conn-row, .track-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .track-detail-panel {
+    display: grid;
+    gap: 4px;
+    padding: 10px 12px;
+    margin: 0 0 6px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.035);
+  }
+  .proof-panel { background: rgba(122,255,198,0.05); }
   .track-row:last-child, .conn-row:last-child { border-bottom: none; }
   .actions { display: flex; gap: 8px; }
   .hero-actions { margin-top: 10px; }
@@ -419,6 +536,8 @@
   .strength-bar { height: 100%; border-radius: 2px; transition: width 0.3s ease; }
   .strength-label { font-size: 0.68rem; flex-shrink: 0; }
   .related-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .route-why { color: #d9e7f1; line-height: 1.4; }
+  .route-risk { color: #f0c983; line-height: 1.4; }
   .sim-btn { color: #7affc6; border-color: rgba(122,255,198,0.3); font-size: 0.78rem; padding: 4px 10px; }
   .bridge-btn { color: #ffd166; border-color: rgba(255,209,102,0.3); font-size: 0.78rem; padding: 4px 10px; }
   .hunt-btn { color: #ff9f7a; border-color: rgba(255,159,122,0.3); font-size: 0.78rem; padding: 4px 10px; }

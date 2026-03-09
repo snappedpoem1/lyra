@@ -71,8 +71,8 @@ $manifest = [ordered]@{
             (Join-Path $repoRoot ".lyra-build\bin\lyra_backend.exe")
         )
         packaged_host = Get-RequiredArtifact -Label "packaged host" -Candidates @(
-            (Join-Path $repoRoot "desktop\renderer-app\src-tauri\target\debug\Lyra Oracle.exe"),
-            (Join-Path $repoRoot "desktop\renderer-app\src-tauri\target\debug\Lyra.exe")
+            (Join-Path $repoRoot "desktop\renderer-app\src-tauri\target\debug\lyra_tauri.exe"),
+            (Join-Path $repoRoot "desktop\renderer-app\src-tauri\target\release\lyra_tauri.exe")
         )
         rip = Get-RequiredArtifact -Label "rip.exe" -Candidates @(
             (Join-Path $runtimeBinRoot "rip.exe")

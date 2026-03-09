@@ -1,6 +1,6 @@
 # Lyra Intelligence Contract
 
-Last updated: March 8, 2026
+Last updated: March 9, 2026
 
 ## Purpose
 
@@ -194,6 +194,16 @@ The discovery output must show:
 - what each route intentionally changes
 - whether Lyra is staying familiar or pushing novelty
 
+Scene exits are part of discovery, but they are a special case.
+Prompts like:
+
+- `give me three exits from this scene`
+- `same pulse, different world`
+- `leave this genre, keep this wound`
+- `stay in the ache, lose the gloss`
+
+must be treated as exit logic, not generic adjacency.
+
 ## Revision Rule
 
 Lyra should propose a revision instead of a final playlist when:
@@ -249,7 +259,8 @@ Providers may help with:
 
 - interpreting vague or poetic language
 - disambiguating route type
-- writing concise route narratives
+- parsing scene exits, challenge pressure, and route comparison intent inside the allowed schema
+- writing concise route narratives that obey Lyra's role, confidence, and fallback rules
 
 Providers may not:
 
@@ -257,6 +268,8 @@ Providers may not:
 - pick tracks outside the local library
 - replace deterministic retrieval/reranking
 - fabricate evidence
+- emit intent fields outside Lyra's allowed role/energy/novelty/aggression/depth boundaries
+- freestyle generic assistant copy that ignores route shape or uncertainty
 
 The UI must show:
 
@@ -264,6 +277,34 @@ The UI must show:
 - provider kind
 - provider mode
 - fallback reason when heuristics were used
+
+### Provider Narrative Obedience
+
+Provider-authored narrative is not a freeform style layer.
+It must be constrained by the same rules as local Lyra copy:
+
+- role-aware behavior
+- confidence-aware phrasing
+- fallback honesty
+- route comparison language
+- preserve/change logic
+- alternative offering when routes are plural
+
+If a provider output does not name what the route preserves, what it changes, or how certain Lyra should sound, the local template should win instead.
+
+### Provider Intent Parsing Obedience
+
+Provider-assisted parsing must obey the same contract boundaries as local parsing:
+
+- valid roles only: `coach`, `copilot`, `recommender`, `oracle`
+- valid energy levels only: `low`, `medium`, `high`
+- valid novelty states only: `familiar leaning`, `balanced`, `novel leaning`
+- valid discovery aggressiveness only: `gentle`, `assertive`, `exploratory`
+- valid explanation depth only: `light`, `balanced`, `deep`
+- explicit entities must stay bounded to entities the prompt or fallback actually supports
+- confidence must not jump merely because a provider sounded confident
+
+If a provider parse drifts outside those rules, the canonical Rust layer must sanitize it back toward the fallback instead of trusting provider freedom.
 
 ## Deterministic Retrieval Contract
 
@@ -288,6 +329,59 @@ Lyra must be able to answer:
 - what Lyra inferred
 - what uncertainty remained
 - whether language interpretation came from a provider or heuristics
+- what each route preserves
+- what each route changes
+- what adjacency dimension is actually carrying the move
+- what local graph evidence, if any, is helping the move feel believable
+
+## Taste Memory Contract
+
+Taste memory is real, but thin by design.
+Lyra may remember:
+
+- recent steering preferences
+- rolling recurring taste axes
+- light route-choice history
+- explicit accepted or rejected route lanes from Cassette route comparison
+- confidence and recency notes for those remembered signals
+
+Lyra may not:
+
+- imply deep personal knowledge from one or two prompts
+- hide when a remembered preference is still light evidence
+- let memory overrule a clear current prompt
+
+Memory should be split into:
+
+- session taste posture
+- lightweight rolling taste memory
+
+and it must stay evidence-aware in language.
+
+## Adjacency Contract
+
+Bridge and discovery reasoning should be grounded in explicit adjacency dimensions, not "similar artist" fluff.
+
+At minimum Lyra should reason about:
+
+- emotional continuity and contrast
+- texture / timbre continuity
+- rhythmic continuity
+- production polish / roughness
+- scene and era adjacency
+- local graph adjacency when artist-connection, co-play, or shared-genre evidence exists
+- risk / surprise value
+- bridge smoothness
+- bridge reward potential
+
+Route variants should be meaningfully distinct:
+
+- `safe`
+- `interesting`
+- `dangerous`
+- `direct_bridge`
+- `scenic`
+- `contrast`
 
 Reason payloads are part of the product.
 They are not optional telemetry.
@@ -305,6 +399,12 @@ Minimum steering surface:
 - brighter / more nocturnal or warmer
 - explanation depth
 - result shape preference when the UI can support it cleanly
+
+The UI should also expose, when available:
+
+- Lyra-read pressure summaries
+- route audition teasers
+- saved explanation payloads that survive beyond the live composer
 
 ## Evaluation Contract
 

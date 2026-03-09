@@ -19,7 +19,7 @@
   } from "$lib/stores/workspace";
 
   const nav = [
-    { href: "/", label: "Oracle Home", short: "Home" },
+    { href: "/", label: "Cassette Home", short: "Home" },
     { href: "/library", label: "Library", short: "Library" },
     { href: "/playlists", label: "Playlists", short: "Playlists" },
     { href: "/discover", label: "Discover", short: "Discover" },
@@ -223,9 +223,9 @@
 
   $: if (!$workspace.pageTitle || $workspace.pageTitle === "Oracle workspace") {
     setWorkspacePage(
-      "Lyra",
-      "Oracle workspace",
-      "One shell for playlist making, discovery, acquisition, and explanation.",
+      "Cassette",
+      "Music companion workspace",
+      "One shell for discovery, playlist authorship, bridge-finding, acquisition, and explanation.",
       "context"
     );
   }
@@ -237,7 +237,7 @@
 </script>
 
 <svelte:head>
-  <title>Lyra</title>
+  <title>Cassette</title>
 </svelte:head>
 
 <div class="shell-frame">
@@ -264,9 +264,9 @@
   <div class="app-shell" class:left-collapsed={!$workspace.leftRailOpen} class:right-collapsed={!$workspace.rightRailOpen}>
     <aside class="nav-rail">
       <div class="rail-section brand-block">
-        <p class="eyebrow">Lyra Oracle</p>
-        <h2>Vibe-to-journey intelligence</h2>
-        <p class="muted">Interpret intent, shape journeys, follow bridges, and keep playback in support of discovery.</p>
+        <p class="eyebrow">Cassette</p>
+        <h2>Workspace for Lyra</h2>
+        <p class="muted">Cassette is the shell. Lyra is the intelligence shaping journeys, bridges, discoveries, and explanation.</p>
       </div>
 
       <nav class="nav-list rail-section">
@@ -463,7 +463,7 @@
   <section class="composer-line">
     <div class="composer-copy">
       <p class="eyebrow">Lyra Composer</p>
-      <small>Freeform intent first. Use plain navigation verbs only when you want a page jump.</small>
+      <small>Ask Lyra in freeform language. Use plain navigation verbs only when you want a page jump.</small>
     </div>
     <input
       value={$workspace.composerText}
@@ -536,9 +536,10 @@
 <style>
   :global(body) {
     margin: 0;
-    font-family: "Segoe UI", sans-serif;
+    font-family: "Aptos", "Segoe UI", sans-serif;
     background:
-      radial-gradient(circle at top left, rgba(90, 145, 255, 0.12), transparent 28%),
+      radial-gradient(circle at top left, rgba(246, 196, 114, 0.08), transparent 24%),
+      radial-gradient(circle at top right, rgba(87, 127, 197, 0.12), transparent 26%),
       linear-gradient(165deg, #081019 0%, #0d1721 35%, #121e2b 100%);
     color: #eff5fb;
   }
@@ -582,8 +583,12 @@
   }
 
   .workspace-headline h1,
+  .brand-block h2 {
+    font-family: "Georgia", "Times New Roman", serif;
+  }
+
+  .workspace-headline h1,
   .workspace-headline p,
-  .brand-block h2,
   .brand-block p {
     margin: 0;
   }

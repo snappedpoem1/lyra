@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
   import { onDestroy, onMount } from "svelte";
   import { api } from "$lib/tauri";
   import {
+    setComposerText,
     setWorkspaceAcquisition,
     setWorkspaceBridgeActions,
     setWorkspacePage
@@ -10,7 +12,8 @@
     AcquisitionEventPayload,
     AcquisitionPreflight,
     AcquisitionQueueItem,
-    LibraryRootRecord
+    LibraryRootRecord,
+    SpotifyGapSummary
   } from "$lib/types";
 
   type AcquisitionActivity = {
@@ -63,6 +66,9 @@
   let bulkMessage = "";
   let seedingSpotify = false;
   let seedSpotifyMessage = "";
+  let spotifyGapSummary: SpotifyGapSummary | null = null;
+  let spotifyGapBusy = false;
+  let spotifyGapMessage = "";
 
   onMount(async () => {
     setWorkspacePage(
@@ -71,13 +77,7 @@
       "Drive queue work from preflight to library availability without dropping context.",
       "acquisition"
     );
-    setWorkspaceBridgeActions([
-      { label: "Review discovery leads", href: "/discover", detail: "Turn promising recommendations into acquisition candidates." },
-      { label: "Open queue", href: "/queue", detail: "Carry successful acquisitions into active listening." },
-      { label: "Shape playlists", href: "/playlists", detail: "Move newly owned tracks into authored journeys." }
-    ]);
-
-    await Promise.all([loadQueue(), checkWorkerStatus(), loadPreflight(), loadLibraryRoots()]);
+    await Promise.all([loadQueue(), checkWorkerStatus(), loadPreflight(), loadLibraryRoots(), loadSpotifyGapSummary()]);
     eventDisposer = await api.on<AcquisitionEventPayload>("lyra://acquisition-updated", (payload) => {
       workerRunning = payload.workerRunning;
       reconcileQueue(payload.queue, payload.latestItemId ?? null);
@@ -168,6 +168,10 @@
     if (!newTargetRootId && libraryRoots.length) {
       newTargetRootId = String(libraryRoots[0].id);
     }
+  }
+
+  async function loadSpotifyGapSummary(): Promise<void> {
+    spotifyGapSummary = await api.getSpotifyGapSummary(6).catch(() => null);
   }
 
   async function checkWorkerStatus(): Promise<void> {
@@ -268,6 +272,43 @@
       if (count > 0) await loadQueue();
     } finally {
       seedingSpotify = false;
+    }
+  }
+
+  function openLyraPrompt(prompt: string): Promise<void> {
+    const trimmed = prompt.trim();
+    setComposerText(trimmed);
+    return goto(`/playlists?compose=1&prompt=${encodeURIComponent(trimmed)}`);
+  }
+
+  async function queueSpotifyGapCandidate(artist: string, title: string, album?: string | null): Promise<void> {
+    spotifyGapBusy = true;
+    spotifyGapMessage = "";
+    try {
+      await api.addToAcquisitionQueue(artist, title, album ?? undefined, "spotify_gap_recovery");
+      spotifyGapMessage = `Queued ${artist} - ${title} from missing-world recovery.`;
+      await loadQueue();
+      await loadSpotifyGapSummary();
+    } finally {
+      spotifyGapBusy = false;
+    }
+  }
+
+  async function queueTopSpotifyGapCandidates(): Promise<void> {
+    const entries = spotifyGapSummary?.missingCandidates.slice(0, 8) ?? [];
+    if (!entries.length) return;
+    spotifyGapBusy = true;
+    spotifyGapMessage = "";
+    try {
+      const payload = entries.map((entry) => [entry.artist, entry.title, entry.album ?? null] as [string, string, string | null]);
+      const added = await api.bulkAddToAcquisitionQueue(payload, "spotify_missing_world");
+      spotifyGapMessage = added.length
+        ? `Queued ${added.length} missing-world tracks for recovery.`
+        : "Those missing-world tracks are already owned or queued.";
+      await loadQueue();
+      await loadSpotifyGapSummary();
+    } finally {
+      spotifyGapBusy = false;
     }
   }
 
@@ -389,6 +430,24 @@
   $: pendingCount = items.filter((item) => liveStates.includes(item.status)).length;
   $: activeCount = items.filter((item) => ["acquiring", "staging", "organizing", "scanning", "indexing"].includes(item.status)).length;
   $: selectedItem = filteredItems.find((item) => item.id === selectedId) ?? filteredItems[0] ?? null;
+  $: setWorkspaceBridgeActions([
+    {
+      label: "Recover missing world",
+      href: "/playlists?compose=1&prompt=" + encodeURIComponent("rebuild the world i used to live in on spotify but never actually brought local"),
+      detail: "Turn Spotify absence into a Lyra route instead of a blind queue.",
+      emphasis: "accent"
+    },
+    {
+      label: "Three exits",
+      href: "/playlists?compose=1&prompt=" + encodeURIComponent("give me three exits from this scene, one safe, one interesting, one dangerous"),
+      detail: "Compare safer and riskier recovery routes."
+    },
+    {
+      label: "Review discovery leads",
+      href: "/discover",
+      detail: "Pull stronger candidates from route-aware discovery."
+    }
+  ]);
   $: setWorkspaceAcquisition({
     pending: pendingCount,
     active: activeCount,
@@ -530,6 +589,80 @@
             {#if seedSpotifyMessage}
               <p class="bulk-msg">{seedSpotifyMessage}</p>
             {/if}
+          </div>
+        {/if}
+      </section>
+
+      <section class="panel">
+        {#if spotifyGapSummary?.available}
+          <div class="panel-head">
+            <div>
+              <h2>Missing-world recovery</h2>
+              <p>Use Spotify memory as acquisition pressure instead of treating the queue like a blind wishlist.</p>
+            </div>
+            <button on:click={loadSpotifyGapSummary} disabled={spotifyGapBusy}>{spotifyGapBusy ? "Refreshing..." : "Refresh Spotify view"}</button>
+          </div>
+          <div class="spotify-gap-grid">
+            <article class="spotify-gap-card">
+              <span class="summary-label">Recoverable gaps</span>
+              <strong>{spotifyGapSummary.recoverableMissingCount}</strong>
+              <small>{spotifyGapSummary.summaryLines[0]}</small>
+            </article>
+            <article class="spotify-gap-card">
+              <span class="summary-label">Already owned</span>
+              <strong>{spotifyGapSummary.ownedOverlapCount}</strong>
+              <small>{spotifyGapSummary.summaryLines[1] ?? "Owned overlap against Spotify worlds."}</small>
+            </article>
+          </div>
+          <div class="spotify-world-row">
+            {#each spotifyGapSummary.topArtists.slice(0, 3) as artist}
+              <button class="spotify-world-pill" on:click={() => openLyraPrompt(`rebuild the world i used to live in around ${artist.artist}, but route it through what my local library is still missing`)}>
+                <strong>{artist.artist}</strong>
+                <span>{artist.playCount} plays</span>
+                <small>{artist.missingTrackCount} missing locally</small>
+              </button>
+            {/each}
+          </div>
+          {#if spotifyGapSummary.missingCandidates.length}
+            <div class="spotify-actions">
+              <button on:click={queueTopSpotifyGapCandidates} disabled={spotifyGapBusy}>
+                {spotifyGapBusy ? "Queueing..." : "Queue top missing-world tracks"}
+              </button>
+              <button class="dim-btn" on:click={() => openLyraPrompt("what do i keep replaying in my history that i still don’t own")}>
+                Ask Lyra what is still missing
+              </button>
+            </div>
+            <div class="spotify-candidate-list">
+              {#each spotifyGapSummary.missingCandidates.slice(0, 5) as candidate}
+                <div class="spotify-candidate">
+                  <div>
+                    <strong>{candidate.artist} - {candidate.title}</strong>
+                    <small>{candidate.playCount} plays{candidate.album ? ` • ${candidate.album}` : ""}</small>
+                  </div>
+                  <div class="actions-cell">
+                    <button class="btn-small" on:click={() => openLyraPrompt(`bridge from ${candidate.artist} into what my local library is missing, but keep the emotional temperature`)}>
+                      Route
+                    </button>
+                    <button class="btn-small" on:click={() => queueSpotifyGapCandidate(candidate.artist, candidate.title, candidate.album)}>
+                      Queue
+                    </button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+            {#if spotifyGapMessage}
+              <p class="muted-inline">{spotifyGapMessage}</p>
+            {/if}
+          {/if}
+        {:else}
+          <div class="panel-head">
+            <div>
+              <h2>Missing-world recovery</h2>
+              <p>Import Spotify history/library data to turn old listening worlds into recovery leads.</p>
+            </div>
+            <button class="dim-btn" on:click={seedFromSpotifyLibrary} disabled={seedingSpotify}>
+              {seedingSpotify ? "Seeding..." : "Seed from Spotify liked"}
+            </button>
           </div>
         {/if}
       </section>
@@ -717,6 +850,8 @@
   .summary-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .workspace-grid { grid-template-columns: minmax(0, 2.6fr) minmax(22rem, 1fr); align-items: start; }
   .main-column, .side-column { display: grid; gap: 1rem; }
+  .spotify-gap-grid, .spotify-world-row, .spotify-actions, .spotify-candidate-list { display: grid; gap: 0.85rem; }
+  .spotify-gap-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summary-card, .panel {
     border-radius: 16px;
     border: 1px solid rgba(122, 162, 191, 0.14);
@@ -726,6 +861,38 @@
   .summary-card { padding: 1rem; display: grid; gap: 0.25rem; }
   .summary-label { color: #86a1b5; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
   .summary-card strong { font-size: 1.55rem; }
+  .spotify-gap-card {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.95rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(122, 162, 191, 0.12);
+  }
+  .spotify-gap-card small { color: #97adbf; }
+  .spotify-world-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .spotify-world-pill {
+    display: grid;
+    gap: 0.2rem;
+    text-align: left;
+    padding: 0.9rem;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(122, 162, 191, 0.12);
+  }
+  .spotify-world-pill span, .spotify-world-pill small { color: #97adbf; }
+  .spotify-actions { grid-template-columns: repeat(2, minmax(0, max-content)); align-items: center; }
+  .spotify-candidate {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.85rem;
+    align-items: center;
+    padding: 0.8rem 0.9rem;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(122,162,191,0.08);
+  }
+  .spotify-candidate small { display: block; color: #97adbf; margin-top: 0.2rem; }
   .panel { padding: 1rem; display: grid; gap: 0.9rem; }
   .panel-head p, .muted-inline { color: #97adbf; }
   .preflight-status { padding: 0.85rem 1rem; border-radius: 12px; font-weight: 600; }

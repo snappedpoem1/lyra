@@ -71,10 +71,8 @@ function Resolve-PackagedHostExe {
   }
 
   $candidates = @(
-    (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\release\Lyra Oracle.exe"),
     (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\release\lyra_tauri.exe"),
     (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\release\deps\lyra_tauri.exe"),
-    (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\debug\Lyra Oracle.exe"),
     (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\debug\lyra_tauri.exe"),
     (Join-Path $RepoRoot "desktop\renderer-app\src-tauri\target\debug\deps\lyra_tauri.exe")
   )

@@ -108,7 +108,8 @@ fn infer_provider_from_tier(tier: &str) -> &'static str {
 }
 
 fn acquisition_workspace_root(paths: &AppPaths) -> &Path {
-    paths.app_data_dir
+    paths
+        .app_data_dir
         .parent()
         .and_then(|p| p.parent())
         .unwrap_or(paths.app_data_dir.as_path())
@@ -171,12 +172,16 @@ fn find_command(configured: Option<&str>, candidates: &[&str]) -> Option<PathBuf
 }
 
 fn build_streamrip_query(artist: &str, title: &str, album: Option<&str>) -> String {
-    [Some(artist.trim()), Some(title.trim()), album.map(str::trim)]
-        .into_iter()
-        .flatten()
-        .filter(|value| !value.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
+    [
+        Some(artist.trim()),
+        Some(title.trim()),
+        album.map(str::trim),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|value| !value.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ")
 }
 
 fn percent_encode_segment(value: &str) -> String {
@@ -212,7 +217,12 @@ fn newest_audio_file(output_dir: &Path, started_at: std::time::SystemTime) -> Op
             let is_audio = path
                 .extension()
                 .and_then(OsStr::to_str)
-                .map(|value| matches!(value.to_ascii_lowercase().as_str(), "flac" | "mp3" | "m4a" | "aac" | "ogg" | "opus" | "wav" | "aiff"))
+                .map(|value| {
+                    matches!(
+                        value.to_ascii_lowercase().as_str(),
+                        "flac" | "mp3" | "m4a" | "aac" | "ogg" | "opus" | "wav" | "aiff"
+                    )
+                })
                 .unwrap_or(false);
             if !is_audio {
                 continue;
@@ -290,8 +300,12 @@ fn run_monitored_command(
             return Ok(MonitoredCommandResult {
                 cancelled: false,
                 timed_out: false,
-                stdout: stdout_rx.recv_timeout(Duration::from_secs(2)).unwrap_or_default(),
-                stderr: stderr_rx.recv_timeout(Duration::from_secs(2)).unwrap_or_default(),
+                stdout: stdout_rx
+                    .recv_timeout(Duration::from_secs(2))
+                    .unwrap_or_default(),
+                stderr: stderr_rx
+                    .recv_timeout(Duration::from_secs(2))
+                    .unwrap_or_default(),
                 exit_code: status.code(),
             });
         }
@@ -311,7 +325,11 @@ fn try_native_streamrip(
     let config = load_provider_config(conn, "streamrip");
     let configured_binary = config
         .as_ref()
-        .and_then(|value| value.get("lyra_streamrip_binary").or_else(|| value.get("LYRA_STREAMRIP_BINARY")))
+        .and_then(|value| {
+            value
+                .get("lyra_streamrip_binary")
+                .or_else(|| value.get("LYRA_STREAMRIP_BINARY"))
+        })
         .and_then(Value::as_str)
         .map(str::to_string)
         .or_else(|| std::env::var("LYRA_STREAMRIP_BINARY").ok());
@@ -330,7 +348,11 @@ fn try_native_streamrip(
     let query = build_streamrip_query(artist, title, album);
     let source = config
         .as_ref()
-        .and_then(|value| value.get("lyra_streamrip_source").or_else(|| value.get("LYRA_STREAMRIP_SOURCE")))
+        .and_then(|value| {
+            value
+                .get("lyra_streamrip_source")
+                .or_else(|| value.get("LYRA_STREAMRIP_SOURCE"))
+        })
         .and_then(Value::as_str)
         .unwrap_or("qobuz");
     let started_at = std::time::SystemTime::now();
@@ -386,7 +408,14 @@ fn try_native_streamrip(
             provider: Some("streamrip".to_string()),
             tier: Some("T2".to_string()),
             failure_stage: Some("acquiring".to_string()),
-            failure_reason: Some(format!("streamrip failed: {}", if reason.is_empty() { "unknown error" } else { reason })),
+            failure_reason: Some(format!(
+                "streamrip failed: {}",
+                if reason.is_empty() {
+                    "unknown error"
+                } else {
+                    reason
+                }
+            )),
             ..AcquireTrackResult::default()
         });
     }
@@ -418,7 +447,11 @@ fn try_native_qobuz_service(
     let config = load_provider_config(conn, "qobuz");
     let service_url = config
         .as_ref()
-        .and_then(|value| value.get("qobuz_service_url").or_else(|| value.get("QOBUZ_SERVICE_URL")))
+        .and_then(|value| {
+            value
+                .get("qobuz_service_url")
+                .or_else(|| value.get("QOBUZ_SERVICE_URL"))
+        })
         .and_then(Value::as_str)
         .unwrap_or("http://localhost:7700")
         .trim_end_matches('/')
@@ -465,7 +498,11 @@ fn try_native_qobuz_service(
         }
     };
 
-    if !payload.get("success").and_then(Value::as_bool).unwrap_or(false) {
+    if !payload
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
         return Ok(AcquireTrackResult {
             provider: Some("qobuz".to_string()),
             tier: Some("T1".to_string()),
@@ -489,11 +526,8 @@ fn try_native_qobuz_service(
         .cloned()
         .or_else(|| {
             response_path.as_ref().map(|path| {
-                acquisition_staging_dir(paths).join(
-                    path.file_name()
-                        .and_then(OsStr::to_str)
-                        .unwrap_or_default(),
-                )
+                acquisition_staging_dir(paths)
+                    .join(path.file_name().and_then(OsStr::to_str).unwrap_or_default())
             })
         })
         .filter(|path| path.exists());
@@ -509,18 +543,23 @@ fn try_native_qobuz_service(
             provider: Some("qobuz".to_string()),
             tier: Some("T1".to_string()),
             failure_stage: Some("staging".to_string()),
-            failure_reason: Some("Qobuz service reported success but no staged file was visible to Lyra".to_string()),
+            failure_reason: Some(
+                "Qobuz service reported success but no staged file was visible to Lyra".to_string(),
+            ),
             ..AcquireTrackResult::default()
         }),
     }
 }
 
-fn slskd_node_config(conn: &rusqlite::Connection) -> (String, String, Option<String>, String, String) {
+fn slskd_node_config(
+    conn: &rusqlite::Connection,
+) -> (String, String, Option<String>, String, String) {
     let config = load_provider_config(conn, "slskd");
     let base_url = config
         .as_ref()
         .and_then(|value| {
-            value.get("slskd_url")
+            value
+                .get("slskd_url")
                 .or_else(|| value.get("SLSKD_URL"))
                 .or_else(|| value.get("lyra_protocol_node_url"))
                 .or_else(|| value.get("LYRA_PROTOCOL_NODE_URL"))
@@ -535,18 +574,34 @@ fn slskd_node_config(conn: &rusqlite::Connection) -> (String, String, Option<Str
         .unwrap_or_else(|| "/api/v0".to_string());
     let api_key = config
         .as_ref()
-        .and_then(|value| value.get("slskd_api_key").or_else(|| value.get("SLSKD_API_KEY")).or_else(|| value.get("lyra_protocol_node_key")).or_else(|| value.get("LYRA_PROTOCOL_NODE_KEY")))
+        .and_then(|value| {
+            value
+                .get("slskd_api_key")
+                .or_else(|| value.get("SLSKD_API_KEY"))
+                .or_else(|| value.get("lyra_protocol_node_key"))
+                .or_else(|| value.get("LYRA_PROTOCOL_NODE_KEY"))
+        })
         .and_then(Value::as_str)
         .map(str::to_string);
     let username = config
         .as_ref()
-        .and_then(|value| value.get("lyra_protocol_node_user").or_else(|| value.get("LYRA_PROTOCOL_NODE_USER")).or_else(|| value.get("slskd_user")))
+        .and_then(|value| {
+            value
+                .get("lyra_protocol_node_user")
+                .or_else(|| value.get("LYRA_PROTOCOL_NODE_USER"))
+                .or_else(|| value.get("slskd_user"))
+        })
         .and_then(Value::as_str)
         .unwrap_or("slskd")
         .to_string();
     let password = config
         .as_ref()
-        .and_then(|value| value.get("lyra_protocol_node_pass").or_else(|| value.get("LYRA_PROTOCOL_NODE_PASS")).or_else(|| value.get("slskd_pass")))
+        .and_then(|value| {
+            value
+                .get("lyra_protocol_node_pass")
+                .or_else(|| value.get("LYRA_PROTOCOL_NODE_PASS"))
+                .or_else(|| value.get("slskd_pass"))
+        })
         .and_then(Value::as_str)
         .unwrap_or("slskd")
         .to_string();
@@ -559,13 +614,14 @@ fn slskd_api_url(base_url: &str, api_base: &str, path: &str) -> String {
     if trimmed_api.is_empty() {
         format!("{trimmed_base}/{}", path.trim_start_matches('/'))
     } else {
-        format!("{trimmed_base}/{trimmed_api}/{}", path.trim_start_matches('/'))
+        format!(
+            "{trimmed_base}/{trimmed_api}/{}",
+            path.trim_start_matches('/')
+        )
     }
 }
 
-fn slskd_headers(
-    conn: &rusqlite::Connection,
-) -> LyraResult<Vec<(String, String)>> {
+fn slskd_headers(conn: &rusqlite::Connection) -> LyraResult<Vec<(String, String)>> {
     let (base_url, api_base, api_key, username, password) = slskd_node_config(conn);
     if let Some(api_key) = api_key.filter(|value| !value.trim().is_empty()) {
         return Ok(vec![("X-API-Key".to_string(), api_key)]);
@@ -580,20 +636,29 @@ fn slskd_headers(
         .get("token")
         .and_then(Value::as_str)
         .ok_or(LyraError::InvalidInput("slskd authentication failed"))?;
-    Ok(vec![("Authorization".to_string(), format!("Bearer {token}"))])
+    Ok(vec![(
+        "Authorization".to_string(),
+        format!("Bearer {token}"),
+    )])
 }
 
-fn slskd_best_candidate(
-    detail: &Value,
-) -> Option<SlskdCandidate> {
+fn slskd_best_candidate(detail: &Value) -> Option<SlskdCandidate> {
     let mut best: Option<(i64, SlskdCandidate)> = None;
     for response in detail.get("responses")?.as_array()? {
         let username = response.get("username")?.as_str()?.to_string();
-        if response.get("locked").and_then(Value::as_bool).unwrap_or(false) {
+        if response
+            .get("locked")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
             continue;
         }
         for file in response.get("files")?.as_array()? {
-            if file.get("isLocked").and_then(Value::as_bool).unwrap_or(false) {
+            if file
+                .get("isLocked")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
                 continue;
             }
             let filename = file.get("filename")?.as_str()?.to_string();
@@ -703,7 +768,16 @@ fn try_native_slskd(
         }
     };
     let search_payload: Value = search_response.into_json()?;
-    let Some(search_id) = search_payload.get("id").and_then(Value::as_str).or_else(|| search_payload.get("id").and_then(Value::as_i64).map(|value| Box::leak(value.to_string().into_boxed_str()) as &str)) else {
+    let Some(search_id) = search_payload
+        .get("id")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            search_payload
+                .get("id")
+                .and_then(Value::as_i64)
+                .map(|value| Box::leak(value.to_string().into_boxed_str()) as &str)
+        })
+    else {
         return Ok(AcquireTrackResult {
             provider: Some("slskd".to_string()),
             tier: Some("T3".to_string()),
@@ -726,7 +800,11 @@ fn try_native_slskd(
             });
         }
         thread::sleep(Duration::from_secs(3));
-        let detail_url = slskd_api_url(&base_url, &api_base, &format!("/searches/{search_id}?includeResponses=true"));
+        let detail_url = slskd_api_url(
+            &base_url,
+            &api_base,
+            &format!("/searches/{search_id}?includeResponses=true"),
+        );
         let mut detail_request = ureq::get(&detail_url);
         for (key, value) in &headers {
             detail_request = detail_request.set(key, value);
@@ -766,7 +844,9 @@ fn try_native_slskd(
     for (key, value) in &headers {
         enqueue_request = enqueue_request.set(key, value);
     }
-    if let Err(error) = enqueue_request.send_json(serde_json::json!([{ "filename": candidate.filename }])) {
+    if let Err(error) =
+        enqueue_request.send_json(serde_json::json!([{ "filename": candidate.filename }]))
+    {
         return Ok(AcquireTrackResult {
             provider: Some("slskd".to_string()),
             tier: Some("T3".to_string()),
@@ -820,7 +900,10 @@ fn try_native_slskd(
         provider: Some("slskd".to_string()),
         tier: Some("T3".to_string()),
         failure_stage: Some("staging".to_string()),
-        failure_reason: Some("slskd queued a download but no completed file appeared in DOWNLOADS_FOLDER".to_string()),
+        failure_reason: Some(
+            "slskd queued a download but no completed file appeared in DOWNLOADS_FOLDER"
+                .to_string(),
+        ),
         ..AcquireTrackResult::default()
     })
 }
@@ -902,7 +985,14 @@ fn try_native_spotdl(
             provider: Some("spotdl".to_string()),
             tier: Some("T5".to_string()),
             failure_stage: Some("acquiring".to_string()),
-            failure_reason: Some(format!("spotdl failed: {}", if reason.is_empty() { "unknown error" } else { reason })),
+            failure_reason: Some(format!(
+                "spotdl failed: {}",
+                if reason.is_empty() {
+                    "unknown error"
+                } else {
+                    reason
+                }
+            )),
             ..AcquireTrackResult::default()
         });
     }
@@ -972,7 +1062,9 @@ fn organize_download(
                 let path = PathBuf::from(root.path);
                 path.exists().then_some(path)
             })
-            .ok_or(LyraError::InvalidInput("No accessible library root configured"))?,
+            .ok_or(LyraError::InvalidInput(
+                "No accessible library root configured",
+            ))?,
     };
     let artist_dir = sanitize_segment(artist, "Unknown Artist");
     let album_dir = sanitize_segment(album.unwrap_or("Singles"), "Singles");
@@ -1044,7 +1136,10 @@ fn acquire_track(
     notify: &Arc<dyn Fn(i64) + Send + Sync>,
 ) -> LyraResult<AcquireTrackResult> {
     let workspace_root = acquisition_workspace_root(paths);
-    let python_exe = workspace_root.join(".venv").join("Scripts").join("python.exe");
+    let python_exe = workspace_root
+        .join(".venv")
+        .join("Scripts")
+        .join("python.exe");
     if !python_exe.exists() {
         return try_native_acquire_track(paths, artist, title, album, queue_id, conn, notify);
     }
@@ -1066,7 +1161,10 @@ fn acquire_track(
     let mut child = match cmd.spawn() {
         Ok(child) => child,
         Err(error) => {
-            warn!("Falling back to native acquisition after waterfall spawn error: {}", error);
+            warn!(
+                "Falling back to native acquisition after waterfall spawn error: {}",
+                error
+            );
             return try_native_acquire_track(paths, artist, title, album, queue_id, conn, notify);
         }
     };
@@ -1128,7 +1226,10 @@ fn acquire_track(
                         provider,
                         elapsed,
                     }) => {
-                        info!("[waterfall] success tier={} path={} elapsed={:.1}s", tier, path, elapsed);
+                        info!(
+                            "[waterfall] success tier={} path={} elapsed={:.1}s",
+                            tier, path, elapsed
+                        );
                         let provider =
                             provider.unwrap_or_else(|| infer_provider_from_tier(&tier).to_string());
                         let path_buf = PathBuf::from(&path);
@@ -1154,8 +1255,12 @@ fn acquire_track(
                         tier,
                         elapsed,
                     }) => {
-                        warn!("[waterfall] failure error={} elapsed={:.1}s", error, elapsed);
-                        result.failure_stage = Some(stage.unwrap_or_else(|| "acquiring".to_string()));
+                        warn!(
+                            "[waterfall] failure error={} elapsed={:.1}s",
+                            error, elapsed
+                        );
+                        result.failure_stage =
+                            Some(stage.unwrap_or_else(|| "acquiring".to_string()));
                         result.failure_reason = Some(error);
                         result.provider = provider.or(result.provider);
                         result.tier = tier.or(result.tier);
@@ -1233,7 +1338,16 @@ where
              ORDER BY priority_score DESC, queue_position ASC, id ASC
              LIMIT 1",
             [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
         )
         .optional()?;
 
@@ -1314,7 +1428,8 @@ where
     );
     notify(id);
 
-    let acquire_result = acquire_track(paths, &artist, &title, album.as_deref(), id, &conn, &notify)?;
+    let acquire_result =
+        acquire_track(paths, &artist, &title, album.as_deref(), id, &conn, &notify)?;
     if let Some(provider) = acquire_result.provider.as_deref() {
         if acquire_result.path.is_some() {
             let _ = providers::record_provider_success(&conn, provider);
@@ -1363,7 +1478,8 @@ where
     notify(id);
 
     if acquisition::cancel_requested(&conn, id)? {
-        let _ = acquisition::mark_cancelled(&conn, id, "staging", Some("Cancelled after acquisition"));
+        let _ =
+            acquisition::mark_cancelled(&conn, id, "staging", Some("Cancelled after acquisition"));
         notify(id);
         return Ok(true);
     }
@@ -1414,7 +1530,12 @@ where
     notify(id);
 
     if acquisition::cancel_requested(&conn, id)? {
-        let _ = acquisition::mark_cancelled(&conn, id, "organizing", Some("Cancelled after organize stage"));
+        let _ = acquisition::mark_cancelled(
+            &conn,
+            id,
+            "organizing",
+            Some("Cancelled after organize stage"),
+        );
         notify(id);
         return Ok(true);
     }
@@ -1455,7 +1576,8 @@ where
     notify(id);
 
     if acquisition::cancel_requested(&conn, id)? {
-        let _ = acquisition::mark_cancelled(&conn, id, "scanning", Some("Cancelled after scan stage"));
+        let _ =
+            acquisition::mark_cancelled(&conn, id, "scanning", Some("Cancelled after scan stage"));
         notify(id);
         return Ok(true);
     }

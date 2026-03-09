@@ -17,8 +17,7 @@ mod imp {
         Foundation::TypedEventHandler,
         Media::{
             MediaPlaybackStatus, MediaPlaybackType, SystemMediaTransportControls,
-            SystemMediaTransportControlsButton,
-            SystemMediaTransportControlsButtonPressedEventArgs,
+            SystemMediaTransportControlsButton, SystemMediaTransportControlsButtonPressedEventArgs,
         },
         Win32::{Foundation::HWND, System::WinRT::ISystemMediaTransportControlsInterop},
     };
@@ -51,20 +50,15 @@ mod imp {
         fn extract_hwnd<W: HasWindowHandle>(window: &W) -> Option<HWND> {
             let handle = window.window_handle().ok()?;
             match handle.as_raw() {
-                RawWindowHandle::Win32(h) => {
-                    Some(HWND(h.hwnd.get() as *mut core::ffi::c_void))
-                }
+                RawWindowHandle::Win32(h) => Some(HWND(h.hwnd.get() as *mut core::ffi::c_void)),
                 _ => None,
             }
         }
 
         fn try_new(hwnd: HWND, core: LyraCore) -> windows::core::Result<Self> {
-            let interop = factory::<
-                SystemMediaTransportControls,
-                ISystemMediaTransportControlsInterop,
-            >()?;
-            let controls: SystemMediaTransportControls =
-                unsafe { interop.GetForWindow(hwnd)? };
+            let interop =
+                factory::<SystemMediaTransportControls, ISystemMediaTransportControlsInterop>()?;
+            let controls: SystemMediaTransportControls = unsafe { interop.GetForWindow(hwnd)? };
 
             controls.SetIsEnabled(true)?;
             controls.SetIsPlayEnabled(true)?;
@@ -76,10 +70,7 @@ mod imp {
             // Button presses go directly to core so they work when the
             // window is hidden (tray-only mode).
             controls.ButtonPressed(&TypedEventHandler::new(
-                move |_smtc,
-                      args: &Option<
-                    SystemMediaTransportControlsButtonPressedEventArgs,
-                >| {
+                move |_smtc, args: &Option<SystemMediaTransportControlsButtonPressedEventArgs>| {
                     let Some(args) = args else { return Ok(()) };
                     match args.Button()? {
                         SystemMediaTransportControlsButton::Play

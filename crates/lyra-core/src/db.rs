@@ -83,6 +83,18 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
           key TEXT PRIMARY KEY,
           value_json TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS composer_diagnostics (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          level TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          prompt TEXT NOT NULL,
+          action TEXT,
+          provider TEXT NOT NULL DEFAULT '',
+          mode TEXT NOT NULL DEFAULT '',
+          message TEXT NOT NULL DEFAULT '',
+          payload_json TEXT,
+          created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
           value_json TEXT NOT NULL
@@ -229,6 +241,17 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
           action TEXT NOT NULL,
           created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS composer_runs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          prompt TEXT NOT NULL,
+          action TEXT NOT NULL,
+          active_role TEXT NOT NULL DEFAULT '',
+          summary TEXT NOT NULL DEFAULT '',
+          provider TEXT NOT NULL DEFAULT '',
+          mode TEXT NOT NULL DEFAULT '',
+          response_json TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS connections (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           source TEXT NOT NULL,
@@ -249,6 +272,26 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
           circuit_open INTEGER NOT NULL DEFAULT 0,
           last_check TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS taste_memory_preferences (
+          axis_key TEXT PRIMARY KEY,
+          axis_label TEXT NOT NULL,
+          preferred_pole TEXT NOT NULL,
+          confidence REAL NOT NULL DEFAULT 0.0,
+          evidence_count INTEGER NOT NULL DEFAULT 0,
+          last_seen_at TEXT NOT NULL,
+          supporting_phrases_json TEXT NOT NULL DEFAULT '[]'
+        );
+        CREATE TABLE IF NOT EXISTS taste_route_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          action TEXT NOT NULL,
+          route_kind TEXT NOT NULL,
+          source TEXT NOT NULL,
+          outcome TEXT NOT NULL DEFAULT 'observed',
+          note TEXT NOT NULL,
+          confidence REAL NOT NULL DEFAULT 0.0,
+          observed_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_taste_route_history_observed ON taste_route_history(observed_at DESC);
         ",
     )?;
     // Backfill FTS index for any tracks not yet indexed
@@ -258,8 +301,9 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
          FROM tracks t
          LEFT JOIN artists ar ON ar.id = t.artist_id
          LEFT JOIN albums al ON al.id = t.album_id
-         WHERE t.id NOT IN (SELECT rowid FROM tracks_fts)"
-    ).unwrap_or_default();
+         WHERE t.id NOT IN (SELECT rowid FROM tracks_fts)",
+    )
+    .unwrap_or_default();
     // Extend tracks with rich metadata columns (idempotent)
     for (col, typedef) in &[
         ("genre", "TEXT"),
@@ -272,6 +316,8 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
         ("bpm", "REAL"),
         ("key_signature", "TEXT"),
         ("liked_at", "TEXT"),
+        ("track_number", "INTEGER"),
+        ("disc_number", "INTEGER"),
     ] {
         let _ = conn.execute(
             &format!("ALTER TABLE tracks ADD COLUMN {col} {typedef}"),
@@ -279,7 +325,10 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
         );
     }
     // Extend tracks with quarantine column
-    let _ = conn.execute("ALTER TABLE tracks ADD COLUMN quarantined INTEGER DEFAULT 0", []);
+    let _ = conn.execute(
+        "ALTER TABLE tracks ADD COLUMN quarantined INTEGER DEFAULT 0",
+        [],
+    );
 
     for (col, typedef) in &[
         ("queue_position", "INTEGER NOT NULL DEFAULT 0"),
@@ -356,6 +405,30 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
     ] {
         let _ = conn.execute(
             &format!("ALTER TABLE playlist_track_reasons ADD COLUMN {col} {typedef}"),
+            [],
+        );
+    }
+    let _ = conn.execute(
+        "ALTER TABLE taste_route_history ADD COLUMN outcome TEXT NOT NULL DEFAULT 'observed'",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_composer_diagnostics_created_at ON composer_diagnostics(created_at DESC)",
+        [],
+    );
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_composer_runs_created_at ON composer_runs(created_at DESC)",
+        [],
+    );
+    for (col, typedef) in &[
+        ("active_role", "TEXT NOT NULL DEFAULT ''"),
+        ("summary", "TEXT NOT NULL DEFAULT ''"),
+        ("provider", "TEXT NOT NULL DEFAULT ''"),
+        ("mode", "TEXT NOT NULL DEFAULT ''"),
+        ("response_json", "TEXT"),
+    ] {
+        let _ = conn.execute(
+            &format!("ALTER TABLE composer_runs ADD COLUMN {col} {typedef}"),
             [],
         );
     }

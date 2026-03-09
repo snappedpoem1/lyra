@@ -1,9 +1,10 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import { api } from "$lib/tauri";
   import { shell } from "$lib/stores/lyra";
-  import { setWorkspacePage, setWorkspaceProvenance, setWorkspaceTrack } from "$lib/stores/workspace";
-  import type { CurationLogEntry, DuplicateCluster, EnrichmentEntry, GeneratedPlaylist, LibraryCleanupPreview, PlaylistSummary, TrackEnrichmentResult, TrackRecord, TrackScores } from "$lib/types";
+  import { setComposerText, setWorkspaceExplanation, setWorkspacePage, setWorkspaceProvenance, setWorkspaceTrack } from "$lib/stores/workspace";
+  import type { CurationLogEntry, DuplicateCluster, ExplainPayload, LibraryCleanupPreview, PlaylistSummary, TrackEnrichmentResult, TrackRecord, TrackScores } from "$lib/types";
 
   const SCORE_DIMS = ["energy","valence","tension","density","warmth","movement","space","rawness","complexity","nostalgia"] as const;
 
@@ -12,6 +13,7 @@
   let playlists: PlaylistSummary[] = [];
   let addToPlaylistTrackId: number | null = null;
   let expandedScores: Record<number, TrackScores | null | "loading"> = {};
+  let expandedExplain: Record<number, ExplainPayload | "loading"> = {};
   let expandedEnrich: Record<number, Record<string, unknown> | null | "loading"> = {};
   let expandedEnrichV2: Record<number, TrackEnrichmentResult | null | "loading"> = {};
   let duplicates: DuplicateCluster[] = [];
@@ -78,6 +80,29 @@
     const scores = await api.trackScores(trackId);
     expandedScores = { ...expandedScores, [trackId]: scores ?? null };
     setWorkspaceTrack(tracks.find((item) => item.id === trackId) ?? null);
+  }
+
+  function openLyraPrompt(prompt: string): Promise<void> {
+    const trimmed = prompt.trim();
+    setComposerText(trimmed);
+    return goto(`/playlists?compose=1&prompt=${encodeURIComponent(trimmed)}`);
+  }
+
+  async function toggleExplain(trackId: number) {
+    if (expandedExplain[trackId] !== undefined) {
+      const { [trackId]: _, ...rest } = expandedExplain;
+      expandedExplain = rest;
+      return;
+    }
+    expandedExplain = { ...expandedExplain, [trackId]: "loading" };
+    try {
+      const payload = await api.explainRecommendation(trackId);
+      expandedExplain = { ...expandedExplain, [trackId]: payload };
+      setWorkspaceExplanation(payload, tracks.find((item) => item.id === trackId) ?? null);
+    } catch {
+      const { [trackId]: _, ...rest } = expandedExplain;
+      expandedExplain = rest;
+    }
   }
 
   async function toggleEnrich(trackId: number) {
@@ -208,6 +233,27 @@
   </div>
 </section>
 
+<section class="excavation-panel">
+  <div>
+    <p class="eyebrow">Excavation</p>
+    <strong>{query.trim() ? `Treat "${query.trim()}" like a world, not a filter.` : "Search should hand off into routes, not stop at matching rows."}</strong>
+  </div>
+  <div class="excavation-actions">
+    <button class="excavation-chip" on:click={() => openLyraPrompt(query.trim() ? `build a route out of ${query.trim()} and take me less obvious` : "take me somewhere adjacent but don’t give me the canon")}>
+      Less obvious route
+    </button>
+    <button class="excavation-chip" on:click={() => openLyraPrompt(query.trim() ? `give me three exits from ${query.trim()}, one safe, one interesting, one dangerous` : "give me three exits from this scene, one safe, one interesting, one dangerous")}>
+      Three exits
+    </button>
+    <button class="excavation-chip" on:click={() => openLyraPrompt(query.trim() ? `bridge from ${query.trim()} into another world but keep the pulse` : "same pulse, different world")}>
+      Keep the pulse
+    </button>
+    <button class="excavation-chip" on:click={() => openLyraPrompt(query.trim() ? `explain what is true about ${query.trim()} and what is just canon similarity` : "what’s the rewarding risk here")}>
+      Ask Lyra
+    </button>
+  </div>
+</section>
+
 <!-- G-062: Curation Panel -->
 {#if curationOpen}
   <section class="curation-section">
@@ -323,6 +369,12 @@
           title={track.liked ? 'Unlike' : 'Like'}>{track.liked ? 'Liked' : 'Like'}</button>
         <button on:click={() => play(track.id)}>Play</button>
         <button on:click={() => queue(track.id)}>Queue</button>
+        <button on:click={() => openLyraPrompt(`start from ${track.artist} - ${track.title} and take me somewhere adjacent but not the canon`)}>
+          Route
+        </button>
+        <button on:click={() => toggleExplain(track.id)}>
+          {expandedExplain[track.id] !== undefined ? 'Hide Why' : 'Why'}
+        </button>
         <button on:click={() => openAddToPlaylist(track.id)}>+ Playlist</button>
         <button class="scores-toggle" on:click={() => toggleScores(track.id)}
           title="Show scores">{expandedScores[track.id] !== undefined ? 'Hide' : 'Show'}</button>
@@ -330,6 +382,19 @@
           title="Show enrichment data">{expandedEnrich[track.id] !== undefined ? 'Hide' : 'Enrich'}</button>
       </div>
     </article>
+    {#if expandedExplain[track.id] !== undefined}
+      <div class="explain-panel">
+        {#if expandedExplain[track.id] === "loading"}
+          <small class="muted">Loading Lyra read...</small>
+        {:else}
+          {@const explain = expandedExplain[track.id] as ExplainPayload}
+          {#each explain.reasons as reason}
+            <p>{reason}</p>
+          {/each}
+          <small class="muted">Confidence {Math.round(explain.confidence * 100)}% • {explain.source}</small>
+        {/if}
+      </div>
+    {/if}
     {#if expandedScores[track.id] !== undefined && expandedScores[track.id] !== "loading"}
       {@const rawScore = expandedScores[track.id]}
       {@const sc = (rawScore !== "loading" ? rawScore : null) as import("$lib/types").TrackScores | null}
@@ -540,6 +605,18 @@
   .eyebrow { text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.72rem; }
   .page-head, .search-row { display: flex; gap: 12px; }
   .page-head { justify-content: space-between; align-items: end; margin-bottom: 20px; }
+  .excavation-panel {
+    margin: 0 0 18px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(18, 33, 46, 0.85), rgba(22, 27, 40, 0.92));
+    border: 1px solid rgba(168,196,224,0.16);
+    display: grid;
+    gap: 12px;
+  }
+  .excavation-panel strong { color: #dcecf6; }
+  .excavation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .excavation-chip { border-radius: 999px; padding: 7px 12px; }
   .track-list { display: flex; flex-direction: column; gap: 4px; }
   .search-row input {
     min-width: 280px;
@@ -604,6 +681,15 @@
     background: rgba(168,196,224,0.05);
     margin-bottom: 4px;
   }
+  .explain-panel {
+    display: grid;
+    gap: 6px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.035);
+    margin-bottom: 4px;
+  }
+  .explain-panel p { margin: 0; color: #d0e8f8; line-height: 1.4; }
   .enrich-state-row { display: flex; align-items: center; gap: 10px; flex: 1; }
   .state-badge { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
   .mbid-label { font-size: 0.68rem; color: #6a8aab; text-transform: uppercase; letter-spacing: 0.12em; }

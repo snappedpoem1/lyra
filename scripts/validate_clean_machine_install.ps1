@@ -180,7 +180,7 @@ if (-not $SkipToolSmokeCheck) {
 Write-Section "Simulated Tauri install layout check"
 $simRoot = Join-Path $env:TEMP "lyra_install_sim_$(Get-Random)"
 try {
-    # Tauri installs:         <sim>\Lyra Oracle.exe            (host, we fake an empty file)
+    # Tauri installs:         <sim>\Cassette.exe               (host, we fake an empty file)
     #                         <sim>\resources\lyra_backend.exe (sidecar)
     #                         <sim>\resources\runtime\bin\rip.exe etc.
     $simInstall     = Join-Path $simRoot "LyraOracle"

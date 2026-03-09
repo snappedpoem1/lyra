@@ -48,6 +48,17 @@ const defaultShell: AppShellState = {
     totalSignals: 0,
     source: "unknown"
   },
+  tasteMemory: {
+    sessionPosture: {
+      activeSignals: [],
+      summary: "",
+      confidenceNote: "",
+      updatedAt: ""
+    },
+    rememberedPreferences: [],
+    routePreferences: [],
+    summaryLines: []
+  },
   acquisitionQueuePending: 0
 };
 

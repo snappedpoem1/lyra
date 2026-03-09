@@ -5,14 +5,20 @@
   import { api } from "$lib/tauri";
   import { shell } from "$lib/stores/lyra";
   import { setWorkspaceExplanation, setWorkspacePage, setWorkspaceProvenance, setWorkspaceTrack } from "$lib/stores/workspace";
-  import type { ExplainPayload, PlaylistDetail, TrackEnrichmentResult, TrackRecord } from "$lib/types";
+  import type {
+    ExplainPayload,
+    PlaylistDetail,
+    PlaylistTrackReasonRecord,
+    TrackEnrichmentResult,
+    TrackRecord
+  } from "$lib/types";
 
   let playlist: PlaylistDetail | null = null;
   let nextName = "";
   let dragIndex: number | null = null;
 
   // G-061: per-track reasons (from playlist_track_reasons for generated playlists)
-  let trackReasons: Record<number, string> = {};
+  let trackReasons: Record<number, PlaylistTrackReasonRecord> = {};
   // G-061: expand states for explain and provenance
   let expandedExplain: Record<number, ExplainPayload | "loading"> = {};
   let expandedProvenance: Record<number, TrackEnrichmentResult | "loading"> = {};
@@ -22,11 +28,11 @@
     // Load detail and reasons in parallel
     const [detail, reasons] = await Promise.all([
       api.playlistDetail(id),
-      api.getPlaylistTrackReasons(id).catch(() => [] as [number, string][]),
+      api.getPlaylistTrackReasons(id).catch(() => [] as PlaylistTrackReasonRecord[]),
     ]);
     playlist = detail;
     nextName = detail.name;
-    trackReasons = Object.fromEntries(reasons);
+    trackReasons = Object.fromEntries(reasons.map((reason) => [reason.trackId, reason]));
   }
 
   async function rename() {
@@ -111,7 +117,7 @@
   }
 
   onMount(() => {
-    setWorkspacePage("Playlist", "Playlist detail", "View and manage tracks in this playlist. See why each track belongs.", "context");
+    setWorkspacePage("Cassette", "Saved route", "View a saved Cassette result with Lyra reasoning, phase roles, and proof still attached.", "context");
     loadDetail();
   });
 </script>
@@ -167,7 +173,27 @@
 
           <!-- Playlist reason badge (populated for generated playlists) -->
           {#if trackReasons[track.id]}
-            <p class="reason-badge">{trackReasons[track.id]}</p>
+            <div class="saved-reason">
+              <p class="reason-badge">{trackReasons[track.id].reason}</p>
+              {#if trackReasons[track.id].phaseLabel}
+                <small class="phase-chip">{trackReasons[track.id].phaseLabel}</small>
+              {/if}
+              {#if trackReasons[track.id].reasonPayload}
+                <div class="reason-grid">
+                  <small><strong>Why</strong> {trackReasons[track.id].reasonPayload?.whyThisTrack}</small>
+                  <small><strong>Transition</strong> {trackReasons[track.id].reasonPayload?.transitionNote}</small>
+                  {#if trackReasons[track.id].reasonPayload?.explicitFromPrompt.length}
+                    <small><strong>Explicit</strong> {trackReasons[track.id].reasonPayload?.explicitFromPrompt.join(", ")}</small>
+                  {/if}
+                  {#if trackReasons[track.id].reasonPayload?.inferredByLyra.length}
+                    <small><strong>Inferred by Lyra</strong> {trackReasons[track.id].reasonPayload?.inferredByLyra.join(", ")}</small>
+                  {/if}
+                  {#if trackReasons[track.id].reasonPayload?.evidence.length}
+                    <small><strong>Evidence</strong> {trackReasons[track.id].reasonPayload?.evidence.join(" | ")}</small>
+                  {/if}
+                </div>
+              {/if}
+            </div>
           {/if}
 
           <!-- G-061: explain panel -->
@@ -265,6 +291,36 @@
     padding-left: 8px;
     margin: 0;
     font-style: italic;
+  }
+
+  .saved-reason {
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.035);
+  }
+
+  .phase-chip {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(246,196,114,0.1);
+    color: #f0c983;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.68rem;
+  }
+
+  .reason-grid {
+    display: grid;
+    gap: 4px;
+  }
+
+  .reason-grid strong {
+    color: #f4e6c0;
+    margin-right: 6px;
   }
 
   .expand-panel {

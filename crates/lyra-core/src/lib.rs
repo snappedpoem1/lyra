@@ -11,6 +11,7 @@ pub mod enrichment;
 pub mod errors;
 pub mod intelligence;
 pub mod library;
+pub mod llm_client;
 pub mod logging;
 pub mod native;
 pub mod oracle;
@@ -23,6 +24,7 @@ pub mod scrobble;
 pub mod state;
 pub mod taste;
 pub mod taste_memory;
+pub mod waterfall;
 
 use std::fs;
 use std::path::{Path, PathBuf};

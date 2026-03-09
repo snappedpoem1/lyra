@@ -119,10 +119,8 @@ pub fn update_taste_from_completion(
     let now = Utc::now().to_rfc3339();
     let dim_order: &[&str] = DIMS;
 
-    let dim_vals: HashMap<String, (f64, f64)> = existing
-        .into_iter()
-        .map(|(d, v, c)| (d, (v, c)))
-        .collect();
+    let dim_vals: HashMap<String, (f64, f64)> =
+        existing.into_iter().map(|(d, v, c)| (d, (v, c))).collect();
 
     for (i, &dim) in dim_order.iter().enumerate() {
         let Some(&(old_val, old_conf)) = dim_vals.get(dim) else {

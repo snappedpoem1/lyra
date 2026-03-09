@@ -1,9 +1,13 @@
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::commands::{GeneratedPlaylist, PlaylistDetail, PlaylistSummary, PlaylistTrackWithReason, TrackRecord};
+use crate::commands::{
+    GeneratedPlaylist, PlaylistDetail, PlaylistSummary, PlaylistTrackReasonRecord,
+    PlaylistTrackWithReason, TrackReasonPayload, TrackRecord,
+};
 use crate::errors::{LyraError, LyraResult};
 use crate::library::get_track_by_id;
+use crate::llm_client::LlmClient;
 
 pub fn list_playlists(conn: &Connection) -> LyraResult<Vec<PlaylistSummary>> {
     let mut stmt = conn.prepare(
@@ -213,8 +217,16 @@ const ACTS: [PlaylustAct; 4] = [
 ];
 
 const DIM_NAMES: [&str; 10] = [
-    "energy", "valence", "tension", "density", "warmth",
-    "movement", "space", "rawness", "complexity", "nostalgia",
+    "energy",
+    "valence",
+    "tension",
+    "density",
+    "warmth",
+    "movement",
+    "space",
+    "rawness",
+    "complexity",
+    "nostalgia",
 ];
 
 fn l1_distance(a: &Dims, b: &Dims) -> f64 {
@@ -270,10 +282,17 @@ fn act_reason(act: &PlaylustAct, track_dims: &Dims, fit_score: f64) -> String {
     if best_fit > 0.88 {
         format!(
             "{} — strong {} match ({:.0}% fit)",
-            act.label, best_dim, fit_score * 100.0
+            act.label,
+            best_dim,
+            fit_score * 100.0
         )
     } else {
-        format!("{} — {} ({:.0}% dimensional fit)", act.label, tone, fit_score * 100.0)
+        format!(
+            "{} — {} ({:.0}% dimensional fit)",
+            act.label,
+            tone,
+            fit_score * 100.0
+        )
     }
 }
 
@@ -283,13 +302,9 @@ fn narrate_playlist_llm(
     act_openers: &[(&str, Vec<String>)],
     mood: &str,
     track_count: usize,
+    conn: &Connection,
 ) -> Option<String> {
-    let base_url = std::env::var("LYRA_LLM_BASE_URL").ok()?;
-    let api_key = std::env::var("LYRA_LLM_API_KEY").unwrap_or_default();
-    let model = std::env::var("LYRA_LLM_MODEL").ok()?;
-    if base_url.is_empty() || model.is_empty() {
-        return None;
-    }
+    let llm_client = LlmClient::from_connection(conn)?;
 
     let mood_line = if !mood.is_empty() && mood != "smart" {
         format!("The mood seed is: \"{}\".\n\n", mood)
@@ -321,28 +336,13 @@ fn narrate_playlist_llm(
         mood_line, track_count, acts_text
     );
 
-    let body = serde_json::json!({
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are Lyra, a poetic music intelligence. \
-                            Describe playlists with evocative, sensory language. Be concise."
-            },
-            {"role": "user", "content": prompt}
-        ],
-        "max_tokens": 200,
-        "temperature": 0.85
-    });
-
-    let chat_url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
-    let mut builder = ureq::post(&chat_url).set("Content-Type", "application/json");
-    if !api_key.is_empty() {
-        builder = builder.set("Authorization", &format!("Bearer {}", api_key));
-    }
-    let response = builder.send_json(body).ok()?;
-    let json: serde_json::Value = response.into_json().ok()?;
-    let text = json["choices"][0]["message"]["content"].as_str()?;
+    let text = llm_client.chat_completion_text(
+        "You are Lyra, a poetic music intelligence. \
+         Describe playlists with evocative, sensory language. Be concise.",
+        &prompt,
+        200,
+        0.85,
+    )?;
     let trimmed = text.trim();
     if trimmed.len() > 20 {
         Some(trimmed.to_string())
@@ -391,9 +391,16 @@ pub fn generate_act_playlist(
         .query_map([], |row| {
             let id: i64 = row.get(0)?;
             let dims: Dims = [
-                row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?,
-                row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?,
-                row.get(9)?, row.get(10)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+                row.get(8)?,
+                row.get(9)?,
+                row.get(10)?,
             ];
             let liked_at: Option<String> = row.get(20)?;
             let track = TrackRecord {
@@ -452,7 +459,7 @@ pub fn generate_act_playlist(
     }
 
     // LLM narrative — silent failure, template fallback
-    let narrative = narrate_playlist_llm(&act_openers, intent, playlist_tracks.len())
+    let narrative = narrate_playlist_llm(&act_openers, intent, playlist_tracks.len(), conn)
         .or_else(|| {
             let mood_clause = if !intent.is_empty() && intent != "smart" {
                 format!(" seeded from \"{}\"", intent)
@@ -463,7 +470,8 @@ pub fn generate_act_playlist(
                 "A {}-track journey{}. Four acts: aggressive confrontation, \
                  seductive warmth, stripped breakdown, and transcendent resolution. \
                  Built from your library using dimensional profiling.",
-                playlist_tracks.len(), mood_clause
+                playlist_tracks.len(),
+                mood_clause
             ))
         });
 
@@ -495,25 +503,45 @@ pub fn save_generated_playlist(
         add_track_to_playlist(conn, playlist_id, item.track.id)?;
         // Store reason
         conn.execute(
-            "INSERT OR REPLACE INTO playlist_track_reasons (playlist_id, track_id, reason, position)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![playlist_id, item.track.id, item.reason, item.position as i64],
+            "INSERT OR REPLACE INTO playlist_track_reasons (playlist_id, track_id, reason, reason_json, phase_key, phase_label, position)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                playlist_id,
+                item.track.id,
+                item.reason,
+                Option::<String>::None,
+                Option::<String>::None,
+                Option::<String>::None,
+                item.position as i64
+            ],
         )?;
     }
     Ok(playlist_id)
 }
 
-/// Return (track_id, reason) pairs for a playlist.
+/// Return persisted reason payloads for a playlist.
 pub fn get_playlist_track_reasons(
     conn: &Connection,
     playlist_id: i64,
-) -> LyraResult<Vec<(i64, String)>> {
+) -> LyraResult<Vec<PlaylistTrackReasonRecord>> {
     let mut stmt = conn.prepare(
-        "SELECT track_id, reason FROM playlist_track_reasons
+        "SELECT track_id, reason, reason_json, phase_key, phase_label, position
+         FROM playlist_track_reasons
          WHERE playlist_id = ?1 ORDER BY position ASC",
     )?;
     let rows = stmt.query_map(params![playlist_id], |row| {
-        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        let reason_json: Option<String> = row.get(2)?;
+        let reason_payload = reason_json
+            .as_deref()
+            .and_then(|value| serde_json::from_str::<TrackReasonPayload>(value).ok());
+        Ok(PlaylistTrackReasonRecord {
+            track_id: row.get(0)?,
+            reason: row.get(1)?,
+            reason_payload,
+            phase_key: row.get(3)?,
+            phase_label: row.get(4)?,
+            position: row.get::<_, i64>(5)? as usize,
+        })
     })?;
     Ok(rows.filter_map(Result::ok).collect())
 }

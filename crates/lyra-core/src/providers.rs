@@ -18,6 +18,171 @@ fn base64_encode(s: &str) -> String {
     BASE64_STANDARD.encode(s.as_bytes())
 }
 
+// ── LLM config ────────────────────────────────────────────────────────────────
+
+/// Resolved LLM configuration for making chat-completion calls.
+#[derive(Clone, Debug)]
+pub struct LlmConfig {
+    pub base_url: String,
+    pub model: String,
+    pub api_key: String,
+    /// One of "ollama", "openai", "openrouter", "groq", or "openai_compatible".
+    pub provider_kind: String,
+}
+
+/// Load a single provider's raw config JSON from the `provider_configs` table.
+/// Returns `None` if the provider has no row or is disabled.
+pub fn load_provider_config(conn: &Connection, provider_key: &str) -> Option<Value> {
+    conn.query_row(
+        "SELECT config_json FROM provider_configs WHERE provider_key = ?1 AND enabled = 1",
+        params![provider_key],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|s| serde_json::from_str(&s).ok())
+}
+
+/// Upsert a provider's config JSON into the `provider_configs` table.
+pub fn save_provider_config(
+    conn: &Connection,
+    provider_key: &str,
+    config_json: &Value,
+) -> LyraResult<()> {
+    let display_name = conn
+        .query_row(
+            "SELECT display_name FROM provider_capabilities WHERE provider_key = ?1",
+            params![provider_key],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap_or_else(|_| provider_key.to_string());
+    conn.execute(
+        "INSERT INTO provider_configs (provider_key, display_name, enabled, config_json, updated_at)
+         VALUES (?1, ?2, 1, ?3, ?4)
+         ON CONFLICT(provider_key) DO UPDATE SET
+           display_name = excluded.display_name,
+           config_json  = excluded.config_json,
+           updated_at   = excluded.updated_at",
+        params![
+            provider_key,
+            display_name,
+            serde_json::to_string(config_json)?,
+            Utc::now().to_rfc3339(),
+        ],
+    )?;
+    Ok(())
+}
+
+/// Return the provider keys that have a non-empty config_json in the DB.
+pub fn list_configured_providers(conn: &Connection) -> Vec<String> {
+    let mut stmt = match conn.prepare(
+        "SELECT provider_key FROM provider_configs WHERE config_json != '{}' AND config_json != ''",
+    ) {
+        Ok(s) => s,
+        Err(_) => return vec![],
+    };
+    let result: Result<Vec<String>, _> = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map(|rows| rows.filter_map(Result::ok).collect());
+    result.unwrap_or_default()
+}
+
+/// Helper to pull a string field from a JSON object, trying multiple key spellings.
+fn config_str<'a>(config: &'a Value, keys: &[&str]) -> Option<&'a str> {
+    keys.iter()
+        .find_map(|k| config.get(*k).and_then(Value::as_str))
+        .filter(|v| !v.trim().is_empty())
+}
+
+/// Load LLM configuration, preferring the `provider_configs` DB rows for the
+/// first enabled LLM provider found (`groq`, `openrouter`, `openai`, `ollama`),
+/// with a fallback to the legacy `LYRA_LLM_*` environment variables.
+pub fn load_llm_config(conn: &Connection) -> LlmConfig {
+    // Try DB providers in priority order (cloud-first, matching the intelligence.rs heuristic).
+    let db_order = ["groq", "openrouter", "openai", "ollama"];
+    for key in &db_order {
+        if let Some(cfg) = load_provider_config(conn, key) {
+            let (base_url, model, api_key) = match *key {
+                "ollama" => {
+                    let url = config_str(&cfg, &["base_url", "ollama_base_url"])
+                        .unwrap_or("http://127.0.0.1:11434")
+                        .to_owned();
+                    let model = config_str(&cfg, &["model", "ollama_model"])
+                        .unwrap_or_default()
+                        .to_owned();
+                    (url, model, String::new())
+                }
+                _ => {
+                    let url = config_str(
+                        &cfg,
+                        &[
+                            "base_url",
+                            "openai_base_url",
+                            "openrouter_base_url",
+                            "groq_base_url",
+                            "lyra_llm_base_url",
+                        ],
+                    )
+                    .unwrap_or(match *key {
+                        "openai" => "https://api.openai.com/v1",
+                        "openrouter" => "https://openrouter.ai/api/v1",
+                        "groq" => "https://api.groq.com/openai/v1",
+                        _ => "",
+                    })
+                    .to_owned();
+                    let model = config_str(
+                        &cfg,
+                        &[
+                            "model",
+                            "cloud_model",
+                            "openai_model",
+                            "groq_model",
+                            "openrouter_model",
+                            "lyra_llm_model",
+                        ],
+                    )
+                    .unwrap_or_default()
+                    .to_owned();
+                    let api_key = config_str(
+                        &cfg,
+                        &[
+                            "api_key",
+                            "token",
+                            "openai_api_key",
+                            "groq_api_key",
+                            "openrouter_api_key",
+                            "lyra_llm_api_key",
+                        ],
+                    )
+                    .unwrap_or_default()
+                    .to_owned();
+                    (url, model, api_key)
+                }
+            };
+            if !model.is_empty() {
+                return LlmConfig {
+                    base_url,
+                    model,
+                    api_key,
+                    provider_kind: key.to_string(),
+                };
+            }
+        }
+    }
+
+    // Fall back to legacy LYRA_LLM_* environment variables.
+    let base_url = std::env::var("LYRA_LLM_BASE_URL").unwrap_or_default();
+    let model = std::env::var("LYRA_LLM_MODEL").unwrap_or_default();
+    let api_key = std::env::var("LYRA_LLM_API_KEY").unwrap_or_default();
+    let provider_kind =
+        std::env::var("LYRA_LLM_PROVIDER").unwrap_or_else(|_| "openai_compatible".to_string());
+    LlmConfig {
+        base_url,
+        model,
+        api_key,
+        provider_kind,
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ProviderCapabilitySeed {
     pub provider_key: &'static str,
@@ -137,18 +302,9 @@ pub fn provider_env_mappings() -> HashMap<&'static str, Vec<&'static str>> {
                 "LYRA_STREAMRIP_SOURCE",
             ],
         ),
-        (
-            "spotdl",
-            vec!["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"],
-        ),
-        (
-            "prowlarr",
-            vec!["PROWLARR_URL", "PROWLARR_API_KEY"],
-        ),
-        (
-            "realdebrid",
-            vec!["REAL_DEBRID_KEY", "REAL_DEBRID_API_KEY"],
-        ),
+        ("spotdl", vec!["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"]),
+        ("prowlarr", vec!["PROWLARR_URL", "PROWLARR_API_KEY"]),
+        ("realdebrid", vec!["REAL_DEBRID_KEY", "REAL_DEBRID_API_KEY"]),
         (
             "slskd",
             vec![
@@ -172,12 +328,31 @@ pub fn provider_env_mappings() -> HashMap<&'static str, Vec<&'static str>> {
         ("acoustid", vec!["ACOUSTID_API_KEY"]),
         ("discogs", vec!["DISCOGS_TOKEN", "DISCOGS_USER_TOKEN"]),
         ("ollama", vec!["OLLAMA_BASE_URL", "OLLAMA_MODEL"]),
-        ("openai", vec!["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL"]),
+        (
+            "openai",
+            vec!["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL"],
+        ),
         (
             "openrouter",
-            vec!["OPENROUTER_API_KEY", "OPENROUTER_BASE_URL", "OPENROUTER_MODEL"],
+            vec![
+                "OPENROUTER_API_KEY",
+                "OPENROUTER_BASE_URL",
+                "OPENROUTER_MODEL",
+            ],
         ),
-        ("groq", vec!["GROQ_API_KEY", "GROQ_BASE_URL", "GROQ_MODEL"]),
+        (
+            "groq",
+            vec![
+                "GROQ_API_KEY",
+                "GROQ_BASE_URL",
+                "GROQ_MODEL",
+                // Legacy generic LLM interface — maps to groq when present
+                "LYRA_LLM_API_KEY",
+                "LYRA_LLM_BASE_URL",
+                "LYRA_LLM_MODEL",
+                "LYRA_LLM_PROVIDER",
+            ],
+        ),
     ])
 }
 
@@ -258,8 +433,11 @@ pub fn import_env_file(
     let mappings = provider_env_mappings();
     let mut env_values: HashMap<String, String> = HashMap::new();
     for item in from_path_iter(env_path)? {
-        let (key, value) = item?;
-        env_values.insert(key, value);
+        // Skip individual lines that fail to parse (e.g. unquoted Windows paths
+        // with backslashes). We only care about known provider key names.
+        if let Ok((key, value)) = item {
+            env_values.insert(key, value);
+        }
     }
 
     let mut imported_count = 0_usize;
@@ -338,7 +516,10 @@ pub fn record_provider_success(conn: &Connection, provider_key: &str) -> LyraRes
     Ok(())
 }
 
-pub fn record_provider_failure(conn: &Connection, provider_key: &str) -> LyraResult<ProviderHealth> {
+pub fn record_provider_failure(
+    conn: &Connection,
+    provider_key: &str,
+) -> LyraResult<ProviderHealth> {
     let now = Utc::now().to_rfc3339();
     conn.execute(
         "INSERT INTO provider_health (provider_key, status, failure_count, last_failure, circuit_open, last_check)
@@ -458,7 +639,10 @@ pub fn validate_provider(
                 });
             }
             ureq::get("https://api.discogs.com/oauth/identity")
-                .set("User-Agent", "Lyra/0.1 +https://github.com/snappedpoem1/lyra")
+                .set(
+                    "User-Agent",
+                    "Lyra/0.1 +https://github.com/snappedpoem1/lyra",
+                )
                 .set("Authorization", &format!("Discogs token={token}"))
                 .call()
                 .map(|resp| {
@@ -490,13 +674,11 @@ pub fn validate_provider(
                 .set("Authorization", &format!("Bearer {token}"))
                 .call()
                 .map(|resp| {
-                    resp.into_json::<Value>()
-                        .ok()
-                        .and_then(|v| {
-                            v.pointer("/response/user/name")
-                                .and_then(Value::as_str)
-                                .map(String::from)
-                        })
+                    resp.into_json::<Value>().ok().and_then(|v| {
+                        v.pointer("/response/user/name")
+                            .and_then(Value::as_str)
+                            .map(String::from)
+                    })
                 })
                 .map_err(|e| e.to_string())
         }
@@ -529,20 +711,21 @@ pub fn validate_provider(
                     ("app_id", "950096963"),
                 ])
                 .map(|resp| {
-                    resp.into_json::<Value>()
-                        .ok()
-                        .and_then(|v| {
-                            v.pointer("/user/display_name")
-                                .and_then(Value::as_str)
-                                .map(String::from)
-                        })
+                    resp.into_json::<Value>().ok().and_then(|v| {
+                        v.pointer("/user/display_name")
+                            .and_then(Value::as_str)
+                            .map(String::from)
+                    })
                 })
                 .map_err(|e| e.to_string())
         }
         "musicbrainz" => {
             // MusicBrainz is always available — no auth needed.  Just confirm reachability.
             ureq::get("https://musicbrainz.org/ws/2/artist")
-                .set("User-Agent", "Lyra/0.1 (https://github.com/snappedpoem1/lyra)")
+                .set(
+                    "User-Agent",
+                    "Lyra/0.1 (https://github.com/snappedpoem1/lyra)",
+                )
                 .query("query", "Radiohead")
                 .query("limit", "1")
                 .query("fmt", "json")
@@ -576,9 +759,11 @@ pub fn validate_provider(
                 .set("X-Api-Key", api_key)
                 .call()
                 .map(|resp| {
-                    resp.into_json::<Value>()
-                        .ok()
-                        .and_then(|v| v.get("version").and_then(Value::as_str).map(|s| format!("Prowlarr {}", s)))
+                    resp.into_json::<Value>().ok().and_then(|v| {
+                        v.get("version")
+                            .and_then(Value::as_str)
+                            .map(|s| format!("Prowlarr {}", s))
+                    })
                 })
                 .map_err(|e| e.to_string())
         }
@@ -640,7 +825,10 @@ pub fn validate_provider(
             let endpoint = format!("{}/api/v0/session", url.trim_end_matches('/'));
             ureq::get(&endpoint)
                 .set("User-Agent", "Lyra/0.1")
-                .set("Authorization", &format!("Basic {}", base64_encode(&format!("{}:{}", user, pass))))
+                .set(
+                    "Authorization",
+                    &format!("Basic {}", base64_encode(&format!("{}:{}", user, pass))),
+                )
                 .call()
                 .map(|_| Some("authenticated".to_string()))
                 .map_err(|e| e.to_string())
@@ -652,14 +840,16 @@ pub fn validate_provider(
                 .or_else(|| config.get("LYRA_STREAMRIP_BINARY"))
                 .and_then(Value::as_str)
                 .unwrap_or("rip");
-            
+
             // Try to find the binary
             let found = if std::path::Path::new(binary_path).exists() {
                 Some(binary_path.to_string())
             } else {
-                which::which(binary_path).ok().map(|p| p.display().to_string())
+                which::which(binary_path)
+                    .ok()
+                    .map(|p| p.display().to_string())
             };
-            
+
             match found {
                 Some(path) => Ok(Some(format!("binary found: {}", path))),
                 None => Err(format!("streamrip binary '{}' not found", binary_path)),
@@ -689,12 +879,19 @@ pub fn validate_provider(
             // Validate Spotify credentials via OAuth token endpoint
             ureq::post("https://accounts.spotify.com/api/token")
                 .set("User-Agent", "Lyra/0.1")
-                .set("Authorization", &format!("Basic {}", base64_encode(&format!("{}:{}", client_id, client_secret))))
+                .set(
+                    "Authorization",
+                    &format!(
+                        "Basic {}",
+                        base64_encode(&format!("{}:{}", client_id, client_secret))
+                    ),
+                )
                 .send_form(&[("grant_type", "client_credentials")])
                 .map(|resp| {
-                    resp.into_json::<Value>()
-                        .ok()
-                        .and_then(|v| v.get("access_token").map(|_| "credentials valid".to_string()))
+                    resp.into_json::<Value>().ok().and_then(|v| {
+                        v.get("access_token")
+                            .map(|_| "credentials valid".to_string())
+                    })
                 })
                 .map_err(|e| e.to_string())
         }
@@ -721,12 +918,19 @@ pub fn validate_provider(
             }
             ureq::post("https://accounts.spotify.com/api/token")
                 .set("User-Agent", "Lyra/0.1")
-                .set("Authorization", &format!("Basic {}", base64_encode(&format!("{}:{}", client_id, client_secret))))
+                .set(
+                    "Authorization",
+                    &format!(
+                        "Basic {}",
+                        base64_encode(&format!("{}:{}", client_id, client_secret))
+                    ),
+                )
                 .send_form(&[("grant_type", "client_credentials")])
                 .map(|resp| {
-                    resp.into_json::<Value>()
-                        .ok()
-                        .and_then(|v| v.get("access_token").map(|_| "credentials valid".to_string()))
+                    resp.into_json::<Value>().ok().and_then(|v| {
+                        v.get("access_token")
+                            .map(|_| "credentials valid".to_string())
+                    })
                 })
                 .map_err(|e| e.to_string())
         }
@@ -750,15 +954,13 @@ pub fn validate_provider(
                 .set("Authorization", &format!("Token {}", token))
                 .call()
                 .map(|resp| {
-                    resp.into_json::<Value>()
-                        .ok()
-                        .and_then(|v| {
-                            if v.get("valid").and_then(Value::as_bool).unwrap_or(false) {
-                                v.get("user_name").and_then(Value::as_str).map(String::from)
-                            } else {
-                                None
-                            }
-                        })
+                    resp.into_json::<Value>().ok().and_then(|v| {
+                        if v.get("valid").and_then(Value::as_bool).unwrap_or(false) {
+                            v.get("user_name").and_then(Value::as_str).map(String::from)
+                        } else {
+                            None
+                        }
+                    })
                 })
                 .map_err(|e| e.to_string())
         }
@@ -788,7 +990,10 @@ pub fn validate_provider(
                     detail: None,
                 });
             }
-            Ok(Some(format!("api_key configured ({}...)", &api_key[..8.min(api_key.len())])))
+            Ok(Some(format!(
+                "api_key configured ({}...)",
+                &api_key[..8.min(api_key.len())]
+            )))
         }
         "ollama" => {
             let base_url = config
@@ -871,8 +1076,16 @@ pub fn validate_provider(
                 provider_key: provider_key.to_string(),
                 valid: configured,
                 latency_ms: 0,
-                error: if configured { None } else { Some("No credentials configured".to_string()) },
-                detail: if configured { Some("credentials present, probe not implemented".to_string()) } else { None },
+                error: if configured {
+                    None
+                } else {
+                    Some("No credentials configured".to_string())
+                },
+                detail: if configured {
+                    Some("credentials present, probe not implemented".to_string())
+                } else {
+                    None
+                },
             });
         }
     };
@@ -987,19 +1200,29 @@ pub fn lastfm_get_session(
 ///
 /// Returns a summary: `(saved, skipped)` counts.
 pub fn backup_env_to_keychain(env_path: &str) -> Result<(usize, usize), String> {
-    let credential_indicators = ["KEY", "SECRET", "TOKEN", "PASSWORD", "PASS", "AUTH", "EMAIL"];
+    let credential_indicators = [
+        "KEY", "SECRET", "TOKEN", "PASSWORD", "PASS", "AUTH", "EMAIL",
+    ];
     let mut saved = 0usize;
     let mut skipped = 0usize;
 
     // Read file bytes, strip UTF-8 BOM (EF BB BF) if present, then parse.
     let raw = std::fs::read(env_path).map_err(|e| format!("Failed to read {env_path}: {e}"))?;
-    let content = if raw.starts_with(b"\xef\xbb\xbf") { &raw[3..] } else { &raw[..] };
+    let content = if raw.starts_with(b"\xef\xbb\xbf") {
+        &raw[3..]
+    } else {
+        &raw[..]
+    };
     let pairs = dotenvy::from_read_iter(std::io::Cursor::new(content));
 
     for pair in pairs {
         let (k, v) = match pair {
             Ok(kv) => kv,
-            Err(e) => { warn!("Skipping .env line: {e}"); skipped += 1; continue; }
+            Err(e) => {
+                warn!("Skipping .env line: {e}");
+                skipped += 1;
+                continue;
+            }
         };
         let ku = k.to_ascii_uppercase();
         let is_cred = credential_indicators.iter().any(|ind| ku.contains(ind));
@@ -1012,7 +1235,9 @@ pub fn backup_env_to_keychain(env_path: &str) -> Result<(usize, usize), String> 
             .map_err(|e| e.to_string())
             .and_then(|e| e.set_password(&v).map_err(|e| e.to_string()))
         {
-            Ok(()) => { saved += 1; }
+            Ok(()) => {
+                saved += 1;
+            }
             Err(err) => {
                 warn!("keychain save failed for {k}: {err}");
                 skipped += 1;

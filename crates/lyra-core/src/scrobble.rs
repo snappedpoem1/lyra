@@ -39,7 +39,11 @@ impl LastFmCreds {
         let api_key = get("lastfm_api_key", "LASTFM_API_KEY")?;
         let api_secret = get("lastfm_api_secret", "LASTFM_API_SECRET")?;
         let session_key = get("lastfm_session_key", "LASTFM_SESSION_KEY")?;
-        Some(Self { api_key, api_secret, session_key })
+        Some(Self {
+            api_key,
+            api_secret,
+            session_key,
+        })
     }
 }
 
@@ -58,7 +62,9 @@ fn sign(params: &BTreeMap<&str, String>, api_secret: &str) -> String {
 /// Send a "track.updateNowPlaying" notification to Last.fm.
 /// Call this when a track begins playing.
 pub fn now_playing(conn: &Connection, artist: &str, title: &str, album: &str, duration_secs: u64) {
-    let Some(creds) = LastFmCreds::from_db(conn) else { return };
+    let Some(creds) = LastFmCreds::from_db(conn) else {
+        return;
+    };
     let mut params = BTreeMap::new();
     params.insert("method", "track.updateNowPlaying".to_string());
     params.insert("api_key", creds.api_key.clone());
@@ -73,8 +79,16 @@ pub fn now_playing(conn: &Connection, artist: &str, title: &str, album: &str, du
     params.insert("api_sig", sig);
     params.insert("format", "json".to_string());
 
-    let form_data: Vec<(String, String)> = params.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
-    match ureq::post(LASTFM_API_URL).send_form(&form_data.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>()) {
+    let form_data: Vec<(String, String)> = params
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    match ureq::post(LASTFM_API_URL).send_form(
+        &form_data
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect::<Vec<_>>(),
+    ) {
         Ok(_) => info!("Last.fm now playing: {artist} - {title}"),
         Err(e) => warn!("Last.fm now_playing failed: {e}"),
     }
@@ -94,7 +108,9 @@ pub fn scrobble(
     if duration_secs < 30 {
         return;
     }
-    let Some(creds) = LastFmCreds::from_db(conn) else { return };
+    let Some(creds) = LastFmCreds::from_db(conn) else {
+        return;
+    };
     let mut params = BTreeMap::new();
     params.insert("method", "track.scrobble".to_string());
     params.insert("api_key", creds.api_key.clone());
@@ -110,20 +126,29 @@ pub fn scrobble(
     params.insert("api_sig", sig);
     params.insert("format", "json".to_string());
 
-    let form_data: Vec<(String, String)> = params.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
-    match ureq::post(LASTFM_API_URL).send_form(&form_data.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>()) {
-        Ok(resp) => {
-            match resp.into_json::<Value>() {
-                Ok(body) => {
-                    if body.get("error").is_some() {
-                        warn!("Last.fm scrobble error for {artist} - {title}: {:?}", body.get("message"));
-                    } else {
-                        info!("Last.fm scrobbled: {artist} - {title}");
-                    }
+    let form_data: Vec<(String, String)> = params
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    match ureq::post(LASTFM_API_URL).send_form(
+        &form_data
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect::<Vec<_>>(),
+    ) {
+        Ok(resp) => match resp.into_json::<Value>() {
+            Ok(body) => {
+                if body.get("error").is_some() {
+                    warn!(
+                        "Last.fm scrobble error for {artist} - {title}: {:?}",
+                        body.get("message")
+                    );
+                } else {
+                    info!("Last.fm scrobbled: {artist} - {title}");
                 }
-                Err(e) => warn!("Last.fm scrobble response parse error: {e}"),
             }
-        }
+            Err(e) => warn!("Last.fm scrobble response parse error: {e}"),
+        },
         Err(e) => warn!("Last.fm scrobble failed: {e}"),
     }
 }
@@ -131,7 +156,12 @@ pub fn scrobble(
 /// Obtain a Last.fm session key via the "mobile session" method (username + password).
 /// On success, returns the session key string. This should be stored in provider config
 /// as `lastfm_session_key`.
-pub fn get_mobile_session(api_key: &str, api_secret: &str, username: &str, password: &str) -> Result<String, String> {
+pub fn get_mobile_session(
+    api_key: &str,
+    api_secret: &str,
+    username: &str,
+    password: &str,
+) -> Result<String, String> {
     let mut params = BTreeMap::new();
     params.insert("method", "auth.getMobileSession".to_string());
     params.insert("api_key", api_key.to_string());
@@ -141,13 +171,24 @@ pub fn get_mobile_session(api_key: &str, api_secret: &str, username: &str, passw
     params.insert("api_sig", sig);
     params.insert("format", "json".to_string());
 
-    let form_data: Vec<(String, String)> = params.into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+    let form_data: Vec<(String, String)> = params
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
     let resp = ureq::post(LASTFM_API_URL)
-        .send_form(&form_data.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect::<Vec<_>>())
+        .send_form(
+            &form_data
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect::<Vec<_>>(),
+        )
         .map_err(|e| format!("HTTP error: {e}"))?;
     let body: Value = resp.into_json().map_err(|e| format!("Parse error: {e}"))?;
     if let Some(err) = body.get("error") {
-        let msg = body.get("message").and_then(Value::as_str).unwrap_or("unknown");
+        let msg = body
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
         return Err(format!("Last.fm error {err}: {msg}"));
     }
     body.pointer("/session/key")

@@ -5,8 +5,8 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::commands::{
-    DiscoveryInteraction, DiscoverySession, EvidenceItem, ExplainPayload, RelatedArtist,
-    RecommendationResult, TasteProfile, TrackScores,
+    DiscoveryInteraction, DiscoverySession, EvidenceItem, ExplainPayload, RecommendationResult,
+    RelatedArtist, TasteProfile, TrackScores,
 };
 
 /// Static cross-genre bridge map ported from oracle/recommendation_broker.py `_SCOUT_GENRE_BRIDGES`.
@@ -234,7 +234,8 @@ impl<'conn> RecommendationBroker<'conn> {
                  LEFT JOIN playback_history ph ON ph.track_id = t.id
                  GROUP BY t.id",
             ) {
-                let rows = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)));
+                let rows =
+                    stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)));
                 if let Ok(rows) = rows {
                     for row in rows.filter_map(Result::ok) {
                         map.insert(row.0, row.1);
@@ -296,15 +297,24 @@ impl<'conn> RecommendationBroker<'conn> {
             let score_row = score_rows.get(&track_id);
 
             // Determine strongest matching dimensions for human text
-            let shared_dims = score_row.map(|sr| {
-                let sm = scores_to_map(sr);
-                strongest_dimension_matches(&taste.dimensions, &sm)
-            }).unwrap_or_default();
+            let shared_dims = score_row
+                .map(|sr| {
+                    let sm = scores_to_map(sr);
+                    strongest_dimension_matches(&taste.dimensions, &sm)
+                })
+                .unwrap_or_default();
 
-            let track_mood = score_row.map(|sr| interpreter.label(&scores_to_map(sr))).unwrap_or_default();
+            let track_mood = score_row
+                .map(|sr| interpreter.label(&scores_to_map(sr)))
+                .unwrap_or_default();
 
             let is_deep_cut = play_count <= 3 && raw_score >= 0.55;
-            let provider = if is_deep_cut { "local/deep_cut" } else { "local/taste" }.to_string();
+            let provider = if is_deep_cut {
+                "local/deep_cut"
+            } else {
+                "local/taste"
+            }
+            .to_string();
 
             let (why, evidence_type, evidence_text) = if is_deep_cut {
                 (
@@ -323,18 +333,28 @@ impl<'conn> RecommendationBroker<'conn> {
                         shared_dims.join(", ")
                     ),
                     "taste_alignment",
-                    format!("Shared dimensions: {}. Score {:.0}%.", shared_dims.join(", "), raw_score * 100.0),
+                    format!(
+                        "Shared dimensions: {}. Score {:.0}%.",
+                        shared_dims.join(", "),
+                        raw_score * 100.0
+                    ),
                 )
             } else {
                 (
-                    format!("Lyra sees a {} profile match against your current taste reading.", track_mood),
+                    format!(
+                        "Lyra sees a {} profile match against your current taste reading.",
+                        track_mood
+                    ),
                     "taste_alignment",
                     format!("Cosine match {:.0}%.", raw_score * 100.0),
                 )
             };
 
             let inferred_note = if !shared_dims.is_empty() {
-                format!("Dimension overlap on {} inferred from local scores.", shared_dims.join(", "))
+                format!(
+                    "Dimension overlap on {} inferred from local scores.",
+                    shared_dims.join(", ")
+                )
             } else {
                 "Cosine similarity inferred from local taste profile.".to_string()
             };
@@ -408,12 +428,15 @@ impl<'conn> RecommendationBroker<'conn> {
                         continue;
                     };
 
-                    let bridge_score = score_rows.get(&bridge_id).map(|sr| {
-                        let sm = scores_to_map(sr);
-                        let sim = cosine_similarity(&taste.dimensions, &sm);
-                        let ov = mean_overlap(&taste.dimensions, &sm);
-                        (sim * 0.7 + ov * 0.3).clamp(0.0, 1.0)
-                    }).unwrap_or(0.35);
+                    let bridge_score = score_rows
+                        .get(&bridge_id)
+                        .map(|sr| {
+                            let sm = scores_to_map(sr);
+                            let sim = cosine_similarity(&taste.dimensions, &sm);
+                            let ov = mean_overlap(&taste.dimensions, &sm);
+                            (sim * 0.7 + ov * 0.3).clamp(0.0, 1.0)
+                        })
+                        .unwrap_or(0.35);
 
                     // Only include bridge candidates with some taste coherence
                     if bridge_score < 0.25 {
@@ -426,7 +449,9 @@ impl<'conn> RecommendationBroker<'conn> {
                     );
                     let evidence_text = format!(
                         "Cross-genre bridge: {} × {}. Local taste coherence {:.0}%.",
-                        seed_genre, bridge_genre, bridge_score * 100.0
+                        seed_genre,
+                        bridge_genre,
+                        bridge_score * 100.0
                     );
 
                     results.push(RecommendationResult {
@@ -434,14 +459,12 @@ impl<'conn> RecommendationBroker<'conn> {
                         score: bridge_score * 0.82,
                         provider: "scout/bridge".to_string(),
                         why_this_track: why,
-                        evidence: vec![
-                            EvidenceItem {
-                                type_label: "scout_bridge".to_string(),
-                                source: "scout".to_string(),
-                                text: evidence_text,
-                                weight: 0.10,
-                            },
-                        ],
+                        evidence: vec![EvidenceItem {
+                            type_label: "scout_bridge".to_string(),
+                            source: "scout".to_string(),
+                            text: evidence_text,
+                            weight: 0.10,
+                        }],
                     });
                     seen_ids.insert(bridge_id);
                 }
@@ -451,12 +474,16 @@ impl<'conn> RecommendationBroker<'conn> {
         // --- Lane 3: graph/co_play — artists with graph affinity ---
         // Find artists connected to the top scored tracks' artists
         let anchor_artists: Vec<String> = {
-            local_scored.iter().take(5).filter_map(|(tid, _)| {
-                library::get_track_by_id(self.conn, *tid)
-                    .ok()
-                    .flatten()
-                    .map(|t| t.artist.to_lowercase())
-            }).collect()
+            local_scored
+                .iter()
+                .take(5)
+                .filter_map(|(tid, _)| {
+                    library::get_track_by_id(self.conn, *tid)
+                        .ok()
+                        .flatten()
+                        .map(|t| t.artist.to_lowercase())
+                })
+                .collect()
         };
 
         if !anchor_artists.is_empty() {
@@ -480,19 +507,26 @@ impl<'conn> RecommendationBroker<'conn> {
 
                 for (connected_artist, graph_score) in connected {
                     // Find a track from this artist
-                    let track_row: Option<i64> = self.conn.query_row(
-                        "SELECT t.id FROM tracks t
+                    let track_row: Option<i64> = self
+                        .conn
+                        .query_row(
+                            "SELECT t.id FROM tracks t
                          JOIN artists ar ON ar.id = t.artist_id
                          WHERE LOWER(ar.name) = LOWER(?)
                            AND t.status = 'active'
                          ORDER BY RANDOM() LIMIT 1",
-                        [&connected_artist],
-                        |row| row.get(0),
-                    ).ok();
+                            [&connected_artist],
+                            |row| row.get(0),
+                        )
+                        .ok();
 
                     let Some(track_id) = track_row else { continue };
-                    if seen_ids.contains(&track_id) { continue; }
-                    let Ok(Some(track)) = library::get_track_by_id(self.conn, track_id) else { continue };
+                    if seen_ids.contains(&track_id) {
+                        continue;
+                    }
+                    let Ok(Some(track)) = library::get_track_by_id(self.conn, track_id) else {
+                        continue;
+                    };
 
                     let co_score = (graph_score as f64 / 100.0).clamp(0.2, 0.75);
                     let why = format!(
@@ -505,17 +539,15 @@ impl<'conn> RecommendationBroker<'conn> {
                         score: co_score * 0.72,
                         provider: "graph/co_play".to_string(),
                         why_this_track: why.clone(),
-                        evidence: vec![
-                            EvidenceItem {
-                                type_label: "co_play".to_string(),
-                                source: "graph".to_string(),
-                                text: format!(
-                                    "Artist graph connection: {} → {}. Affinity score {}.",
-                                    anchor, connected_artist, graph_score
-                                ),
-                                weight: 0.10,
-                            },
-                        ],
+                        evidence: vec![EvidenceItem {
+                            type_label: "co_play".to_string(),
+                            source: "graph".to_string(),
+                            text: format!(
+                                "Artist graph connection: {} → {}. Affinity score {}.",
+                                anchor, connected_artist, graph_score
+                            ),
+                            weight: 0.10,
+                        }],
                     });
                     seen_ids.insert(track_id);
                 }
@@ -525,14 +557,21 @@ impl<'conn> RecommendationBroker<'conn> {
         // Sort: local taste first by score, then scout, then graph
         results.sort_by(|a, b| {
             let provider_rank = |p: &str| -> u8 {
-                if p.starts_with("local/taste") { 0 }
-                else if p.starts_with("local/deep_cut") { 1 }
-                else if p.starts_with("scout") { 2 }
-                else { 3 }
+                if p.starts_with("local/taste") {
+                    0
+                } else if p.starts_with("local/deep_cut") {
+                    1
+                } else if p.starts_with("scout") {
+                    2
+                } else {
+                    3
+                }
             };
             let pa = provider_rank(&a.provider);
             let pb = provider_rank(&b.provider);
-            if pa != pb { return pa.cmp(&pb); }
+            if pa != pb {
+                return pa.cmp(&pb);
+            }
             b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal)
         });
 
@@ -606,24 +645,28 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
         ((similarity * 0.7 + overlap * 0.3) * taste.confidence.max(0.25)).clamp(0.0, 1.0);
 
     // Build the "why_this_track" — composer-payload-depth sentence
-    let why_this_track = if !shared_dimensions.is_empty() {
-        if let Some(ref title) = track_title {
-            format!(
-                "{} lands in a {} world — strongest alignment with your {} taste on {}.",
-                title, mood_label, taste_label, shared_dimensions.join(", ")
-            )
-        } else {
-            format!(
+    let why_this_track =
+        if !shared_dimensions.is_empty() {
+            if let Some(ref title) = track_title {
+                format!(
+                    "{} lands in a {} world — strongest alignment with your {} taste on {}.",
+                    title,
+                    mood_label,
+                    taste_label,
+                    shared_dimensions.join(", ")
+                )
+            } else {
+                format!(
                 "This track lands in a {} world — strongest alignment with your {} taste on {}.",
                 mood_label, taste_label, shared_dimensions.join(", ")
             )
-        }
-    } else {
-        format!(
-            "Lyra sees a {} profile that matches your current {} taste reading.",
-            mood_label, taste_label
-        )
-    };
+            }
+        } else {
+            format!(
+                "Lyra sees a {} profile that matches your current {} taste reading.",
+                mood_label, taste_label
+            )
+        };
 
     // Build flat legacy reasons (backward compat)
     let mut reasons = Vec::new();

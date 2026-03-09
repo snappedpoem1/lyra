@@ -7,6 +7,9 @@ import type {
   AudioOutputDevice,
   BootstrapPayload,
   ComposerResponse,
+  ComposerDiagnosticEntry,
+  ComposerRunDetail,
+  ComposerRunRecord,
   ComposedPlaylistDraft,
   CurationLogEntry,
   DiagnosticsReport,
@@ -22,6 +25,7 @@ import type {
   PlaybackEvent,
   PlaybackState,
   PlaylistDetail,
+  PlaylistTrackReasonRecord,
   PlaylistSummary,
   ProviderConfigRecord,
   ProviderHealth,
@@ -32,6 +36,7 @@ import type {
   RelatedArtist,
   ScanJobRecord,
   SettingsPayload,
+  SpotifyGapSummary,
   SteerPayload,
   TasteProfile,
   ArtistProfile,
@@ -181,14 +186,31 @@ export const api = {
     invoke<ComposedPlaylistDraft>("compose_playlist_draft", { prompt, trackCount }),
   composeWithLyra: (prompt: string, trackCount: number, steer?: SteerPayload) =>
     invoke<ComposerResponse>("compose_with_lyra", { prompt, trackCount, steer }),
+  getComposerDiagnostics: (limit?: number) =>
+    invoke<ComposerDiagnosticEntry[]>("get_composer_diagnostics", { limit }),
+  getRecentComposerRuns: (limit?: number) =>
+    invoke<ComposerRunRecord[]>("get_recent_composer_runs", { limit }),
+  getComposerRun: (runId: number) =>
+    invoke<ComposerRunDetail>("get_composer_run", { runId }),
+  getSpotifyGapSummary: (limit?: number) =>
+    invoke<SpotifyGapSummary>("get_spotify_gap_summary", { limit }),
   saveComposedPlaylist: (name: string, draft: ComposedPlaylistDraft) =>
     invoke<PlaylistDetail>("save_composed_playlist", { name, draft }),
+  recordRouteFeedback: (
+    routeKind: string,
+    action: string,
+    outcome: string,
+    source: string,
+    note?: string
+  ) => invoke<AppShellState["tasteMemory"]>("record_route_feedback", {
+    payload: { routeKind, action, outcome, source, note }
+  }),
   generateActPlaylist: (intent: string, trackCount: number) =>
     invoke<GeneratedPlaylist>("generate_act_playlist", { intent, trackCount }),
   saveGeneratedPlaylist: (name: string, playlist: GeneratedPlaylist) =>
     invoke<PlaylistDetail>("save_generated_playlist", { name, playlist }),
   getPlaylistTrackReasons: (playlistId: number) =>
-    invoke<[number, string][]>("get_playlist_track_reasons", { playlistId }),
+    invoke<PlaylistTrackReasonRecord[]>("get_playlist_track_reasons", { playlistId }),
   // --- Acquisition Seeding ---
   seedAcquisitionFromSpotifyLibrary: () =>
     invoke<number>("seed_acquisition_from_spotify_library"),

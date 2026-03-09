@@ -59,6 +59,7 @@ Goal: make the Lyra composer the real front door to the product.
 - [x] Operationalize voice/persona as typed composer behavior instead of decorative copy
 - [x] Replace the light steer-memory hook with a persisted session-plus-rolling taste-memory layer
 - [x] Push persona rules deeper into provider-authored narratives and route narration surfaces
+- [x] Extract playlist narration LLM transport/failover into a shared Rust client so composer-facing playlist flows stop duplicating inline HTTP logic
 - [x] Learn from explicit accepted/rejected route choices instead of only prompt and steer pressure
 - [x] Constrain provider-assisted intent parsing behind the same Lyra contract boundaries used for narrative output
 - [x] Make scene exits first-class in the composer instead of treating them as generic discovery copy

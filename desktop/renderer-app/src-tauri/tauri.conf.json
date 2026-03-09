@@ -6,14 +6,14 @@
     "devUrl": "http://localhost:5173",
     "frontendDist": "../build"
   },
-  "productName": "Lyra",
+  "productName": "Cassette",
   "version": "0.1.0",
   "identifier": "com.lyra.player",
   "app": {
     "windows": [
       {
         "label": "main",
-        "title": "Lyra",
+        "title": "Cassette",
         "width": 1680,
         "height": 1020,
         "minWidth": 1180,
@@ -27,9 +27,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "shortDescription": "Native local-first music player",
-    "longDescription": "Lyra is a native-feeling desktop music player with a Rust-owned local core, SvelteKit frontend, and embedded SQLite library.",
-    "copyright": "Lyra Oracle contributors",
+    "shortDescription": "Cassette is a local-first music intelligence workspace powered by Lyra.",
+    "longDescription": "Cassette is the desktop shell for Lyra, a local-first music intelligence companion for discovery, bridge finding, playlist authorship, and explainable guided listening.",
+    "copyright": "Cassette / Lyra Oracle contributors",
     "resources": [
       "bin"
     ],

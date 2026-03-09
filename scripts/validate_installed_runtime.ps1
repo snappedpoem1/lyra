@@ -8,7 +8,7 @@
     and can optionally launch the installed app via the packaged-host smoke path.
 
     Supported sidecar/runtime layouts include:
-      - <app>\Lyra Oracle.exe
+      - <app>\Cassette.exe
       - <app>\bin\lyra_backend.exe
       - <app>\resources\lyra_backend.exe
       - <app>\resources\bin\lyra_backend.exe
@@ -16,7 +16,7 @@
       - <app>\resources\runtime\bin\*.exe
 
 .PARAMETER InstalledExe
-    Full path to the installed `Lyra Oracle.exe`.
+    Full path to the installed `Cassette.exe`.
 
 .PARAMETER InstalledRoot
     App install directory. If omitted, the script probes common local install paths.
@@ -28,8 +28,8 @@
     Timeout used for installed launch smoke.
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File scripts\validate_installed_runtime.ps1 -InstalledRoot "$env:LOCALAPPDATA\Programs\Lyra Oracle"
-    powershell -ExecutionPolicy Bypass -File scripts\validate_installed_runtime.ps1 -InstalledExe "C:\Users\Admin\AppData\Local\Programs\Lyra Oracle\Lyra Oracle.exe"
+    powershell -ExecutionPolicy Bypass -File scripts\validate_installed_runtime.ps1 -InstalledRoot "$env:LOCALAPPDATA\Programs\Cassette"
+    powershell -ExecutionPolicy Bypass -File scripts\validate_installed_runtime.ps1 -InstalledExe "C:\Users\Admin\AppData\Local\Programs\Cassette\Cassette.exe"
 #>
 param(
     [string]$InstalledExe,
@@ -62,13 +62,13 @@ function Resolve-InstalledRoot {
     }
 
     $candidates = @(
-        (Join-Path $env:LOCALAPPDATA "Programs\Lyra Oracle"),
-        (Join-Path $env:ProgramFiles "Lyra Oracle"),
-        (Join-Path ${env:ProgramFiles(x86)} "Lyra Oracle")
+        (Join-Path $env:LOCALAPPDATA "Programs\Cassette"),
+        (Join-Path $env:ProgramFiles "Cassette"),
+        (Join-Path ${env:ProgramFiles(x86)} "Cassette")
     ) | Where-Object { $_ -and (Test-Path $_) }
 
     foreach ($candidate in $candidates) {
-        if (Test-Path (Join-Path $candidate "Lyra Oracle.exe")) {
+        if (Test-Path (Join-Path $candidate "Cassette.exe")) {
             return (Resolve-Path $candidate).Path
         }
     }
@@ -83,7 +83,7 @@ function Resolve-InstalledExePath {
         return (Resolve-Path $ExplicitExe).Path
     }
 
-    $candidate = Join-Path $RootPath "Lyra Oracle.exe"
+    $candidate = Join-Path $RootPath "Cassette.exe"
     if (Test-Path $candidate) {
         return (Resolve-Path $candidate).Path
     }

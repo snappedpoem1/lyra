@@ -8,12 +8,16 @@ use std::time::Duration;
 mod smtc;
 
 use lyra_core::commands::{
-    AcquisitionEventPayload, AcquisitionPreflight, AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
-    ComposerResponse, ComposedPlaylistDraft, CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist, GraphStats,
-    LegacyImportReport, LibraryCleanupPreview, NativeCapabilities, PlaybackEvent,
-    PlaybackState, PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
-    ProviderValidationResult, QueueItemRecord, RecentPlayRecord, RecommendationResult, RelatedArtist,
-    ScanJobRecord, SettingsPayload, SteerPayload, TasteProfile, TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
+    AcquisitionEventPayload, AcquisitionPreflight, AcquisitionQueueItem, AppShellState,
+    ArtistProfile, AudioOutputDevice, BootstrapPayload, ComposedPlaylistDraft,
+    ComposerDiagnosticEntry, ComposerResponse, ComposerRunDetail, ComposerRunRecord,
+    CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist,
+    GraphStats, LegacyImportReport, LibraryCleanupPreview, NativeCapabilities, PlaybackEvent,
+    PlaybackState, PlaylistDetail, PlaylistSummary, PlaylistTrackReasonRecord,
+    ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
+    RecentPlayRecord, RecommendationResult, RelatedArtist, RouteFeedbackPayload, ScanJobRecord,
+    SettingsPayload, SpotifyGapSummary, SteerPayload, TasteMemorySnapshot, TasteProfile,
+    TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
 };
 use lyra_core::logging::initialize_logging;
 use lyra_core::LyraCore;
@@ -424,20 +428,32 @@ fn list_liked_tracks(state: State<'_, AppState>) -> Result<Vec<TrackRecord>, Str
 /// Set a sleep timer to stop playback after `minutes` minutes.
 /// Pass 0 to cancel.
 #[tauri::command]
-fn list_recent_plays(state: State<'_, AppState>, limit: Option<i64>) -> Result<Vec<RecentPlayRecord>, String> {
-    state.core.list_recent_plays(limit).map_err(|e| e.to_string())
+fn list_recent_plays(
+    state: State<'_, AppState>,
+    limit: Option<i64>,
+) -> Result<Vec<RecentPlayRecord>, String> {
+    state
+        .core
+        .list_recent_plays(limit)
+        .map_err(|e| e.to_string())
 }
 
 /// Scan a .env file and save all credential-like values to the OS keychain.
 /// Returns { saved, skipped }.
 #[tauri::command]
-fn backup_env_to_keychain(state: State<'_, AppState>, env_path: String) -> Result<serde_json::Value, String> {
+fn backup_env_to_keychain(
+    state: State<'_, AppState>,
+    env_path: String,
+) -> Result<serde_json::Value, String> {
     let (saved, skipped) = state.core.backup_env_to_keychain(env_path)?;
     Ok(serde_json::json!({ "saved": saved, "skipped": skipped }))
 }
 
 #[tauri::command]
-fn load_env_credential(state: State<'_, AppState>, key_name: String) -> Result<Option<String>, String> {
+fn load_env_credential(
+    state: State<'_, AppState>,
+    key_name: String,
+) -> Result<Option<String>, String> {
     state.core.load_env_credential(key_name)
 }
 
@@ -458,7 +474,11 @@ fn get_sleep_timer(state: State<'_, AppState>) -> Result<Option<u64>, String> {
     let guard = state.sleep_until.lock().map_err(|e| e.to_string())?;
     Ok(guard.map(|t| {
         let now = std::time::Instant::now();
-        if t > now { (t - now).as_secs() } else { 0 }
+        if t > now {
+            (t - now).as_secs()
+        } else {
+            0
+        }
     }))
 }
 
@@ -470,7 +490,9 @@ fn lastfm_get_session(
     username: String,
     password: String,
 ) -> Result<String, String> {
-    state.core.lastfm_get_session(api_key, api_secret, username, password)
+    state
+        .core
+        .lastfm_get_session(api_key, api_secret, username, password)
 }
 
 #[tauri::command]
@@ -726,10 +748,7 @@ fn set_output_device(
 }
 
 #[tauri::command]
-fn enrich_track(
-    state: State<'_, AppState>,
-    track_id: i64,
-) -> Result<serde_json::Value, String> {
+fn enrich_track(state: State<'_, AppState>, track_id: i64) -> Result<serde_json::Value, String> {
     state.core.enrich_track(track_id).map_err(|e| e.to_string())
 }
 
@@ -952,10 +971,7 @@ fn update_acquisition_item(
 }
 
 #[tauri::command]
-fn process_acquisition_queue(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+fn process_acquisition_queue(app: AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
     let processed = state
         .core
         .process_acquisition_queue_with_callback({
@@ -973,10 +989,7 @@ fn process_acquisition_queue(
 }
 
 #[tauri::command]
-fn clear_completed_acquisition(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<i64, String> {
+fn clear_completed_acquisition(app: AppHandle, state: State<'_, AppState>) -> Result<i64, String> {
     let removed = state
         .core
         .clear_completed_acquisition()
@@ -987,10 +1000,7 @@ fn clear_completed_acquisition(
 }
 
 #[tauri::command]
-fn retry_failed_acquisition(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<i64, String> {
+fn retry_failed_acquisition(app: AppHandle, state: State<'_, AppState>) -> Result<i64, String> {
     let retried = state
         .core
         .retry_failed_acquisition()
@@ -1065,17 +1075,15 @@ fn cancel_acquisition_item(
 }
 
 #[tauri::command]
-fn acquisition_preflight(
-    state: State<'_, AppState>,
-) -> Result<AcquisitionPreflight, String> {
-    state.core.acquisition_preflight().map_err(|e| e.to_string())
+fn acquisition_preflight(state: State<'_, AppState>) -> Result<AcquisitionPreflight, String> {
+    state
+        .core
+        .acquisition_preflight()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn start_acquisition_worker(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+fn start_acquisition_worker(app: AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
     let started = state
         .core
         .start_acquisition_worker_with_callback({
@@ -1092,10 +1100,7 @@ fn start_acquisition_worker(
 }
 
 #[tauri::command]
-fn stop_acquisition_worker(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+fn stop_acquisition_worker(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     state
         .core
         .stop_acquisition_worker()
@@ -1105,9 +1110,7 @@ fn stop_acquisition_worker(
 }
 
 #[tauri::command]
-fn acquisition_worker_status(
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+fn acquisition_worker_status(state: State<'_, AppState>) -> Result<bool, String> {
     state
         .core
         .acquisition_worker_status()
@@ -1118,10 +1121,7 @@ fn acquisition_worker_status(
 fn run_diagnostics(
     state: State<'_, AppState>,
 ) -> Result<lyra_core::commands::DiagnosticsReport, String> {
-    state
-        .core
-        .run_diagnostics()
-        .map_err(|e| e.to_string())
+    state.core.run_diagnostics().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1267,7 +1267,10 @@ fn get_track_enrichment(
     state: State<'_, AppState>,
     track_id: i64,
 ) -> Result<TrackEnrichmentResult, String> {
-    state.core.get_track_enrichment(track_id).map_err(|e| e.to_string())
+    state
+        .core
+        .get_track_enrichment(track_id)
+        .map_err(|e| e.to_string())
 }
 
 // ── G-062: Curation Workflows ─────────────────────────────────────────────────
@@ -1278,7 +1281,9 @@ fn resolve_duplicate_cluster(
     keep_track_id: i64,
     remove_track_ids: Vec<i64>,
 ) -> Result<(), String> {
-    state.core.resolve_duplicate_cluster(keep_track_id, remove_track_ids)
+    state
+        .core
+        .resolve_duplicate_cluster(keep_track_id, remove_track_ids)
         .map_err(|e| e.to_string())
 }
 
@@ -1294,7 +1299,10 @@ fn undo_curation(state: State<'_, AppState>, log_id: i64) -> Result<(), String> 
 
 #[tauri::command]
 fn preview_library_cleanup(state: State<'_, AppState>) -> Result<LibraryCleanupPreview, String> {
-    state.core.preview_library_cleanup().map_err(|e| e.to_string())
+    state
+        .core
+        .preview_library_cleanup()
+        .map_err(|e| e.to_string())
 }
 
 // ── G-063: Playlist Intelligence ─────────────────────────────────────────────
@@ -1325,6 +1333,47 @@ fn compose_with_lyra(
 }
 
 #[tauri::command]
+fn get_composer_diagnostics(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<ComposerDiagnosticEntry>, String> {
+    state
+        .core
+        .get_composer_diagnostics(limit.unwrap_or(20))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_recent_composer_runs(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<ComposerRunRecord>, String> {
+    state
+        .core
+        .get_recent_composer_runs(limit.unwrap_or(12))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_composer_run(state: State<'_, AppState>, run_id: i64) -> Result<ComposerRunDetail, String> {
+    state
+        .core
+        .get_composer_run(run_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_spotify_gap_summary(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<SpotifyGapSummary, String> {
+    state
+        .core
+        .get_spotify_gap_summary(limit.unwrap_or(8))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn save_composed_playlist(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1340,12 +1389,29 @@ fn save_composed_playlist(
 }
 
 #[tauri::command]
+fn record_route_feedback(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    payload: RouteFeedbackPayload,
+) -> Result<TasteMemorySnapshot, String> {
+    let snapshot = state
+        .core
+        .record_route_feedback(payload)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(snapshot)
+}
+
+#[tauri::command]
 fn generate_act_playlist(
     state: State<'_, AppState>,
     intent: String,
     track_count: usize,
 ) -> Result<GeneratedPlaylist, String> {
-    state.core.generate_act_playlist(intent, track_count).map_err(|e| e.to_string())
+    state
+        .core
+        .generate_act_playlist(intent, track_count)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1355,7 +1421,9 @@ fn save_generated_playlist(
     name: String,
     playlist: GeneratedPlaylist,
 ) -> Result<PlaylistDetail, String> {
-    let payload = state.core.save_generated_playlist(name, playlist)
+    let payload = state
+        .core
+        .save_generated_playlist(name, playlist)
         .map_err(|e| e.to_string())?;
     emit_shell(&app, &state.core);
     Ok(payload)
@@ -1365,8 +1433,11 @@ fn save_generated_playlist(
 fn get_playlist_track_reasons(
     state: State<'_, AppState>,
     playlist_id: i64,
-) -> Result<Vec<(i64, String)>, String> {
-    state.core.get_playlist_track_reasons(playlist_id).map_err(|e| e.to_string())
+) -> Result<Vec<PlaylistTrackReasonRecord>, String> {
+    state
+        .core
+        .get_playlist_track_reasons(playlist_id)
+        .map_err(|e| e.to_string())
 }
 
 // ── Acquisition Seeding ───────────────────────────────────────────────────────
@@ -1376,7 +1447,10 @@ fn seed_acquisition_from_spotify_library(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<usize, String> {
-    let count = state.core.seed_acquisition_from_spotify_library().map_err(|e| e.to_string())?;
+    let count = state
+        .core
+        .seed_acquisition_from_spotify_library()
+        .map_err(|e| e.to_string())?;
     if count > 0 {
         emit_shell(&app, &state.core);
     }
@@ -1400,7 +1474,10 @@ fn bulk_add_to_acquisition_queue(
             Some((artist, title, album))
         })
         .collect();
-    let items = state.core.bulk_add_to_acquisition_queue(parsed, source).map_err(|e| e.to_string())?;
+    let items = state
+        .core
+        .bulk_add_to_acquisition_queue(parsed, source)
+        .map_err(|e| e.to_string())?;
     emit_shell(&app, &state.core);
     Ok(items)
 }
@@ -1413,7 +1490,10 @@ fn get_related_artists(
     artist_name: String,
     limit: usize,
 ) -> Result<Vec<RelatedArtist>, String> {
-    state.core.get_related_artists(artist_name, limit).map_err(|e| e.to_string())
+    state
+        .core
+        .get_related_artists(artist_name, limit)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1423,7 +1503,9 @@ fn play_similar_to_artist(
     artist_name: String,
     limit: usize,
 ) -> Result<Vec<QueueItemRecord>, String> {
-    let queue = state.core.play_similar_to_artist(artist_name, limit)
+    let queue = state
+        .core
+        .play_similar_to_artist(artist_name, limit)
         .map_err(|e| e.to_string())?;
     emit_queue(&app, &queue);
     Ok(queue)
@@ -1431,7 +1513,10 @@ fn play_similar_to_artist(
 
 #[tauri::command]
 fn get_discovery_session(state: State<'_, AppState>) -> Result<DiscoverySession, String> {
-    state.core.get_discovery_session().map_err(|e| e.to_string())
+    state
+        .core
+        .get_discovery_session()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1519,13 +1604,19 @@ fn main() {
                     if playback.status == "playing" {
                         let expired = sleep_tick
                             .lock()
-                            .map(|guard| guard.map(|t| std::time::Instant::now() >= t).unwrap_or(false))
+                            .map(|guard| {
+                                guard
+                                    .map(|t| std::time::Instant::now() >= t)
+                                    .unwrap_or(false)
+                            })
                             .unwrap_or(false);
                         if expired {
                             if let Ok(stopped) = core_tick.stop_playback() {
                                 emit_playback(&app_tick, &stopped);
                             }
-                            if let Ok(mut guard) = sleep_tick.lock() { *guard = None; }
+                            if let Ok(mut guard) = sleep_tick.lock() {
+                                *guard = None;
+                            }
                             let _ = app_tick.emit("lyra://sleep-timer-fired", ());
                             continue;
                         }
@@ -1542,8 +1633,7 @@ fn main() {
                             // Record completion for the track that just finished
                             if let Some(track_id) = playback.current_track_id {
                                 let duration = playback.duration_seconds.max(1.0);
-                                let completion =
-                                    (playback.position_seconds / duration).min(1.0);
+                                let completion = (playback.position_seconds / duration).min(1.0);
                                 let _ = core_tick.record_playback_event(
                                     track_id,
                                     completion,
@@ -1678,7 +1768,12 @@ fn main() {
             // G-063: Playlist Intelligence
             compose_playlist_draft,
             compose_with_lyra,
+            get_composer_diagnostics,
+            get_recent_composer_runs,
+            get_composer_run,
+            get_spotify_gap_summary,
             save_composed_playlist,
+            record_route_feedback,
             generate_act_playlist,
             save_generated_playlist,
             get_playlist_track_reasons,

@@ -35,6 +35,7 @@ Current product framing:
 - first real composer slice in the canonical runtime:
   - typed `PlaylistIntent`
   - local/cloud LLM provider abstraction
+  - shared Rust `LlmClient` for OpenAI-compatible calls in playlist narration
   - explicit provider selection and fallback mode in settings
   - deterministic retrieval, reranking, and sequencing in Rust
   - first-class composer action routing: draft, bridge, discovery, explain, steer
@@ -62,6 +63,7 @@ Current product framing:
   - partial scene-targeting lift from legacy `oracle/scout.py` so scene-exit prompts now bias route worlds through adjacent and contrast scene families rather than only generic novelty
   - explicit route feedback capture from the Cassette route comparison surface so Lyra can remember accepted vs rejected lanes
   - provider-authored narrative constrained behind a Lyra contract instead of freeform assistant narration
+  - Groq/OpenRouter failover for playlist narration extracted from `playlists.rs` inline HTTP wiring into shared Rust client code
   - provider-assisted intent parsing sanitized back to Lyra's allowed roles, energies, novelty/aggression enums, explicit-entity limits, and fallback honesty
   - first-class scene-exit handling for prompts such as `same pulse, different world`, `leave this genre, keep this wound`, and `stay in the ache, lose the gloss`
   - Lyra-read surface with bounded, evidence-aware pressure summaries instead of decorative taste copy

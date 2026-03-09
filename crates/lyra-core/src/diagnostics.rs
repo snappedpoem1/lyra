@@ -7,7 +7,6 @@
 /// - Acquisition queue status
 /// - Library scan status
 /// - Worker thread status
-
 use crate::config::AppPaths;
 use crate::errors::LyraResult;
 use rusqlite::Connection;
@@ -86,27 +85,27 @@ impl ComponentHealth {
 /// Run full system diagnostics.
 pub fn run_diagnostics(paths: &AppPaths) -> LyraResult<DiagnosticsReport> {
     info!("Running system diagnostics");
-    
+
     let mut checks = HashMap::new();
-    
+
     // Database connectivity
     checks.insert("database".to_string(), check_database(paths));
-    
+
     // Python runtime
     checks.insert("python".to_string(), check_python());
-    
+
     // Library roots
     checks.insert("library_roots".to_string(), check_library_roots(paths));
-    
+
     // Acquisition worker
     checks.insert("acquisition_worker".to_string(), check_acquisition_worker());
-    
+
     // Gather statistics
     let stats = gather_stats(paths)?;
-    
+
     // Determine overall status
     let status = determine_overall_status(&checks);
-    
+
     Ok(DiagnosticsReport {
         status,
         checks,
@@ -146,31 +145,27 @@ fn check_python() -> ComponentHealth {
 fn check_library_roots(paths: &AppPaths) -> ComponentHealth {
     match Connection::open(&paths.db_path) {
         Ok(conn) => {
-            match conn.query_row(
-                "SELECT COUNT(*) FROM library_roots",
-                [],
-                |row| row.get::<_, i64>(0),
-            ) {
+            match conn.query_row("SELECT COUNT(*) FROM library_roots", [], |row| {
+                row.get::<_, i64>(0)
+            }) {
                 Ok(0) => ComponentHealth::not_configured("No library roots configured"),
                 Ok(count) => {
                     // Check if roots are accessible
-                    let mut stmt = match conn.prepare(
-                        "SELECT path FROM library_roots"
-                    ) {
+                    let mut stmt = match conn.prepare("SELECT path FROM library_roots") {
                         Ok(s) => s,
                         Err(e) => return ComponentHealth::error("Failed to prepare query", e),
                     };
                     let paths_result: Result<Vec<String>, _> = stmt
                         .query_map([], |row| row.get(0))
                         .and_then(|rows| rows.collect());
-                    
+
                     match paths_result {
                         Ok(root_paths) => {
                             let missing: Vec<_> = root_paths
                                 .iter()
                                 .filter(|p| !Path::new(p).exists())
                                 .collect();
-                            
+
                             if missing.is_empty() {
                                 ComponentHealth::ok(format!("{} library root(s) accessible", count))
                             } else {
@@ -201,7 +196,7 @@ fn check_acquisition_worker() -> ComponentHealth {
 
 fn gather_stats(paths: &AppPaths) -> LyraResult<SystemStats> {
     let conn = Connection::open(&paths.db_path)?;
-    
+
     let total_tracks = conn.query_row("SELECT COUNT(*) FROM tracks", [], |row| row.get(0))?;
     let total_playlists = conn.query_row("SELECT COUNT(*) FROM playlists", [], |row| row.get(0))?;
     let pending_acquisitions = conn.query_row(
@@ -209,22 +204,16 @@ fn gather_stats(paths: &AppPaths) -> LyraResult<SystemStats> {
         [],
         |row| row.get(0),
     )?;
-    let library_roots = conn.query_row(
-        "SELECT COUNT(*) FROM library_roots",
-        [],
-        |row| row.get(0),
-    )?;
-    let enriched_tracks = conn.query_row(
-        "SELECT COUNT(*) FROM enrich_cache",
-        [],
-        |row| row.get(0),
-    )?;
+    let library_roots =
+        conn.query_row("SELECT COUNT(*) FROM library_roots", [], |row| row.get(0))?;
+    let enriched_tracks =
+        conn.query_row("SELECT COUNT(*) FROM enrich_cache", [], |row| row.get(0))?;
     let liked_tracks = conn.query_row(
         "SELECT COUNT(*) FROM tracks WHERE liked_at IS NOT NULL",
         [],
         |row| row.get(0),
     )?;
-    
+
     Ok(SystemStats {
         total_tracks,
         total_playlists,
@@ -238,7 +227,7 @@ fn gather_stats(paths: &AppPaths) -> LyraResult<SystemStats> {
 fn determine_overall_status(checks: &HashMap<String, ComponentHealth>) -> String {
     let has_error = checks.values().any(|c| c.status == "error");
     let has_warning = checks.values().any(|c| c.status == "warning");
-    
+
     if has_error {
         "error".to_string()
     } else if has_warning {

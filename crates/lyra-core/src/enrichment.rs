@@ -79,7 +79,10 @@ impl EnricherAdapter for MusicBrainzAdapter {
         let url = "https://musicbrainz.org/ws/2/recording";
         let query = format!("recording:\"{title}\" AND artist:\"{artist}\"");
         let result = ureq::get(url)
-            .set("User-Agent", "Lyra/0.1 (https://github.com/snappedpoem1/lyra)")
+            .set(
+                "User-Agent",
+                "Lyra/0.1 (https://github.com/snappedpoem1/lyra)",
+            )
             .query("query", &query)
             .query("limit", "10")
             .query("fmt", "json")
@@ -116,10 +119,7 @@ impl EnricherAdapter for MusicBrainzAdapter {
                         .and_then(Value::as_str)
                         .unwrap_or("")
                         .to_string();
-                    let rec_score = rec
-                        .get("score")
-                        .and_then(Value::as_i64)
-                        .unwrap_or(0) as f64;
+                    let rec_score = rec.get("score").and_then(Value::as_i64).unwrap_or(0) as f64;
 
                     // Reconstruct artist from artist-credit
                     let rec_artist: String = rec
@@ -131,15 +131,11 @@ impl EnricherAdapter for MusicBrainzAdapter {
                                 .flat_map(|c| {
                                     let name = c
                                         .get("name")
-                                        .or_else(|| {
-                                            c.get("artist").and_then(|a| a.get("name"))
-                                        })
+                                        .or_else(|| c.get("artist").and_then(|a| a.get("name")))
                                         .and_then(Value::as_str)
                                         .unwrap_or("");
-                                    let join = c
-                                        .get("joinphrase")
-                                        .and_then(Value::as_str)
-                                        .unwrap_or("");
+                                    let join =
+                                        c.get("joinphrase").and_then(Value::as_str).unwrap_or("");
                                     [name, join]
                                 })
                                 .collect::<String>()
@@ -186,12 +182,26 @@ impl EnricherAdapter for MusicBrainzAdapter {
                             .and_then(Value::as_str)
                             .unwrap_or("")
                             .to_string();
-                        best = Some((mbid, rec_artist, release_mbid, release_title, release_date, combined));
+                        best = Some((
+                            mbid,
+                            rec_artist,
+                            release_mbid,
+                            release_title,
+                            release_date,
+                            combined,
+                        ));
                     }
                 }
 
                 match best {
-                    Some((mbid, rec_artist, release_mbid, release_title, release_date, combined)) => {
+                    Some((
+                        mbid,
+                        rec_artist,
+                        release_mbid,
+                        release_title,
+                        release_date,
+                        combined,
+                    )) => {
                         Ok(Some(json!({
                             "status": "ok",
                             "provider": "musicbrainz",
@@ -252,7 +262,9 @@ impl Default for AcoustIDAdapter {
 
 impl AcoustIDAdapter {
     pub fn new(client_key: impl Into<String>) -> Self {
-        Self { client_key: client_key.into() }
+        Self {
+            client_key: client_key.into(),
+        }
     }
 }
 
@@ -276,12 +288,8 @@ impl EnricherAdapter for AcoustIDAdapter {
 
         let (duration_secs, fingerprint) = match fpcalc_out {
             Ok(out) if out.status.success() => {
-                let body: Value =
-                    serde_json::from_slice(&out.stdout).unwrap_or(Value::Null);
-                let dur = body
-                    .get("duration")
-                    .and_then(Value::as_f64)
-                    .unwrap_or(0.0);
+                let body: Value = serde_json::from_slice(&out.stdout).unwrap_or(Value::Null);
+                let dur = body.get("duration").and_then(Value::as_f64).unwrap_or(0.0);
                 let fp = body
                     .get("fingerprint")
                     .and_then(Value::as_str)
@@ -326,7 +334,10 @@ impl EnricherAdapter for AcoustIDAdapter {
 
         // Step 2 — AcoustID API lookup
         let result = ureq::get("https://api.acoustid.org/v2/lookup")
-            .set("User-Agent", "Lyra/0.1 (https://github.com/snappedpoem1/lyra)")
+            .set(
+                "User-Agent",
+                "Lyra/0.1 (https://github.com/snappedpoem1/lyra)",
+            )
             .query("client", &self.client_key)
             .query("duration", &format!("{}", duration_secs as u64))
             .query("fingerprint", &fingerprint)
@@ -355,10 +366,7 @@ impl EnricherAdapter for AcoustIDAdapter {
                             .and_then(Value::as_str)
                             .unwrap_or("")
                             .to_string();
-                        let score = hit
-                            .get("score")
-                            .and_then(Value::as_f64)
-                            .unwrap_or(0.0);
+                        let score = hit.get("score").and_then(Value::as_f64).unwrap_or(0.0);
                         let recording_mbid = hit
                             .get("recordings")
                             .and_then(|r| r.as_array())
@@ -395,6 +403,66 @@ impl EnricherAdapter for AcoustIDAdapter {
 }
 
 // ── Last.fm adapter ───────────────────────────────────────────────────────────
+
+const LASTFM_JUNK_TAGS: &[&str] = &[
+    "seen live",
+    "favorites",
+    "favourite",
+    "favourites",
+    "my favorite",
+    "my favourite",
+    "awesome",
+    "love",
+    "cool",
+    "amazing",
+];
+
+const LASTFM_BASE: &str = "https://ws.audioscrobbler.com/2.0/";
+const LASTFM_UA: &str = "Lyra/0.1 (https://github.com/snappedpoem1/lyra)";
+const LASTFM_RATE_MS: u64 = 250;
+
+fn lastfm_call(api_key: &str, method: &str, params: &[(&str, &str)]) -> Value {
+    std::thread::sleep(std::time::Duration::from_millis(LASTFM_RATE_MS));
+    let mut req = ureq::get(LASTFM_BASE)
+        .set("User-Agent", LASTFM_UA)
+        .query("method", method)
+        .query("api_key", api_key)
+        .query("format", "json")
+        .query("autocorrect", "1");
+    for (k, v) in params {
+        req = req.query(k, v);
+    }
+    req.call()
+        .ok()
+        .and_then(|r| r.into_json::<Value>().ok())
+        .unwrap_or(Value::Null)
+}
+
+fn lastfm_extract_tags(toptags_node: &Value, limit: usize) -> Vec<String> {
+    let tag_arr = match toptags_node.get("tag") {
+        Some(Value::Array(arr)) => arr.clone(),
+        Some(single @ Value::Object(_)) => vec![single.clone()],
+        _ => return vec![],
+    };
+    let mut out = Vec::new();
+    for tag in &tag_arr {
+        let name = tag
+            .get("name")
+            .and_then(Value::as_str)
+            .map(|s| s.trim().to_ascii_lowercase())
+            .unwrap_or_default();
+        if name.is_empty() || LASTFM_JUNK_TAGS.contains(&name.as_str()) {
+            continue;
+        }
+        if !out.contains(&name) {
+            out.push(name);
+        }
+        if out.len() >= limit {
+            break;
+        }
+    }
+    out
+}
 
 pub struct LastFmAdapter {
     api_key: String,
@@ -443,93 +511,126 @@ impl EnricherAdapter for LastFmAdapter {
             })));
         }
 
-        let result = ureq::get("https://ws.audioscrobbler.com/2.0/")
-            .set("User-Agent", "Lyra/0.1 (https://github.com/snappedpoem1/lyra)")
-            .query("method", "track.getInfo")
-            .query("api_key", &self.api_key)
-            .query("artist", artist)
-            .query("track", title)
-            .query("format", "json")
-            .query("autocorrect", "1")
-            .call();
-
-        match result {
-            Ok(response) => {
-                let body: Value = response.into_json().unwrap_or(Value::Null);
-                if body.get("error").is_some() {
-                    return Ok(Some(json!({
-                        "status": "not_found",
-                        "provider": "lastfm",
-                        "artist": artist,
-                        "title": title,
-                        "errorCode": body.get("error"),
-                    })));
-                }
-
-                let track = body.get("track").cloned().unwrap_or(Value::Null);
-                let listeners = track
-                    .get("listeners")
-                    .and_then(Value::as_str)
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .unwrap_or(0);
-                let playcount = track
-                    .get("playcount")
-                    .and_then(Value::as_str)
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .unwrap_or(0);
-
-                let tags: Vec<String> = track
-                    .get("toptags")
-                    .and_then(|t| t.get("tag"))
-                    .and_then(Value::as_array)
-                    .map(|arr| {
-                        arr.iter()
-                            .take(5)
-                            .filter_map(|t| t.get("name").and_then(Value::as_str).map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-
-                let summary = track
-                    .get("wiki")
-                    .and_then(|w| w.get("summary"))
-                    .and_then(Value::as_str)
-                    .map(|s| {
-                        // Strip Last.fm footer link and HTML
-                        let trimmed = s.split("<a href=\"https://www.last.fm").next().unwrap_or(s);
-                        trimmed.trim().to_string()
-                    })
-                    .unwrap_or_default();
-
-                let mbid = track
-                    .get("mbid")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string();
-
-                Ok(Some(json!({
-                    "status": "ok",
-                    "provider": "lastfm",
-                    "artist": artist,
-                    "title": title,
-                    "listeners": listeners,
-                    "playcount": playcount,
-                    "tags": tags,
-                    "mbid": mbid,
-                    "summary": summary,
-                })))
-            }
-            Err(e) => {
-                warn!("Last.fm request failed for {artist} / {title}: {e}");
-                Ok(Some(json!({
-                    "status": "error",
-                    "provider": "lastfm",
-                    "artist": artist,
-                    "title": title,
-                    "error": e.to_string(),
-                })))
-            }
+        // 1. track.getInfo — primary data + tag cascade
+        let info_body = lastfm_call(
+            &self.api_key,
+            "track.getInfo",
+            &[("artist", artist), ("track", title)],
+        );
+        if info_body.get("error").is_some() {
+            return Ok(Some(json!({
+                "status": "not_found",
+                "provider": "lastfm",
+                "artist": artist,
+                "title": title,
+            })));
         }
+
+        let track = info_body.get("track").cloned().unwrap_or(Value::Null);
+        let listeners = track
+            .get("listeners")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0);
+        let playcount = track
+            .get("playcount")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0);
+        let mbid = track
+            .get("mbid")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let summary = track
+            .get("wiki")
+            .and_then(|w| w.get("summary"))
+            .and_then(Value::as_str)
+            .map(|s| {
+                s.split("<a href=\"https://www.last.fm")
+                    .next()
+                    .unwrap_or(s)
+                    .trim()
+                    .to_string()
+            })
+            .unwrap_or_default();
+
+        // Tag cascade: track.getInfo → track.getTopTags → artist.getTopTags
+        let mut tags =
+            lastfm_extract_tags(&track.get("toptags").cloned().unwrap_or(Value::Null), 5);
+        if tags.is_empty() {
+            let top = lastfm_call(
+                &self.api_key,
+                "track.getTopTags",
+                &[("artist", artist), ("track", title)],
+            );
+            tags = lastfm_extract_tags(&top.get("toptags").cloned().unwrap_or(Value::Null), 5);
+        }
+        if tags.is_empty() {
+            let atop = lastfm_call(&self.api_key, "artist.getTopTags", &[("artist", artist)]);
+            tags = lastfm_extract_tags(&atop.get("toptags").cloned().unwrap_or(Value::Null), 5);
+        }
+
+        // 2. track.getSimilar
+        let sim_tracks_body = lastfm_call(
+            &self.api_key,
+            "track.getSimilar",
+            &[("artist", artist), ("track", title), ("limit", "10")],
+        );
+        let similar_tracks: Vec<Value> = sim_tracks_body
+            .pointer("/similartracks/track")
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .take(10)
+                    .filter_map(|row| {
+                        let name = row.get("name").and_then(Value::as_str)?;
+                        let sim_artist = row
+                            .get("artist")
+                            .map(|a| {
+                                if a.is_object() {
+                                    a.get("name").and_then(Value::as_str).unwrap_or("")
+                                } else {
+                                    a.as_str().unwrap_or("")
+                                }
+                            })
+                            .unwrap_or("");
+                        Some(json!({"artist": sim_artist, "title": name}))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // 3. artist.getSimilar
+        let sim_artists_body = lastfm_call(
+            &self.api_key,
+            "artist.getSimilar",
+            &[("artist", artist), ("limit", "10")],
+        );
+        let similar_artists: Vec<String> = sim_artists_body
+            .pointer("/similarartists/artist")
+            .and_then(Value::as_array)
+            .map(|arr| {
+                arr.iter()
+                    .take(10)
+                    .filter_map(|row| row.get("name").and_then(Value::as_str).map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(Some(json!({
+            "status": "ok",
+            "provider": "lastfm",
+            "artist": artist,
+            "title": title,
+            "listeners": listeners,
+            "playcount": playcount,
+            "tags": tags,
+            "mbid": mbid,
+            "summary": summary,
+            "similarTracks": similar_tracks,
+            "similarArtists": similar_artists,
+        })))
     }
 }
 
@@ -568,18 +669,43 @@ impl EnricherAdapter for DiscogsAdapter {
 
     fn enrich(
         &self,
-        _conn: &Connection,
-        _track_id: i64,
+        conn: &Connection,
+        track_id: i64,
         artist: &str,
         title: &str,
         _path: &str,
     ) -> LyraResult<Option<Value>> {
-        let query = format!("{artist} {title}");
+        // Look up the album title from the DB — Discogs is a release database;
+        // searching artist + album gives far better results than artist + track title.
+        let album: Option<String> = conn
+            .query_row(
+                "SELECT al.title FROM tracks t
+                 LEFT JOIN albums al ON al.id = t.album_id
+                 WHERE t.id = ?1",
+                params![track_id],
+                |row| row.get(0),
+            )
+            .ok()
+            .flatten()
+            .filter(|s: &String| !s.trim().is_empty());
+
         let mut request = ureq::get("https://api.discogs.com/database/search")
-            .set("User-Agent", "Lyra/0.1 +https://github.com/snappedpoem1/lyra")
-            .query("q", &query)
+            .set(
+                "User-Agent",
+                "Lyra/0.1 +https://github.com/snappedpoem1/lyra",
+            )
             .query("type", "release")
-            .query("per_page", "1");
+            .query("per_page", "5");
+
+        // Prefer artist + release_title when album is known (matches Python behaviour);
+        // fall back to free-text artist + track title otherwise.
+        if let Some(ref album_title) = album {
+            request = request
+                .query("artist", artist)
+                .query("release_title", album_title);
+        } else {
+            request = request.query("q", &format!("{artist} {title}"));
+        }
 
         if !self.user_token.is_empty() {
             request = request.set(
@@ -587,6 +713,10 @@ impl EnricherAdapter for DiscogsAdapter {
                 &format!("Discogs token={}", self.user_token),
             );
         }
+
+        // Discogs rate limit: ~60 req/min for authenticated, ~25 for unauthenticated.
+        // A 1-second delay keeps us well within limits.
+        std::thread::sleep(std::time::Duration::from_millis(1000));
 
         match request.call() {
             Ok(response) => {
@@ -742,7 +872,10 @@ impl EnricherAdapter for GeniusAdapter {
 
         let query = format!("{artist} {title}");
         let result = ureq::get("https://api.genius.com/search")
-            .set("User-Agent", "Lyra/0.1 (https://github.com/snappedpoem1/lyra)")
+            .set(
+                "User-Agent",
+                "Lyra/0.1 (https://github.com/snappedpoem1/lyra)",
+            )
             .set("Authorization", &format!("Bearer {}", self.token))
             .query("q", &query)
             .call();
@@ -750,9 +883,7 @@ impl EnricherAdapter for GeniusAdapter {
         match result {
             Ok(response) => {
                 let body: Value = response.into_json().unwrap_or(Value::Null);
-                let hit = body
-                    .pointer("/response/hits/0/result")
-                    .cloned();
+                let hit = body.pointer("/response/hits/0/result").cloned();
 
                 match hit {
                     None => Ok(Some(json!({
@@ -762,9 +893,21 @@ impl EnricherAdapter for GeniusAdapter {
                         "title": title,
                     }))),
                     Some(result) => {
-                        let url = result.get("url").and_then(Value::as_str).unwrap_or("").to_string();
-                        let full_title = result.get("full_title").and_then(Value::as_str).unwrap_or("").to_string();
-                        let art_url = result.get("song_art_image_thumbnail_url").and_then(Value::as_str).unwrap_or("").to_string();
+                        let url = result
+                            .get("url")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        let full_title = result
+                            .get("full_title")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        let art_url = result
+                            .get("song_art_image_thumbnail_url")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
                         let genius_id = result.get("id").and_then(Value::as_i64).unwrap_or(0);
                         let artist_name = result
                             .pointer("/primary_artist/name")
@@ -922,13 +1065,32 @@ impl EnrichmentDispatcher {
                 .enrich(conn, track_id, artist, title, path)?
                 .unwrap_or_else(|| json!({}));
             set_enrich_cache(conn, provider, &lookup_key, &payload)?;
-            if payload
+            let status_ok = payload
                 .get("status")
                 .and_then(Value::as_str)
-                .map(|status| status != "ok")
-                .unwrap_or(true)
-            {
+                .map(|s| s == "ok")
+                .unwrap_or(false);
+            if !status_ok {
                 degraded.push(provider.to_string());
+            }
+            // Write the first tag back to tracks.genre when the enricher supplies
+            // tags and the track doesn't already have a genre set.
+            if status_ok {
+                let first_tag = payload
+                    .get("tags")
+                    .and_then(Value::as_array)
+                    .and_then(|arr| arr.first())
+                    .and_then(Value::as_str);
+                if let Some(genre) = first_tag {
+                    let now = Utc::now().to_rfc3339();
+                    let _ = conn.execute(
+                        "UPDATE tracks SET
+                            genre = CASE WHEN genre IS NULL OR trim(genre) = '' THEN ?1 ELSE genre END,
+                            last_enriched_at = ?2
+                         WHERE id = ?3",
+                        params![genre, now, track_id],
+                    );
+                }
             }
             providers.insert(
                 provider.to_string(),

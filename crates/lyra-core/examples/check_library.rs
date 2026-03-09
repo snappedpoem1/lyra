@@ -5,11 +5,11 @@ use std::path::PathBuf;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_data_dir = PathBuf::from("C:\\MusicOracle");
     let lyra = LyraCore::new(app_data_dir)?;
-    
+
     println!("Library Configuration:\n");
-    
+
     let roots = lyra.list_library_roots()?;
-    
+
     if roots.is_empty() {
         println!("❌ No library roots configured!");
         println!("\nExpected library root: C:\\MusicOracle\\downloads");
@@ -21,6 +21,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("  {} - {} (added: {})", status, root.path, root.added_at);
         }
     }
-    
+
     Ok(())
 }

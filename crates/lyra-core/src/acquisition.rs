@@ -109,10 +109,17 @@ fn next_queue_position(conn: &Connection) -> LyraResult<i64> {
         .unwrap_or(1))
 }
 
-pub fn get_acquisition_item(conn: &Connection, id: i64) -> LyraResult<Option<AcquisitionQueueItem>> {
-    conn.query_row(&queue_select_sql("WHERE id = ?1"), params![id], map_acquisition_row)
-        .optional()
-        .map_err(Into::into)
+pub fn get_acquisition_item(
+    conn: &Connection,
+    id: i64,
+) -> LyraResult<Option<AcquisitionQueueItem>> {
+    conn.query_row(
+        &queue_select_sql("WHERE id = ?1"),
+        params![id],
+        map_acquisition_row,
+    )
+    .optional()
+    .map_err(Into::into)
 }
 
 pub fn list_acquisition_queue(
@@ -172,7 +179,11 @@ pub fn add_acquisition_item(
     get_acquisition_item(conn, conn.last_insert_rowid()).map(|item| item.expect("inserted item"))
 }
 
-pub fn requeue_item(conn: &Connection, id: i64, note: Option<&str>) -> LyraResult<Option<AcquisitionQueueItem>> {
+pub fn requeue_item(
+    conn: &Connection,
+    id: i64,
+    note: Option<&str>,
+) -> LyraResult<Option<AcquisitionQueueItem>> {
     let now = Utc::now().to_rfc3339();
     let queue_position = next_queue_position(conn)?;
     let message = note.unwrap_or("Retry queued");
@@ -569,21 +580,66 @@ pub fn set_priority(conn: &Connection, id: i64, priority_score: f64) -> LyraResu
 }
 
 const GENRE_BOOSTS: &[(&str, &[(&str, f64)])] = &[
-    ("hip-hop", &[("energy", 0.6), ("rawness", 0.7), ("density", 0.4)]),
-    ("rap", &[("energy", 0.6), ("rawness", 0.7), ("density", 0.4)]),
-    ("electronic", &[("energy", 0.7), ("movement", 0.8), ("tension", 0.5)]),
-    ("edm", &[("energy", 0.8), ("movement", 0.9), ("tension", 0.6)]),
-    ("pop", &[("valence", 0.7), ("warmth", 0.5), ("density", 0.3)]),
-    ("rock", &[("energy", 0.6), ("rawness", 0.5), ("tension", 0.4)]),
-    ("jazz", &[("complexity", 0.8), ("warmth", 0.6), ("nostalgia", 0.5)]),
-    ("classical", &[("complexity", 0.9), ("space", 0.8), ("tension", 0.3)]),
-    ("r&b", &[("warmth", 0.7), ("valence", 0.6), ("movement", 0.5)]),
-    ("soul", &[("warmth", 0.8), ("rawness", 0.4), ("nostalgia", 0.6)]),
-    ("ambient", &[("space", 0.9), ("energy", 0.1), ("tension", 0.1)]),
-    ("metal", &[("energy", 0.9), ("rawness", 0.9), ("tension", 0.8)]),
-    ("indie", &[("rawness", 0.5), ("nostalgia", 0.4), ("complexity", 0.4)]),
-    ("folk", &[("warmth", 0.7), ("nostalgia", 0.6), ("rawness", 0.4)]),
-    ("blues", &[("rawness", 0.6), ("warmth", 0.7), ("nostalgia", 0.7)]),
+    (
+        "hip-hop",
+        &[("energy", 0.6), ("rawness", 0.7), ("density", 0.4)],
+    ),
+    (
+        "rap",
+        &[("energy", 0.6), ("rawness", 0.7), ("density", 0.4)],
+    ),
+    (
+        "electronic",
+        &[("energy", 0.7), ("movement", 0.8), ("tension", 0.5)],
+    ),
+    (
+        "edm",
+        &[("energy", 0.8), ("movement", 0.9), ("tension", 0.6)],
+    ),
+    (
+        "pop",
+        &[("valence", 0.7), ("warmth", 0.5), ("density", 0.3)],
+    ),
+    (
+        "rock",
+        &[("energy", 0.6), ("rawness", 0.5), ("tension", 0.4)],
+    ),
+    (
+        "jazz",
+        &[("complexity", 0.8), ("warmth", 0.6), ("nostalgia", 0.5)],
+    ),
+    (
+        "classical",
+        &[("complexity", 0.9), ("space", 0.8), ("tension", 0.3)],
+    ),
+    (
+        "r&b",
+        &[("warmth", 0.7), ("valence", 0.6), ("movement", 0.5)],
+    ),
+    (
+        "soul",
+        &[("warmth", 0.8), ("rawness", 0.4), ("nostalgia", 0.6)],
+    ),
+    (
+        "ambient",
+        &[("space", 0.9), ("energy", 0.1), ("tension", 0.1)],
+    ),
+    (
+        "metal",
+        &[("energy", 0.9), ("rawness", 0.9), ("tension", 0.8)],
+    ),
+    (
+        "indie",
+        &[("rawness", 0.5), ("nostalgia", 0.4), ("complexity", 0.4)],
+    ),
+    (
+        "folk",
+        &[("warmth", 0.7), ("nostalgia", 0.6), ("rawness", 0.4)],
+    ),
+    (
+        "blues",
+        &[("rawness", 0.6), ("warmth", 0.7), ("nostalgia", 0.7)],
+    ),
 ];
 
 const DIMS: &[&str] = &[
@@ -641,7 +697,10 @@ pub fn compute_initial_priority(
 
     let mut candidate = std::collections::HashMap::new();
     if let Some(Some(_)) = artist_scores.as_ref().map(|scores| scores[0]) {
-        for (dim, value) in DIMS.iter().zip(artist_scores.expect("artist scores present")) {
+        for (dim, value) in DIMS
+            .iter()
+            .zip(artist_scores.expect("artist scores present"))
+        {
             candidate.insert((*dim).to_string(), value.unwrap_or(0.5));
         }
     } else {
@@ -937,13 +996,64 @@ mod tests {
     fn summarizes_queue_state() {
         let conn = setup_conn();
         let rows = [
-            ("A", "One", Some("Album"), "queued", 1_i64, 0.9, Some("wishlist"), "2026-03-08T01:00:00Z", 0_i64),
-            ("B", "Two", None, "failed", 2_i64, 0.6, Some("manual"), "2026-03-08T02:00:00Z", 2_i64),
-            ("C", "Three", None, "completed", 3_i64, 0.4, Some("recommendation"), "2026-03-08T04:00:00Z", 1_i64),
-            ("D", "Four", None, "cancelled", 4_i64, 0.2, None, "2026-03-08T06:00:00Z", 0_i64),
+            (
+                "A",
+                "One",
+                Some("Album"),
+                "queued",
+                1_i64,
+                0.9,
+                Some("wishlist"),
+                "2026-03-08T01:00:00Z",
+                0_i64,
+            ),
+            (
+                "B",
+                "Two",
+                None,
+                "failed",
+                2_i64,
+                0.6,
+                Some("manual"),
+                "2026-03-08T02:00:00Z",
+                2_i64,
+            ),
+            (
+                "C",
+                "Three",
+                None,
+                "completed",
+                3_i64,
+                0.4,
+                Some("recommendation"),
+                "2026-03-08T04:00:00Z",
+                1_i64,
+            ),
+            (
+                "D",
+                "Four",
+                None,
+                "cancelled",
+                4_i64,
+                0.2,
+                None,
+                "2026-03-08T06:00:00Z",
+                0_i64,
+            ),
         ];
 
-        for (artist, title, album, status, queue_position, priority, source, added_at, retry_count) in rows {
+        for (
+            artist,
+            title,
+            album,
+            status,
+            queue_position,
+            priority,
+            source,
+            added_at,
+            retry_count,
+        ) in rows
+        {
             conn.execute(
                 "INSERT INTO acquisition_queue
                  (artist, title, album, status, queue_position, priority_score, source, added_at, retry_count)
@@ -960,7 +1070,10 @@ mod tests {
         assert_eq!(summary.failed_count, 1);
         assert_eq!(summary.skipped_count, 1);
         assert_eq!(summary.retrying_count, 1);
-        assert_eq!(summary.oldest_pending_added_at.as_deref(), Some("2026-03-08T01:00:00Z"));
+        assert_eq!(
+            summary.oldest_pending_added_at.as_deref(),
+            Some("2026-03-08T01:00:00Z")
+        );
         assert!((summary.average_priority - 0.525).abs() < f64::EPSILON);
     }
 
@@ -999,8 +1112,19 @@ mod tests {
     #[test]
     fn retrying_failed_item_increments_retry_and_clears_error() {
         let conn = setup_conn();
-        let item = add_acquisition_item(&conn, "A", "One", None, Some("manual"), 0.8, Some(0.7), Some("validated"), None, None)
-            .expect("item inserted");
+        let item = add_acquisition_item(
+            &conn,
+            "A",
+            "One",
+            None,
+            Some("manual"),
+            0.8,
+            Some(0.7),
+            Some("validated"),
+            None,
+            None,
+        )
+        .expect("item inserted");
         let failed = update_acquisition_status(&conn, item.id, "failed", Some("boom"))
             .expect("failed update")
             .expect("item present");
@@ -1024,8 +1148,19 @@ mod tests {
     #[test]
     fn queued_item_cancels_immediately() {
         let conn = setup_conn();
-        let item = add_acquisition_item(&conn, "A", "One", None, Some("manual"), 0.5, Some(0.7), Some("validated"), None, None)
-            .expect("item inserted");
+        let item = add_acquisition_item(
+            &conn,
+            "A",
+            "One",
+            None,
+            Some("manual"),
+            0.5,
+            Some(0.7),
+            Some("validated"),
+            None,
+            None,
+        )
+        .expect("item inserted");
         let cancelled = request_cancel(&conn, item.id, Some("User cancelled"))
             .expect("cancel update")
             .expect("item present");
@@ -1037,8 +1172,19 @@ mod tests {
     #[test]
     fn active_item_sets_cancel_request() {
         let conn = setup_conn();
-        let item = add_acquisition_item(&conn, "A", "One", None, Some("manual"), 0.5, Some(0.7), Some("validated"), None, None)
-            .expect("item inserted");
+        let item = add_acquisition_item(
+            &conn,
+            "A",
+            "One",
+            None,
+            Some("manual"),
+            0.5,
+            Some(0.7),
+            Some("validated"),
+            None,
+            None,
+        )
+        .expect("item inserted");
         let _ = update_lifecycle(
             &conn,
             item.id,
@@ -1060,9 +1206,45 @@ mod tests {
     #[test]
     fn move_queue_item_reorders_positions() {
         let conn = setup_conn();
-        let first = add_acquisition_item(&conn, "A", "One", None, Some("manual"), 0.6, Some(0.7), Some("validated"), None, None).expect("first");
-        let second = add_acquisition_item(&conn, "B", "Two", None, Some("manual"), 0.6, Some(0.7), Some("validated"), None, None).expect("second");
-        let third = add_acquisition_item(&conn, "C", "Three", None, Some("manual"), 0.6, Some(0.7), Some("validated"), None, None).expect("third");
+        let first = add_acquisition_item(
+            &conn,
+            "A",
+            "One",
+            None,
+            Some("manual"),
+            0.6,
+            Some(0.7),
+            Some("validated"),
+            None,
+            None,
+        )
+        .expect("first");
+        let second = add_acquisition_item(
+            &conn,
+            "B",
+            "Two",
+            None,
+            Some("manual"),
+            0.6,
+            Some(0.7),
+            Some("validated"),
+            None,
+            None,
+        )
+        .expect("second");
+        let third = add_acquisition_item(
+            &conn,
+            "C",
+            "Three",
+            None,
+            Some("manual"),
+            0.6,
+            Some(0.7),
+            Some("validated"),
+            None,
+            None,
+        )
+        .expect("third");
         move_queue_item(&conn, third.id, 0).expect("move");
         let ids = list_acquisition_queue(&conn, None)
             .expect("queue")

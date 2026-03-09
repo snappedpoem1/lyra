@@ -5,7 +5,10 @@ use chrono::Utc;
 use lofty::prelude::{Accessor, AudioFile, TaggedFileExt};
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::commands::{CleanupIssue, CurationLogEntry, DuplicateCluster, LibraryCleanupPreview, LibraryOverview, LibraryRootRecord, ScanJobRecord, TrackRecord};
+use crate::commands::{
+    CleanupIssue, CurationLogEntry, DuplicateCluster, LibraryCleanupPreview, LibraryOverview,
+    LibraryRootRecord, ScanJobRecord, TrackRecord,
+};
 use crate::errors::LyraResult;
 
 pub fn is_supported_audio_file(path: &Path) -> bool {
@@ -50,7 +53,11 @@ pub fn get_library_overview(conn: &Connection) -> LyraResult<LibraryOverview> {
     })
 }
 
-pub fn list_tracks(conn: &Connection, query: Option<String>, sort: Option<String>) -> LyraResult<Vec<TrackRecord>> {
+pub fn list_tracks(
+    conn: &Connection,
+    query: Option<String>,
+    sort: Option<String>,
+) -> LyraResult<Vec<TrackRecord>> {
     let q = query.unwrap_or_default();
     if q.trim().is_empty() {
         // Recently-added sort: most recently imported tracks first
@@ -136,7 +143,11 @@ fn sanitize_fts_query(q: &str) -> String {
         .split_whitespace()
         .filter_map(|w| {
             let clean: String = w.chars().filter(|c| !r#""():*^+-"#.contains(*c)).collect();
-            if clean.is_empty() { None } else { Some(format!("\"{clean}\"*")) }
+            if clean.is_empty() {
+                None
+            } else {
+                Some(format!("\"{clean}\"*"))
+            }
         })
         .collect();
     parts.join(" AND ")
@@ -198,7 +209,11 @@ pub fn get_track_by_id(conn: &Connection, track_id: i64) -> LyraResult<Option<Tr
     .map_err(Into::into)
 }
 
-pub fn list_track_ids_for_artist(conn: &Connection, artist_name: &str, limit: i64) -> LyraResult<Vec<i64>> {
+pub fn list_track_ids_for_artist(
+    conn: &Connection,
+    artist_name: &str,
+    limit: i64,
+) -> LyraResult<Vec<i64>> {
     let mut stmt = conn.prepare(
         "
         SELECT t.id
@@ -232,8 +247,9 @@ pub fn list_track_ids_for_album(
         LIMIT ?3
         ",
     )?;
-    let rows =
-        stmt.query_map(params![artist_name, album_title, limit], |row| row.get::<_, i64>(0))?;
+    let rows = stmt.query_map(params![artist_name, album_title, limit], |row| {
+        row.get::<_, i64>(0)
+    })?;
     Ok(rows.filter_map(Result::ok).collect())
 }
 
@@ -279,26 +295,45 @@ pub fn update_scan_job_status(
     Ok(())
 }
 
-pub fn import_track_from_path(conn: &Connection, path: &Path) -> LyraResult<bool> {
-    let (title, artist, album, duration_seconds, genre, year) = read_audio_tags(path);
-    let inserted = import_legacy_track(
-        conn,
-        &path.to_string_lossy(),
-        &title,
-        &artist,
-        &album,
-        duration_seconds,
-    )?;
-    if inserted && (genre.is_some() || year.is_some()) {
-        let _ = conn.execute(
-            "UPDATE tracks SET genre = COALESCE(?1, genre), year = COALESCE(?2, year) WHERE path = ?3",
-            params![genre, year, path.to_string_lossy().as_ref()],
-        );
-    }
-    Ok(inserted)
+struct AudioTags {
+    title: String,
+    artist: String,
+    album: String,
+    duration_seconds: f64,
+    genre: Option<String>,
+    year: Option<String>,
+    track_number: Option<u32>,
+    disc_number: Option<u32>,
 }
 
-fn read_audio_tags(path: &Path) -> (String, String, String, f64, Option<String>, Option<String>) {
+fn content_hash_fast(path: &Path) -> Option<String> {
+    use std::io::Read;
+    let mut buf = vec![0u8; 65536];
+    let mut file = std::fs::File::open(path).ok()?;
+    let n = file.read(&mut buf).ok()?;
+    Some(format!("{:x}", md5::compute(&buf[..n])))
+}
+
+fn strip_feat(artist: &str) -> String {
+    const MARKERS: &[&str] = &[
+        " (feat.",
+        " (ft.",
+        " feat.",
+        " feat ",
+        " ft.",
+        " ft ",
+        " featuring ",
+    ];
+    let lower = artist.to_ascii_lowercase();
+    for marker in MARKERS {
+        if let Some(pos) = lower.find(marker) {
+            return artist[..pos].trim().to_string();
+        }
+    }
+    artist.trim().to_string()
+}
+
+fn read_audio_tags(path: &Path) -> AudioTags {
     let fallback_title = path
         .file_stem()
         .and_then(OsStr::to_str)
@@ -319,28 +354,32 @@ fn read_audio_tags(path: &Path) -> (String, String, String, f64, Option<String>,
         .to_string();
 
     let Ok(tagged) = lofty::read_from_path(path) else {
-        return (
-            fallback_title,
-            fallback_artist,
-            fallback_album,
-            0.0,
-            None,
-            None,
-        );
+        return AudioTags {
+            title: fallback_title,
+            artist: fallback_artist,
+            album: fallback_album,
+            duration_seconds: 0.0,
+            genre: None,
+            year: None,
+            track_number: None,
+            disc_number: None,
+        };
     };
 
     let duration = tagged.properties().duration().as_secs_f64();
     let tag = tagged.primary_tag().or_else(|| tagged.first_tag());
 
     let Some(tag) = tag else {
-        return (
-            fallback_title,
-            fallback_artist,
-            fallback_album,
-            duration,
-            None,
-            None,
-        );
+        return AudioTags {
+            title: fallback_title,
+            artist: fallback_artist,
+            album: fallback_album,
+            duration_seconds: duration,
+            genre: None,
+            year: None,
+            track_number: None,
+            disc_number: None,
+        };
     };
 
     let title = tag
@@ -351,7 +390,7 @@ fn read_audio_tags(path: &Path) -> (String, String, String, f64, Option<String>,
     let artist = tag
         .artist()
         .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
+        .map(|s| strip_feat(&s.to_string()))
         .unwrap_or(fallback_artist);
     let album = tag
         .album()
@@ -360,8 +399,90 @@ fn read_audio_tags(path: &Path) -> (String, String, String, f64, Option<String>,
         .unwrap_or(fallback_album);
     let genre = tag.genre().filter(|s| !s.is_empty()).map(|s| s.to_string());
     let year = tag.year().map(|y| y.to_string());
+    let track_number = tag.track();
+    let disc_number = tag.disk();
 
-    (title, artist, album, duration, genre, year)
+    AudioTags {
+        title,
+        artist,
+        album,
+        duration_seconds: duration,
+        genre,
+        year,
+        track_number,
+        disc_number,
+    }
+}
+
+pub fn import_track_from_path(conn: &Connection, path: &Path) -> LyraResult<bool> {
+    let tags = read_audio_tags(path);
+    let path_str = path.to_string_lossy();
+    let hash = content_hash_fast(path);
+    let now = Utc::now().to_rfc3339();
+
+    let existing_id: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM tracks WHERE path = ?1",
+            params![path_str.as_ref()],
+            |row| row.get(0),
+        )
+        .optional()?;
+
+    if let Some(track_id) = existing_id {
+        let artist_id = ensure_artist(conn, &tags.artist)?;
+        let album_id = ensure_album(conn, artist_id, &tags.album)?;
+        conn.execute(
+            "UPDATE tracks SET
+                artist_id = ?1,
+                album_id = ?2,
+                title = ?3,
+                duration_seconds = CASE WHEN ?4 > 0 THEN ?4 ELSE duration_seconds END,
+                genre = COALESCE(NULLIF(?5, ''), genre),
+                year = COALESCE(NULLIF(?6, ''), year),
+                content_hash = COALESCE(?7, content_hash),
+                track_number = COALESCE(?8, track_number),
+                disc_number = COALESCE(?9, disc_number)
+             WHERE id = ?10",
+            params![
+                artist_id,
+                album_id,
+                tags.title,
+                tags.duration_seconds,
+                tags.genre,
+                tags.year,
+                hash,
+                tags.track_number.map(|n| n as i64),
+                tags.disc_number.map(|n| n as i64),
+                track_id
+            ],
+        )?;
+        return Ok(false);
+    }
+
+    // New track — INSERT
+    let artist_id = ensure_artist(conn, &tags.artist)?;
+    let album_id = ensure_album(conn, artist_id, &tags.album)?;
+    conn.execute(
+        "INSERT INTO tracks
+            (legacy_track_key, artist_id, album_id, title, path, duration_seconds,
+             genre, year, content_hash, track_number, disc_number, imported_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        params![
+            path_str.as_ref(),
+            artist_id,
+            album_id,
+            tags.title,
+            path_str.as_ref(),
+            tags.duration_seconds,
+            tags.genre,
+            tags.year,
+            hash,
+            tags.track_number.map(|n| n as i64),
+            tags.disc_number.map(|n| n as i64),
+            now
+        ],
+    )?;
+    Ok(true)
 }
 
 pub fn import_legacy_track(
@@ -416,7 +537,10 @@ pub fn toggle_like(conn: &Connection, track_id: i64) -> LyraResult<bool> {
         .optional()?
         .flatten();
     if liked_at.is_some() {
-        conn.execute("UPDATE tracks SET liked_at = NULL WHERE id = ?1", params![track_id])?;
+        conn.execute(
+            "UPDATE tracks SET liked_at = NULL WHERE id = ?1",
+            params![track_id],
+        )?;
         Ok(false)
     } else {
         conn.execute(
@@ -452,7 +576,10 @@ pub fn resolve_duplicate_cluster(
     remove_track_ids: Vec<i64>,
 ) -> LyraResult<()> {
     // Ensure quarantined column exists (idempotent)
-    let _ = conn.execute("ALTER TABLE tracks ADD COLUMN quarantined INTEGER DEFAULT 0", []);
+    let _ = conn.execute(
+        "ALTER TABLE tracks ADD COLUMN quarantined INTEGER DEFAULT 0",
+        [],
+    );
 
     for &tid in &remove_track_ids {
         conn.execute(
@@ -463,7 +590,11 @@ pub fn resolve_duplicate_cluster(
 
     // Log the action
     let now = Utc::now().to_rfc3339();
-    let all_ids = remove_track_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
+    let all_ids = remove_track_ids
+        .iter()
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
     let detail = format!("Kept track {keep_track_id}, quarantined: {all_ids}");
     let track_ids_json = serde_json::to_string(&remove_track_ids).unwrap_or_default();
     conn.execute(
@@ -508,11 +639,13 @@ pub fn get_curation_log(conn: &Connection) -> LyraResult<Vec<CurationLogEntry>> 
 
 /// Undo a curation action by restoring quarantined tracks.
 pub fn undo_curation(conn: &Connection, log_id: i64) -> LyraResult<()> {
-    let track_ids_json: Option<String> = conn.query_row(
-        "SELECT track_ids_json FROM curation_log WHERE id = ?1 AND undone = 0",
-        params![log_id],
-        |row| row.get(0),
-    ).optional()?;
+    let track_ids_json: Option<String> = conn
+        .query_row(
+            "SELECT track_ids_json FROM curation_log WHERE id = ?1 AND undone = 0",
+            params![log_id],
+            |row| row.get(0),
+        )
+        .optional()?;
 
     if let Some(json) = track_ids_json {
         let track_ids: Vec<i64> = serde_json::from_str(&json).unwrap_or_default();
@@ -543,7 +676,11 @@ pub fn preview_library_cleanup(conn: &Connection) -> LyraResult<LibraryCleanupPr
          LIMIT 100",
     )?;
     let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
     })?;
     for row in rows.filter_map(Result::ok) {
         let (track_id, title, current_value) = row;
@@ -594,7 +731,11 @@ pub fn preview_library_cleanup(conn: &Connection) -> LyraResult<LibraryCleanupPr
          LIMIT 100",
     )?;
     let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+        ))
     })?;
     for row in rows.filter_map(Result::ok) {
         let (track_id, title, artist) = row;
