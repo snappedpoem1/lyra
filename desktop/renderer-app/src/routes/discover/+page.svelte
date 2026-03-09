@@ -344,15 +344,19 @@
               {:else}
                 {@const proof = expandedProvenance[rec.track.id] as TrackEnrichmentResult}
                 <div class="proof-head">
-                  <span class="proof-state">{proof.enrichmentState}</span>
+                  <span class="proof-state" class:proof-degraded={proof.enrichmentState === "degraded" || proof.degradedProviders.length > 0}>{proof.enrichmentState}</span>
                   {#if proof.primaryMbid}
-                    <code>{proof.primaryMbid}</code>
+                    <code class="proof-mbid">{proof.primaryMbid}</code>
+                  {/if}
+                  {#if proof.degradedProviders.length > 0}
+                    <span class="proof-degraded-note">Degraded: {proof.degradedProviders.join(", ")}</span>
                   {/if}
                 </div>
-                {#each proof.entries.slice(0, 3) as entry}
-                  <div class="proof-row">
+                {#each proof.entries.slice(0, 4) as entry}
+                  <div class="proof-row" class:proof-row-dim={entry.status === "not_configured" || entry.status === "not_found"}>
                     <strong>{entry.provider}</strong>
-                    <span>{entry.status} - {Math.round(entry.confidence * 100)}%</span>
+                    <span>{entry.status} — {Math.round(entry.confidence * 100)}%</span>
+                    {#if entry.note}<span class="proof-note">{entry.note}</span>{/if}
                   </div>
                 {/each}
               {/if}
@@ -522,7 +526,12 @@
     gap: 6px;
   }
   .proof-head, .proof-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .proof-state { text-transform: uppercase; letter-spacing: 0.12em; color: #9cb2c7; font-size: 0.68rem; }
+  .proof-state { text-transform: uppercase; letter-spacing: 0.12em; color: #7affc6; font-size: 0.68rem; background: rgba(122,255,198,0.1); padding: 2px 7px; border-radius: 6px; }
+  .proof-state.proof-degraded { color: #ffc850; background: rgba(255,200,80,0.12); }
+  .proof-mbid { font-size: 0.72rem; color: #9cb2c7; background: rgba(255,255,255,0.05); padding: 1px 5px; border-radius: 5px; }
+  .proof-degraded-note { font-size: 0.72rem; color: #ffc850; }
+  .proof-note { font-size: 0.7rem; color: #7a95a8; font-style: italic; }
+  .proof-row-dim { opacity: 0.4; }
   .proof-head code { font-size: 0.72rem; color: #a8c4e0; }
   .proof-row span { color: #9cb2c7; }
   .reason { color: #c0d8ea; line-height: 1.4; }

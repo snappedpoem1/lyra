@@ -51,8 +51,8 @@ Goal: make enrichment and identity trust legible inside the canonical shell.
 - [ ] Reuse existing provider config and secret plumbing instead of parallel config paths
 - [x] Keep provenance and confidence visible through the canonical shell rather than isolated detail panels
 - [x] Extend first-pass provenance and confidence coverage into playlists and discovery surfaces
-- [ ] Extend provenance and confidence coverage into saved playlists and broader recommendation explanation flows
-- [ ] Keep degraded, missing, and not-configured provider states consistently honest across all shell surfaces
+- [x] Extend provenance and confidence coverage into saved playlists and broader recommendation explanation flows
+- [x] Keep degraded, missing, and not-configured provider states consistently honest across all shell surfaces
 
 ### G-060 Acquisition Workflow Parity Checkpoint
 
