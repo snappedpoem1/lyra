@@ -9,11 +9,11 @@ mod smtc;
 
 use lyra_core::commands::{
     AcquisitionEventPayload, AcquisitionPreflight, AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
-    ComposedPlaylistDraft, CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist, GraphStats,
+    ComposerResponse, ComposedPlaylistDraft, CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist, GraphStats,
     LegacyImportReport, LibraryCleanupPreview, NativeCapabilities, PlaybackEvent,
     PlaybackState, PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
     ProviderValidationResult, QueueItemRecord, RecentPlayRecord, RecommendationResult, RelatedArtist,
-    ScanJobRecord, SettingsPayload, TasteProfile, TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
+    ScanJobRecord, SettingsPayload, SteerPayload, TasteProfile, TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
 };
 use lyra_core::logging::initialize_logging;
 use lyra_core::LyraCore;
@@ -1312,6 +1312,19 @@ fn compose_playlist_draft(
 }
 
 #[tauri::command]
+fn compose_with_lyra(
+    state: State<'_, AppState>,
+    prompt: String,
+    track_count: usize,
+    steer: Option<SteerPayload>,
+) -> Result<ComposerResponse, String> {
+    state
+        .core
+        .compose_with_lyra(prompt, track_count, steer)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn save_composed_playlist(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1664,6 +1677,7 @@ fn main() {
             preview_library_cleanup,
             // G-063: Playlist Intelligence
             compose_playlist_draft,
+            compose_with_lyra,
             save_composed_playlist,
             generate_act_playlist,
             save_generated_playlist,

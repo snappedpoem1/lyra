@@ -13,9 +13,11 @@
     setWorkspaceTrack
   } from "$lib/stores/workspace";
   import type {
+    ComposerResponse,
     ComposedPlaylistDraft,
     ExplainPayload,
     PlaylistSummary,
+    SteerPayload,
     TrackEnrichmentResult
   } from "$lib/types";
 
@@ -25,9 +27,61 @@
   let prompt = "";
   let trackCount = 20;
   let composing = false;
+  let composerResult: ComposerResponse | null = null;
   let draft: ComposedPlaylistDraft | null = null;
+  let previewTracks: ComposedPlaylistDraft["tracks"] = [];
   let saveMessage = "";
   let generatedProof: Record<number, TrackEnrichmentResult | "loading"> = {};
+  let resultPreference: "auto" | "playlist" | "bridge" | "discovery" = "auto";
+  let noveltyBias = 0.56;
+  let adventurousness = 0.56;
+  let contrastSharpness = 0.5;
+  let warmthBias = 0.5;
+  let explanationDepth = "balanced";
+
+  $: draft = composerResult?.draft ?? null;
+  $: previewTracks =
+    draft?.tracks ??
+    composerResult?.bridge?.steps.map((step, index) => ({
+      track: step.track,
+      phaseKey: step.role,
+      phaseLabel: step.role,
+      fitScore: step.fitScore,
+      reason: {
+        summary: step.role,
+        phase: step.role,
+        whyThisTrack: step.why,
+        transitionNote: `${Math.round(step.distanceFromSource * 100)}% from source, ${Math.round(step.distanceFromDestination * 100)}% from destination.`,
+        evidence: [],
+        explicitFromPrompt: [],
+        inferredByLyra: [],
+        confidence: step.fitScore
+      },
+      position: index
+    })) ??
+    composerResult?.discovery?.directions.flatMap((direction) => direction.tracks) ??
+    [];
+
+  function steerPayload(): SteerPayload {
+    return {
+      noveltyBias,
+      adventurousness,
+      contrastSharpness,
+      warmthBias,
+      explanationDepth
+    };
+  }
+
+  function effectivePrompt(): string {
+    const trimmed = prompt.trim();
+    if (resultPreference === "bridge" && !trimmed.toLowerCase().includes("bridge")) {
+      return `bridge from ${trimmed}`;
+    }
+    if (resultPreference === "discovery" && !/adjacent|discover|less obvious|three ways/i.test(trimmed)) {
+      return `${trimmed} into something adjacent but less obvious`;
+    }
+    return trimmed;
+  }
 
   async function refresh(): Promise<void> {
     playlists = await api.playlists();
@@ -43,13 +97,34 @@
   async function composeDraft(): Promise<void> {
     if (!prompt.trim()) return;
     composing = true;
-    draft = null;
+    composerResult = null;
     saveMessage = "";
     generatedProof = {};
     try {
-      draft = await api.composePlaylistDraft(prompt.trim(), trackCount);
+      composerResult = await api.composeWithLyra(effectivePrompt(), trackCount, steerPayload());
+      const workspaceTracks =
+        composerResult.draft?.tracks ??
+        composerResult.bridge?.steps.map((step, index) => ({
+          track: step.track,
+          phaseKey: step.role,
+          phaseLabel: step.role,
+          fitScore: step.fitScore,
+          reason: {
+            summary: step.role,
+            phase: step.role,
+            whyThisTrack: step.why,
+            transitionNote: `${Math.round(step.distanceFromSource * 100)}% from source, ${Math.round(step.distanceFromDestination * 100)}% from destination.`,
+            evidence: [],
+            explicitFromPrompt: [],
+            inferredByLyra: [],
+            confidence: step.fitScore
+          },
+          position: index
+        })) ??
+        composerResult.discovery?.directions.flatMap((direction) => direction.tracks) ??
+        [];
       setWorkspaceBridgeActions(
-        draft.tracks.slice(0, 4).map((item) => ({
+        workspaceTracks.slice(0, 4).map((item) => ({
           label: item.track.artist,
           href: `/artists/${encodeURIComponent(item.track.artist)}`,
           detail: item.reason.summary
@@ -67,7 +142,7 @@
       const detail = await api.saveComposedPlaylist(draft.name, draft);
       saveMessage = `Saved "${detail.name}" with ${detail.items.length} tracks.`;
       await refresh();
-      draft = null;
+      composerResult = null;
     } catch (error) {
       saveMessage = error instanceof Error ? error.message : "Failed to save.";
     }
@@ -80,7 +155,7 @@
   }
 
   async function inspectDraftTrack(trackId: number): Promise<void> {
-    const item = draft?.tracks.find((entry) => entry.track.id === trackId);
+    const item = previewTracks.find((entry) => entry.track.id === trackId);
     if (!item) return;
     setWorkspaceTrack(item.track);
     setWorkspaceExplanation(
@@ -110,7 +185,7 @@
     try {
       const result = await api.getTrackEnrichment(trackId);
       generatedProof = { ...generatedProof, [trackId]: result };
-      const track = draft?.tracks.find((item) => item.track.id === trackId)?.track ?? null;
+      const track = previewTracks.find((item) => item.track.id === trackId)?.track ?? null;
       setWorkspaceProvenance(result.entries, track);
     } catch {
       const next = { ...generatedProof };
@@ -123,7 +198,7 @@
     setWorkspacePage(
       "Playlists",
       "Composer-first playlist authorship",
-      "Parse freeform intent into an arc, inspect the reasoning, and save authored drafts with durable payloads.",
+      "Steer Lyra across draft, bridge, discovery, and explanation outputs instead of treating composition as a one-shot playlist generator.",
       "bridge"
     );
     trackCount = get(shell).settings.composerDefaultTrackCount ?? 20;
@@ -159,7 +234,7 @@
     <textarea
       bind:value={prompt}
       rows="3"
-      placeholder="sad bedroom static that eventually forgives me"
+      placeholder="mall goth sprint into neon confession booth"
       on:keydown={(event) => {
         if (event.key === "Enter" && !event.shiftKey) {
           event.preventDefault();
@@ -167,66 +242,150 @@
         }
       }}
     ></textarea>
+
     <div class="compose-controls">
       <label>
         Tracks
         <input type="range" min="8" max="40" step="4" bind:value={trackCount} />
         <strong>{trackCount}</strong>
       </label>
+      <label>
+        Result
+        <select bind:value={resultPreference}>
+          <option value="auto">Auto</option>
+          <option value="playlist">Draft</option>
+          <option value="bridge">Bridge</option>
+          <option value="discovery">Discovery</option>
+        </select>
+      </label>
       <button class="gen-action-btn" on:click={composeDraft} disabled={composing}>
-        {composing ? "Parsing + sequencing..." : "Compose Draft"}
+        {composing ? "Interpreting + routing..." : "Ask Lyra"}
       </button>
     </div>
 
-    {#if draft}
+    <div class="steering-grid">
+      <label>
+        Less obvious / more obvious
+        <input type="range" min="0" max="1" step="0.01" bind:value={noveltyBias} />
+      </label>
+      <label>
+        More familiar / more adventurous
+        <input type="range" min="0" max="1" step="0.01" bind:value={adventurousness} />
+      </label>
+      <label>
+        Smoother / sharper
+        <input type="range" min="0" max="1" step="0.01" bind:value={contrastSharpness} />
+      </label>
+      <label>
+        Brighter / more nocturnal
+        <input type="range" min="0" max="1" step="0.01" bind:value={warmthBias} />
+      </label>
+      <label>
+        Explanation
+        <select bind:value={explanationDepth}>
+          <option value="light">Light</option>
+          <option value="balanced">Balanced</option>
+          <option value="deep">Deep</option>
+        </select>
+      </label>
+    </div>
+
+    {#if composerResult}
       <div class="draft-head">
         <div>
-          <strong>{draft.name}</strong>
-          <small>{draft.tracks.length} tracks • {draft.providerStatus.selectedProvider} • {draft.providerStatus.mode}</small>
+          <strong>{draft?.name ?? composerResult.action}</strong>
+          <small>{composerResult.activeRole} • {composerResult.providerStatus.selectedProvider} • {composerResult.providerStatus.mode}</small>
         </div>
         <div class="draft-actions">
-          <button on:click={saveDraft}>Save Playlist</button>
-          <button on:click={enqueueDraft}>Queue All</button>
+          {#if draft}
+            <button on:click={saveDraft}>Save Playlist</button>
+            <button on:click={enqueueDraft}>Queue All</button>
+          {/if}
         </div>
       </div>
 
       <div class="intent-summary-grid">
         <article class="summary-card">
           <span class="summary-label">Parsed intent</span>
-          <strong>{draft.intent.sourceEnergy} → {draft.intent.destinationEnergy}</strong>
-          <small>{draft.intent.transitionStyle}</small>
-          <small>{draft.intent.textureDescriptors.join(", ")}</small>
+          <strong>{composerResult.intent.sourceEnergy} → {composerResult.intent.destinationEnergy}</strong>
+          <small>{composerResult.action} • {composerResult.intent.transitionStyle}</small>
+          <small>{composerResult.intent.textureDescriptors.join(", ")}</small>
         </article>
         <article class="summary-card">
           <span class="summary-label">Discovery stance</span>
-          <strong>{draft.intent.familiarityVsNovelty}</strong>
-          <small>{draft.intent.discoveryAggressiveness}</small>
-          <small>{draft.intent.confidenceNotes.join(" ")}</small>
+          <strong>{composerResult.intent.familiarityVsNovelty}</strong>
+          <small>{composerResult.intent.discoveryAggressiveness}</small>
+          <small>{composerResult.uncertainty.join(" ")}</small>
         </article>
         <article class="summary-card">
           <span class="summary-label">Provider</span>
-          <strong>{draft.providerStatus.selectedProvider}</strong>
-          <small>{draft.providerStatus.providerKind} • {draft.providerStatus.mode}</small>
-          <small>{draft.providerStatus.fallbackReason ?? "Provider used for language tasks only; ranking stayed local."}</small>
+          <strong>{composerResult.providerStatus.selectedProvider}</strong>
+          <small>{composerResult.providerStatus.providerKind} • {composerResult.providerStatus.mode}</small>
+          <small>{composerResult.providerStatus.fallbackReason ?? "Provider assisted language only; retrieval stayed local."}</small>
         </article>
       </div>
 
-      <div class="phase-strip">
-        {#each draft.phases as phase}
-          <article class="phase-card">
-            <span class="summary-label">{phase.label}</span>
-            <strong>{Math.round(phase.targetEnergy * 100)}% energy</strong>
-            <small>{phase.summary}</small>
-          </article>
-        {/each}
-      </div>
+      {#if draft}
+        <div class="phase-strip">
+          {#each draft.phases as phase}
+            <article class="phase-card">
+              <span class="summary-label">{phase.label}</span>
+              <strong>{Math.round(phase.targetEnergy * 100)}% energy</strong>
+              <small>{phase.summary}</small>
+            </article>
+          {/each}
+        </div>
+      {:else if composerResult.bridge}
+        <div class="phase-strip">
+          {#each composerResult.bridge.steps as step}
+            <article class="phase-card">
+              <span class="summary-label">{step.role}</span>
+              <strong>{step.track.title}</strong>
+              <small>{step.track.artist}</small>
+            </article>
+          {/each}
+        </div>
+      {:else if composerResult.discovery}
+        <div class="phase-strip">
+          {#each composerResult.discovery.directions as direction}
+            <article class="phase-card">
+              <span class="summary-label">{direction.label}</span>
+              <strong>{direction.tracks.length} tracks</strong>
+              <small>{direction.description}</small>
+            </article>
+          {/each}
+        </div>
+      {/if}
 
-      {#if draft.narrative}
+      {#if draft?.narrative}
         <p class="narrative">{draft.narrative}</p>
+      {:else if composerResult.bridge?.narrative}
+        <p class="narrative">{composerResult.bridge.narrative}</p>
+      {:else if composerResult.discovery?.narrative}
+        <p class="narrative">{composerResult.discovery.narrative}</p>
+      {:else if composerResult.explanation}
+        <p class="narrative">{composerResult.explanation}</p>
+      {/if}
+
+      {#if composerResult.bridge}
+        <div class="route-card">
+          <strong>{composerResult.bridge.sourceLabel} → {composerResult.bridge.destinationLabel}</strong>
+          <small>{Math.round(composerResult.bridge.confidence * 100)}% confidence</small>
+          {#each composerResult.bridge.alternateDirections as option}
+            <span class="route-option">{option}</span>
+          {/each}
+        </div>
+      {:else if composerResult.discovery}
+        <div class="route-card">
+          <strong>{composerResult.discovery.seedLabel}</strong>
+          {#each composerResult.discovery.directions as direction}
+            <small>{direction.label}: {direction.why}</small>
+          {/each}
+        </div>
       {/if}
 
       <div class="preview-list">
-        {#each draft.tracks as item}
+        {#each previewTracks as item}
           <article class="preview-row">
             <span class="preview-pos">{item.position + 1}</span>
             <div class="preview-info">
@@ -272,6 +431,15 @@
           </article>
         {/each}
       </div>
+
+      {#if composerResult.alternativesConsidered.length}
+        <div class="route-card">
+          <strong>Alternate directions</strong>
+          {#each composerResult.alternativesConsidered as option}
+            <small>{option}</small>
+          {/each}
+        </div>
+      {/if}
     {/if}
 
     {#if saveMessage}
@@ -303,7 +471,8 @@
   .compose-panel,
   .summary-card,
   .phase-card,
-  .preview-row {
+  .preview-row,
+  .route-card {
     border-radius: 18px;
     background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
     border: 1px solid rgba(255,255,255,0.08);
@@ -315,7 +484,7 @@
     display: grid;
     gap: 10px;
   }
-  input, button, textarea {
+  input, button, textarea, select {
     padding: 10px 12px;
     border-radius: 12px;
     border: 1px solid rgba(255,255,255,0.12);
@@ -340,10 +509,15 @@
     justify-content: space-between;
     flex-wrap: wrap;
   }
-  .compose-controls label {
-    display: flex;
-    gap: 10px;
-    align-items: center;
+  .compose-controls label,
+  .steering-grid label {
+    display: grid;
+    gap: 8px;
+  }
+  .steering-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
   }
   .gen-action-btn { color: #7affc6; border-color: rgba(122,255,198,0.3); }
   .draft-head {
@@ -363,7 +537,8 @@
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   }
   .summary-card,
-  .phase-card {
+  .phase-card,
+  .route-card {
     padding: 14px;
     display: grid;
     gap: 6px;
@@ -383,6 +558,14 @@
     border-left: 2px solid rgba(122,255,198,0.32);
     background: rgba(255,255,255,0.03);
     border-radius: 0 12px 12px 0;
+  }
+  .route-option {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(122,255,198,0.08);
+    color: #cdeee2;
   }
   .preview-list {
     display: grid;

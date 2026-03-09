@@ -5,9 +5,11 @@ use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
 use crate::commands::{
-    ComposedPlaylistDraft, ComposedPlaylistTrack, ComposerProviderStatus, GeneratedPlaylist,
-    PlaylistIntent, PlaylistIntentState, PlaylistPhase, PlaylistTrackWithReason,
-    SettingsPayload, TasteProfile, TrackReasonPayload, TrackRecord,
+    BridgePath, BridgeStep, ComposerAction, ComposerProviderStatus, ComposerResponse,
+    ComposedPlaylistDraft, ComposedPlaylistTrack, DiscoveryDirection, DiscoveryRoute,
+    GeneratedPlaylist, PlaylistIntent, PlaylistIntentState, PlaylistPhase,
+    PlaylistTrackWithReason, SettingsPayload, SteerPayload, TasteProfile, TrackReasonPayload,
+    TrackRecord,
 };
 use crate::errors::{LyraError, LyraResult};
 use crate::playlists;
@@ -26,6 +28,23 @@ const DIMENSIONS: [&str; 10] = [
 ];
 
 type Dims = [f64; 10];
+
+#[derive(Clone)]
+struct RoleBehavior {
+    role: String,
+    explanation_depth: String,
+    silent_inference_ok: bool,
+    offer_alternatives: bool,
+    prefer_revision: bool,
+}
+
+struct ComposeRuntime<'a> {
+    provider_status: &'a ComposerProviderStatus,
+    provider_configs: &'a [ProviderConfig],
+    behavior: &'a RoleBehavior,
+    taste: &'a TasteProfile,
+    candidates: &'a [CandidateTrack],
+}
 
 #[derive(Clone)]
 struct CandidateTrack {
@@ -228,12 +247,13 @@ impl LlmProvider for OpenAiCompatibleProvider {
     }
 }
 
-pub fn compose_playlist_draft(
+pub fn compose_composer_response(
     conn: &Connection,
     settings: &SettingsPayload,
     prompt: &str,
     track_count: usize,
-) -> LyraResult<ComposedPlaylistDraft> {
+    steer: Option<&SteerPayload>,
+) -> LyraResult<ComposerResponse> {
     let trimmed_prompt = prompt.trim();
     if trimmed_prompt.is_empty() {
         return Err(LyraError::Message("Prompt cannot be empty".to_string()));
@@ -248,28 +268,57 @@ pub fn compose_playlist_draft(
         requested_provider.as_str(),
         &provider_configs,
     );
-    let phases = build_phase_plan(&parsed_intent, track_count.max(4));
+    let steered_intent = apply_steer(&parsed_intent, steer);
+    let action = detect_composer_action(trimmed_prompt, &steered_intent);
+    let behavior = role_behavior(&steered_intent, &action);
     let taste = load_taste_profile(conn);
     let candidates = load_candidates(conn)?;
-    let tracks = sequence_tracks(&candidates, &phases, &parsed_intent, &taste, track_count.max(4));
-    let narrative = select_narrative(
-        trimmed_prompt,
-        &provider_status,
-        &provider_configs,
-        &phases,
-        &tracks,
-    )
-    .or_else(|| Some(template_narrative(&parsed_intent, &phases)));
+    let runtime = ComposeRuntime {
+        provider_status: &provider_status,
+        provider_configs: &provider_configs,
+        behavior: &behavior,
+        taste: &taste,
+        candidates: &candidates,
+    };
+    let response = match action {
+        ComposerAction::Bridge => compose_bridge_response(
+            trimmed_prompt,
+            track_count.max(5),
+            &steered_intent,
+            &runtime,
+        ),
+        ComposerAction::Discovery => compose_discovery_response(
+            trimmed_prompt,
+            track_count.max(9),
+            &steered_intent,
+            &runtime,
+        ),
+        ComposerAction::Explain => compose_explanation_response(
+            trimmed_prompt,
+            &steered_intent,
+            runtime.provider_status,
+            runtime.behavior,
+        ),
+        ComposerAction::Steer | ComposerAction::Playlist => compose_draft_response(
+            trimmed_prompt,
+            track_count.max(4),
+            &steered_intent,
+            &runtime,
+        ),
+    };
+    Ok(response)
+}
 
-    Ok(ComposedPlaylistDraft {
-        name: format!("{} Journey", title_case(trimmed_prompt)),
-        prompt: trimmed_prompt.to_string(),
-        intent: parsed_intent,
-        provider_status,
-        phases,
-        narrative,
-        tracks,
-    })
+pub fn compose_playlist_draft(
+    conn: &Connection,
+    settings: &SettingsPayload,
+    prompt: &str,
+    track_count: usize,
+) -> LyraResult<ComposedPlaylistDraft> {
+    let response = compose_composer_response(conn, settings, prompt, track_count, None)?;
+    response
+        .draft
+        .ok_or_else(|| LyraError::Message("Prompt did not resolve to a playlist draft.".to_string()))
 }
 
 pub fn save_composed_playlist(
@@ -311,6 +360,208 @@ pub fn draft_to_generated(draft: &ComposedPlaylistDraft) -> GeneratedPlaylist {
                 position: item.position,
             })
             .collect(),
+    }
+}
+
+fn compose_draft_response(
+    prompt: &str,
+    track_count: usize,
+    intent: &PlaylistIntent,
+    runtime: &ComposeRuntime<'_>,
+) -> ComposerResponse {
+    let phases = build_phase_plan(intent, track_count, runtime.behavior);
+    let tracks = sequence_tracks(
+        runtime.candidates,
+        &phases,
+        intent,
+        runtime.taste,
+        track_count,
+        runtime.behavior,
+    );
+    let narrative = select_narrative(
+        prompt,
+        runtime.provider_status,
+        runtime.provider_configs,
+        &phases,
+        &tracks,
+    )
+    .or_else(|| Some(template_narrative(intent, &phases, runtime.behavior)));
+    let alternatives_considered = alternatives_for_action(intent, &ComposerAction::Playlist);
+    let uncertainty = uncertainty_notes(intent, runtime.provider_status, runtime.behavior);
+
+    ComposerResponse {
+        action: detect_composer_action(prompt, intent),
+        prompt: prompt.to_string(),
+        intent: intent.clone(),
+        provider_status: runtime.provider_status.clone(),
+        draft: Some(ComposedPlaylistDraft {
+            name: format!("{} Journey", title_case(prompt)),
+            prompt: prompt.to_string(),
+            intent: intent.clone(),
+            provider_status: runtime.provider_status.clone(),
+            phases,
+            narrative,
+            tracks,
+        }),
+        bridge: None,
+        discovery: None,
+        explanation: None,
+        active_role: runtime.behavior.role.clone(),
+        uncertainty,
+        alternatives_considered,
+    }
+}
+
+fn compose_bridge_response(
+    prompt: &str,
+    track_count: usize,
+    intent: &PlaylistIntent,
+    runtime: &ComposeRuntime<'_>,
+) -> ComposerResponse {
+    let phases = build_bridge_phase_plan(intent, track_count, runtime.behavior);
+    let tracks = sequence_tracks(
+        runtime.candidates,
+        &phases,
+        intent,
+        runtime.taste,
+        track_count,
+        runtime.behavior,
+    );
+    let (source_label, destination_label) = bridge_labels(prompt, intent);
+    let narrative = select_narrative(
+        prompt,
+        runtime.provider_status,
+        runtime.provider_configs,
+        &phases,
+        &tracks,
+    )
+        .or_else(|| Some(template_bridge_narrative(intent, &source_label, &destination_label)));
+    let steps = tracks
+        .iter()
+        .enumerate()
+        .map(|(idx, item)| BridgeStep {
+            track: item.track.clone(),
+            fit_score: item.fit_score,
+            role: bridge_step_role(idx, tracks.len()),
+            why: format!("{} {}", item.reason.why_this_track, item.reason.transition_note),
+            distance_from_source: bridge_distance(idx, tracks.len(), false),
+            distance_from_destination: bridge_distance(idx, tracks.len(), true),
+        })
+        .collect::<Vec<_>>();
+    let bridge = BridgePath {
+        source_label,
+        destination_label,
+        steps,
+        narrative,
+        confidence: intent.confidence,
+        alternate_directions: alternatives_for_action(intent, &ComposerAction::Bridge),
+    };
+
+    ComposerResponse {
+        action: ComposerAction::Bridge,
+        prompt: prompt.to_string(),
+        intent: intent.clone(),
+        provider_status: runtime.provider_status.clone(),
+        draft: None,
+        bridge: Some(bridge),
+        discovery: None,
+        explanation: None,
+        active_role: runtime.behavior.role.clone(),
+        uncertainty: uncertainty_notes(intent, runtime.provider_status, runtime.behavior),
+        alternatives_considered: alternatives_for_action(intent, &ComposerAction::Bridge),
+    }
+}
+
+fn compose_discovery_response(
+    prompt: &str,
+    track_count: usize,
+    intent: &PlaylistIntent,
+    runtime: &ComposeRuntime<'_>,
+) -> ComposerResponse {
+    let seed_label = intent
+        .explicit_entities
+        .first()
+        .cloned()
+        .unwrap_or_else(|| title_case(prompt));
+    let route = DiscoveryRoute {
+        seed_label,
+        directions: discovery_directions(
+            prompt,
+            track_count,
+            intent,
+            runtime,
+        ),
+        narrative: Some(template_discovery_narrative(intent)),
+        confidence: intent.confidence,
+    };
+
+    ComposerResponse {
+        action: ComposerAction::Discovery,
+        prompt: prompt.to_string(),
+        intent: intent.clone(),
+        provider_status: runtime.provider_status.clone(),
+        draft: None,
+        bridge: None,
+        discovery: Some(route),
+        explanation: None,
+        active_role: runtime.behavior.role.clone(),
+        uncertainty: uncertainty_notes(intent, runtime.provider_status, runtime.behavior),
+        alternatives_considered: alternatives_for_action(intent, &ComposerAction::Discovery),
+    }
+}
+
+fn compose_explanation_response(
+    prompt: &str,
+    intent: &PlaylistIntent,
+    provider_status: &ComposerProviderStatus,
+    behavior: &RoleBehavior,
+) -> ComposerResponse {
+    ComposerResponse {
+        action: ComposerAction::Explain,
+        prompt: prompt.to_string(),
+        intent: intent.clone(),
+        provider_status: provider_status.clone(),
+        draft: None,
+        bridge: None,
+        discovery: None,
+        explanation: Some(template_explanation(intent, provider_status, behavior)),
+        active_role: behavior.role.clone(),
+        uncertainty: uncertainty_notes(intent, provider_status, behavior),
+        alternatives_considered: alternatives_for_action(intent, &ComposerAction::Explain),
+    }
+}
+
+fn role_behavior(intent: &PlaylistIntent, action: &ComposerAction) -> RoleBehavior {
+    let role = intent.prompt_role.clone();
+    match role.as_str() {
+        "oracle" => RoleBehavior {
+            role,
+            explanation_depth: "deep".to_string(),
+            silent_inference_ok: false,
+            offer_alternatives: true,
+            prefer_revision: matches!(action, ComposerAction::Playlist | ComposerAction::Steer),
+        },
+        "copilot" => RoleBehavior {
+            role,
+            explanation_depth: "balanced".to_string(),
+            silent_inference_ok: true,
+            offer_alternatives: true,
+            prefer_revision: true,
+        },
+        "coach" => RoleBehavior {
+            role,
+            explanation_depth: "balanced".to_string(),
+            silent_inference_ok: false,
+            offer_alternatives: true,
+            prefer_revision: true,
+        },
+        _ => RoleBehavior {
+            role,
+            explanation_depth: "light".to_string(),
+            silent_inference_ok: true,
+            offer_alternatives: matches!(action, ComposerAction::Bridge | ComposerAction::Discovery),
+            prefer_revision: false,
+        },
     }
 }
 
@@ -490,7 +741,7 @@ fn heuristic_intent(conn: &Connection, prompt: &str, settings: &SettingsPayload)
     }
 }
 
-fn build_phase_plan(intent: &PlaylistIntent, track_count: usize) -> Vec<PlaylistPhase> {
+fn build_phase_plan(intent: &PlaylistIntent, track_count: usize, behavior: &RoleBehavior) -> Vec<PlaylistPhase> {
     let start_energy = energy_value(&intent.source_energy);
     let end_energy = energy_value(&intent.destination_energy);
     let gradual = intent.transition_style.contains("gradual") || intent.transition_style.contains("glide");
@@ -500,6 +751,11 @@ fn build_phase_plan(intent: &PlaylistIntent, track_count: usize) -> Vec<Playlist
         ("bridge", "Bridge"),
         ("land", "Landing"),
     ];
+    let role_valence_bias = match behavior.role.as_str() {
+        "coach" => 0.06,
+        "oracle" => -0.04,
+        _ => 0.0,
+    };
     arc.iter()
         .enumerate()
         .map(|(idx, (key, label))| {
@@ -515,9 +771,9 @@ fn build_phase_plan(intent: &PlaylistIntent, track_count: usize) -> Vec<Playlist
             };
             let energy = lerp(start_energy, end_energy, eased);
             let valence = if intent.emotional_arc.iter().any(|value| value.contains("ache")) {
-                lerp(0.38, 0.56, eased)
+                lerp(0.38 + role_valence_bias, 0.56 + role_valence_bias, eased)
             } else {
-                lerp(0.48, 0.64, eased)
+                lerp(0.48 + role_valence_bias, 0.64 + role_valence_bias, eased)
             };
             let tension = if idx < 2 {
                 lerp(0.78, 0.5, eased)
@@ -626,6 +882,7 @@ fn sequence_tracks(
     intent: &PlaylistIntent,
     taste: &TasteProfile,
     track_count: usize,
+    behavior: &RoleBehavior,
 ) -> Vec<ComposedPlaylistTrack> {
     let phase_count = phases.len().max(1);
     let per_phase = ((track_count as f64 / phase_count as f64).ceil() as usize).max(1);
@@ -651,11 +908,13 @@ fn sequence_tracks(
                 let transition_fit = previous_dims
                     .map(|prev| transition_fit(prev, candidate.dims, &intent.transition_style))
                     .unwrap_or(0.64);
-                let score = fit * 0.42
-                    + taste_fit * 0.18
-                    + novelty_fit * 0.14
-                    + transition_fit * 0.16
-                    + entity_bonus * 0.10;
+                let (fit_weight, taste_weight, novelty_weight, transition_weight, entity_weight) =
+                    score_weights(&behavior.role, &intent.prompt_role);
+                let score = fit * fit_weight
+                    + taste_fit * taste_weight
+                    + novelty_fit * novelty_weight
+                    + transition_fit * transition_weight
+                    + entity_bonus * entity_weight;
                 (score, candidate)
             })
             .filter(|(score, _)| *score >= 0.32)
@@ -669,13 +928,14 @@ fn sequence_tracks(
         });
 
         for (score, candidate) in scored.into_iter().take(per_phase) {
-            let summary = reason_summary(candidate, phase, score);
+            let summary = reason_summary(candidate, phase, score, behavior);
             let why_this_track = format!(
-                "{} anchors {} by matching {} energy with {} texture.",
+                "{} anchors {} by matching {} energy with {} texture while Lyra works in {} mode.",
                 candidate.track.title,
                 phase.label,
                 intent_phrase(&phase.label),
-                descriptor_phrase(candidate, intent)
+                descriptor_phrase(candidate, intent),
+                behavior.role
             );
             let transition_note = previous_dims
                 .map(|prev| transition_sentence(prev, candidate.dims, &intent.transition_style))
@@ -687,7 +947,7 @@ fn sequence_tracks(
                 transition_note,
                 evidence: evidence_for_candidate(candidate, phase, taste),
                 explicit_from_prompt: explicit_hits(candidate, &entity_needles),
-                inferred_by_lyra: inferred_notes(candidate, phase, intent),
+                inferred_by_lyra: inferred_notes(candidate, phase, intent, behavior),
                 confidence: score.clamp(0.0, 1.0),
             };
             ordered.push(ComposedPlaylistTrack {
@@ -719,6 +979,86 @@ fn normalize_provider_preference(value: &str) -> String {
     }
 }
 
+fn apply_steer(intent: &PlaylistIntent, steer: Option<&SteerPayload>) -> PlaylistIntent {
+    let Some(steer) = steer else {
+        return intent.clone();
+    };
+    let mut next = intent.clone();
+    if let Some(novelty_bias) = steer.novelty_bias {
+        next.familiarity_vs_novelty = if novelty_bias >= 0.72 {
+            "novel leaning".to_string()
+        } else if novelty_bias <= 0.32 {
+            "familiar leaning".to_string()
+        } else {
+            "balanced".to_string()
+        };
+    }
+    if let Some(explanation_depth) = &steer.explanation_depth {
+        next.explanation_depth = explanation_depth.clone();
+    }
+    if let Some(contrast) = steer.contrast_sharpness {
+        next.transition_style = if contrast >= 0.68 {
+            "contrast cut".to_string()
+        } else if contrast <= 0.32 {
+            "gradual cooling".to_string()
+        } else {
+            next.transition_style.clone()
+        };
+    }
+    if let Some(warmth_bias) = steer.warmth_bias {
+        if warmth_bias >= 0.68 {
+            next.texture_descriptors.push("warm-night".to_string());
+        } else if warmth_bias <= 0.32 {
+            next.texture_descriptors.push("bright-air".to_string());
+        }
+    }
+    if let Some(energy_bias) = steer.energy_bias {
+        next.destination_energy = if energy_bias >= 0.68 {
+            "high".to_string()
+        } else if energy_bias <= 0.32 {
+            "low".to_string()
+        } else {
+            next.destination_energy.clone()
+        };
+    }
+    if let Some(adventurousness) = steer.adventurousness {
+        next.discovery_aggressiveness = if adventurousness >= 0.72 {
+            "assertive".to_string()
+        } else if adventurousness <= 0.32 {
+            "gentle".to_string()
+        } else {
+            "medium".to_string()
+        };
+    }
+    next.texture_descriptors.sort();
+    next.texture_descriptors.dedup();
+    next
+}
+
+fn detect_composer_action(prompt: &str, intent: &PlaylistIntent) -> ComposerAction {
+    let lower = prompt.to_ascii_lowercase();
+    if has_any(&lower, &["bridge from", "show me a path", "path from", "what should come after this"]) {
+        ComposerAction::Bridge
+    } else if has_any(&lower, &["three ways", "leave this scene"]) {
+        ComposerAction::Discovery
+    } else if has_any(
+        &lower,
+        &["adjacent", "less obvious", "three ways", "leave this scene", "discover", "something adjacent"],
+    ) {
+        if has_any(&lower, &["make this", "without losing", "keep the"]) {
+            ComposerAction::Steer
+        } else {
+            ComposerAction::Discovery
+        }
+    } else if has_any(&lower, &["why is this", "explain", "why this track"]) {
+        ComposerAction::Explain
+    } else if intent.prompt_role == "copilot" {
+        ComposerAction::Steer
+    } else {
+        ComposerAction::Playlist
+    }
+}
+
 fn detect_named_entities(conn: &Connection, prompt: &str) -> Vec<String> {
     let prompt_lower = prompt.to_ascii_lowercase();
     let mut entities = Vec::new();
@@ -740,9 +1080,9 @@ fn detect_named_entities(conn: &Connection, prompt: &str) -> Vec<String> {
 fn detect_prompt_role(lower: &str) -> String {
     if lower.contains("why") || lower.contains("explain") {
         "oracle".to_string()
-    } else if lower.contains("make this") || lower.contains("keep") || lower.contains("less obvious") {
+    } else if has_any(lower, &["make this", "keep the"]) {
         "copilot".to_string()
-    } else if lower.contains("adjacent") || lower.contains("discover") || lower.contains("bridge") {
+    } else if has_any(lower, &["adjacent", "discover", "bridge", "path from", "come after this", "what should come after this", "three ways"]) {
         "recommender".to_string()
     } else {
         "coach".to_string()
@@ -772,6 +1112,8 @@ fn detect_destination_energy(lower: &str, source: &str) -> String {
 fn detect_transition_style(lower: &str) -> String {
     if has_any(lower, &["trickling", "gradual", "glide", "undercurrent", "slowly", "eventually"]) {
         "gradual cooling".to_string()
+    } else if has_any(lower, &["sharper contrast", "hard pivot", "leave this scene"]) {
+        "contrast cut".to_string()
     } else if has_any(lower, &["bridge", "adjacent", "path"]) {
         "adjacent bridge".to_string()
     } else if has_any(lower, &["sprint", "storm", "crash"]) {
@@ -788,6 +1130,9 @@ fn detect_emotional_arc(lower: &str) -> Vec<String> {
     }
     if has_any(lower, &["confession", "human", "forgives", "resolve"]) {
         values.push("release".to_string());
+    }
+    if has_any(lower, &["regret", "late-night", "melancholy", "bedroom static"]) {
+        values.push("afterglow".to_string());
     }
     if has_any(lower, &["storm", "fire", "sprint"]) {
         values.push("surge".to_string());
@@ -810,6 +1155,12 @@ fn detect_texture_descriptors(lower: &str) -> Vec<String> {
         ("mall", "public-space"),
         ("nocturnal", "night-drive"),
         ("chill", "cooling"),
+        ("shimmer", "digital-shimmer"),
+        ("analog", "analog-warmth"),
+        ("confession", "confessional"),
+        ("booth", "booth-intimate"),
+        ("mall goth", "mall-goth"),
+        ("electronic melancholy", "electronic-melancholy"),
     ];
     let mut values = Vec::new();
     for (needle, label) in mapping {
@@ -826,6 +1177,8 @@ fn detect_texture_descriptors(lower: &str) -> Vec<String> {
 fn detect_familiarity(lower: &str) -> String {
     if has_any(lower, &["less obvious", "adjacent but less obvious", "adventurous", "deeper cut"]) {
         "novel leaning".to_string()
+    } else if has_any(lower, &["more obvious", "familiar", "recognizable"]) {
+        "familiar leaning".to_string()
     } else if has_any(lower, &["familiar", "keep the ache", "covers"]) {
         "familiar landing".to_string()
     } else {
@@ -836,6 +1189,8 @@ fn detect_familiarity(lower: &str) -> String {
 fn detect_discovery_aggressiveness(lower: &str) -> String {
     if has_any(lower, &["less obvious", "adjacent", "bridge", "adventurous"]) {
         "assertive".to_string()
+    } else if has_any(lower, &["three ways", "leave this scene", "path from"]) {
+        "exploratory".to_string()
     } else if has_any(lower, &["keep", "gently", "familiar"]) {
         "gentle".to_string()
     } else {
@@ -845,7 +1200,23 @@ fn detect_discovery_aggressiveness(lower: &str) -> String {
 
 fn detect_user_steer(lower: &str) -> Vec<String> {
     let mut values = Vec::new();
-    for needle in ["keep", "make this", "less obvious", "bridge", "why", "explain", "more nocturnal"] {
+    for needle in [
+        "keep",
+        "make this",
+        "less obvious",
+        "more obvious",
+        "bridge",
+        "why",
+        "explain",
+        "more nocturnal",
+        "brighter",
+        "heavier",
+        "softer",
+        "more adventurous",
+        "more familiar",
+        "smoother transition",
+        "sharper contrast",
+    ] {
         if lower.contains(needle) {
             values.push(needle.to_string());
         }
@@ -880,6 +1251,9 @@ fn detect_sequencing_notes(lower: &str) -> Vec<String> {
     }
     if lower.contains("keep the ache") {
         values.push("Preserve emotional sting while softening the surface.".to_string());
+    }
+    if has_any(lower, &["leave this scene", "path from", "bridge from"]) {
+        values.push("Make the pivot legible with intermediate adjacency, not a blind jump.".to_string());
     }
     if values.is_empty() {
         values.push("Maintain a readable arc instead of random jumps.".to_string());
@@ -925,6 +1299,9 @@ fn confidence_notes_for_prompt(lower: &str, entities: &[String]) -> Vec<String> 
     }
     if !lower.contains("into") && !lower.contains("to") {
         values.push("Destination energy is inferred because the prompt does not state an explicit landing.".to_string());
+    }
+    if has_any(lower, &["bridge", "adjacent", "less obvious", "leave this scene"]) {
+        values.push("This prompt implies a route choice, so Lyra may offer alternate directions instead of one supposedly final answer.".to_string());
     }
     values
 }
@@ -999,6 +1376,7 @@ fn novelty_score(candidate: &CandidateTrack) -> f64 {
 fn novelty_target(label: &str) -> f64 {
     match label {
         "novel leaning" => 0.78,
+        "familiar leaning" => 0.24,
         "familiar landing" => 0.34,
         _ => 0.56,
     }
@@ -1035,6 +1413,8 @@ fn transition_fit(previous: Dims, next: Dims, style: &str) -> f64 {
         / 10.0;
     if style.contains("gradual") {
         (1.0 - distance).clamp(0.0, 1.0)
+    } else if style.contains("contrast") {
+        (0.48 + distance / 1.6).clamp(0.0, 1.0)
     } else if style.contains("charged") {
         (0.55 + distance / 2.0).clamp(0.0, 1.0)
     } else {
@@ -1053,12 +1433,18 @@ fn entity_bonus(candidate: &CandidateTrack, entities: &[String]) -> f64 {
     }
 }
 
-fn reason_summary(candidate: &CandidateTrack, phase: &PlaylistPhase, fit_score: f64) -> String {
+fn reason_summary(
+    candidate: &CandidateTrack,
+    phase: &PlaylistPhase,
+    fit_score: f64,
+    behavior: &RoleBehavior,
+) -> String {
     format!(
-        "{} sits in {} because it scores {:.0}% against the phase target.",
+        "{} sits in {} because it scores {:.0}% against the phase target and supports Lyra's {} stance.",
         candidate.track.title,
         phase.label,
-        fit_score * 100.0
+        fit_score * 100.0,
+        behavior.role
     )
 }
 
@@ -1122,13 +1508,21 @@ fn explicit_hits(candidate: &CandidateTrack, entities: &[String]) -> Vec<String>
         .collect()
 }
 
-fn inferred_notes(candidate: &CandidateTrack, phase: &PlaylistPhase, intent: &PlaylistIntent) -> Vec<String> {
+fn inferred_notes(
+    candidate: &CandidateTrack,
+    phase: &PlaylistPhase,
+    intent: &PlaylistIntent,
+    behavior: &RoleBehavior,
+) -> Vec<String> {
     let mut notes = vec![format!("Assigned to {} from local score fit.", phase.label)];
     if !intent.texture_descriptors.is_empty() {
         notes.push(format!(
             "Texture interpretation leaned on {}.",
             intent.texture_descriptors.join(", ")
         ));
+    }
+    if !behavior.silent_inference_ok {
+        notes.push("Lyra is surfacing inference explicitly because this role should not hide uncertainty.".to_string());
     }
     if candidate.play_count == 0 {
         notes.push("Boosted as a fresh library path with no prior playback history.".to_string());
@@ -1150,10 +1544,173 @@ fn title_case(value: &str) -> String {
         .join(" ")
 }
 
-fn template_narrative(intent: &PlaylistIntent, phases: &[PlaylistPhase]) -> String {
+fn score_weights(role: &str, prompt_role: &str) -> (f64, f64, f64, f64, f64) {
+    match (role, prompt_role) {
+        ("oracle", _) => (0.34, 0.14, 0.14, 0.24, 0.14),
+        ("coach", _) => (0.34, 0.22, 0.18, 0.14, 0.12),
+        ("copilot", _) => (0.38, 0.16, 0.18, 0.14, 0.14),
+        _ => (0.42, 0.18, 0.14, 0.16, 0.10),
+    }
+}
+
+fn build_bridge_phase_plan(
+    intent: &PlaylistIntent,
+    track_count: usize,
+    behavior: &RoleBehavior,
+) -> Vec<PlaylistPhase> {
+    let mut phases = build_phase_plan(intent, track_count.max(5), behavior);
+    let labels = [
+        ("source", "Departure"),
+        ("slip", "Slip"),
+        ("hinge", "Hinge"),
+        ("glow", "Arrival shadow"),
+        ("arrive", "Arrival"),
+    ];
+    phases.truncate(labels.len());
+    for (idx, phase) in phases.iter_mut().enumerate() {
+        phase.key = labels[idx].0.to_string();
+        phase.label = labels[idx].1.to_string();
+        phase.summary = match idx {
+            0 => "Start close enough to the source scene to keep the DNA audible.".to_string(),
+            1 => "Loosen the obvious markers without losing pulse or ache.".to_string(),
+            2 => "Use a hinge track that makes the next emotional language believable.".to_string(),
+            3 => "Let the destination mood appear before the genre label fully flips.".to_string(),
+            _ => "Arrive at the new scene with the route still legible in hindsight.".to_string(),
+        };
+    }
+    phases
+}
+
+fn bridge_labels(prompt: &str, intent: &PlaylistIntent) -> (String, String) {
+    let lower = prompt.to_ascii_lowercase();
+    let entities = &intent.explicit_entities;
+    if entities.len() >= 2 {
+        return (entities[0].clone(), entities[1].clone());
+    }
+    if let Some(rest) = lower.split("bridge from ").nth(1) {
+        if let Some((left, right)) = rest.split_once(" into ") {
+            return (title_case(left.trim()), title_case(right.trim()));
+        }
+        if let Some((left, right)) = rest.split_once(" to ") {
+            return (title_case(left.trim()), title_case(right.trim()));
+        }
+    }
+    (
+        entities.first().cloned().unwrap_or_else(|| intent.opening_state.descriptors.join(" ")),
+        if !intent.landing_state.descriptors.is_empty() {
+            intent.landing_state.descriptors.join(" ")
+        } else {
+            intent.destination_energy.clone()
+        },
+    )
+}
+
+fn bridge_step_role(index: usize, len: usize) -> String {
+    match index {
+        0 => "anchor".to_string(),
+        i if i + 1 >= len => "arrival".to_string(),
+        i if i == len / 2 => "hinge".to_string(),
+        _ => "handoff".to_string(),
+    }
+}
+
+fn bridge_distance(index: usize, len: usize, reverse: bool) -> f64 {
+    if len <= 1 {
+        return 0.0;
+    }
+    let progress = index as f64 / (len.saturating_sub(1) as f64);
+    if reverse { 1.0 - progress } else { progress }
+}
+
+fn discovery_directions(
+    prompt: &str,
+    track_count: usize,
+    intent: &PlaylistIntent,
+    runtime: &ComposeRuntime<'_>,
+) -> Vec<DiscoveryDirection> {
+    let direction_specs = [
+        ("Closer in", "Stay near the source, but sand off the obvious picks.", "balanced"),
+        ("Side door", "Move into adjacent territory with stronger novelty pressure.", "novel leaning"),
+        ("Scene break", "Keep the pulse but let the texture family change on purpose.", "familiar landing"),
+    ];
+    direction_specs
+        .iter()
+        .map(|(label, description, novelty)| {
+            let mut direction_intent = intent.clone();
+            direction_intent.familiarity_vs_novelty = (*novelty).to_string();
+            let phases = build_phase_plan(&direction_intent, (track_count / 3).max(3), runtime.behavior);
+            let tracks = sequence_tracks(
+                runtime.candidates,
+                &phases,
+                &direction_intent,
+                runtime.taste,
+                (track_count / 3).max(3),
+                runtime.behavior,
+            );
+            let why = select_narrative(
+                prompt,
+                runtime.provider_status,
+                runtime.provider_configs,
+                &phases,
+                &tracks,
+            )
+                .unwrap_or_else(|| format!("{description} Lyra kept {} in play.", direction_intent.emotional_arc.join(", ")));
+            DiscoveryDirection {
+                label: (*label).to_string(),
+                description: (*description).to_string(),
+                tracks,
+                why,
+            }
+        })
+        .collect()
+}
+
+fn uncertainty_notes(
+    intent: &PlaylistIntent,
+    provider_status: &ComposerProviderStatus,
+    behavior: &RoleBehavior,
+) -> Vec<String> {
+    let mut notes = intent.confidence_notes.clone();
+    if provider_status.provider_kind == "deterministic" {
+        notes.push("Heuristic fallback shaped the language parse; Lyra kept retrieval and sequencing deterministic.".to_string());
+    }
+    if !behavior.silent_inference_ok {
+        notes.push("This role exposes interpretation seams instead of silently smoothing them over.".to_string());
+    }
+    if behavior.prefer_revision {
+        notes.push("Lyra is treating this as a revisable working route, not a final immutable answer.".to_string());
+    }
+    notes
+}
+
+fn alternatives_for_action(intent: &PlaylistIntent, action: &ComposerAction) -> Vec<String> {
+    match action {
+        ComposerAction::Bridge => vec![
+            "Take a slower hinge through warmer, more confessional tracks.".to_string(),
+            "Keep the same destination but pivot through sharper synthetic contrast.".to_string(),
+            "Stay closer to the source scene and reduce the novelty jump.".to_string(),
+        ],
+        ComposerAction::Discovery => vec![
+            "Push harder toward obscure adjacency.".to_string(),
+            "Keep more familiar landmarks and soften the jump.".to_string(),
+            "Preserve pulse while changing texture first.".to_string(),
+        ],
+        ComposerAction::Explain => vec![
+            "Ask Lyra to defend the bridge instead of the destination.".to_string(),
+            "Request deeper evidence instead of summary explanation.".to_string(),
+        ],
+        _ if intent.prompt_role == "copilot" || intent.prompt_role == "coach" => vec![
+            "Revise the middle so it gets less obvious without collapsing the ache.".to_string(),
+            "Keep the same shape but brighten the landing.".to_string(),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+fn template_narrative(intent: &PlaylistIntent, phases: &[PlaylistPhase], behavior: &RoleBehavior) -> String {
     format!(
-        "Lyra reads this prompt as a {} move from {} toward {}. The sequence moves through {} and keeps {} in view without giving up {}.",
-        intent.prompt_role,
+        "Lyra is acting as a {} and reads this prompt as a move from {} toward {}. The sequence moves through {} and keeps {} in view without giving up {}. {}",
+        behavior.role,
         intent.source_energy,
         intent.destination_energy,
         phases
@@ -1162,7 +1719,51 @@ fn template_narrative(intent: &PlaylistIntent, phases: &[PlaylistPhase]) -> Stri
             .collect::<Vec<_>>()
             .join(", "),
         intent.texture_descriptors.join(", "),
+        intent.emotional_arc.join(", "),
+        if behavior.offer_alternatives {
+            "This is a steerable draft, so Lyra keeps adjacent revisions available."
+        } else {
+            "Lyra is optimizing for a direct route."
+        }
+    )
+}
+
+fn template_bridge_narrative(intent: &PlaylistIntent, source_label: &str, destination_label: &str) -> String {
+    format!(
+        "Lyra treats this as a bridge problem, not a generic draft: start at {}, loosen the obvious markers, and arrive at {} through {} without losing {}.",
+        source_label,
+        destination_label,
+        intent.texture_descriptors.join(", "),
         intent.emotional_arc.join(", ")
+    )
+}
+
+fn template_discovery_narrative(intent: &PlaylistIntent) -> String {
+    format!(
+        "Lyra is offering multiple exits from the current scene so discovery stays steerable. The directions vary novelty pressure while keeping {} and {} legible.",
+        intent.texture_descriptors.join(", "),
+        intent.emotional_arc.join(", ")
+    )
+}
+
+fn template_explanation(
+    intent: &PlaylistIntent,
+    provider_status: &ComposerProviderStatus,
+    behavior: &RoleBehavior,
+) -> String {
+    format!(
+        "Lyra is in {} mode. It inferred a {} -> {} move with {} transition style, explanation depth {}, and provider mode {}. {}",
+        behavior.role,
+        intent.source_energy,
+        intent.destination_energy,
+        intent.transition_style,
+        behavior.explanation_depth,
+        provider_status.mode,
+        if provider_status.provider_kind == "deterministic" {
+            "Because no provider parsed the language, Lyra is exposing uncertainty instead of pretending semantic certainty."
+        } else {
+            "A language provider helped with interpretation, but local retrieval and sequencing remained authoritative."
+        }
     )
 }
 
@@ -1175,12 +1776,12 @@ fn lerp(start: f64, end: f64, amount: f64) -> f64 {
 }
 
 fn intent_prompt() -> &'static str {
-    "You convert creative music prompts into JSON. Return only JSON with keys: source_energy, destination_energy, transition_style, emotional_arc, texture_descriptors, explicit_entities, familiarity_vs_novelty, discovery_aggressiveness, user_steer, exclusions, explanation_depth, sequencing_notes, confidence_notes, confidence."
+    "You are Lyra, a music intelligence companion. Interpret poetic music prompts for local-library retrieval. Do not invent tracks, artists, or library state. Distinguish bridge/discovery/steering/explanation intent from ordinary playlist drafting. Return only JSON with keys: prompt_role, source_energy, destination_energy, transition_style, emotional_arc, texture_descriptors, explicit_entities, familiarity_vs_novelty, discovery_aggressiveness, user_steer, exclusions, explanation_depth, sequencing_notes, confidence_notes, confidence. Keep confidence_notes honest when the prompt is ambiguous."
 }
 
 fn intent_user_prompt(prompt: &str, fallback: &PlaylistIntent) -> String {
     format!(
-        "Prompt: {prompt}\nFallback interpretation: {}\nReturn only JSON.",
+        "Prompt: {prompt}\nFallback interpretation: {}\nUse the fallback if the prompt is underspecified, but improve it when the language clearly implies bridge, discovery, coaching, or explanation behavior.\nReturn only JSON.",
         serde_json::to_string(fallback).unwrap_or_default()
     )
 }
@@ -1206,6 +1807,11 @@ fn parse_intent_response(content: &str, fallback: &PlaylistIntent) -> Option<Pla
     let json_text = extract_json_object(content)?;
     let payload: Value = serde_json::from_str(json_text).ok()?;
     let mut intent = fallback.clone();
+    intent.prompt_role = payload
+        .get("prompt_role")
+        .and_then(Value::as_str)
+        .unwrap_or(&intent.prompt_role)
+        .to_string();
     intent.source_energy = payload
         .get("source_energy")
         .and_then(Value::as_str)
@@ -1314,12 +1920,76 @@ fn extract_json_object(content: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db;
+
+    fn setup_memory_db() -> Connection {
+        let conn = Connection::open_in_memory().expect("in-memory db");
+        db::init_database(&conn).expect("db init");
+
+        let artists = [
+            "Brand New",
+            "Midnight Circuit",
+            "Glass Static",
+            "Neon Chapel",
+            "Warm Tape",
+            "Lofi Haze",
+            "Digital Ash",
+            "Soft Signal",
+            "Mall Ghost",
+            "Analog Regret",
+            "Fire Run",
+            "Confession Booth",
+        ];
+        for artist in artists {
+            conn.execute("INSERT INTO artists (name) VALUES (?1)", params![artist]).expect("artist");
+        }
+        let tracks = [
+            ("Soco Static", "Brand New", 0.46, 0.34, 0.62, 0.52, 0.44, 0.40, 0.32, 0.38, 0.56, 0.68, "emo"),
+            ("Late Train Pulse", "Midnight Circuit", 0.58, 0.28, 0.56, 0.48, 0.38, 0.54, 0.52, 0.36, 0.62, 0.44, "electronic"),
+            ("Bedroom Static", "Glass Static", 0.24, 0.30, 0.40, 0.34, 0.66, 0.22, 0.64, 0.48, 0.42, 0.74, "lofi"),
+            ("Neon Confession", "Neon Chapel", 0.72, 0.48, 0.58, 0.70, 0.36, 0.78, 0.42, 0.28, 0.52, 0.34, "synthpop"),
+            ("Warm Analog Regret", "Warm Tape", 0.36, 0.32, 0.44, 0.42, 0.82, 0.30, 0.58, 0.34, 0.46, 0.86, "indie"),
+            ("Chill Undercurrent", "Lofi Haze", 0.18, 0.42, 0.22, 0.30, 0.72, 0.18, 0.76, 0.24, 0.38, 0.62, "lofi"),
+            ("Aggressive Shimmer", "Digital Ash", 0.82, 0.40, 0.68, 0.78, 0.22, 0.84, 0.26, 0.30, 0.64, 0.20, "edm"),
+            ("Eventually Forgives", "Soft Signal", 0.22, 0.54, 0.26, 0.32, 0.78, 0.20, 0.72, 0.22, 0.34, 0.80, "dream-pop"),
+            ("Mall Goth Sprint", "Mall Ghost", 0.76, 0.38, 0.60, 0.74, 0.28, 0.80, 0.30, 0.42, 0.58, 0.32, "post-punk"),
+            ("Analog Afterglow", "Analog Regret", 0.34, 0.36, 0.32, 0.40, 0.84, 0.26, 0.66, 0.20, 0.40, 0.90, "ambient"),
+            ("Fire Storm Trickle", "Fire Run", 0.88, 0.52, 0.72, 0.82, 0.24, 0.90, 0.18, 0.32, 0.48, 0.26, "edm"),
+            ("Confession Neon Booth", "Confession Booth", 0.62, 0.44, 0.54, 0.60, 0.46, 0.68, 0.44, 0.26, 0.50, 0.40, "art-pop"),
+        ];
+
+        for (index, (title, artist, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia, genre)) in tracks.iter().enumerate() {
+            let artist_id: i64 = conn
+                .query_row("SELECT id FROM artists WHERE name = ?1", params![artist], |row| row.get(0))
+                .expect("artist id");
+            conn.execute(
+                "INSERT INTO tracks (artist_id, title, path, duration_seconds, imported_at) VALUES (?1, ?2, ?3, 180.0, '2026-03-08T00:00:00Z')",
+                params![artist_id, title, format!("C:/Music/{index}.mp3")],
+            )
+            .expect("track");
+            let track_id = conn.last_insert_rowid();
+            conn.execute(
+                "INSERT INTO track_scores (track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia, scored_at, score_version) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, '2026-03-08T00:00:00Z', 2)",
+                params![track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia],
+            )
+            .expect("score");
+            conn.execute("UPDATE tracks SET genre = ?1 WHERE id = ?2", params![genre, track_id]).ok();
+            if index % 3 == 0 {
+                conn.execute(
+                    "INSERT INTO playback_history (track_id, ts, context, completion_rate, skipped) VALUES (?1, '2026-03-08T00:00:00Z', 'test', 0.9, 0)",
+                    params![track_id],
+                )
+                .expect("history");
+            }
+        }
+
+        conn
+    }
 
     #[test]
     fn detects_gradual_cooling_prompt() {
         let settings = SettingsPayload::default();
-        let conn = Connection::open_in_memory().expect("in-memory db");
-        crate::db::init_database(&conn).expect("db init");
+        let conn = setup_memory_db();
         let intent = heuristic_intent(
             &conn,
             "edm fire storm trickling into chill undercurrent of lofi covers",
@@ -1335,5 +2005,131 @@ mod tests {
     fn extracts_json_object_from_wrapped_text() {
         let content = "here\n{\"source_energy\":\"high\"}\nthanks";
         assert_eq!(extract_json_object(content), Some("{\"source_energy\":\"high\"}"));
+    }
+
+    #[test]
+    fn classifies_bridge_prompt_as_bridge_action() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let response = compose_composer_response(
+            &conn,
+            &settings,
+            "bridge from Brand New into late-night electronic melancholy",
+            10,
+            None,
+        )
+        .expect("compose");
+        assert!(matches!(response.action, ComposerAction::Bridge));
+        assert!(response.bridge.is_some());
+        assert!(response.draft.is_none());
+        assert_eq!(response.active_role, "recommender");
+    }
+
+    #[test]
+    fn classifies_discovery_prompt_as_discovery_action() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let response = compose_composer_response(
+            &conn,
+            &settings,
+            "take me from this artist into something adjacent but less obvious",
+            12,
+            None,
+        )
+        .expect("compose");
+        assert!(matches!(response.action, ComposerAction::Discovery));
+        assert!(response.discovery.is_some());
+        assert!(response.alternatives_considered.len() >= 2);
+    }
+
+    #[test]
+    fn classifies_refinement_prompt_as_steer_action() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let response = compose_composer_response(
+            &conn,
+            &settings,
+            "make this playlist less obvious in the middle without losing the ache",
+            12,
+            None,
+        )
+        .expect("compose");
+        assert!(matches!(response.action, ComposerAction::Steer));
+        assert!(response.draft.is_some());
+        assert_eq!(response.active_role, "copilot");
+    }
+
+    #[test]
+    fn classifies_explanation_prompt_as_oracle_action() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let response = compose_composer_response(
+            &conn,
+            &settings,
+            "why is this track here if I want more ache but less gloss",
+            8,
+            None,
+        )
+        .expect("compose");
+        assert!(matches!(response.action, ComposerAction::Explain));
+        assert!(response.explanation.as_deref().unwrap_or("").contains("Lyra is in oracle mode"));
+    }
+
+    #[test]
+    fn steering_payload_changes_novelty_and_fallback_reporting() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let response = compose_composer_response(
+            &conn,
+            &settings,
+            "sad bedroom static that eventually forgives me",
+            12,
+            Some(&SteerPayload {
+                novelty_bias: Some(0.9),
+                adventurousness: Some(0.85),
+                contrast_sharpness: Some(0.2),
+                warmth_bias: Some(0.88),
+                explanation_depth: Some("deep".to_string()),
+                ..SteerPayload::default()
+            }),
+        )
+        .expect("compose");
+        assert_eq!(response.intent.familiarity_vs_novelty, "novel leaning");
+        assert_eq!(response.provider_status.provider_kind, "deterministic");
+        assert!(response
+            .uncertainty
+            .iter()
+            .any(|note| note.contains("Heuristic fallback")));
+    }
+
+    #[test]
+    fn weird_prompt_fixture_suite_stays_deterministic_without_provider() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let prompts = [
+            ("edm fire storm trickling into chill undercurrent of lofi covers", "playlist", "coach"),
+            ("sad bedroom static that eventually forgives me", "playlist", "coach"),
+            ("mall goth sprint into neon confession booth", "playlist", "coach"),
+            ("bridge from Brand New into late-night electronic melancholy", "bridge", "recommender"),
+            ("make this playlist less obvious in the middle without losing the ache", "steer", "copilot"),
+            ("give me a path from aggressive digital shimmer into warm analog regret", "bridge", "recommender"),
+            ("take me from this artist into something adjacent but less obvious", "discovery", "recommender"),
+            ("what should come after this if I want more ache but less gloss", "bridge", "recommender"),
+            ("give me three ways to leave this scene without losing the pulse", "discovery", "recommender"),
+        ];
+
+        for (prompt, action, role) in prompts {
+            let response = compose_composer_response(&conn, &settings, prompt, 12, None).expect("compose");
+            assert_eq!(response.provider_status.provider_kind, "deterministic");
+            assert_eq!(response.active_role, role);
+            assert_eq!(format!("{:?}", response.action).to_ascii_lowercase(), action);
+            assert!(!response.uncertainty.is_empty());
+            assert!(
+                response.draft.is_some()
+                    || response.bridge.is_some()
+                    || response.discovery.is_some()
+                    || response.explanation.is_some()
+            );
+        }
     }
 }

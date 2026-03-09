@@ -455,6 +455,63 @@ export type ComposedPlaylistDraft = {
   tracks: ComposedPlaylistTrack[];
 };
 
+export type ComposerAction = "playlist" | "bridge" | "discovery" | "explain" | "steer";
+
+export type BridgeStep = {
+  track: TrackRecord;
+  fitScore: number;
+  role: string;
+  why: string;
+  distanceFromSource: number;
+  distanceFromDestination: number;
+};
+
+export type BridgePath = {
+  sourceLabel: string;
+  destinationLabel: string;
+  steps: BridgeStep[];
+  narrative?: string | null;
+  confidence: number;
+  alternateDirections: string[];
+};
+
+export type DiscoveryDirection = {
+  label: string;
+  description: string;
+  tracks: ComposedPlaylistTrack[];
+  why: string;
+};
+
+export type DiscoveryRoute = {
+  seedLabel: string;
+  directions: DiscoveryDirection[];
+  narrative?: string | null;
+  confidence: number;
+};
+
+export type SteerPayload = {
+  noveltyBias?: number | null;
+  energyBias?: number | null;
+  warmthBias?: number | null;
+  adventurousness?: number | null;
+  contrastSharpness?: number | null;
+  explanationDepth?: string | null;
+};
+
+export type ComposerResponse = {
+  action: ComposerAction;
+  prompt: string;
+  intent: PlaylistIntent;
+  providerStatus: ComposerProviderStatus;
+  draft?: ComposedPlaylistDraft | null;
+  bridge?: BridgePath | null;
+  discovery?: DiscoveryRoute | null;
+  explanation?: string | null;
+  activeRole: string;
+  uncertainty: string[];
+  alternativesConsidered: string[];
+};
+
 export type GeneratedPlaylist = {
   name: string;
   intent: string;

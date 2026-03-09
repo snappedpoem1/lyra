@@ -28,11 +28,11 @@ use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use commands::{
     AcquisitionPreflight, AcquisitionPreflightCheck, AcquisitionQueueItem, ArtistConnection, ArtistProfile, AudioOutputDevice, BootstrapPayload,
-    ComposedPlaylistDraft, DuplicateCluster, ExplainPayload, LegacyImportReport, LibraryOverview, LibraryRootRecord,
+    ComposerResponse, ComposedPlaylistDraft, DuplicateCluster, ExplainPayload, LegacyImportReport, LibraryOverview, LibraryRootRecord,
     NativeCapabilities, PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary,
     ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
-    RecommendationResult, ScanJobRecord, SettingsPayload, TasteProfile, TrackDetail, TrackRecord,
-    TrackScores,
+    RecommendationResult, ScanJobRecord, SettingsPayload, SteerPayload, TasteProfile,
+    TrackDetail, TrackRecord, TrackScores,
 };
 use config::AppPaths;
 use db::{connect, init_database};
@@ -1320,6 +1320,17 @@ impl LyraCore {
         let conn = self.conn()?;
         let settings = state::load_settings(&conn)?;
         intelligence::compose_playlist_draft(&conn, &settings, &prompt, track_count)
+    }
+
+    pub fn compose_with_lyra(
+        &self,
+        prompt: String,
+        track_count: usize,
+        steer: Option<SteerPayload>,
+    ) -> LyraResult<ComposerResponse> {
+        let conn = self.conn()?;
+        let settings = state::load_settings(&conn)?;
+        intelligence::compose_composer_response(&conn, &settings, &prompt, track_count, steer.as_ref())
     }
 
     pub fn save_composed_playlist(

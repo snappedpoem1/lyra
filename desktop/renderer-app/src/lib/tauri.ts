@@ -6,6 +6,7 @@ import type {
   AppShellState,
   AudioOutputDevice,
   BootstrapPayload,
+  ComposerResponse,
   ComposedPlaylistDraft,
   CurationLogEntry,
   DiagnosticsReport,
@@ -31,6 +32,7 @@ import type {
   RelatedArtist,
   ScanJobRecord,
   SettingsPayload,
+  SteerPayload,
   TasteProfile,
   ArtistProfile,
   TrackDetail,
@@ -177,6 +179,8 @@ export const api = {
   // --- G-063: Playlist Intelligence ---
   composePlaylistDraft: (prompt: string, trackCount: number) =>
     invoke<ComposedPlaylistDraft>("compose_playlist_draft", { prompt, trackCount }),
+  composeWithLyra: (prompt: string, trackCount: number, steer?: SteerPayload) =>
+    invoke<ComposerResponse>("compose_with_lyra", { prompt, trackCount, steer }),
   saveComposedPlaylist: (name: string, draft: ComposedPlaylistDraft) =>
     invoke<PlaylistDetail>("save_composed_playlist", { name, draft }),
   generateActPlaylist: (intent: string, trackCount: number) =>

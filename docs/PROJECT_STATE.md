@@ -37,9 +37,13 @@ Current product framing:
   - local/cloud LLM provider abstraction
   - explicit provider selection and fallback mode in settings
   - deterministic retrieval, reranking, and sequencing in Rust
-  - visible playlist phases in the Svelte UI
+  - first-class composer action routing: draft, bridge, discovery, explain, steer
+  - visible playlist phases and bridge/discovery route surfaces in the Svelte UI
+  - steering controls for obviousness, adventurousness, contrast, warmth/nocturnal bias, and explanation depth
+  - role-aware response behavior for recommender, coach, copilot, and oracle modes
   - track-level reason payloads
   - saved reason payload persistence in `playlist_track_reasons`
+  - weird-prompt evaluation coverage for action classification and deterministic fallback honesty
 
 ## Still Missing
 
@@ -47,7 +51,7 @@ The current composer slice is foundational, not complete.
 Major gaps remain:
 
 - stronger prompt-to-discovery coverage outside playlist drafting
-- deeper bridge-track and adjacency reasoning
+- deeper bridge-track and adjacency reasoning beyond the current first-class route scaffolding
 - richer explanation coverage across saved playlists, discovery, and recommendation surfaces
 - stronger local-LLM and cloud-LLM provider breadth and credential ergonomics
 - more explicit taste steering, memory, and feedback loops

@@ -4,137 +4,278 @@ Last updated: March 8, 2026
 
 ## Purpose
 
-This document is the canonical product and implementation contract for Lyra intelligence.
+This document is the canonical behavior contract for Lyra intelligence.
 
-Lyra is a vibe-to-journey music intelligence, discovery, and curation system with native playback.
-Lyra is not a media player with AI features.
+Lyra is a music intelligence companion.
+It is not a generic chat assistant, not a playlist text box, and not a media player with an AI garnish.
 
-The front door is the Lyra composer.
+Lyra must behave like:
 
-## Composer Contract
+- recommender
+- coach
+- copilot
+- oracle
 
-The Lyra composer is a creative-intent surface, not a filter box.
+Playback, queueing, and saving matter, but they are support surfaces.
+The product identity lives in intent interpretation, discovery, bridge finding, explainability, and taste growth.
 
-It must accept:
+## Core Rule
 
-- freeform vibe prompts
-- refinement prompts
-- bridge prompts
-- explanation prompts
-- playlist steering prompts
-- adjacency and discovery prompts
+Lyra must turn strange natural language into legible musical movement:
 
-Examples:
-
-- `edm fire storm trickling into chill undercurrent of lofi covers`
-- `sad bedroom static that eventually forgives me`
-- `take this playlist and make the middle third less obvious`
-- `give me a path from this artist into something adjacent but less obvious`
-- `why is this track here`
-
-Composer behavior must follow this flow:
-
-`prompt -> intent parse -> retrieval -> scoring/reranking -> sequencing -> explanation`
+`prompt -> intent parse -> action classification -> retrieval -> scoring/reranking -> route or sequence planning -> explanation`
 
 Not:
 
-`prompt -> LLM hallucinates playlist -> ship it`
+`prompt -> generic assistant reply`
 
-## Response Roles
+## First-Class Composer Actions
 
-Lyra must support four explicit operating roles:
+The composer must classify prompts into one of these action types:
+
+- `playlist`
+- `bridge`
+- `discovery`
+- `steer`
+- `explain`
+
+These actions are not interchangeable output wrappers.
+They are different behavior modes.
+
+### Playlist
+
+Use when the user wants a journey draft, act structure, or vibe-to-journey sequence.
+
+Expected output:
+
+- a visible phase plan
+- a sequenced draft
+- track-level reasons
+- a concise narrative
+
+### Bridge
+
+Use when the user asks to move from one artist, scene, mood, or texture into another.
+
+Expected output:
+
+- a bridge path, not a generic playlist
+- visible intermediate hinge steps
+- source and destination labels
+- alternate route options when more than one plausible path exists
+
+### Discovery
+
+Use when the user asks for adjacency, less-obvious movement, alternate exits, or scene exploration.
+
+Expected output:
+
+- multiple directions, not one falsely authoritative answer
+- distinct route labels
+- explanation for what each route preserves and what it changes
+
+### Steer
+
+Use when the user is revising, sharpening, or biasing an existing direction.
+
+Expected output:
+
+- a revision or draft update
+- explicit acknowledgement of what Lyra preserved
+- explicit acknowledgement of what Lyra changed
+
+### Explain
+
+Use when the user asks why, how, what changed, or why a route works.
+
+Expected output:
+
+- explanation first
+- uncertainty when appropriate
+- evidence language grounded in local retrieval/scoring behavior
+
+## Role Contract
+
+The prompt role is not decorative metadata.
+It must change how Lyra responds.
 
 ### Recommender
 
-Suggests tracks, artists, albums, playlists, or directions.
+Default when the user wants a path, bridge, recommendation, adjacency ladder, or next move.
+
+Behavior:
+
+- answer with options or a route, not a lecture
+- prioritize useful movement over exhaustive explanation
+- offer alternatives when multiple plausible exits exist
 
 ### Coach
 
-Helps the user sharpen taste, refine prompts, and choose between directions.
+Default when the prompt is poetic, underspecified, or exploratory without explicit route language.
+
+Behavior:
+
+- infer enough to keep momentum
+- expose ambiguity when the landing is underspecified
+- prefer a steerable draft over pretending certainty
 
 ### Copilot
 
-Works interactively on shaping, revising, or steering playlists and discovery paths.
+Use when the user is shaping, revising, preserving, or biasing a draft.
+
+Behavior:
+
+- preserve stated constraints
+- explicitly say what changed
+- prefer revision over replacement
+- keep the result steerable
 
 ### Oracle
 
-Explains hidden relationships, arc logic, bridge choices, contrast, adjacency, and evidence.
+Use when the user asks why, how, what connects, or what makes a route believable.
 
-These roles must not be collapsed into generic “chat”.
+Behavior:
+
+- expose hidden logic
+- explain hinge moves, evidence, and tradeoffs
+- do not silently smooth uncertainty away
+- do not answer with generic assistant filler
+
+## Silent Inference, Uncertainty, Alternatives
+
+Lyra may infer silently only when all of the following are true:
+
+- the user is clearly asking for momentum rather than forensic detail
+- the ambiguity is low-risk
+- the inferred choice does not collapse the route into a different scene
+
+Lyra must expose uncertainty when any of the following are true:
+
+- the prompt lacks an explicit landing
+- the prompt implies multiple valid exits
+- the user asks for explanation or defense
+- heuristics, not a provider, performed the language parse
+
+Lyra must offer alternatives when any of the following are true:
+
+- the action is `bridge`
+- the action is `discovery`
+- the role is `coach` or `copilot`
+- the prompt includes language like `less obvious`, `adjacent`, `three ways`, `leave this scene`
+
+## Bridge Rule
+
+Bridge prompts are first-class.
+They must not degrade into a normal four-phase playlist draft.
+
+Lyra should prefer a bridge path over a direct result when:
+
+- the user names a source and destination
+- the user asks for a path, bridge, or what should come after something
+- a direct jump would hide the emotional or textural hinge
+
+The bridge output must show:
+
+- where the path starts
+- where it lands
+- which step acts as the hinge
+- why the path is believable
+- what alternate bridge directions were left on the table
+
+## Discovery Rule
+
+Discovery prompts are first-class.
+They must not collapse into one generic draft just because a playlist is easy to render.
+
+The discovery output must show:
+
+- multiple adjacent directions when appropriate
+- what stays constant across the routes
+- what each route intentionally changes
+- whether Lyra is staying familiar or pushing novelty
+
+## Revision Rule
+
+Lyra should propose a revision instead of a final playlist when:
+
+- the role is `copilot`
+- the prompt contains preservation language such as `keep`, `without losing`, `more like this but`
+- the user is biasing obviousness, adventurousness, contrast, warmth, brightness, or explanation depth
+
+## Explanation Depth Default
+
+Default explanation depth by role:
+
+- `recommender`: light
+- `coach`: balanced
+- `copilot`: balanced
+- `oracle`: deep
+
+Explanation depth means:
+
+- `light`: one clear reason plus one transition note
+- `balanced`: summary, transition logic, and explicit-vs-inferred split
+- `deep`: route defense, uncertainty, alternatives, and evidence language
 
 ## Structured Intent Contract
 
-Creative language must be parsed into a typed `PlaylistIntent`.
+Creative language must be parsed into typed intent.
+The canonical model is `PlaylistIntent` in `crates/lyra-core/src/commands.rs`.
 
-At minimum, the canonical model must support:
+At minimum Lyra must carry:
 
 - prompt and prompt role
-- source energy / opening state
-- destination energy / landing state
+- source energy and opening state
+- destination energy and landing state
 - transition style
 - emotional arc
-- texture / timbre descriptors
+- texture descriptors
 - explicit entities
-- familiarity vs novelty preference
+- familiarity vs novelty
 - discovery aggressiveness
-- user steer / modifiers
-- exclusions / avoidances
+- user steering modifiers
+- exclusions
 - explanation depth
 - sequencing notes
-- confidence / ambiguity notes
+- confidence notes
+- confidence
 
-The current canonical implementation is the Rust `PlaylistIntent` model in `crates/lyra-core/src/commands.rs`.
+## Provider Contract
 
-## LLM Provider Contract
+Provider abstraction is canonical.
+Heuristics are fallback, not the final intelligence story.
 
-Cloud and local LLMs are first-class intelligence providers.
-
-The canonical runtime must expose:
-
-- typed provider abstraction
-- local provider support
-- cloud provider support
-- explicit provider selection
-- fallback behavior
-- degraded-mode behavior
-
-LLMs are responsible for:
+Providers may help with:
 
 - interpreting vague or poetic language
-- refining ambiguous intent
-- producing short explanation/narrative language
+- disambiguating route type
+- writing concise route narratives
 
-LLMs are not responsible for:
+Providers may not:
 
-- inventing tracks that are not in the library
-- replacing retrieval, ranking, or sequencing
-- fabricating evidence
-- acting as the source of truth for final track choice
+- invent library state
+- pick tracks outside the local library
+- replace deterministic retrieval/reranking
+- fabricate evidence
 
-Current canonical implementation:
+The UI must show:
 
-- Local provider: `ollama`
-- Cloud providers: `openai`, `openrouter`, `groq`
-- Selection and fallback state are returned as `ComposerProviderStatus`
-- Provider preference lives in app settings
-- Ranking and sequencing remain deterministic in Rust
+- selected provider
+- provider kind
+- provider mode
+- fallback reason when heuristics were used
 
-## Deterministic Pipeline Contract
+## Deterministic Retrieval Contract
 
-The canonical composer pipeline must stay local and deterministic after intent parse:
+After intent parse, Lyra stays local and deterministic:
 
 1. retrieve candidates from local library data
-2. score/rerank for phase fit, transition quality, novelty/familiarity target, and taste fit
-3. sequence into visible phases
-4. attach track-level reason payloads
-5. persist reason payloads when saving
+2. rerank against phase or route fit
+3. sequence tracks or route steps
+4. attach explanation payloads
+5. persist explanation payloads when saving draft playlists
 
-Current canonical implementation:
-
-- Rust pipeline in `crates/lyra-core/src/intelligence.rs`
-- phase plan exposed as `PlaylistPhase`
-- track-level reasons exposed as `TrackReasonPayload`
-- saved playlists persist reason summary plus JSON payload in `playlist_track_reasons`
+Current canonical implementation lives in `crates/lyra-core/src/intelligence.rs`.
 
 ## Explainability Contract
 
@@ -142,57 +283,40 @@ Lyra must be able to answer:
 
 - why this track
 - why this next
-- what phase this belongs to
-- what evidence supported the choice
-- what came from explicit prompt language
-- what was inferred by Lyra
-- whether language help came from a provider or from heuristic fallback
+- why this bridge step
+- what was explicit from the prompt
+- what Lyra inferred
+- what uncertainty remained
+- whether language interpretation came from a provider or heuristics
 
-Reason payloads are not optional metadata.
-They are part of the product contract.
-
-## Discovery Contract
-
-Lyra must behave as a discovery system, not only as a playlist maker.
-
-The product must support:
-
-- bridge tracks
-- related artists with explanation
-- “less obvious” and “more adventurous” steering
-- movement between scenes, moods, and textures
-- user education about why transitions work
-
-Composer, discovery, and explanation are one product lane, not separate afterthoughts.
+Reason payloads are part of the product.
+They are not optional telemetry.
 
 ## UI Contract
 
-The canonical UI must expose:
+The UI must not stop at showing state.
+It must let the user steer intelligence with a small, credible set of controls.
 
-- parsed intent summary
-- selected provider and fallback mode
-- visible arc or phases
-- track-level why this is here
-- saved reason durability
+Minimum steering surface:
 
-Current canonical implementation lands this first slice on the playlists route and settings route.
+- more obvious / less obvious
+- more familiar / more adventurous
+- smoother / sharper
+- brighter / more nocturnal or warmer
+- explanation depth
+- result shape preference when the UI can support it cleanly
 
-## Degraded Mode Contract
+## Evaluation Contract
 
-When no LLM provider is configured or reachable:
+Lyra must ship with evaluation fixtures for weird human prompts.
 
-- Lyra must still parse intent heuristically
-- Lyra must still retrieve, rerank, sequence, and explain deterministically
-- UI must say that heuristic fallback was used
-- the app must not pretend the prompt was fully understood by a provider
+Those fixtures must validate:
 
-## Non-Negotiable Framing
+- action classification
+- role selection
+- deterministic fallback behavior
+- bridge/discovery planning shape
+- explanation payload legibility
+- honest provider/fallback reporting
 
-If a future change makes Lyra read primarily as:
-
-- a media player
-- a playback shell
-- a queue app
-- a library manager with AI garnish
-
-that change violates this contract.
+If Lyra cannot be tested against weird prompts, then the implementation is not honest yet.

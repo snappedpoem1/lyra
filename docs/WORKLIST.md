@@ -41,15 +41,16 @@ Goal: make the Lyra composer the real front door to the product.
 - [x] Retrieve candidates from local data and rerank/sequence deterministically
 - [x] Surface parsed intent, provider mode, phases, and track-level why in the UI
 - [x] Persist reason payloads when saving composed playlists
-- [ ] Deepen prompt coverage beyond playlist drafting into recommendation, bridge, and explanation flows
-- [ ] Add richer iterative refinement and playlist steering loops
+- [x] Deepen prompt coverage beyond playlist drafting into recommendation, bridge, discovery, steering, and explanation flows
+- [x] Add richer iterative refinement and playlist steering loops
+- [x] Add weird-prompt evaluation coverage for action classification and deterministic fallback honesty
 - [ ] Port stronger semantic retrieval behavior from legacy `oracle/vibes.py`, `oracle/playlust.py`, `oracle/explain.py`, and `oracle/arc.py`
 
 ### G-064 Discovery Graph And Bridge Depth
 
 Goal: make adjacency exploration feel like a core Lyra capability.
 
-- [ ] Turn bridge prompts into first-class composer actions
+- [x] Turn bridge prompts into first-class composer actions
 - [ ] Expand related-artist results into explained adjacency paths
 - [ ] Bring graph and bridge evidence into the composer and discovery surfaces together
 
@@ -59,7 +60,7 @@ Goal: keep the intelligence layer legible everywhere it matters.
 
 - [ ] Carry the new reason payload model into saved playlists, discovery, and recommendation surfaces more broadly
 - [ ] Expose inferred-vs-explicit reasoning consistently
-- [ ] Keep degraded provider states explicit in composer and explanation surfaces
+- [x] Keep degraded provider states explicit in composer and explanation surfaces
 
 ### G-060 Remaining Acquisition Runtime Risk
 
