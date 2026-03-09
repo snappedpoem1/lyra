@@ -7,6 +7,81 @@ pub use crate::diagnostics::{ComponentHealth, DiagnosticsReport, SystemStats};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ComposerDiagnosticEntry {
+    pub id: i64,
+    pub level: String,
+    pub event_type: String,
+    pub prompt: String,
+    pub action: Option<String>,
+    pub provider: String,
+    pub mode: String,
+    pub message: String,
+    pub payload_json: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComposerRunRecord {
+    pub id: i64,
+    pub prompt: String,
+    pub action: String,
+    pub active_role: String,
+    pub summary: String,
+    pub provider: String,
+    pub mode: String,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComposerRunDetail {
+    pub record: ComposerRunRecord,
+    pub response: ComposerResponse,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpotifyTopArtist {
+    pub artist: String,
+    pub play_count: i64,
+    pub total_ms_played: i64,
+    pub owned_track_count: i64,
+    pub missing_track_count: i64,
+    pub last_played_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpotifyMissingCandidate {
+    pub artist: String,
+    pub title: String,
+    pub album: Option<String>,
+    pub spotify_uri: Option<String>,
+    pub source: String,
+    pub play_count: i64,
+    pub last_played_at: Option<String>,
+    pub already_queued: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpotifyGapSummary {
+    pub available: bool,
+    pub db_path: Option<String>,
+    pub history_count: i64,
+    pub library_count: i64,
+    pub features_count: i64,
+    pub owned_overlap_count: i64,
+    pub queued_overlap_count: i64,
+    pub recoverable_missing_count: i64,
+    pub top_artists: Vec<SpotifyTopArtist>,
+    pub missing_candidates: Vec<SpotifyMissingCandidate>,
+    pub summary_lines: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AudioOutputDevice {
     pub id: String,
     pub name: String,
@@ -337,6 +412,7 @@ pub struct AppShellState {
     pub providers: Vec<ProviderConfigRecord>,
     pub scan_jobs: Vec<ScanJobRecord>,
     pub taste_profile: TasteProfile,
+    pub taste_memory: TasteMemorySnapshot,
     pub acquisition_queue_pending: i64,
 }
 
@@ -436,6 +512,17 @@ pub struct TrackReasonPayload {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PlaylistTrackReasonRecord {
+    pub track_id: i64,
+    pub reason: String,
+    pub reason_payload: Option<TrackReasonPayload>,
+    pub phase_key: Option<String>,
+    pub phase_label: Option<String>,
+    pub position: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ComposedPlaylistTrack {
     pub track: TrackRecord,
     pub phase_key: String,
@@ -458,7 +545,7 @@ pub struct ComposedPlaylistDraft {
 }
 
 /// The classified action type for a composer prompt.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComposerAction {
     /// Standard playlist composition with phased arc.
@@ -484,6 +571,11 @@ pub struct BridgeStep {
     pub why: String,
     pub distance_from_source: f64,
     pub distance_from_destination: f64,
+    pub preserves: Vec<String>,
+    pub changes: Vec<String>,
+    pub adjacency_type: String,
+    pub adjacency_signals: Vec<AdjacencySignal>,
+    pub leads_to_next: String,
 }
 
 /// A bridge path result — an explained route between two musical poles.
@@ -492,10 +584,12 @@ pub struct BridgeStep {
 pub struct BridgePath {
     pub source_label: String,
     pub destination_label: String,
+    pub route_flavor: String,
     pub steps: Vec<BridgeStep>,
     pub narrative: Option<String>,
     pub confidence: f64,
     pub alternate_directions: Vec<String>,
+    pub variants: Vec<RouteVariantSummary>,
 }
 
 /// A discovered adjacency with explanation.
@@ -503,19 +597,49 @@ pub struct BridgePath {
 #[serde(rename_all = "camelCase")]
 pub struct DiscoveryRoute {
     pub seed_label: String,
+    pub primary_flavor: String,
+    pub scene_exit: bool,
     pub directions: Vec<DiscoveryDirection>,
     pub narrative: Option<String>,
     pub confidence: f64,
+    pub variants: Vec<RouteVariantSummary>,
 }
 
 /// One direction branch in a discovery result.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscoveryDirection {
+    pub flavor: String,
     pub label: String,
     pub description: String,
     pub tracks: Vec<ComposedPlaylistTrack>,
     pub why: String,
+    pub preserves: Vec<String>,
+    pub changes: Vec<String>,
+    pub adjacency_signals: Vec<AdjacencySignal>,
+    pub risk_note: String,
+    pub reward_note: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdjacencySignal {
+    pub dimension: String,
+    pub relation: String,
+    pub score: f64,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteVariantSummary {
+    pub flavor: String,
+    pub label: String,
+    pub logic: String,
+    pub preserves: Vec<String>,
+    pub changes: Vec<String>,
+    pub risk_note: String,
+    pub reward_note: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -558,6 +682,15 @@ pub struct FallbackVoice {
 pub struct RouteComparison {
     pub headline: String,
     pub summary: String,
+    pub variants: Vec<RouteVariantSummary>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyraReadSurface {
+    pub summary: String,
+    pub cues: Vec<String>,
+    pub confidence_note: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -573,9 +706,64 @@ pub struct LyraFraming {
     pub confidence: ConfidenceVoice,
     pub fallback: FallbackVoice,
     pub route_comparison: Option<RouteComparison>,
+    pub lyra_read: LyraReadSurface,
     pub sideways_temptations: Vec<String>,
     pub memory_hint: Option<String>,
     pub next_nudges: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RememberedPreference {
+    pub axis_key: String,
+    pub axis_label: String,
+    pub preferred_pole: String,
+    pub confidence: f64,
+    pub evidence_count: i64,
+    pub last_seen_at: String,
+    pub recency_note: String,
+    pub confidence_note: String,
+    pub supporting_phrases: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteChoicePreference {
+    pub route_kind: String,
+    pub action: String,
+    pub source: String,
+    pub note: String,
+    pub outcome: String,
+    pub confidence: f64,
+    pub observed_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteFeedbackPayload {
+    pub route_kind: String,
+    pub action: String,
+    pub outcome: String,
+    pub source: String,
+    pub note: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionTastePosture {
+    pub active_signals: Vec<String>,
+    pub summary: String,
+    pub confidence_note: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TasteMemorySnapshot {
+    pub session_posture: SessionTastePosture,
+    pub remembered_preferences: Vec<RememberedPreference>,
+    pub route_preferences: Vec<RouteChoicePreference>,
+    pub summary_lines: Vec<String>,
 }
 
 /// Steering adjustments the user can apply post-composition.
@@ -613,6 +801,8 @@ pub struct ComposerResponse {
     pub uncertainty: Vec<String>,
     /// Alternatives Lyra considered but did not select.
     pub alternatives_considered: Vec<String>,
+    /// Lightweight session-plus-rolling taste memory snapshot used in this response.
+    pub taste_memory: TasteMemorySnapshot,
 }
 
 /// A playlist generated by the oracle from a user intent.
@@ -634,6 +824,10 @@ pub struct RelatedArtist {
     pub connection_strength: f32,
     pub connection_type: String, // "similar", "collab", "genre"
     pub local_track_count: usize,
+    pub why: String,
+    pub preserves: Vec<String>,
+    pub changes: Vec<String>,
+    pub risk_note: String,
 }
 
 /// A single discovery interaction in the session.
@@ -735,22 +929,51 @@ pub struct TrackEnrichmentResult {
     pub degraded_providers: Vec<String>,
 }
 
+/// A single piece of scored evidence attached to a recommendation or explanation.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceItem {
+    /// Machine-readable type tag: e.g. "taste_alignment", "scout_bridge", "co_play", "deep_cut"
+    pub type_label: String,
+    /// Which subsystem produced this signal: "local", "scout", "graph", "feedback"
+    pub source: String,
+    /// Human-readable explanation sentence.
+    pub text: String,
+    /// Relative weight of this signal in the final score (0.0–1.0).
+    pub weight: f64,
+}
+
 /// Human-readable explanation of why a track was recommended.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExplainPayload {
     pub track_id: i64,
+    /// Short single-sentence "why" at composer payload depth.
+    pub why_this_track: String,
+    /// Legacy flat reasons list (kept for backward compat).
     pub reasons: Vec<String>,
+    /// Structured evidence items mirroring TrackReasonPayload depth.
+    pub evidence_items: Vec<EvidenceItem>,
+    /// Facts pulled directly from the prompt or explicit library evidence.
+    pub explicit_from_prompt: Vec<String>,
+    /// Signals inferred by Lyra from taste/graph/scout rather than stated explicitly.
+    pub inferred_by_lyra: Vec<String>,
     pub confidence: f64,
     pub source: String,
 }
 
-/// A recommended track with its similarity score.
+/// A recommended track with broker-grade evidence.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecommendationResult {
     pub track: TrackRecord,
     pub score: f64,
+    /// Which broker lane produced this candidate: "local", "scout", "graph"
+    pub provider: String,
+    /// Single-sentence reason at composer payload depth.
+    pub why_this_track: String,
+    /// Structured evidence items.
+    pub evidence: Vec<EvidenceItem>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

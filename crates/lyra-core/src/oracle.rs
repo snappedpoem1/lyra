@@ -4,7 +4,33 @@ use std::collections::HashMap;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-use crate::commands::{DiscoveryInteraction, DiscoverySession, ExplainPayload, RelatedArtist, TasteProfile, TrackScores};
+use crate::commands::{
+    DiscoveryInteraction, DiscoverySession, EvidenceItem, ExplainPayload, RelatedArtist,
+    RecommendationResult, TasteProfile, TrackScores,
+};
+
+/// Static cross-genre bridge map ported from oracle/recommendation_broker.py `_SCOUT_GENRE_BRIDGES`.
+/// Keys are lowercase genre tokens; values are natural bridge destination genres in adjacency order.
+fn genre_bridges(genre: &str) -> &'static [&'static str] {
+    match genre {
+        "rock" => &["electronic", "jazz", "folk"],
+        "electronic" => &["jazz", "classical", "hip hop"],
+        "hip hop" | "hip-hop" | "rap" => &["jazz", "electronic", "r&b"],
+        "jazz" => &["electronic", "classical", "soul"],
+        "classical" => &["electronic", "jazz", "ambient"],
+        "folk" => &["electronic", "bluegrass", "world"],
+        "metal" => &["electronic", "jazz", "classical"],
+        "pop" => &["electronic", "r&b", "jazz"],
+        "r&b" | "soul" => &["jazz", "hip hop", "electronic"],
+        "ambient" => &["classical", "electronic", "drone"],
+        "country" => &["folk", "blues", "rock"],
+        "blues" => &["jazz", "soul", "rock"],
+        "reggae" => &["dub", "electronic", "world"],
+        "punk" => &["electronic", "noise", "jazz"],
+        "alternative" | "indie" => &["folk", "electronic", "jazz"],
+        _ => &["electronic", "jazz", "folk"],
+    }
+}
 
 const DIMENSIONS: &[&str] = &[
     "energy",
@@ -175,6 +201,344 @@ impl<'conn> RecommendationBroker<'conn> {
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
         scored.into_iter().take(limit).collect()
     }
+
+    /// Returns broker-grade `RecommendationResult` with structured evidence per candidate.
+    ///
+    /// Lane breakdown (mirrors Python broker provider weights):
+    /// - local/taste (0.45): cosine + overlap against taste profile
+    /// - local/deep_cut (implicit): low-play tracks that score well
+    /// - scout/bridge (0.10): cross-genre bridge candidates from local library
+    /// - graph/co_play (0.10): artists with graph affinity to taste anchors
+    pub fn recommend_with_evidence(
+        &self,
+        taste: &TasteProfile,
+        limit: usize,
+    ) -> Vec<RecommendationResult> {
+        use crate::library;
+
+        if taste.dimensions.is_empty() || limit == 0 {
+            return Vec::new();
+        }
+
+        let interpreter = MoodInterpreter;
+        let taste_label = interpreter.label(&taste.dimensions);
+
+        // --- Lane 1: local taste alignment ---
+        let local_scored = self.recommend_scored(taste, limit * 2);
+
+        // Load play counts for deep-cut detection
+        let play_counts: HashMap<i64, i64> = {
+            let mut map = HashMap::new();
+            if let Ok(mut stmt) = self.conn.prepare(
+                "SELECT t.id, COUNT(ph.id) FROM tracks t
+                 LEFT JOIN playback_history ph ON ph.track_id = t.id
+                 GROUP BY t.id",
+            ) {
+                let rows = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)));
+                if let Ok(rows) = rows {
+                    for row in rows.filter_map(Result::ok) {
+                        map.insert(row.0, row.1);
+                    }
+                }
+            }
+            map
+        };
+
+        // Load track scores for dimension labeling
+        let score_rows: HashMap<i64, TrackScores> = {
+            let mut map = HashMap::new();
+            if let Ok(mut stmt) = self.conn.prepare(
+                "SELECT track_id, energy, valence, tension, density, warmth, movement,
+                        space, rawness, complexity, nostalgia, bpm, key_signature,
+                        scored_at, score_version
+                 FROM track_scores",
+            ) {
+                let rows = stmt.query_map([], |row| {
+                    Ok(TrackScores {
+                        track_id: row.get(0)?,
+                        energy: row.get(1)?,
+                        valence: row.get(2)?,
+                        tension: row.get(3)?,
+                        density: row.get(4)?,
+                        warmth: row.get(5)?,
+                        movement: row.get(6)?,
+                        space: row.get(7)?,
+                        rawness: row.get(8)?,
+                        complexity: row.get(9)?,
+                        nostalgia: row.get(10)?,
+                        bpm: row.get(11)?,
+                        key_signature: row.get(12)?,
+                        scored_at: row.get(13)?,
+                        score_version: row.get(14)?,
+                    })
+                });
+                if let Ok(rows) = rows {
+                    for row in rows.filter_map(Result::ok) {
+                        map.insert(row.track_id, row);
+                    }
+                }
+            }
+            map
+        };
+
+        let mut results: Vec<RecommendationResult> = Vec::new();
+        let mut seen_ids: std::collections::HashSet<i64> = std::collections::HashSet::new();
+
+        for (track_id, raw_score) in &local_scored {
+            let track_id = *track_id;
+            let raw_score = *raw_score;
+
+            let Ok(Some(track)) = library::get_track_by_id(self.conn, track_id) else {
+                continue;
+            };
+
+            let play_count = play_counts.get(&track_id).copied().unwrap_or(0);
+            let score_row = score_rows.get(&track_id);
+
+            // Determine strongest matching dimensions for human text
+            let shared_dims = score_row.map(|sr| {
+                let sm = scores_to_map(sr);
+                strongest_dimension_matches(&taste.dimensions, &sm)
+            }).unwrap_or_default();
+
+            let track_mood = score_row.map(|sr| interpreter.label(&scores_to_map(sr))).unwrap_or_default();
+
+            let is_deep_cut = play_count <= 3 && raw_score >= 0.55;
+            let provider = if is_deep_cut { "local/deep_cut" } else { "local/taste" }.to_string();
+
+            let (why, evidence_type, evidence_text) = if is_deep_cut {
+                (
+                    format!(
+                        "Rarely played but Lyra reads a strong {} profile — this is the kind of track that disappears in your library.",
+                        track_mood
+                    ),
+                    "deep_cut",
+                    format!("Only {} plays. Taste match {:.0}%.", play_count, raw_score * 100.0),
+                )
+            } else if !shared_dims.is_empty() {
+                (
+                    format!(
+                        "Strongest overlap with your {} taste pressure on {}.",
+                        taste_label,
+                        shared_dims.join(", ")
+                    ),
+                    "taste_alignment",
+                    format!("Shared dimensions: {}. Score {:.0}%.", shared_dims.join(", "), raw_score * 100.0),
+                )
+            } else {
+                (
+                    format!("Lyra sees a {} profile match against your current taste reading.", track_mood),
+                    "taste_alignment",
+                    format!("Cosine match {:.0}%.", raw_score * 100.0),
+                )
+            };
+
+            let inferred_note = if !shared_dims.is_empty() {
+                format!("Dimension overlap on {} inferred from local scores.", shared_dims.join(", "))
+            } else {
+                "Cosine similarity inferred from local taste profile.".to_string()
+            };
+
+            results.push(RecommendationResult {
+                track,
+                score: raw_score,
+                provider: provider.clone(),
+                why_this_track: why,
+                evidence: vec![
+                    EvidenceItem {
+                        type_label: evidence_type.to_string(),
+                        source: provider,
+                        text: evidence_text,
+                        weight: 0.45,
+                    },
+                    EvidenceItem {
+                        type_label: "inferred".to_string(),
+                        source: "local".to_string(),
+                        text: inferred_note,
+                        weight: 0.1,
+                    },
+                ],
+            });
+            seen_ids.insert(track_id);
+        }
+
+        // --- Lane 2: scout/bridge — find local tracks in bridge genres ---
+        // Determine the dominant genre(s) from the local scored set
+        let seed_genres: Vec<String> = {
+            let mut genre_counts: HashMap<String, usize> = HashMap::new();
+            for (track_id, _) in local_scored.iter().take(10) {
+                if let Ok(Some(track)) = library::get_track_by_id(self.conn, *track_id) {
+                    if let Some(genre) = track.genre {
+                        let tok = genre.to_lowercase();
+                        *genre_counts.entry(tok).or_insert(0) += 1;
+                    }
+                }
+            }
+            let mut pairs: Vec<_> = genre_counts.into_iter().collect();
+            pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            pairs.into_iter().take(2).map(|(g, _)| g).collect()
+        };
+
+        for seed_genre in &seed_genres {
+            let bridges = genre_bridges(seed_genre);
+            for bridge_genre in bridges.iter().take(2) {
+                // Find local library tracks in the bridge genre
+                let genre_pattern = format!("%{}%", bridge_genre);
+                let bridge_ids: Vec<i64> = match self.conn.prepare(
+                    "SELECT t.id FROM tracks t
+                     WHERE LOWER(COALESCE(t.genre, '')) LIKE LOWER(?)
+                       AND t.status = 'active'
+                     LIMIT 8",
+                ) {
+                    Err(_) => continue,
+                    Ok(mut stmt) => {
+                        let x = match stmt.query_map([&genre_pattern], |row| row.get::<_, i64>(0)) {
+                            Ok(rows) => rows.filter_map(Result::ok).collect(),
+                            Err(_) => continue,
+                        };
+                        x
+                    }
+                };
+
+                for bridge_id in bridge_ids {
+                    if seen_ids.contains(&bridge_id) {
+                        continue;
+                    }
+                    let Ok(Some(track)) = library::get_track_by_id(self.conn, bridge_id) else {
+                        continue;
+                    };
+
+                    let bridge_score = score_rows.get(&bridge_id).map(|sr| {
+                        let sm = scores_to_map(sr);
+                        let sim = cosine_similarity(&taste.dimensions, &sm);
+                        let ov = mean_overlap(&taste.dimensions, &sm);
+                        (sim * 0.7 + ov * 0.3).clamp(0.0, 1.0)
+                    }).unwrap_or(0.35);
+
+                    // Only include bridge candidates with some taste coherence
+                    if bridge_score < 0.25 {
+                        continue;
+                    }
+
+                    let why = format!(
+                        "Scout bridge: this is where {} meets {} — a different world that shares your current pressure.",
+                        seed_genre, bridge_genre
+                    );
+                    let evidence_text = format!(
+                        "Cross-genre bridge: {} × {}. Local taste coherence {:.0}%.",
+                        seed_genre, bridge_genre, bridge_score * 100.0
+                    );
+
+                    results.push(RecommendationResult {
+                        track,
+                        score: bridge_score * 0.82,
+                        provider: "scout/bridge".to_string(),
+                        why_this_track: why,
+                        evidence: vec![
+                            EvidenceItem {
+                                type_label: "scout_bridge".to_string(),
+                                source: "scout".to_string(),
+                                text: evidence_text,
+                                weight: 0.10,
+                            },
+                        ],
+                    });
+                    seen_ids.insert(bridge_id);
+                }
+            }
+        }
+
+        // --- Lane 3: graph/co_play — artists with graph affinity ---
+        // Find artists connected to the top scored tracks' artists
+        let anchor_artists: Vec<String> = {
+            local_scored.iter().take(5).filter_map(|(tid, _)| {
+                library::get_track_by_id(self.conn, *tid)
+                    .ok()
+                    .flatten()
+                    .map(|t| t.artist.to_lowercase())
+            }).collect()
+        };
+
+        if !anchor_artists.is_empty() {
+            for anchor in anchor_artists.iter().take(3) {
+                let connected: Vec<(String, i64)> = {
+                    let stmt = self.conn.prepare(
+                        "SELECT artist_b, score FROM artist_connections
+                         WHERE LOWER(artist_a) = LOWER(?)
+                         ORDER BY score DESC LIMIT 3",
+                    );
+                    match stmt {
+                        Err(_) => vec![],
+                        Ok(mut stmt) => match stmt.query_map([anchor], |row| {
+                            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                        }) {
+                            Ok(rows) => rows.filter_map(Result::ok).collect(),
+                            Err(_) => vec![],
+                        },
+                    }
+                };
+
+                for (connected_artist, graph_score) in connected {
+                    // Find a track from this artist
+                    let track_row: Option<i64> = self.conn.query_row(
+                        "SELECT t.id FROM tracks t
+                         JOIN artists ar ON ar.id = t.artist_id
+                         WHERE LOWER(ar.name) = LOWER(?)
+                           AND t.status = 'active'
+                         ORDER BY RANDOM() LIMIT 1",
+                        [&connected_artist],
+                        |row| row.get(0),
+                    ).ok();
+
+                    let Some(track_id) = track_row else { continue };
+                    if seen_ids.contains(&track_id) { continue; }
+                    let Ok(Some(track)) = library::get_track_by_id(self.conn, track_id) else { continue };
+
+                    let co_score = (graph_score as f64 / 100.0).clamp(0.2, 0.75);
+                    let why = format!(
+                        "Listeners who love {} also gravitate toward {} — graph affinity, not just genre proximity.",
+                        anchor, connected_artist
+                    );
+
+                    results.push(RecommendationResult {
+                        track,
+                        score: co_score * 0.72,
+                        provider: "graph/co_play".to_string(),
+                        why_this_track: why.clone(),
+                        evidence: vec![
+                            EvidenceItem {
+                                type_label: "co_play".to_string(),
+                                source: "graph".to_string(),
+                                text: format!(
+                                    "Artist graph connection: {} → {}. Affinity score {}.",
+                                    anchor, connected_artist, graph_score
+                                ),
+                                weight: 0.10,
+                            },
+                        ],
+                    });
+                    seen_ids.insert(track_id);
+                }
+            }
+        }
+
+        // Sort: local taste first by score, then scout, then graph
+        results.sort_by(|a, b| {
+            let provider_rank = |p: &str| -> u8 {
+                if p.starts_with("local/taste") { 0 }
+                else if p.starts_with("local/deep_cut") { 1 }
+                else if p.starts_with("scout") { 2 }
+                else { 3 }
+            };
+            let pa = provider_rank(&a.provider);
+            let pb = provider_rank(&b.provider);
+            if pa != pb { return pa.cmp(&pb); }
+            b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal)
+        });
+
+        results.truncate(limit);
+        results
+    }
 }
 
 pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> ExplainPayload {
@@ -221,7 +585,11 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
     let Some(track_scores) = track_scores else {
         return ExplainPayload {
             track_id,
+            why_this_track: "No local score data for this track yet.".to_string(),
             reasons: vec!["No local track_scores row exists for this track yet.".to_string()],
+            evidence_items: vec![],
+            explicit_from_prompt: vec![],
+            inferred_by_lyra: vec!["Track has not been scored by the local engine.".to_string()],
             confidence: 0.0,
             source,
         };
@@ -234,31 +602,50 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
     let mood_label = interpreter.label(&score_map);
     let taste_label = interpreter.label(&taste.dimensions);
     let shared_dimensions = strongest_dimension_matches(&taste.dimensions, &score_map);
+    let confidence =
+        ((similarity * 0.7 + overlap * 0.3) * taste.confidence.max(0.25)).clamp(0.0, 1.0);
 
+    // Build the "why_this_track" — composer-payload-depth sentence
+    let why_this_track = if !shared_dimensions.is_empty() {
+        if let Some(ref title) = track_title {
+            format!(
+                "{} lands in a {} world — strongest alignment with your {} taste on {}.",
+                title, mood_label, taste_label, shared_dimensions.join(", ")
+            )
+        } else {
+            format!(
+                "This track lands in a {} world — strongest alignment with your {} taste on {}.",
+                mood_label, taste_label, shared_dimensions.join(", ")
+            )
+        }
+    } else {
+        format!(
+            "Lyra sees a {} profile that matches your current {} taste reading.",
+            mood_label, taste_label
+        )
+    };
+
+    // Build flat legacy reasons (backward compat)
     let mut reasons = Vec::new();
-    if let Some(title) = track_title {
+    if let Some(ref title) = track_title {
         reasons.push(format!("{title} resolves to a {mood_label} profile."));
     } else {
         reasons.push(format!("This track resolves to a {mood_label} profile."));
     }
-
     if !shared_dimensions.is_empty() {
         reasons.push(format!(
             "Strongest taste overlap: {}.",
             shared_dimensions.join(", ")
         ));
     }
-
     reasons.push(format!(
         "Taste profile currently reads as {taste_label}; cosine similarity is {:.2} with mean overlap {:.2}.",
         similarity, overlap
     ));
-
     if let Some(bpm) = track_scores.bpm {
         reasons.push(format!("Tempo signal sits at roughly {:.0} BPM.", bpm));
     }
-
-    if let Some(key_signature) = &track_scores.key_signature {
+    if let Some(ref key_signature) = track_scores.key_signature {
         if !key_signature.trim().is_empty() {
             reasons.push(format!(
                 "Local structure metadata includes key {key_signature}."
@@ -266,11 +653,71 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
         }
     }
 
+    // Build structured evidence items
+    let mut evidence_items = vec![EvidenceItem {
+        type_label: "taste_alignment".to_string(),
+        source: "local".to_string(),
+        text: format!(
+            "Cosine similarity {:.0}%, mean overlap {:.0}% against your current {} taste profile.",
+            similarity * 100.0,
+            overlap * 100.0,
+            taste_label
+        ),
+        weight: (similarity * 0.85 + overlap * 0.15).clamp(0.0, 1.0),
+    }];
+
+    if !shared_dimensions.is_empty() {
+        evidence_items.push(EvidenceItem {
+            type_label: "dimension_match".to_string(),
+            source: "local".to_string(),
+            text: format!(
+                "Strong dimension alignment on: {}.",
+                shared_dimensions.join(", ")
+            ),
+            weight: 0.6,
+        });
+    }
+
+    if let Some(bpm) = track_scores.bpm {
+        evidence_items.push(EvidenceItem {
+            type_label: "tempo".to_string(),
+            source: "local".to_string(),
+            text: format!("Tempo: ~{:.0} BPM.", bpm),
+            weight: 0.15,
+        });
+    }
+
+    if let Some(ref key_signature) = track_scores.key_signature {
+        if !key_signature.trim().is_empty() {
+            evidence_items.push(EvidenceItem {
+                type_label: "key".to_string(),
+                source: "local".to_string(),
+                text: format!("Key: {}.", key_signature),
+                weight: 0.1,
+            });
+        }
+    }
+
+    // Inferred signals (Lyra's read, not stated by the user)
+    let mut inferred_by_lyra = vec![format!(
+        "Mood profile '{}' inferred from local CLAP/score dimensions.",
+        mood_label
+    )];
+    if !shared_dimensions.is_empty() {
+        inferred_by_lyra.push(format!(
+            "Dimension overlap on {} inferred from cosine comparison against taste profile.",
+            shared_dimensions.join(", ")
+        ));
+    }
+
     ExplainPayload {
         track_id,
+        why_this_track,
         reasons,
-        confidence: ((similarity * 0.7 + overlap * 0.3) * taste.confidence.max(0.25))
-            .clamp(0.0, 1.0),
+        evidence_items,
+        explicit_from_prompt: vec![],
+        inferred_by_lyra,
+        confidence,
         source,
     }
 }
@@ -280,7 +727,10 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
 /// Returns the count of new edge pairs inserted.
 pub fn build_dimension_affinity(conn: &Connection) -> usize {
     // Load per-artist average score vectors
-    let dim_cols: Vec<String> = DIMENSIONS.iter().map(|d| format!("AVG(ts.{})", d)).collect();
+    let dim_cols: Vec<String> = DIMENSIONS
+        .iter()
+        .map(|d| format!("AVG(ts.{})", d))
+        .collect();
     let select_cols = dim_cols.join(", ");
     let sql = format!(
         "SELECT ar.name, {select_cols}
@@ -374,7 +824,10 @@ pub fn build_dimension_affinity(conn: &Connection) -> usize {
     let existing: std::collections::HashSet<(String, String)> = {
         let mut stmt = conn
             .prepare("SELECT source, target FROM connections WHERE type = 'dimension_affinity'")
-            .unwrap_or_else(|_| conn.prepare("SELECT '' AS source, '' AS target WHERE 0").unwrap());
+            .unwrap_or_else(|_| {
+                conn.prepare("SELECT '' AS source, '' AS target WHERE 0")
+                    .unwrap()
+            });
         stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
@@ -410,7 +863,9 @@ pub fn build_dimension_affinity(conn: &Connection) -> usize {
             }
             let a = artists[i].to_string();
             let b = artists[j].to_string();
-            if existing.contains(&(a.clone(), b.clone())) || existing.contains(&(b.clone(), a.clone())) {
+            if existing.contains(&(a.clone(), b.clone()))
+                || existing.contains(&(b.clone(), a.clone()))
+            {
                 continue;
             }
             seen.insert((lo, hi));
@@ -426,7 +881,10 @@ pub fn build_dimension_affinity(conn: &Connection) -> usize {
     let mut inserted = 0usize;
     for (a, b, sim) in &new_edges {
         let weight = (*sim).clamp(0.0, 1.0);
-        let evidence = format!(r#"{{"similarity":{:.4},"type":"dimension_affinity"}}"#, weight);
+        let evidence = format!(
+            r#"{{"similarity":{:.4},"type":"dimension_affinity"}}"#,
+            weight
+        );
         let r1 = conn.execute(
             "INSERT OR IGNORE INTO connections (source, target, type, weight, evidence, updated_at) VALUES (?1, ?2, 'dimension_affinity', ?3, ?4, ?5)",
             params![a, b, weight, evidence, now],
@@ -474,11 +932,17 @@ pub fn get_related_artists(
                         |r| r.get(0),
                     )
                     .unwrap_or(0);
+                let (why, preserves, changes, risk_note) =
+                    related_artist_story(&conn_type, weight as f32, local_count as usize);
                 results.push(RelatedArtist {
                     name,
                     connection_strength: weight as f32,
                     connection_type: conn_type,
                     local_track_count: local_count as usize,
+                    why,
+                    preserves,
+                    changes,
+                    risk_note,
                 });
             }
         }
@@ -523,11 +987,17 @@ pub fn get_related_artists(
                     )
                     .unwrap_or(0);
                 let connection_strength = (strength as f32 / 100_f32).min(1.0);
+                let (why, preserves, changes, risk_note) =
+                    related_artist_story("co_play", connection_strength, local_count as usize);
                 results.push(RelatedArtist {
                     name,
                     connection_strength,
                     connection_type: "co_play".to_string(),
                     local_track_count: local_count as usize,
+                    why,
+                    preserves,
+                    changes,
+                    risk_note,
                 });
             }
         }
@@ -563,11 +1033,18 @@ pub fn get_related_artists(
                             |r| r.get(0),
                         )
                         .unwrap_or(0);
+                    let connection_strength = (cnt as f32 / 50.0).min(1.0);
+                    let (why, preserves, changes, risk_note) =
+                        related_artist_story("genre", connection_strength, local_count as usize);
                     results.push(RelatedArtist {
                         name,
-                        connection_strength: (cnt as f32 / 50.0).min(1.0),
+                        connection_strength,
                         connection_type: "genre".to_string(),
                         local_track_count: local_count as usize,
+                        why,
+                        preserves,
+                        changes,
+                        risk_note,
                     });
                 }
             }
@@ -577,12 +1054,48 @@ pub fn get_related_artists(
     results
 }
 
+fn related_artist_story(
+    connection_type: &str,
+    connection_strength: f32,
+    local_track_count: usize,
+) -> (String, Vec<String>, Vec<String>, String) {
+    let (why, preserves, changes) = match connection_type {
+        "dimension_affinity" => (
+            "This carries a similar emotional temperature and dimensional afterimage, even if the names are not the obvious next click.".to_string(),
+            vec!["emotional temperature".to_string(), "dimensional residue".to_string()],
+            vec!["surface scene markers".to_string()],
+        ),
+        "co_play" => (
+            "This showed up in the same listening orbit, so it behaves like a natural next room rather than a metadata match.".to_string(),
+            vec!["listening context".to_string(), "session momentum".to_string()],
+            vec!["artist identity".to_string()],
+        ),
+        "genre" => (
+            "This is the safer adjacency: shared scene color first, deeper difference second.".to_string(),
+            vec!["scene color".to_string(), "genre neighborhood".to_string()],
+            vec!["emotional specificity".to_string()],
+        ),
+        _ => (
+            "This reads adjacent for a real reason, not only because it sits nearby in metadata.".to_string(),
+            vec!["route legibility".to_string()],
+            vec!["obviousness".to_string()],
+        ),
+    };
+    let risk_note = if local_track_count == 0 {
+        "Higher risk: Cassette does not own this artist yet, so this is a real discovery edge rather than a comfortable local lane.".to_string()
+    } else if connection_strength >= 0.72 {
+        "Lower risk: this should behave like a believable bridge step inside the current library."
+            .to_string()
+    } else if connection_strength >= 0.44 {
+        "Measured risk: close enough to trust, different enough to matter.".to_string()
+    } else {
+        "Rewarding risk: the link is weaker on paper, but it may be truer than the safer obvious neighbors.".to_string()
+    };
+    (why, preserves, changes, risk_note)
+}
+
 /// Return track IDs from related artists, sorted by recommendation score.
-pub fn play_similar_to_artist(
-    artist_name: &str,
-    limit: usize,
-    conn: &Connection,
-) -> Vec<i64> {
+pub fn play_similar_to_artist(artist_name: &str, limit: usize, conn: &Connection) -> Vec<i64> {
     use std::cmp::Ordering;
 
     let related = get_related_artists(artist_name, 5, conn);
@@ -620,11 +1133,7 @@ pub fn play_similar_to_artist(
 }
 
 /// Record a discovery interaction.
-pub fn record_discovery_interaction(
-    artist_name: &str,
-    action: &str,
-    conn: &Connection,
-) {
+pub fn record_discovery_interaction(artist_name: &str, action: &str, conn: &Connection) {
     let now = chrono::Utc::now().to_rfc3339();
     let _ = conn.execute(
         "INSERT INTO discovery_sessions (artist_name, action, created_at) VALUES (?1, ?2, ?3)",

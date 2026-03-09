@@ -2,6 +2,8 @@ pub mod acquisition;
 pub mod acquisition_dispatcher;
 pub mod acquisition_worker;
 pub mod commands;
+pub mod composer_diagnostics;
+pub mod composer_history;
 pub mod config;
 pub mod db;
 pub mod diagnostics;
@@ -20,6 +22,7 @@ pub mod scores;
 pub mod scrobble;
 pub mod state;
 pub mod taste;
+pub mod taste_memory;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -27,12 +30,13 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use commands::{
-    AcquisitionPreflight, AcquisitionPreflightCheck, AcquisitionQueueItem, ArtistConnection, ArtistProfile, AudioOutputDevice, BootstrapPayload,
-    ComposerResponse, ComposedPlaylistDraft, DuplicateCluster, ExplainPayload, LegacyImportReport, LibraryOverview, LibraryRootRecord,
+    AcquisitionPreflight, AcquisitionPreflightCheck, AcquisitionQueueItem, ArtistConnection,
+    ArtistProfile, AudioOutputDevice, BootstrapPayload, ComposedPlaylistDraft, ComposerResponse,
+    DuplicateCluster, ExplainPayload, LegacyImportReport, LibraryOverview, LibraryRootRecord,
     NativeCapabilities, PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary,
     ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
-    RecommendationResult, ScanJobRecord, SettingsPayload, SteerPayload, TasteProfile,
-    TrackDetail, TrackRecord, TrackScores,
+    RecommendationResult, ScanJobRecord, SettingsPayload, SteerPayload, TasteMemorySnapshot,
+    TasteProfile, TrackDetail, TrackRecord, TrackScores,
 };
 use config::AppPaths;
 use db::{connect, init_database};
@@ -78,7 +82,10 @@ impl LyraCore {
     fn clean_artist_name(value: &str) -> String {
         let mut cleaned = value.trim().to_string();
         for suffix in [" - Topic", " VEVO", " Official"] {
-            if cleaned.to_ascii_lowercase().ends_with(&suffix.to_ascii_lowercase()) {
+            if cleaned
+                .to_ascii_lowercase()
+                .ends_with(&suffix.to_ascii_lowercase())
+            {
                 cleaned.truncate(cleaned.len().saturating_sub(suffix.len()));
                 cleaned = cleaned.trim().to_string();
             }
@@ -87,7 +94,12 @@ impl LyraCore {
     }
 
     fn clean_track_title(value: &str) -> String {
-        value.split_whitespace().collect::<Vec<_>>().join(" ").trim().to_string()
+        value
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string()
     }
 
     fn validation_confidence(
@@ -173,7 +185,8 @@ impl LyraCore {
                 title: cleaned_title,
                 album: cleaned_album,
                 confidence,
-                summary: "Rejected by Rust guard: likely junk, cover, or altered-version metadata".to_string(),
+                summary: "Rejected by Rust guard: likely junk, cover, or altered-version metadata"
+                    .to_string(),
                 detail: Some("Queue item matched local junk-pattern checks".to_string()),
                 duplicate_path: None,
             });
@@ -215,7 +228,9 @@ impl LyraCore {
                 title: cleaned_title,
                 album: cleaned_album,
                 confidence,
-                summary: "Rejected by Rust guard: artist metadata looks like a label or YouTube channel".to_string(),
+                summary:
+                    "Rejected by Rust guard: artist metadata looks like a label or YouTube channel"
+                        .to_string(),
                 detail: Some("Queue item matched local artist/label guard checks".to_string()),
                 duplicate_path: None,
             });
@@ -233,8 +248,12 @@ impl LyraCore {
                 |row| row.get::<_, String>(0),
             )
             .optional()?;
-        let confidence =
-            Self::validation_confidence(conn, &cleaned_artist, &cleaned_title, cleaned_album.as_deref())?;
+        let confidence = Self::validation_confidence(
+            conn,
+            &cleaned_artist,
+            &cleaned_title,
+            cleaned_album.as_deref(),
+        )?;
         let summary = if duplicate.is_some() {
             "Rejected by Rust guard: track already exists in the library".to_string()
         } else if confidence >= 0.75 {
@@ -324,6 +343,37 @@ impl LyraCore {
         connect(&self.paths)
     }
 
+    fn legacy_db_path(&self) -> PathBuf {
+        std::env::var("LYRA_DB_PATH")
+            .ok()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("lyra_registry.db"))
+    }
+
+    fn with_attached_legacy_db<T, F>(&self, callback: F) -> LyraResult<Option<T>>
+    where
+        F: FnOnce(&rusqlite::Connection, &Path) -> LyraResult<T>,
+    {
+        let legacy_path = self.legacy_db_path();
+        if !legacy_path.exists() {
+            return Ok(None);
+        }
+
+        let conn = self.conn()?;
+        conn.execute(
+            "ATTACH DATABASE ?1 AS legacy_spotify",
+            params![legacy_path.display().to_string()],
+        )?;
+        let result = callback(&conn, &legacy_path);
+        let detach_result = conn.execute("DETACH DATABASE legacy_spotify", []);
+
+        match (result, detach_result) {
+            (Ok(value), Ok(_)) => Ok(Some(value)),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error.into()),
+        }
+    }
+
     pub fn bootstrap_app(&self) -> LyraResult<BootstrapPayload> {
         Ok(BootstrapPayload {
             shell: self.get_app_shell_state()?,
@@ -343,11 +393,17 @@ impl LyraCore {
             providers: self.list_provider_configs()?,
             scan_jobs: self.get_scan_jobs()?,
             taste_profile: taste::get_taste_profile(&conn).unwrap_or_default(),
+            taste_memory: taste_memory::load_snapshot(&conn)
+                .unwrap_or_else(|_| TasteMemorySnapshot::default()),
             acquisition_queue_pending: acquisition::pending_count(&conn),
         })
     }
 
-    pub fn list_tracks(&self, query: Option<String>, sort: Option<String>) -> LyraResult<Vec<TrackRecord>> {
+    pub fn list_tracks(
+        &self,
+        query: Option<String>,
+        sort: Option<String>,
+    ) -> LyraResult<Vec<TrackRecord>> {
         let conn = self.conn()?;
         library::list_tracks(&conn, query, sort)
     }
@@ -414,9 +470,10 @@ impl LyraCore {
                 .filter(|entry| entry.file_type().is_file())
             {
                 scanned += 1;
-                if library::is_supported_audio_file(entry.path()) &&
-                    library::import_track_from_path(&conn, entry.path())? {
-                        imported += 1;
+                if library::is_supported_audio_file(entry.path())
+                    && library::import_track_from_path(&conn, entry.path())?
+                {
+                    imported += 1;
                 }
                 if scanned % 10 == 0 {
                     library::update_scan_job_status(&conn, job_id, "running", scanned, imported)?;
@@ -686,7 +743,12 @@ impl LyraCore {
             let (idx, item) = if queue_items.get(next_index as usize).is_some() {
                 (next_index, &queue_items[next_index as usize])
             } else {
-                (0.max(fallback), queue_items.first().ok_or(LyraError::InvalidInput("queue is empty"))?)
+                (
+                    0.max(fallback),
+                    queue_items
+                        .first()
+                        .ok_or(LyraError::InvalidInput("queue is empty"))?,
+                )
             };
             (idx, item)
         };
@@ -832,10 +894,7 @@ impl LyraCore {
         providers::list_provider_health(&conn)
     }
 
-    pub fn validate_provider(
-        &self,
-        provider_key: String,
-    ) -> LyraResult<ProviderValidationResult> {
+    pub fn validate_provider(&self, provider_key: String) -> LyraResult<ProviderValidationResult> {
         let conn = self.conn()?;
         providers::validate_provider(&conn, &provider_key)
     }
@@ -860,11 +919,7 @@ impl LyraCore {
     }
 
     /// Delete a provider secret from the OS keychain.
-    pub fn keyring_delete(
-        &self,
-        provider_key: String,
-        key_name: String,
-    ) -> Result<(), String> {
+    pub fn keyring_delete(&self, provider_key: String, key_name: String) -> Result<(), String> {
         providers::keyring_delete(&provider_key, &key_name)
     }
 
@@ -1297,19 +1352,13 @@ impl LyraCore {
         taste::get_taste_profile(&conn)
     }
 
-    /// Returns up to `limit` tracks recommended by the oracle based on the current taste profile.
+    /// Returns up to `limit` tracks recommended by the broker with multi-lane evidence.
+    /// Lanes: local/taste, local/deep_cut, scout/bridge (cross-genre), graph/co_play.
     pub fn get_recommendations(&self, limit: usize) -> LyraResult<Vec<RecommendationResult>> {
         let conn = self.conn()?;
         let taste = taste::get_taste_profile(&conn)?;
         let broker = oracle::RecommendationBroker::new(&conn);
-        let scored = broker.recommend_scored(&taste, limit);
-        let mut results = Vec::with_capacity(scored.len());
-        for (track_id, score) in scored {
-            if let Some(track) = library::get_track_by_id(&conn, track_id)? {
-                results.push(RecommendationResult { track, score });
-            }
-        }
-        Ok(results)
+        Ok(broker.recommend_with_evidence(&taste, limit))
     }
 
     pub fn compose_playlist_draft(
@@ -1329,13 +1378,66 @@ impl LyraCore {
         steer: Option<SteerPayload>,
     ) -> LyraResult<ComposerResponse> {
         let conn = self.conn()?;
-        let mut settings = state::load_settings(&conn)?;
-        let memory = recent_taste_axes(&prompt, steer.as_ref());
-        if !memory.is_empty() {
-            settings.composer_taste_memory = merge_recent_memory(&settings.composer_taste_memory, &memory);
-            state::save_settings(&conn, &settings)?;
+        let settings = state::load_settings(&conn)?;
+        match intelligence::compose_composer_response(
+            &conn,
+            &settings,
+            &prompt,
+            track_count,
+            steer.as_ref(),
+        ) {
+            Ok(mut response) => {
+                response.taste_memory = taste_memory::capture_compose_memory(
+                    &conn,
+                    &prompt,
+                    steer.as_ref(),
+                    &response,
+                )?;
+                let run_id = composer_history::save_run(&conn, &prompt, &response).ok();
+                let action_label = format!("{:?}", response.action).to_ascii_lowercase();
+                let payload = serde_json::json!({
+                    "runId": run_id,
+                    "activeRole": response.active_role,
+                    "fallbackActive": response.framing.fallback.active,
+                    "providerKind": response.provider_status.provider_kind,
+                    "memoryHint": response.framing.memory_hint,
+                    "routeComparison": response.framing.route_comparison.as_ref().map(|comparison| comparison.headline.clone()),
+                });
+                composer_diagnostics::record_event(
+                    &conn,
+                    composer_diagnostics::ComposerDiagnosticWrite {
+                        level: "info".to_string(),
+                        event_type: "compose_success".to_string(),
+                        prompt: prompt.clone(),
+                        action: Some(action_label),
+                        provider: response.provider_status.selected_provider.clone(),
+                        mode: response.provider_status.mode.clone(),
+                        message: "Lyra composed a response successfully.".to_string(),
+                        payload: Some(payload),
+                    },
+                )?;
+                Ok(response)
+            }
+            Err(error) => {
+                let _ = composer_diagnostics::record_event(
+                    &conn,
+                    composer_diagnostics::ComposerDiagnosticWrite {
+                        level: "error".to_string(),
+                        event_type: "compose_failure".to_string(),
+                        prompt,
+                        action: None,
+                        provider: "unknown".to_string(),
+                        mode: "failed".to_string(),
+                        message: error.to_string(),
+                        payload: Some(serde_json::json!({
+                            "trackCount": track_count,
+                            "steer": steer,
+                        })),
+                    },
+                );
+                Err(error)
+            }
         }
-        intelligence::compose_composer_response(&conn, &settings, &prompt, track_count, steer.as_ref())
     }
 
     pub fn save_composed_playlist(
@@ -1346,6 +1448,14 @@ impl LyraCore {
         let conn = self.conn()?;
         let playlist_id = intelligence::save_composed_playlist(&conn, &name, &draft)?;
         self.get_playlist_detail(playlist_id)
+    }
+
+    pub fn record_route_feedback(
+        &self,
+        payload: commands::RouteFeedbackPayload,
+    ) -> LyraResult<commands::TasteMemorySnapshot> {
+        let conn = self.conn()?;
+        taste_memory::record_route_feedback(&conn, &payload)
     }
 
     /// Generate an act-based playlist from a user intent.
@@ -1369,13 +1479,330 @@ impl LyraCore {
         self.get_playlist_detail(playlist_id)
     }
 
-    /// Return (track_id, reason) pairs for a playlist.
+    /// Return persisted reason payloads for a playlist.
     pub fn get_playlist_track_reasons(
         &self,
         playlist_id: i64,
-    ) -> LyraResult<Vec<(i64, String)>> {
+    ) -> LyraResult<Vec<commands::PlaylistTrackReasonRecord>> {
         let conn = self.conn()?;
         playlists::get_playlist_track_reasons(&conn, playlist_id)
+    }
+
+    pub fn get_composer_diagnostics(
+        &self,
+        limit: usize,
+    ) -> LyraResult<Vec<commands::ComposerDiagnosticEntry>> {
+        let conn = self.conn()?;
+        composer_diagnostics::recent(&conn, limit)
+    }
+
+    pub fn get_recent_composer_runs(
+        &self,
+        limit: usize,
+    ) -> LyraResult<Vec<commands::ComposerRunRecord>> {
+        let conn = self.conn()?;
+        composer_history::recent(&conn, limit)
+    }
+
+    pub fn get_composer_run(&self, run_id: i64) -> LyraResult<commands::ComposerRunDetail> {
+        let conn = self.conn()?;
+        composer_history::detail(&conn, run_id)
+    }
+
+    pub fn get_spotify_gap_summary(&self, limit: usize) -> LyraResult<commands::SpotifyGapSummary> {
+        let top_limit = i64::try_from(limit.max(1)).unwrap_or(12);
+        let candidate_limit = i64::try_from(limit.max(3) * 2).unwrap_or(24);
+        let summary = self.with_attached_legacy_db(|conn, legacy_path| {
+            let history_exists = conn
+                .query_row(
+                    "SELECT 1 FROM legacy_spotify.sqlite_master WHERE type = 'table' AND name = 'spotify_history'",
+                    [],
+                    |_| Ok(1_i64),
+                )
+                .optional()?
+                .is_some();
+            let library_exists = conn
+                .query_row(
+                    "SELECT 1 FROM legacy_spotify.sqlite_master WHERE type = 'table' AND name = 'spotify_library'",
+                    [],
+                    |_| Ok(1_i64),
+                )
+                .optional()?
+                .is_some();
+            let features_exists = conn
+                .query_row(
+                    "SELECT 1 FROM legacy_spotify.sqlite_master WHERE type = 'table' AND name = 'spotify_features'",
+                    [],
+                    |_| Ok(1_i64),
+                )
+                .optional()?
+                .is_some();
+
+            if !history_exists && !library_exists {
+                return Ok(commands::SpotifyGapSummary {
+                    available: false,
+                    db_path: Some(legacy_path.display().to_string()),
+                    history_count: 0,
+                    library_count: 0,
+                    features_count: 0,
+                    owned_overlap_count: 0,
+                    queued_overlap_count: 0,
+                    recoverable_missing_count: 0,
+                    top_artists: Vec::new(),
+                    missing_candidates: Vec::new(),
+                    summary_lines: vec![
+                        "Cassette found a legacy database path, but no Spotify history or library tables are present yet.".to_string(),
+                    ],
+                });
+            }
+
+            let history_count = if history_exists {
+                conn.query_row("SELECT COUNT(*) FROM legacy_spotify.spotify_history", [], |row| row.get(0))?
+            } else {
+                0
+            };
+            let library_count = if library_exists {
+                conn.query_row("SELECT COUNT(*) FROM legacy_spotify.spotify_library", [], |row| row.get(0))?
+            } else {
+                0
+            };
+            let features_count = if features_exists {
+                conn.query_row("SELECT COUNT(*) FROM legacy_spotify.spotify_features", [], |row| row.get(0))?
+            } else {
+                0
+            };
+
+            let owned_overlap_count = if library_exists {
+                conn.query_row(
+                    "SELECT COUNT(*)
+                     FROM legacy_spotify.spotify_library sl
+                     WHERE EXISTS (
+                        SELECT 1
+                        FROM tracks t
+                        LEFT JOIN artists ar ON ar.id = t.artist_id
+                        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
+                          AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
+                     )",
+                    [],
+                    |row| row.get(0),
+                )?
+            } else {
+                0
+            };
+
+            let queued_overlap_count = if library_exists {
+                conn.query_row(
+                    "SELECT COUNT(*)
+                     FROM legacy_spotify.spotify_library sl
+                     WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM tracks t
+                        LEFT JOIN artists ar ON ar.id = t.artist_id
+                        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
+                          AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
+                     )
+                     AND EXISTS (
+                        SELECT 1
+                        FROM acquisition_queue aq
+                        WHERE lower(trim(COALESCE(aq.artist, ''))) = lower(trim(sl.artist))
+                          AND lower(trim(COALESCE(aq.title, ''))) = lower(trim(sl.title))
+                          AND aq.status NOT IN ('completed', 'cancelled')
+                     )",
+                    [],
+                    |row| row.get(0),
+                )?
+            } else {
+                0
+            };
+
+            let recoverable_missing_count = if library_exists {
+                conn.query_row(
+                    "SELECT COUNT(*)
+                     FROM legacy_spotify.spotify_library sl
+                     WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM tracks t
+                        LEFT JOIN artists ar ON ar.id = t.artist_id
+                        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
+                          AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
+                     )
+                     AND NOT EXISTS (
+                        SELECT 1
+                        FROM acquisition_queue aq
+                        WHERE lower(trim(COALESCE(aq.artist, ''))) = lower(trim(sl.artist))
+                          AND lower(trim(COALESCE(aq.title, ''))) = lower(trim(sl.title))
+                          AND aq.status NOT IN ('completed', 'cancelled')
+                     )",
+                    [],
+                    |row| row.get(0),
+                )?
+            } else {
+                0
+            };
+
+            let top_artists = if history_exists {
+                let mut stmt = conn.prepare(
+                    "WITH artist_plays AS (
+                        SELECT
+                            trim(artist) AS artist,
+                            COUNT(*) AS play_count,
+                            SUM(COALESCE(ms_played, 0)) AS total_ms_played,
+                            MAX(played_at) AS last_played_at
+                        FROM legacy_spotify.spotify_history
+                        WHERE artist IS NOT NULL AND trim(artist) != ''
+                        GROUP BY lower(trim(artist))
+                    )
+                    SELECT
+                        ap.artist,
+                        ap.play_count,
+                        ap.total_ms_played,
+                        (
+                            SELECT COUNT(*)
+                            FROM tracks t
+                            LEFT JOIN artists ar ON ar.id = t.artist_id
+                            WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(ap.artist))
+                        ) AS owned_track_count,
+                        (
+                            SELECT COUNT(*)
+                            FROM legacy_spotify.spotify_library sl
+                            WHERE lower(trim(sl.artist)) = lower(trim(ap.artist))
+                              AND NOT EXISTS (
+                                SELECT 1
+                                FROM tracks t
+                                LEFT JOIN artists ar ON ar.id = t.artist_id
+                                WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
+                                  AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
+                              )
+                        ) AS missing_track_count,
+                        ap.last_played_at
+                     FROM artist_plays ap
+                     ORDER BY ap.play_count DESC, ap.total_ms_played DESC
+                     LIMIT ?1",
+                )?;
+                let rows = stmt.query_map(params![top_limit], |row| {
+                    Ok(commands::SpotifyTopArtist {
+                        artist: row.get(0)?,
+                        play_count: row.get(1)?,
+                        total_ms_played: row.get(2)?,
+                        owned_track_count: row.get(3)?,
+                        missing_track_count: row.get(4)?,
+                        last_played_at: row.get(5)?,
+                    })
+                })?;
+                rows.filter_map(Result::ok).collect()
+            } else {
+                Vec::new()
+            };
+
+            let missing_candidates = if library_exists {
+                let mut stmt = conn.prepare(
+                    "WITH history_counts AS (
+                        SELECT
+                            lower(trim(artist)) AS artist_key,
+                            lower(trim(track)) AS title_key,
+                            COUNT(*) AS play_count,
+                            MAX(played_at) AS last_played_at
+                        FROM legacy_spotify.spotify_history
+                        WHERE artist IS NOT NULL AND trim(artist) != ''
+                          AND track IS NOT NULL AND trim(track) != ''
+                        GROUP BY artist_key, title_key
+                    )
+                    SELECT
+                        sl.artist,
+                        sl.title,
+                        sl.album,
+                        sl.spotify_uri,
+                        COALESCE(sl.source, 'liked') AS source,
+                        COALESCE(h.play_count, 0) AS play_count,
+                        h.last_played_at,
+                        EXISTS (
+                            SELECT 1
+                            FROM acquisition_queue aq
+                            WHERE lower(trim(COALESCE(aq.artist, ''))) = lower(trim(sl.artist))
+                              AND lower(trim(COALESCE(aq.title, ''))) = lower(trim(sl.title))
+                              AND aq.status NOT IN ('completed', 'cancelled')
+                        ) AS already_queued
+                    FROM legacy_spotify.spotify_library sl
+                    LEFT JOIN history_counts h
+                        ON h.artist_key = lower(trim(sl.artist))
+                       AND h.title_key = lower(trim(sl.title))
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM tracks t
+                        LEFT JOIN artists ar ON ar.id = t.artist_id
+                        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
+                          AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
+                    )
+                    ORDER BY COALESCE(h.play_count, 0) DESC,
+                             h.last_played_at DESC,
+                             sl.added_at DESC
+                    LIMIT ?1",
+                )?;
+                let rows = stmt.query_map(params![candidate_limit], |row| {
+                    Ok(commands::SpotifyMissingCandidate {
+                        artist: row.get(0)?,
+                        title: row.get(1)?,
+                        album: row.get(2)?,
+                        spotify_uri: row.get(3)?,
+                        source: row.get(4)?,
+                        play_count: row.get(5)?,
+                        last_played_at: row.get(6)?,
+                        already_queued: row.get::<_, bool>(7)?,
+                    })
+                })?;
+                rows.filter_map(Result::ok).collect()
+            } else {
+                Vec::new()
+            };
+
+            let summary_lines = if !library_exists && history_exists {
+                vec![
+                    format!("Spotify history is present with {history_count} plays, but no liked-library export was found to compare against ownership."),
+                    "Lyra can treat that history as taste pressure, but missing-world recovery is still underfed until the library export is present.".to_string(),
+                ]
+            } else if library_exists {
+                vec![
+                    format!(
+                        "Cassette found {library_count} Spotify library entries; {recoverable_missing_count} are still missing from your owned world and not yet queued."
+                    ),
+                    format!(
+                        "{owned_overlap_count} already overlap with the local library, and {queued_overlap_count} more are already in the acquisition lane."
+                    ),
+                ]
+            } else {
+                vec!["Spotify evidence is not available yet.".to_string()]
+            };
+
+            Ok(commands::SpotifyGapSummary {
+                available: history_exists || library_exists,
+                db_path: Some(legacy_path.display().to_string()),
+                history_count,
+                library_count,
+                features_count,
+                owned_overlap_count,
+                queued_overlap_count,
+                recoverable_missing_count,
+                top_artists,
+                missing_candidates,
+                summary_lines,
+            })
+        })?;
+
+        Ok(summary.unwrap_or(commands::SpotifyGapSummary {
+            available: false,
+            db_path: Some(self.legacy_db_path().display().to_string()),
+            history_count: 0,
+            library_count: 0,
+            features_count: 0,
+            owned_overlap_count: 0,
+            queued_overlap_count: 0,
+            recoverable_missing_count: 0,
+            top_artists: Vec::new(),
+            missing_candidates: Vec::new(),
+            summary_lines: vec![
+                "Cassette could not find a Spotify export database yet. Set LYRA_DB_PATH or keep lyra_registry.db in the repo root to surface that lane.".to_string(),
+            ],
+        }))
     }
 
     /// Get related artists for a given artist name.
@@ -1421,11 +1848,9 @@ impl LyraCore {
     pub fn get_graph_stats(&self) -> LyraResult<commands::GraphStats> {
         let conn = self.conn()?;
         let total_artists: i64 = conn
-            .query_row(
-                "SELECT COUNT(DISTINCT source) FROM connections",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT COUNT(DISTINCT source) FROM connections", [], |r| {
+                r.get(0)
+            })
             .unwrap_or(0);
         let total_connections: i64 = conn
             .query_row("SELECT COUNT(*) FROM connections", [], |r| r.get(0))
@@ -1477,10 +1902,16 @@ impl LyraCore {
         target_root_id: Option<i64>,
     ) -> LyraResult<Vec<AcquisitionQueueItem>> {
         let conn = self.conn()?;
-        let validation = Self::validate_acquisition_request(&conn, &artist, &title, album.as_deref())?;
+        let validation =
+            Self::validate_acquisition_request(&conn, &artist, &title, album.as_deref())?;
         let (target_root_id, target_root_path) = Self::resolve_target_root(&conn, target_root_id)?;
-        let priority =
-            acquisition::compute_initial_priority(&conn, &validation.artist, &validation.title, validation.album.as_deref(), source.as_deref())?;
+        let priority = acquisition::compute_initial_priority(
+            &conn,
+            &validation.artist,
+            &validation.title,
+            validation.album.as_deref(),
+            source.as_deref(),
+        )?;
         let item = acquisition::add_acquisition_item(
             &conn,
             &validation.artist,
@@ -1513,10 +1944,9 @@ impl LyraCore {
                 item.id,
                 "validating",
                 &validation.summary,
-                validation
-                    .detail
-                    .as_deref()
-                    .or(Some("Queue item was blocked before the provider waterfall started")),
+                validation.detail.as_deref().or(Some(
+                    "Queue item was blocked before the provider waterfall started",
+                )),
             )?;
             acquisition::apply_validation_metadata(
                 &conn,
@@ -1544,7 +1974,11 @@ impl LyraCore {
         acquisition::clear_completed(&conn)
     }
 
-    pub fn cancel_acquisition_item(&self, id: i64, detail: Option<String>) -> LyraResult<Vec<AcquisitionQueueItem>> {
+    pub fn cancel_acquisition_item(
+        &self,
+        id: i64,
+        detail: Option<String>,
+    ) -> LyraResult<Vec<AcquisitionQueueItem>> {
         let conn = self.conn()?;
         acquisition::request_cancel(&conn, id, detail.as_deref())?;
         acquisition::list_acquisition_queue(&conn, None)
@@ -1564,10 +1998,7 @@ impl LyraCore {
     /// Returns the number of new items added.
     pub fn seed_acquisition_from_spotify_library(&self) -> LyraResult<usize> {
         let conn = self.conn()?;
-        let legacy_path = std::env::var("LYRA_DB_PATH")
-            .ok()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("lyra_registry.db"));
+        let legacy_path = self.legacy_db_path();
         if !legacy_path.exists() {
             return Ok(0);
         }
@@ -1593,7 +2024,10 @@ impl LyraCore {
                 continue;
             }
             let validation = Self::validate_acquisition_request(
-                &conn, artist.trim(), title.trim(), album.as_deref(),
+                &conn,
+                artist.trim(),
+                title.trim(),
+                album.as_deref(),
             )?;
             let (target_root_id, target_root_path) = Self::resolve_target_root(&conn, None)?;
             let priority = acquisition::compute_initial_priority(
@@ -1620,13 +2054,21 @@ impl LyraCore {
         Ok(added)
     }
 
-    pub fn set_acquisition_priority(&self, id: i64, priority_score: f64) -> LyraResult<Vec<AcquisitionQueueItem>> {
+    pub fn set_acquisition_priority(
+        &self,
+        id: i64,
+        priority_score: f64,
+    ) -> LyraResult<Vec<AcquisitionQueueItem>> {
         let conn = self.conn()?;
         acquisition::set_priority(&conn, id, priority_score)?;
         acquisition::list_acquisition_queue(&conn, None)
     }
 
-    pub fn move_acquisition_queue_item(&self, id: i64, new_position: i64) -> LyraResult<Vec<AcquisitionQueueItem>> {
+    pub fn move_acquisition_queue_item(
+        &self,
+        id: i64,
+        new_position: i64,
+    ) -> LyraResult<Vec<AcquisitionQueueItem>> {
         let conn = self.conn()?;
         acquisition::move_queue_item(&conn, id, new_position)?;
         acquisition::list_acquisition_queue(&conn, None)
@@ -1652,7 +2094,12 @@ impl LyraCore {
             provider_configs
                 .iter()
                 .find(|record| record.provider_key == key)
-                .and_then(|record| record.config.get(config_key).or_else(|| record.config.get(env_key)))
+                .and_then(|record| {
+                    record
+                        .config
+                        .get(config_key)
+                        .or_else(|| record.config.get(env_key))
+                })
                 .and_then(Value::as_str)
                 .map(str::to_string)
                 .or_else(|| std::env::var(env_key).ok())
@@ -1666,11 +2113,18 @@ impl LyraCore {
             .as_ref()
             .map(|root| root.join("oracle").join("acquirers").join("waterfall.py"));
         let waterfall_available = waterfall_script.as_ref().is_some_and(|p| p.exists());
-        let qobuz_service_url = provider_config("qobuz", "qobuz_service_url", "QOBUZ_SERVICE_URL", "http://localhost:7700");
-        let qobuz_service_available =
-            ureq::get(&format!("{}/health", qobuz_service_url.trim_end_matches('/')))
-                .call()
-                .is_ok();
+        let qobuz_service_url = provider_config(
+            "qobuz",
+            "qobuz_service_url",
+            "QOBUZ_SERVICE_URL",
+            "http://localhost:7700",
+        );
+        let qobuz_service_available = ureq::get(&format!(
+            "{}/health",
+            qobuz_service_url.trim_end_matches('/')
+        ))
+        .call()
+        .is_ok();
         let slskd_url = provider_config("slskd", "slskd_url", "SLSKD_URL", "http://localhost:5030");
         let slskd_api_base = std::env::var("LYRA_PROTOCOL_NODE_API_BASE")
             .ok()
@@ -1723,11 +2177,14 @@ impl LyraCore {
             .unwrap_or_else(|| acquisition_root.join("downloads"));
 
         if let Ok(space) = fs2::available_space(&downloads_dir) {
-                free_bytes = space as i64;
+            free_bytes = space as i64;
         }
         let disk_ok = free_bytes >= required_bytes;
         let library_roots = library::list_library_roots(&conn)?;
-        let library_root_ok = !library_roots.is_empty() && library_roots.iter().any(|root| PathBuf::from(&root.path).exists());
+        let library_root_ok = !library_roots.is_empty()
+            && library_roots
+                .iter()
+                .any(|root| PathBuf::from(&root.path).exists());
         let output_path_ok = create_dir_all_if_missing(&downloads_dir).is_ok()
             && create_dir_all_if_missing(&staging_dir).is_ok()
             && is_path_writable(&downloads_dir)
@@ -1761,7 +2218,10 @@ impl LyraCore {
             ));
         }
         if !library_root_ok {
-            notes.push("No accessible library root is configured for post-acquisition organization.".to_string());
+            notes.push(
+                "No accessible library root is configured for post-acquisition organization."
+                    .to_string(),
+            );
         }
         if !output_path_ok {
             notes.push(format!(
@@ -1796,7 +2256,12 @@ impl LyraCore {
         checks.push(AcquisitionPreflightCheck {
             key: "provider_readiness".to_string(),
             label: "Provider/tool readiness".to_string(),
-            status: if downloader_available { "ok" } else { "warning" }.to_string(),
+            status: if downloader_available {
+                "ok"
+            } else {
+                "warning"
+            }
+            .to_string(),
             detail: if downloader_available {
                 downloader_tools
                     .iter()
@@ -1824,14 +2289,19 @@ impl LyraCore {
             detail: if let Some(root) = library_roots.first() {
                 root.path.clone()
             } else {
-                "Configure at least one writable library root for organize/index completion".to_string()
+                "Configure at least one writable library root for organize/index completion"
+                    .to_string()
             },
         });
         checks.push(AcquisitionPreflightCheck {
             key: "output_paths".to_string(),
             label: "Staging and downloads".to_string(),
             status: if output_path_ok { "ok" } else { "failed" }.to_string(),
-            detail: format!("downloads={} | staging={}", downloads_dir.display(), staging_dir.display()),
+            detail: format!(
+                "downloads={} | staging={}",
+                downloads_dir.display(),
+                staging_dir.display()
+            ),
         });
 
         if notes.is_empty() {
@@ -1873,7 +2343,10 @@ impl LyraCore {
     where
         F: Fn(i64) + Send + Sync + 'static,
     {
-        Ok(acquisition_worker::start_worker_with_callback(self.paths.clone(), notify))
+        Ok(acquisition_worker::start_worker_with_callback(
+            self.paths.clone(),
+            notify,
+        ))
     }
 
     /// Stop the background acquisition worker.
@@ -1912,7 +2385,10 @@ impl LyraCore {
         Ok(rows.filter_map(Result::ok).collect())
     }
 
-    pub fn list_recent_plays(&self, limit: Option<i64>) -> LyraResult<Vec<commands::RecentPlayRecord>> {
+    pub fn list_recent_plays(
+        &self,
+        limit: Option<i64>,
+    ) -> LyraResult<Vec<commands::RecentPlayRecord>> {
         let conn = self.conn()?;
         let limit = limit.unwrap_or(20).min(200);
         let mut stmt = conn.prepare(
@@ -2047,13 +2523,11 @@ impl LyraCore {
                     .or_else(|| payload.get("reason").and_then(Value::as_str))
                     .or_else(|| payload.get("message").and_then(Value::as_str))
                     .map(ToOwned::to_owned);
-                let year = payload
-                    .get("year")
-                    .and_then(|value| match value {
-                        Value::Number(number) => number.as_i64().map(|raw| raw as i32),
-                        Value::String(text) => text.parse::<i32>().ok(),
-                        _ => None,
-                    });
+                let year = payload.get("year").and_then(|value| match value {
+                    Value::Number(number) => number.as_i64().map(|raw| raw as i32),
+                    Value::String(text) => text.parse::<i32>().ok(),
+                    _ => None,
+                });
                 let entry = EnrichmentEntry {
                     provider: provider.clone(),
                     status: status.clone(),
@@ -2080,7 +2554,13 @@ impl LyraCore {
                         .and_then(Value::as_str)
                         .filter(|value| !value.is_empty())
                         .map(ToOwned::to_owned),
-                    match_score: match_score_raw.map(|score| if score > 1.0 { (score / 100.0) as f32 } else { score as f32 }),
+                    match_score: match_score_raw.map(|score| {
+                        if score > 1.0 {
+                            (score / 100.0) as f32
+                        } else {
+                            score as f32
+                        }
+                    }),
                     listeners: payload.get("listeners").and_then(Value::as_i64),
                     play_count: payload
                         .get("playcount")
@@ -2130,8 +2610,14 @@ impl LyraCore {
                 let should_replace = match best_by_provider.get(&provider) {
                     None => true,
                     Some(existing) => {
-                        let existing_rank = ((existing.status == "ok") as i32, (existing.confidence * 1000.0) as i32);
-                        let next_rank = ((entry.status == "ok") as i32, (entry.confidence * 1000.0) as i32);
+                        let existing_rank = (
+                            (existing.status == "ok") as i32,
+                            (existing.confidence * 1000.0) as i32,
+                        );
+                        let next_rank = (
+                            (entry.status == "ok") as i32,
+                            (entry.confidence * 1000.0) as i32,
+                        );
                         next_rank > existing_rank
                     }
                 };
@@ -2162,7 +2648,11 @@ impl LyraCore {
             .collect::<Vec<_>>();
         let identity_confidence = entries
             .iter()
-            .filter(|entry| entry.mbid.is_some() || entry.provider == "musicbrainz" || entry.provider == "acoustid")
+            .filter(|entry| {
+                entry.mbid.is_some()
+                    || entry.provider == "musicbrainz"
+                    || entry.provider == "acoustid"
+            })
             .map(|entry| entry.confidence)
             .fold(0.0_f32, f32::max);
         let has_ok = entries.iter().any(|entry| entry.status == "ok");
@@ -2369,8 +2859,10 @@ impl LyraCore {
             .filter_map(Result::ok)
             .collect::<Vec<_>>();
 
-        let mut provenance_by_provider: std::collections::HashMap<String, commands::EnrichmentEntry> =
-            std::collections::HashMap::new();
+        let mut provenance_by_provider: std::collections::HashMap<
+            String,
+            commands::EnrichmentEntry,
+        > = std::collections::HashMap::new();
         let mut primary_mbid: Option<String> = None;
         let mut identity_confidence = 0.0_f32;
         for track in top_tracks.iter().take(8) {
@@ -2383,8 +2875,14 @@ impl LyraCore {
                 let should_replace = match provenance_by_provider.get(&entry.provider) {
                     None => true,
                     Some(existing) => {
-                        let existing_rank = ((existing.status == "ok") as i32, (existing.confidence * 1000.0) as i32);
-                        let next_rank = ((entry.status == "ok") as i32, (entry.confidence * 1000.0) as i32);
+                        let existing_rank = (
+                            (existing.status == "ok") as i32,
+                            (existing.confidence * 1000.0) as i32,
+                        );
+                        let next_rank = (
+                            (entry.status == "ok") as i32,
+                            (entry.confidence * 1000.0) as i32,
+                        );
                         next_rank > existing_rank
                     }
                 };
@@ -2436,7 +2934,11 @@ impl LyraCore {
         self.play_track(first)
     }
 
-    pub fn play_album(&self, artist_name: String, album_title: String) -> LyraResult<PlaybackState> {
+    pub fn play_album(
+        &self,
+        artist_name: String,
+        album_title: String,
+    ) -> LyraResult<PlaybackState> {
         let conn = self.conn()?;
         let track_ids = library::list_track_ids_for_album(
             &conn,
@@ -2459,8 +2961,8 @@ impl LyraCore {
         track_id: i64,
     ) -> LyraResult<commands::TrackEnrichmentResult> {
         let conn = self.conn()?;
-        let track = library::get_track_by_id(&conn, track_id)?
-            .ok_or(LyraError::NotFound("track"))?;
+        let track =
+            library::get_track_by_id(&conn, track_id)?.ok_or(LyraError::NotFound("track"))?;
         self.build_track_enrichment_result(&conn, &track)
     }
 
@@ -2517,7 +3019,12 @@ impl LyraCore {
         )?;
         let rows: Vec<(i64, String, String, String)> = stmt
             .query_map(params![limit as i64], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get::<_, Option<String>>(3)?.unwrap_or_default()))
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                ))
             })?
             .filter_map(|r| r.ok())
             .collect();
@@ -2529,9 +3036,16 @@ impl LyraCore {
         for (track_id, artist, title, path) in rows {
             // Check if already cached (dispatcher is cache-first, but we want to know if we
             // actually made an HTTP call to apply the rate-limit sleep only when needed).
-            let cached_before = enrichment::get_enrich_cache(&conn, "musicbrainz",
-                &format!("{}::{}", artist.trim().to_ascii_lowercase(), title.trim().to_ascii_lowercase()))?
-                .is_some();
+            let cached_before = enrichment::get_enrich_cache(
+                &conn,
+                "musicbrainz",
+                &format!(
+                    "{}::{}",
+                    artist.trim().to_ascii_lowercase(),
+                    title.trim().to_ascii_lowercase()
+                ),
+            )?
+            .is_some();
 
             let _ = dispatcher.dispatch(&conn, track_id, &artist, &title, &path);
             dispatched += 1;
@@ -2543,56 +3057,6 @@ impl LyraCore {
         }
         Ok(dispatched)
     }
-}
-
-fn recent_taste_axes(prompt: &str, steer: Option<&SteerPayload>) -> Vec<String> {
-    let lower = prompt.to_ascii_lowercase();
-    let mut axes = Vec::new();
-    for (needle, label) in [
-        ("less obvious", "less obvious"),
-        ("more obvious", "more obvious"),
-        ("more adventurous", "more adventurous"),
-        ("more familiar", "more familiar"),
-        ("nocturnal", "more nocturnal"),
-        ("darker", "darker"),
-        ("warmer", "warmer"),
-        ("rougher", "rougher"),
-        ("dirtier", "dirtier"),
-        ("more human", "more human"),
-        ("softer", "softer"),
-    ] {
-        if lower.contains(needle) {
-            axes.push(label.to_string());
-        }
-    }
-    if let Some(steer) = steer {
-        if steer.novelty_bias.unwrap_or(0.56) >= 0.7 {
-            axes.push("less obvious".to_string());
-        }
-        if steer.adventurousness.unwrap_or(0.56) >= 0.7 {
-            axes.push("more adventurous".to_string());
-        }
-        if steer.warmth_bias.unwrap_or(0.5) >= 0.7 {
-            axes.push("more nocturnal".to_string());
-        }
-        if steer.contrast_sharpness.unwrap_or(0.5) >= 0.7 {
-            axes.push("sharper contrast".to_string());
-        }
-    }
-    axes.sort();
-    axes.dedup();
-    axes
-}
-
-fn merge_recent_memory(existing: &[String], incoming: &[String]) -> Vec<String> {
-    let mut merged = incoming.to_vec();
-    for item in existing {
-        if !merged.contains(item) {
-            merged.push(item.clone());
-        }
-    }
-    merged.truncate(6);
-    merged
 }
 
 fn create_dir_all_if_missing(path: &Path) -> std::io::Result<()> {
@@ -2610,27 +3074,5 @@ fn is_path_writable(path: &Path) -> bool {
             true
         }
         Err(_) => false,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{merge_recent_memory, recent_taste_axes};
-
-    #[test]
-    fn taste_memory_extracts_and_merges_recent_axes() {
-        let axes = recent_taste_axes(
-            "make this less obvious and rougher",
-            None,
-        );
-        assert!(axes.contains(&"less obvious".to_string()));
-        assert!(axes.contains(&"rougher".to_string()));
-
-        let merged = merge_recent_memory(
-            &["more nocturnal".to_string(), "warmer".to_string()],
-            &axes,
-        );
-        assert_eq!(merged.first().map(String::as_str), Some("less obvious"));
-        assert!(merged.contains(&"more nocturnal".to_string()));
     }
 }

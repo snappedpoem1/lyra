@@ -1,15 +1,17 @@
 ﻿<script lang="ts">
+  import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import { api } from "$lib/tauri";
   import { shell } from "$lib/stores/lyra";
   import {
+    setComposerText,
     setWorkspaceBridgeActions,
     setWorkspaceExplanation,
     setWorkspacePage,
     setWorkspaceProvenance,
     setWorkspaceTrack
   } from "$lib/stores/workspace";
-  import type { AcquisitionQueueItem, DiscoverySession, ExplainPayload, GraphStats, PlaylistSummary, RecentPlayRecord, RecommendationResult, TrackEnrichmentResult } from "$lib/types";
+  import type { AcquisitionQueueItem, DiscoverySession, ExplainPayload, GraphStats, PlaylistSummary, RecentPlayRecord, RecommendationResult, SpotifyGapSummary, TrackEnrichmentResult } from "$lib/types";
 
   let vibePlaylists: PlaylistSummary[] = [];
   let acquisitionQueue: AcquisitionQueueItem[] = [];
@@ -66,6 +68,9 @@
   let expandedProvenance: Record<number, TrackEnrichmentResult | "loading"> = {};
   let aiPlaylistBusy = false;
   let aiPlaylistMessage = "";
+  let spotifyGapSummary: SpotifyGapSummary | null = null;
+  let spotifyActionMessage = "";
+  let spotifyActionBusy = false;
 
   const STATUS_COLORS: Record<string, string> = {
     pending:   "rgba(203,255,107,0.18)",
@@ -78,9 +83,14 @@
     const all = await api.playlists();
     vibePlaylists = all.filter((p) => p.name.startsWith("[Vibe]"));
     await loadQueue();
+    await loadSpotifyGapSummary();
     // G-064: load discovery session + graph stats in background
     loadDiscoverySession();
     loadGraphStats();
+  }
+
+  async function loadSpotifyGapSummary(): Promise<void> {
+    spotifyGapSummary = await api.getSpotifyGapSummary(6).catch(() => null);
   }
 
   async function loadGraphStats() {
@@ -132,10 +142,87 @@
     try {
       recommendations = await api.getRecommendations(25);
       recsLoaded = true;
+      const topRecommendation = recommendations[0];
+      setWorkspaceBridgeActions(buildDiscoverActions(topRecommendation?.track.artist ?? null));
     } catch (e) {
       recsError = String(e);
     } finally {
       recsLoading = false;
+    }
+  }
+
+  function openLyraPrompt(nextPrompt: string): Promise<void> {
+    const trimmed = nextPrompt.trim();
+    setComposerText(trimmed);
+    return goto(`/playlists?compose=1&prompt=${encodeURIComponent(trimmed)}`);
+  }
+
+  function buildDiscoverActions(anchorArtist: string | null): Array<{ label: string; href?: string; detail?: string; emphasis?: "default" | "accent" }> {
+    const topArtist = spotifyGapSummary?.topArtists[0]?.artist;
+    const actions = [
+      {
+        label: "Three exits",
+        href: "/playlists?compose=1&prompt=" + encodeURIComponent("give me three exits from this scene, one safe, one interesting, one dangerous"),
+        detail: "Safe, interesting, and dangerous scene departures.",
+        emphasis: "accent" as const,
+      },
+      topArtist
+        ? {
+            label: `Recover ${topArtist}`,
+            href: "/playlists?compose=1&prompt=" + encodeURIComponent(`rebuild the world i used to live in around ${topArtist}, but route it through what my local library is still missing`),
+            detail: "Use Spotify memory as route pressure instead of only acquisition data."
+          }
+        : null,
+      anchorArtist
+        ? {
+            label: `Bridge from ${anchorArtist}`,
+            href: `/artists/${encodeURIComponent(anchorArtist)}`,
+            detail: "Open the artist route and use adjacency instead of flat similarity."
+          }
+        : null,
+    ].filter(Boolean);
+    return actions as Array<{ label: string; href?: string; detail?: string; emphasis?: "default" | "accent" }>;
+  }
+
+  function recommendationLyraTake(rec: RecommendationResult, payload?: ExplainPayload | "loading"): string {
+    if (!payload || payload === "loading") {
+      if (spotifyGapSummary?.topArtists.some((artist) => artist.artist.toLowerCase() === rec.track.artist.toLowerCase())) {
+        return "This looks close to a missing world from your Spotify history, not just a generic nearest neighbor.";
+      }
+      return rec.score > 0.82
+        ? "Lyra sees this as a close fit to your current taste pressure."
+        : "Lyra sees this as a route-worthy detour rather than a strict home-base match.";
+    }
+    return payload.reasons[0] ?? "Lyra found a plausible route into this track.";
+  }
+
+  async function queueSpotifyCandidate(artist: string, title: string, album?: string | null): Promise<void> {
+    spotifyActionBusy = true;
+    spotifyActionMessage = "";
+    try {
+      await api.addToAcquisitionQueue(artist, title, album ?? undefined, "spotify_gap_discover");
+      spotifyActionMessage = `Queued ${artist} - ${title} into acquisition from Discover.`;
+      await loadQueue();
+      await loadSpotifyGapSummary();
+    } finally {
+      spotifyActionBusy = false;
+    }
+  }
+
+  async function recoverMissingWorld(entries: SpotifyGapSummary["missingCandidates"]): Promise<void> {
+    if (!entries.length) return;
+    spotifyActionBusy = true;
+    spotifyActionMessage = "";
+    try {
+      const payload = entries.slice(0, 6).map((entry) => [entry.artist, entry.title, entry.album ?? null] as [string, string, string | null]);
+      const added = await api.bulkAddToAcquisitionQueue(payload, "spotify_missing_world");
+      spotifyActionMessage = added.length
+        ? `Queued ${added.length} missing-world tracks from Spotify memory.`
+        : "Those missing-world tracks are already owned or queued.";
+      await loadQueue();
+      await loadSpotifyGapSummary();
+    } finally {
+      spotifyActionBusy = false;
     }
   }
 
@@ -244,6 +331,7 @@
       "Follow recommendations, bridge leads, taste signals, and acquisition candidates without leaving the shell.",
       "bridge"
     );
+    setWorkspaceBridgeActions(buildDiscoverActions(null));
     load();
   });
 </script>
@@ -252,6 +340,55 @@
   <p class="eyebrow">Discover</p>
   <h2>For You - Vibes - Acquisition</h2>
 </section>
+
+{#if spotifyGapSummary?.available}
+  <div class="spotify-gap-panel">
+    <div class="panel-head-row">
+      <div>
+        <p class="panel-head eyebrow">Missing worlds</p>
+        <strong class="spotify-summary">{spotifyGapSummary.summaryLines[0]}</strong>
+        {#if spotifyGapSummary.summaryLines[1]}
+          <p class="muted">{spotifyGapSummary.summaryLines[1]}</p>
+        {/if}
+      </div>
+      <div class="route-chip-row">
+        <button class="route-chip accent" on:click={() => openLyraPrompt("give me three exits from this scene, one safe, one interesting, one dangerous")}>Three exits</button>
+        <button class="route-chip" on:click={() => openLyraPrompt("same pulse, different world")}>Same pulse</button>
+        <button class="route-chip" on:click={() => openLyraPrompt("take me somewhere adjacent but don’t give me the canon")}>Less canon</button>
+      </div>
+    </div>
+    <div class="spotify-stats-row">
+      <span><strong>{spotifyGapSummary.historyCount}</strong> history plays</span>
+      <span><strong>{spotifyGapSummary.ownedOverlapCount}</strong> already owned</span>
+      <span><strong>{spotifyGapSummary.recoverableMissingCount}</strong> recoverable gaps</span>
+    </div>
+    {#if spotifyGapSummary.topArtists.length}
+      <div class="spotify-worlds">
+        {#each spotifyGapSummary.topArtists.slice(0, 3) as artist}
+          <button class="spotify-world-card" on:click={() => openLyraPrompt(`rebuild the world i used to live in around ${artist.artist}, but route it through what my local library is still missing`)}>
+            <strong>{artist.artist}</strong>
+            <span>{artist.playCount} plays</span>
+            <small>{artist.missingTrackCount} still missing locally</small>
+          </button>
+        {/each}
+      </div>
+    {/if}
+    {#if spotifyGapSummary.missingCandidates.length}
+      <div class="spotify-candidate-row">
+        <div class="candidate-copy">
+          <strong>Fast missing-world recovery</strong>
+          <small>Queue the strongest missing hinge tracks directly from Discover.</small>
+        </div>
+        <button on:click={() => recoverMissingWorld(spotifyGapSummary?.missingCandidates ?? [])} disabled={spotifyActionBusy}>
+          {spotifyActionBusy ? "Queueing..." : "Queue top missing tracks"}
+        </button>
+      </div>
+      {#if spotifyActionMessage}
+        <p class="muted">{spotifyActionMessage}</p>
+      {/if}
+    {/if}
+  </div>
+{/if}
 
 <!-- Taste profile panel -->
 {#if tasteProfile && tasteProfile.totalSignals > 0}
@@ -325,11 +462,20 @@
   {:else if !recommendations.length}
     <p class="muted">No scored tracks yet. Run a library scan and enrich your library to generate recommendations.</p>
   {:else}
+    <div class="discover-route-bar">
+      <button class="route-chip accent" on:click={() => openLyraPrompt("give me three exits from this scene, one safe, one interesting, one dangerous")}>Safe / interesting / dangerous</button>
+      <button class="route-chip" on:click={() => openLyraPrompt("stay in the ache, lose the gloss")}>Lose the gloss</button>
+      <button class="route-chip" on:click={() => openLyraPrompt("what’s the rewarding risk here")}>Rewarding risk</button>
+      <button class="route-chip" on:click={() => openLyraPrompt("less obvious, still aching, keep the pulse")}>Keep the pulse</button>
+    </div>
     <div class="recs-grid">
       {#each recommendations as rec}
         <div class="rec-card">
           <div class="rec-meta">
-            <strong class="rec-title">{rec.track.title}</strong>
+            <div class="rec-title-row">
+              <strong class="rec-title">{rec.track.title}</strong>
+              <span class="provider-badge provider-{rec.provider.replace('/', '-')}">{rec.provider}</span>
+            </div>
             <a class="rec-artist" href={`/artists/${encodeURIComponent(rec.track.artist)}`}>{rec.track.artist}</a>
             {#if rec.track.album}<span class="rec-album">{rec.track.album}</span>{/if}
             <div class="score-row">
@@ -338,9 +484,20 @@
               </div>
               <span class="score-label">{Math.round(rec.score * 100)}%</span>
             </div>
+            <p class="lyra-take">{rec.whyThisTrack || recommendationLyraTake(rec, expandedExplain[rec.track.id])}</p>
+            {#if rec.evidence?.length > 0}
+              <div class="inline-evidence">
+                {#each rec.evidence.slice(0, 2) as ev}
+                  <span class="ev-chip ev-{ev.typeLabel}">{ev.text}</span>
+                {/each}
+              </div>
+            {/if}
           </div>
           <div class="rec-actions">
             <button on:click={() => enqueueRec(rec.track.id)}>+ Queue</button>
+            <button on:click={() => openLyraPrompt(`bridge from ${rec.track.artist} into something adjacent but less obvious`)}>
+              Route
+            </button>
             <button class="provenance-btn" on:click={() => toggleProvenance(rec.track.id)}>
               {expandedProvenance[rec.track.id] ? "Hide Proof" : "Proof"}
             </button>
@@ -354,9 +511,33 @@
                 <p class="muted">Loading...</p>
               {:else}
                 {@const ep = expandedExplain[rec.track.id] as import('$lib/types').ExplainPayload}
-                {#each ep.reasons as reason}
-                  <p class="reason">{reason}</p>
-                {/each}
+                {#if ep.whyThisTrack}
+                  <p class="explain-why">{ep.whyThisTrack}</p>
+                {/if}
+                {#if ep.evidenceItems?.length > 0}
+                  <div class="evidence-list">
+                    {#each ep.evidenceItems as ev}
+                      <div class="evidence-row">
+                        <span class="ev-label ev-{ev.typeLabel}">{ev.typeLabel}</span>
+                        <span class="ev-source">{ev.source}</span>
+                        <span class="ev-text">{ev.text}</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+                {#if ep.inferredByLyra?.length > 0}
+                  <div class="inferred-section">
+                    <span class="inferred-label">Inferred by Lyra</span>
+                    {#each ep.inferredByLyra as line}
+                      <p class="inferred-line">{line}</p>
+                    {/each}
+                  </div>
+                {/if}
+                {#if !ep.whyThisTrack}
+                  {#each ep.reasons as reason}
+                    <p class="reason">{reason}</p>
+                  {/each}
+                {/if}
                 <p class="confidence-line">Confidence: {Math.round(ep.confidence * 100)}%</p>
               {/if}
             </div>
@@ -423,14 +604,17 @@
   <p class="panel-head eyebrow">Recent Discovery</p>
   <div class="discovery-rows">
     {#each discoverySession.recent as interaction}
-      <div class="discovery-row">
-        <span class="disc-action">{interaction.action.replace(/_/g, ' ')}</span>
-        <a class="disc-artist" href={`/artists/${encodeURIComponent(interaction.artistName)}`}>
-          {interaction.artistName}
-        </a>
-        <span class="disc-ts muted">{interaction.createdAt.slice(0, 16).replace('T', ' ')}</span>
-        <a class="go-btn" href={`/artists/${encodeURIComponent(interaction.artistName)}`}>Go</a>
-      </div>
+        <div class="discovery-row">
+          <span class="disc-action">{interaction.action.replace(/_/g, ' ')}</span>
+          <a class="disc-artist" href={`/artists/${encodeURIComponent(interaction.artistName)}`}>
+            {interaction.artistName}
+          </a>
+          <span class="disc-ts muted">{interaction.createdAt.slice(0, 16).replace('T', ' ')}</span>
+          <button class="go-btn" on:click={() => openLyraPrompt(`bridge from ${interaction.artistName} into a rewarding risk`)}>
+            Route
+          </button>
+          <a class="go-btn" href={`/artists/${encodeURIComponent(interaction.artistName)}`}>Go</a>
+        </div>
     {/each}
   </div>
 </div>
@@ -518,6 +702,44 @@
   .panel { display: flex; flex-direction: column; gap: 10px; }
   .panel-head { margin: 0; }
   .panel-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .route-chip-row, .discover-route-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+  .route-chip {
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05);
+    color: #cfe5f3;
+    font: inherit;
+    cursor: pointer;
+  }
+  .route-chip.accent { background: rgba(122,255,198,0.12); border-color: rgba(122,255,198,0.18); color: #d6f8ea; }
+  .discover-route-bar { margin-bottom: 12px; }
+
+  .spotify-gap-panel {
+    margin: 0 0 20px;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(24, 35, 24, 0.75), rgba(21, 26, 37, 0.88));
+    border: 1px solid rgba(146, 208, 170, 0.16);
+    display: grid;
+    gap: 12px;
+  }
+  .spotify-summary { display: block; margin-top: 4px; font-size: 1rem; color: #f0f7fb; }
+  .spotify-stats-row { display: flex; flex-wrap: wrap; gap: 14px; color: #9cb2c7; font-size: 0.82rem; }
+  .spotify-worlds { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .spotify-world-card {
+    display: grid;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    text-align: left;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .spotify-world-card small, .spotify-world-card span { color: #9cb2c7; }
+  .spotify-candidate-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .candidate-copy { display: grid; gap: 2px; }
+  .candidate-copy small { color: #9cb2c7; }
 
   /* Recent plays */
   .recent-panel { margin-bottom: 20px; padding: 14px 18px; border-radius: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)); border: 1px solid rgba(255,255,255,0.1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06); display: flex; flex-direction: column; gap: 8px; }
@@ -545,10 +767,70 @@
     gap: 8px;
   }
   .rec-meta { display: grid; gap: 3px; }
+  .rec-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
   .rec-title { font-size: 0.95rem; }
   .rec-artist { color: #9cb2c7; font-size: 0.82rem; }
   .rec-album { color: #7a95a8; font-size: 0.75rem; }
+  .lyra-take { margin: 6px 0 0; color: #d0e8f8; font-size: 0.8rem; line-height: 1.4; }
   .score-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+
+  /* Provider badges */
+  .provider-badge {
+    flex-shrink: 0;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: rgba(255,255,255,0.07);
+    color: #9cb2c7;
+    border: 1px solid rgba(255,255,255,0.1);
+    white-space: nowrap;
+  }
+  .provider-badge.provider-local-taste { color: #7affc6; background: rgba(122,255,198,0.08); border-color: rgba(122,255,198,0.16); }
+  .provider-badge.provider-local-deep_cut { color: #ffd166; background: rgba(255,209,102,0.1); border-color: rgba(255,209,102,0.18); }
+  .provider-badge.provider-scout-bridge { color: #a8c4e0; background: rgba(168,196,224,0.1); border-color: rgba(168,196,224,0.18); }
+  .provider-badge.provider-graph-co_play { color: #f4a261; background: rgba(244,162,97,0.1); border-color: rgba(244,162,97,0.18); }
+
+  /* Inline evidence chips under lyra-take */
+  .inline-evidence { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+  .ev-chip {
+    font-size: 0.68rem;
+    color: #9cb2c7;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    padding: 2px 7px;
+    line-height: 1.4;
+  }
+  .ev-chip.ev-scout_bridge, .ev-chip.ev-scout-bridge { color: #a8c4e0; background: rgba(168,196,224,0.07); }
+  .ev-chip.ev-deep_cut { color: #ffd166; background: rgba(255,209,102,0.07); }
+  .ev-chip.ev-co_play { color: #f4a261; background: rgba(244,162,97,0.07); }
+
+  /* Explain panel structured layout */
+  .explain-why { color: #d0e8f8; font-size: 0.82rem; line-height: 1.45; font-style: italic; margin: 0 0 6px; }
+  .evidence-list { display: grid; gap: 4px; margin: 4px 0; }
+  .evidence-row { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; align-items: start; font-size: 0.72rem; }
+  .ev-label {
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: rgba(255,255,255,0.06);
+    color: #7a95a8;
+    white-space: nowrap;
+  }
+  .ev-label.ev-taste_alignment { color: #7affc6; background: rgba(122,255,198,0.08); }
+  .ev-label.ev-deep_cut { color: #ffd166; background: rgba(255,209,102,0.08); }
+  .ev-label.ev-scout_bridge { color: #a8c4e0; background: rgba(168,196,224,0.08); }
+  .ev-label.ev-co_play { color: #f4a261; background: rgba(244,162,97,0.08); }
+  .ev-label.ev-dimension_match { color: #7affc6; background: rgba(122,255,198,0.06); }
+  .ev-source { color: #7a95a8; font-size: 0.62rem; white-space: nowrap; }
+  .ev-text { color: #c0d8ea; line-height: 1.4; }
+  .inferred-section { margin-top: 6px; padding: 6px 8px; border-radius: 7px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); }
+  .inferred-label { display: block; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em; color: #7a95a8; margin-bottom: 4px; }
+  .inferred-line { color: #9cb2c7; font-size: 0.72rem; line-height: 1.4; margin: 0; }
   .score-bar-bg { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.1); }
   .score-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #34cfab, #5ad1ff); }
   .score-label { font-size: 0.68rem; color: #9cb2c7; width: 32px; text-align: right; }

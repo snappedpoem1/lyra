@@ -110,6 +110,7 @@ export type AppShellState = {
   providers: ProviderConfigRecord[];
   scanJobs: ScanJobRecord[];
   tasteProfile: TasteProfile;
+  tasteMemory: TasteMemorySnapshot;
   acquisitionQueuePending: number;
 };
 
@@ -128,6 +129,40 @@ export type LegacyImportReport = {
   imported: string[];
   unsupported: string[];
   notes: string[];
+};
+
+export type SpotifyTopArtist = {
+  artist: string;
+  playCount: number;
+  totalMsPlayed: number;
+  ownedTrackCount: number;
+  missingTrackCount: number;
+  lastPlayedAt?: string | null;
+};
+
+export type SpotifyMissingCandidate = {
+  artist: string;
+  title: string;
+  album?: string | null;
+  spotifyUri?: string | null;
+  source: string;
+  playCount: number;
+  lastPlayedAt?: string | null;
+  alreadyQueued: boolean;
+};
+
+export type SpotifyGapSummary = {
+  available: boolean;
+  dbPath?: string | null;
+  historyCount: number;
+  libraryCount: number;
+  featuresCount: number;
+  ownedOverlapCount: number;
+  queuedOverlapCount: number;
+  recoverableMissingCount: number;
+  topArtists: SpotifyTopArtist[];
+  missingCandidates: SpotifyMissingCandidate[];
+  summaryLines: string[];
 };
 
 export type TrackScores = {
@@ -270,6 +305,35 @@ export type ComponentHealth = {
   error?: string | null;
 };
 
+export type ComposerDiagnosticEntry = {
+  id: number;
+  level: string;
+  eventType: string;
+  prompt: string;
+  action?: string | null;
+  provider: string;
+  mode: string;
+  message: string;
+  payloadJson?: string | null;
+  createdAt: string;
+};
+
+export type ComposerRunRecord = {
+  id: number;
+  prompt: string;
+  action: string;
+  activeRole: string;
+  summary: string;
+  provider: string;
+  mode: string;
+  createdAt: string;
+};
+
+export type ComposerRunDetail = {
+  record: ComposerRunRecord;
+  response: ComposerResponse;
+};
+
 export type SystemStats = {
   totalTracks: number;
   totalPlaylists: number;
@@ -287,9 +351,25 @@ export type ProviderValidationResult = {
   detail?: string | null;
 };
 
+export type EvidenceItem = {
+  typeLabel: string;
+  source: string;
+  text: string;
+  weight: number;
+};
+
 export type ExplainPayload = {
   trackId: number;
+  /** Composer-grade single-sentence explanation. */
+  whyThisTrack: string;
+  /** Legacy flat reasons list (backward compat). */
   reasons: string[];
+  /** Structured evidence items at TrackReasonPayload depth. */
+  evidenceItems: EvidenceItem[];
+  /** Facts from the prompt or explicit library evidence. */
+  explicitFromPrompt: string[];
+  /** Signals inferred by Lyra from taste/graph/scout. */
+  inferredByLyra: string[];
   confidence: number;
   source: string;
 };
@@ -297,6 +377,12 @@ export type ExplainPayload = {
 export type RecommendationResult = {
   track: TrackRecord;
   score: number;
+  /** Which broker lane produced this: "local/taste", "local/deep_cut", "scout/bridge", "graph/co_play" */
+  provider: string;
+  /** Single-sentence reason at composer payload depth. */
+  whyThisTrack: string;
+  /** Structured evidence items. */
+  evidence: EvidenceItem[];
 };
 
 export type ArtistConnection = {
@@ -437,6 +523,15 @@ export type TrackReasonPayload = {
   confidence: number;
 };
 
+export type PlaylistTrackReasonRecord = {
+  trackId: number;
+  reason: string;
+  reasonPayload?: TrackReasonPayload | null;
+  phaseKey?: string | null;
+  phaseLabel?: string | null;
+  position: number;
+};
+
 export type ComposedPlaylistTrack = {
   track: TrackRecord;
   phaseKey: string;
@@ -465,22 +560,52 @@ export type BridgeStep = {
   why: string;
   distanceFromSource: number;
   distanceFromDestination: number;
+  preserves: string[];
+  changes: string[];
+  adjacencyType: string;
+  adjacencySignals: AdjacencySignal[];
+  leadsToNext: string;
 };
 
 export type BridgePath = {
   sourceLabel: string;
   destinationLabel: string;
+  routeFlavor: string;
   steps: BridgeStep[];
   narrative?: string | null;
   confidence: number;
   alternateDirections: string[];
+  variants: RouteVariantSummary[];
 };
 
 export type DiscoveryDirection = {
+  flavor: string;
   label: string;
   description: string;
   tracks: ComposedPlaylistTrack[];
   why: string;
+  preserves: string[];
+  changes: string[];
+  adjacencySignals: AdjacencySignal[];
+  riskNote: string;
+  rewardNote: string;
+};
+
+export type AdjacencySignal = {
+  dimension: string;
+  relation: string;
+  score: number;
+  note: string;
+};
+
+export type RouteVariantSummary = {
+  flavor: string;
+  label: string;
+  logic: string;
+  preserves: string[];
+  changes: string[];
+  riskNote: string;
+  rewardNote: string;
 };
 
 export type ResponsePosture = "suggestive" | "refining" | "collaborative" | "revelatory";
@@ -502,6 +627,13 @@ export type FallbackVoice = {
 export type RouteComparison = {
   headline: string;
   summary: string;
+  variants: RouteVariantSummary[];
+};
+
+export type LyraReadSurface = {
+  summary: string;
+  cues: string[];
+  confidenceNote: string;
 };
 
 export type LyraFraming = {
@@ -515,6 +647,7 @@ export type LyraFraming = {
   confidence: ConfidenceVoice;
   fallback: FallbackVoice;
   routeComparison?: RouteComparison | null;
+  lyraRead: LyraReadSurface;
   sidewaysTemptations: string[];
   memoryHint?: string | null;
   nextNudges: string[];
@@ -522,9 +655,56 @@ export type LyraFraming = {
 
 export type DiscoveryRoute = {
   seedLabel: string;
+  primaryFlavor: string;
+  sceneExit: boolean;
   directions: DiscoveryDirection[];
   narrative?: string | null;
   confidence: number;
+  variants: RouteVariantSummary[];
+};
+
+export type RememberedPreference = {
+  axisKey: string;
+  axisLabel: string;
+  preferredPole: string;
+  confidence: number;
+  evidenceCount: number;
+  lastSeenAt: string;
+  recencyNote: string;
+  confidenceNote: string;
+  supportingPhrases: string[];
+};
+
+export type RouteChoicePreference = {
+  routeKind: string;
+  action: string;
+  source: string;
+  note: string;
+  outcome: string;
+  confidence: number;
+  observedAt: string;
+};
+
+export type RouteFeedbackPayload = {
+  routeKind: string;
+  action: string;
+  outcome: string;
+  source: string;
+  note?: string | null;
+};
+
+export type SessionTastePosture = {
+  activeSignals: string[];
+  summary: string;
+  confidenceNote: string;
+  updatedAt: string;
+};
+
+export type TasteMemorySnapshot = {
+  sessionPosture: SessionTastePosture;
+  rememberedPreferences: RememberedPreference[];
+  routePreferences: RouteChoicePreference[];
+  summaryLines: string[];
 };
 
 export type SteerPayload = {
@@ -549,6 +729,7 @@ export type ComposerResponse = {
   activeRole: string;
   uncertainty: string[];
   alternativesConsidered: string[];
+  tasteMemory: TasteMemorySnapshot;
 };
 
 export type GeneratedPlaylist = {
@@ -564,6 +745,10 @@ export type RelatedArtist = {
   connectionStrength: number;
   connectionType: string;
   localTrackCount: number;
+  why: string;
+  preserves: string[];
+  changes: string[];
+  riskNote: string;
 };
 
 export type DiscoveryInteraction = {

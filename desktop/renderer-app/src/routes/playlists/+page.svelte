@@ -14,16 +14,18 @@
   } from "$lib/stores/workspace";
   import type {
     ComposerResponse,
+    ComposerDiagnosticEntry,
+    ComposerRunRecord,
     ComposedPlaylistDraft,
     ExplainPayload,
     PlaylistSummary,
+    SpotifyGapSummary,
     SteerPayload,
     TrackEnrichmentResult
   } from "$lib/types";
 
   let playlists: PlaylistSummary[] = [];
   let name = "";
-  let composeOpen = false;
   let prompt = "";
   let trackCount = 20;
   let composing = false;
@@ -32,6 +34,9 @@
   let previewTracks: ComposedPlaylistDraft["tracks"] = [];
   let saveMessage = "";
   let generatedProof: Record<number, TrackEnrichmentResult | "loading"> = {};
+  let composerDiagnostics: ComposerDiagnosticEntry[] = [];
+  let recentComposerRuns: ComposerRunRecord[] = [];
+  let spotifyGapSummary: SpotifyGapSummary | null = null;
   let resultPreference: "auto" | "playlist" | "bridge" | "discovery" = "auto";
   let noveltyBias = 0.56;
   let adventurousness = 0.56;
@@ -51,16 +56,48 @@
         summary: step.role,
         phase: step.role,
         whyThisTrack: step.why,
-        transitionNote: `${Math.round(step.distanceFromSource * 100)}% from source, ${Math.round(step.distanceFromDestination * 100)}% from destination.`,
-        evidence: [],
+        transitionNote: step.leadsToNext,
+        evidence: step.adjacencySignals.map((signal) => `${signal.dimension}: ${signal.note}`),
         explicitFromPrompt: [],
-        inferredByLyra: [],
+        inferredByLyra: [...step.preserves, ...step.changes],
         confidence: step.fitScore
       },
       position: index
     })) ??
     composerResult?.discovery?.directions.flatMap((direction) => direction.tracks) ??
     [];
+  $: routeVariants =
+    composerResult?.framing.routeComparison?.variants ??
+    composerResult?.bridge?.variants ??
+    composerResult?.discovery?.variants ??
+    [];
+  $: resultLabel =
+    composerResult?.action === "playlist"
+      ? "Playlist draft"
+      : composerResult?.action === "bridge"
+        ? "Bridge route"
+        : composerResult?.action === "discovery"
+          ? "Discovery route"
+          : composerResult?.action === "explain"
+            ? "Explanation"
+            : "Steer revision";
+  $: tasteSummary =
+    composerResult?.tasteMemory.summaryLines[0] ??
+    $shell.tasteMemory.summaryLines[0] ??
+    "Lyra has not accumulated enough recent steering pressure to claim a pattern yet.";
+  $: memoryPreferences =
+    composerResult?.tasteMemory.rememberedPreferences.slice(0, 3) ??
+    $shell.tasteMemory.rememberedPreferences.slice(0, 3);
+  $: recommendedFlavor =
+    composerResult?.discovery?.primaryFlavor ?? composerResult?.bridge?.routeFlavor ?? null;
+  $: spotifyTopArtists = spotifyGapSummary?.topArtists.slice(0, 4) ?? [];
+  $: spotifyMissingCandidates = spotifyGapSummary?.missingCandidates.slice(0, 4) ?? [];
+
+  function variantTone(flavor: string): string {
+    if (flavor === "safe" || flavor === "direct_bridge") return "safe";
+    if (flavor === "dangerous" || flavor === "contrast") return "dangerous";
+    return "interesting";
+  }
 
   function steerPayload(): SteerPayload {
     return {
@@ -77,8 +114,8 @@
     if (resultPreference === "bridge" && !trimmed.toLowerCase().includes("bridge")) {
       return `bridge from ${trimmed}`;
     }
-    if (resultPreference === "discovery" && !/adjacent|discover|less obvious|three ways/i.test(trimmed)) {
-      return `${trimmed} into something adjacent but less obvious`;
+    if (resultPreference === "discovery" && !/adjacent|discover|less obvious|three ways|three exits/i.test(trimmed)) {
+      return `${trimmed} | give me three exits from this scene, one safe, one interesting, one dangerous`;
     }
     return trimmed;
   }
@@ -88,8 +125,86 @@
     await composeDraft();
   }
 
+  function routeAuditionTracks(flavor: string) {
+    const discoveryDirection = composerResult?.discovery?.directions.find(
+      (direction) => direction.flavor === flavor
+    );
+    if (discoveryDirection) {
+      return discoveryDirection.tracks.slice(0, 3);
+    }
+    if (composerResult?.bridge && composerResult.bridge.routeFlavor === flavor) {
+      return composerResult.bridge.steps.slice(0, 3).map((step, index) => ({
+        track: step.track,
+        phaseKey: step.role,
+        phaseLabel: step.role,
+        fitScore: step.fitScore,
+        reason: {
+          summary: step.role,
+          phase: step.role,
+          whyThisTrack: step.why,
+          transitionNote: step.leadsToNext,
+          evidence: step.adjacencySignals.map((signal) => `${signal.dimension}: ${signal.note}`),
+          explicitFromPrompt: [],
+          inferredByLyra: [...step.preserves, ...step.changes],
+          confidence: step.fitScore
+        },
+        position: index
+      }));
+    }
+    return [];
+  }
+
+  async function playRouteAudition(flavor: string): Promise<void> {
+    const [first] = routeAuditionTracks(flavor);
+    if (!first) return;
+    const playback = await api.playTrack(first.track.id);
+    shell.update((state) => ({ ...state, playback }));
+  }
+
+  async function queueRouteAudition(flavor: string): Promise<void> {
+    const tracks = routeAuditionTracks(flavor);
+    if (!tracks.length) return;
+    const queue = await api.enqueueTracks(tracks.map((item) => item.track.id));
+    shell.update((state) => ({ ...state, queue }));
+  }
+
+  async function recordRouteFeedback(routeKind: string, outcome: "accepted" | "rejected"): Promise<void> {
+    if (!composerResult) return;
+    const snapshot = await api.recordRouteFeedback(
+      routeKind,
+      composerResult.action,
+      outcome,
+      "ui route comparison",
+      outcome === "accepted"
+        ? `User chose the ${routeKind} lane from Cassette route comparison.`
+        : `User rejected the ${routeKind} lane from Cassette route comparison.`
+    );
+    shell.update((state) => ({ ...state, tasteMemory: snapshot }));
+    composerResult = { ...composerResult, tasteMemory: snapshot };
+  }
+
   async function refresh(): Promise<void> {
     playlists = await api.playlists();
+    composerDiagnostics = await api.getComposerDiagnostics(8).catch(() => []);
+    recentComposerRuns = await api.getRecentComposerRuns(8).catch(() => []);
+    spotifyGapSummary = await api.getSpotifyGapSummary(6).catch(() => null);
+  }
+
+  async function queueSpotifyCandidate(artist: string, title: string, album?: string | null): Promise<void> {
+    await api.addToAcquisitionQueue(artist, title, album ?? undefined, "spotify_gap");
+    spotifyGapSummary = await api.getSpotifyGapSummary(6).catch(() => spotifyGapSummary);
+    saveMessage = `Queued ${artist} - ${title} from the Spotify gap lane.`;
+  }
+
+  function promptSpotifyRecovery(artist: string): void {
+    prompt = `rebuild the world i used to live in around ${artist}, but route it through what my local library is still missing`;
+  }
+
+  async function loadComposerRun(runId: number): Promise<void> {
+    const detail = await api.getComposerRun(runId);
+    composerResult = detail.response;
+    prompt = detail.record.prompt;
+    composerDiagnostics = await api.getComposerDiagnostics(8).catch(() => composerDiagnostics);
   }
 
   async function create(): Promise<void> {
@@ -107,6 +222,7 @@
     generatedProof = {};
     try {
       composerResult = await api.composeWithLyra(effectivePrompt(), trackCount, steerPayload());
+      composerDiagnostics = await api.getComposerDiagnostics(8).catch(() => composerDiagnostics);
       const workspaceTracks =
         composerResult.draft?.tracks ??
         composerResult.bridge?.steps.map((step, index) => ({
@@ -118,10 +234,10 @@
             summary: step.role,
             phase: step.role,
             whyThisTrack: step.why,
-            transitionNote: `${Math.round(step.distanceFromSource * 100)}% from source, ${Math.round(step.distanceFromDestination * 100)}% from destination.`,
-            evidence: [],
+            transitionNote: step.leadsToNext,
+            evidence: step.adjacencySignals.map((signal) => `${signal.dimension}: ${signal.note}`),
             explicitFromPrompt: [],
-            inferredByLyra: [],
+            inferredByLyra: [...step.preserves, ...step.changes],
             confidence: step.fitScore
           },
           position: index
@@ -142,7 +258,7 @@
 
   async function saveDraft(): Promise<void> {
     if (!draft) return;
-    saveMessage = "Saving...";
+    saveMessage = "Saving to Cassette...";
     try {
       const detail = await api.saveComposedPlaylist(draft.name, draft);
       saveMessage = `Saved "${detail.name}" with ${detail.items.length} tracks.`;
@@ -159,6 +275,16 @@
     shell.update((state) => ({ ...state, queue }));
   }
 
+  function currentNarrative(): string | null {
+    return (
+      draft?.narrative ??
+      composerResult?.bridge?.narrative ??
+      composerResult?.discovery?.narrative ??
+      composerResult?.explanation ??
+      null
+    );
+  }
+
   async function inspectDraftTrack(trackId: number): Promise<void> {
     const item = previewTracks.find((entry) => entry.track.id === trackId);
     if (!item) return;
@@ -166,14 +292,23 @@
     setWorkspaceExplanation(
       {
         trackId,
+        whyThisTrack: item.reason.whyThisTrack || item.reason.summary,
         reasons: [
           item.reason.summary,
           item.reason.whyThisTrack,
           item.reason.transitionNote,
           ...item.reason.evidence
         ],
+        evidenceItems: item.reason.evidence.map((text) => ({
+          typeLabel: "composer_reason",
+          source: `lyra:${item.phaseKey}`,
+          text,
+          weight: item.reason.confidence,
+        })),
+        explicitFromPrompt: item.reason.explicitFromPrompt ?? [],
+        inferredByLyra: item.reason.inferredByLyra ?? [],
         confidence: item.reason.confidence,
-        source: `composer:${item.phaseKey}`
+        source: `lyra:${item.phaseKey}`
       } satisfies ExplainPayload,
       item.track
     );
@@ -201,511 +336,831 @@
 
   onMount(() => {
     setWorkspacePage(
-      "Playlists",
-      "Composer-first playlist authorship",
-      "Lyra should feel like a companion with taste and nerve, not a machine that dumps state.",
+      "Cassette",
+      "Lyra workspace",
+      "Prototype shell for bridge-finding, discovery, playlist authorship, and explanation.",
       "bridge"
     );
     trackCount = get(shell).settings.composerDefaultTrackCount ?? 20;
     void refresh();
     const params = page.url?.searchParams;
-    if (params?.get("compose") === "1" || params?.get("generate") === "1") {
-      composeOpen = true;
-      prompt = params.get("prompt") ?? params.get("mood") ?? "";
-      if (prompt) {
-        void composeDraft();
-      }
+    prompt = params?.get("prompt") ?? params?.get("mood") ?? "";
+    if (prompt) {
+      void composeDraft();
     }
   });
 </script>
 
-<section class="header">
+<section class="workspace-header">
   <div>
-    <p class="eyebrow">Playlists</p>
-    <h2>Composer-first playlist authorship</h2>
+    <p class="eyebrow">Cassette</p>
+    <h2>Lyra composer workspace</h2>
+    <p class="subcopy">The composer stays central. Playback stays in support. Routes, memory, and explanation stay visible enough to judge the intelligence honestly.</p>
   </div>
-  <div class="create-row">
+  <div class="header-actions">
     <input bind:value={name} placeholder="New playlist name" />
-    <button on:click={create}>Create</button>
-    <button class="generate-btn" on:click={() => (composeOpen = !composeOpen)}>
-      {composeOpen ? "Hide Composer" : "Open Composer"}
-    </button>
+    <button on:click={create}>Create playlist</button>
   </div>
 </section>
 
-{#if composeOpen}
-  <section class="compose-panel">
-    <p class="eyebrow">Lyra Composer</p>
-    <textarea
-      bind:value={prompt}
-      rows="3"
-      placeholder="this is close but too clean, I want it dirtier and more human"
-      on:keydown={(event) => {
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-          void composeDraft();
-        }
-      }}
-    ></textarea>
+<section class="oracle-grid">
+  <aside class="workspace-left">
+    <article class="panel">
+      <span class="section-label">Spotify memory + gaps</span>
+      {#if !spotifyGapSummary}
+        <small>Loading Spotify evidence...</small>
+      {:else if !spotifyGapSummary.available}
+        {#each spotifyGapSummary.summaryLines as line}
+          <small>{line}</small>
+        {/each}
+      {:else}
+        <strong class="memory-summary">{spotifyGapSummary.summaryLines[0]}</strong>
+        {#if spotifyGapSummary.summaryLines[1]}
+          <small>{spotifyGapSummary.summaryLines[1]}</small>
+        {/if}
+        <div class="memory-list compact-list">
+          <div class="memory-item">
+            <span>History</span>
+            <strong>{spotifyGapSummary.historyCount}</strong>
+          </div>
+          <div class="memory-item">
+            <span>Liked/library</span>
+            <strong>{spotifyGapSummary.libraryCount}</strong>
+          </div>
+          <div class="memory-item">
+            <span>Still missing</span>
+            <strong>{spotifyGapSummary.recoverableMissingCount}</strong>
+          </div>
+        </div>
+        {#if spotifyTopArtists.length}
+          <div class="memory-list">
+            {#each spotifyTopArtists as artist}
+              <button class="history-link" on:click={() => promptSpotifyRecovery(artist.artist)}>
+                <strong>{artist.artist}</strong>
+                <small>{artist.playCount} plays | {artist.missingTrackCount} still missing</small>
+                <span>Use this world as a Lyra recovery seed</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        {#if spotifyMissingCandidates.length}
+          <div class="memory-list">
+            {#each spotifyMissingCandidates as candidate}
+              <div class="memory-item spotify-gap-item">
+                <div>
+                  <span>{candidate.artist}</span>
+                  <strong>{candidate.title}</strong>
+                  <small>{candidate.playCount} plays{candidate.alreadyQueued ? " | already queued" : ""}</small>
+                </div>
+                <button
+                  class="ghost-button"
+                  disabled={candidate.alreadyQueued}
+                  on:click={() => void queueSpotifyCandidate(candidate.artist, candidate.title, candidate.album)}
+                >
+                  {candidate.alreadyQueued ? "Queued" : "Acquire"}
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/if}
+    </article>
 
-    <div class="compose-controls">
-      <label>
-        Tracks
-        <input type="range" min="8" max="40" step="4" bind:value={trackCount} />
-        <strong>{trackCount}</strong>
-      </label>
-      <label>
-        Result
-        <select bind:value={resultPreference}>
-          <option value="auto">Auto</option>
-          <option value="playlist">Draft</option>
-          <option value="bridge">Bridge</option>
-          <option value="discovery">Discovery</option>
-        </select>
-      </label>
-      <button class="gen-action-btn" on:click={composeDraft} disabled={composing}>
-        {composing ? "Reading + shaping..." : "Ask Lyra"}
-      </button>
-    </div>
+    <article class="panel">
+      <span class="section-label">Entry points</span>
+      <button class="prompt-chip" on:click={() => (prompt = "bridge from Brand New into late-night electronic melancholy")}>Bridge a scene</button>
+      <button class="prompt-chip" on:click={() => (prompt = "give me three exits from this scene, one safe, one interesting, one dangerous")}>Compare exits</button>
+      <button class="prompt-chip" on:click={() => (prompt = "this is close but too clean, I want it dirtier and more human")}>Steer texture</button>
+    </article>
 
-    <div class="steering-grid">
-      <label>
-        Less obvious / more obvious
-        <input type="range" min="0" max="1" step="0.01" bind:value={noveltyBias} />
-      </label>
-      <label>
-        More familiar / more adventurous
-        <input type="range" min="0" max="1" step="0.01" bind:value={adventurousness} />
-      </label>
-      <label>
-        Smoother / sharper
-        <input type="range" min="0" max="1" step="0.01" bind:value={contrastSharpness} />
-      </label>
-      <label>
-        Brighter / more nocturnal
-        <input type="range" min="0" max="1" step="0.01" bind:value={warmthBias} />
-      </label>
-      <label>
-        Explanation
-        <select bind:value={explanationDepth}>
-          <option value="light">Light</option>
-          <option value="balanced">Balanced</option>
-          <option value="deep">Deep</option>
-        </select>
-      </label>
-    </div>
+    <article class="panel">
+      <span class="section-label">Recent memory</span>
+      <strong class="memory-summary">{tasteSummary}</strong>
+      {#if memoryPreferences.length}
+        <div class="memory-chip-row">
+          {#each memoryPreferences as preference}
+            <span class="memory-chip">{preference.preferredPole}</span>
+          {/each}
+        </div>
+      {/if}
+      <small>{composerResult?.tasteMemory.sessionPosture.confidenceNote ?? $shell.tasteMemory.sessionPosture.confidenceNote}</small>
+    </article>
+
+    <article class="panel">
+      <span class="section-label">Recent Lyra work</span>
+      {#if !recentComposerRuns.length}
+        <small>No recent routes yet.</small>
+      {/if}
+      {#each recentComposerRuns as run}
+        <button class="history-link" on:click={() => void loadComposerRun(run.id)}>
+          <strong>{run.summary}</strong>
+          <small>{run.action} | {run.activeRole} | {run.mode}</small>
+          <span>{run.prompt}</span>
+        </button>
+      {/each}
+    </article>
+
+    <article class="panel">
+      <span class="section-label">Saved playlists</span>
+      {#if !playlists.length}
+        <small>No saved drafts yet.</small>
+      {/if}
+      {#each playlists.slice(0, 6) as playlist}
+        <a class="playlist-link" href={`/playlists/${playlist.id}`}>
+          <strong>{playlist.name}</strong>
+          <small>{playlist.itemCount} items</small>
+        </a>
+      {/each}
+    </article>
+  </aside>
+
+  <div class="workspace-main">
+    <article class="composer-panel">
+      <div class="composer-head">
+        <div>
+          <span class="section-label">Ask Lyra</span>
+          <strong>Steer with intent, not forms</strong>
+        </div>
+        <div class="result-toggle">
+          <label>
+            Result
+            <select bind:value={resultPreference}>
+              <option value="auto">Auto</option>
+              <option value="playlist">Playlist</option>
+              <option value="bridge">Bridge</option>
+              <option value="discovery">Discovery</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <textarea
+        bind:value={prompt}
+        rows="4"
+        placeholder="less obvious, still aching, keep the pulse"
+        on:keydown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            void composeDraft();
+          }
+        }}
+      ></textarea>
+
+      <div class="steering-row">
+        <label>Tracks <input type="range" min="8" max="40" step="4" bind:value={trackCount} /><strong>{trackCount}</strong></label>
+        <label>Obviousness <input type="range" min="0" max="1" step="0.01" bind:value={noveltyBias} /></label>
+        <label>Adventure <input type="range" min="0" max="1" step="0.01" bind:value={adventurousness} /></label>
+        <label>Transition <input type="range" min="0" max="1" step="0.01" bind:value={contrastSharpness} /></label>
+        <label>Nocturnal <input type="range" min="0" max="1" step="0.01" bind:value={warmthBias} /></label>
+        <label>
+          Explanation
+          <select bind:value={explanationDepth}>
+            <option value="light">Light</option>
+            <option value="balanced">Balanced</option>
+            <option value="deep">Deep</option>
+          </select>
+        </label>
+        <button class="ask-btn" on:click={composeDraft} disabled={composing}>
+          {composing ? "Lyra is shaping the route..." : "Ask Lyra"}
+        </button>
+      </div>
+    </article>
 
     {#if composerResult}
-      <div class="draft-head">
-        <div>
-          <strong>{draft?.name ?? composerResult.action}</strong>
+      <div class="result-bar">
+        <article class="result-card">
+          <span class="section-label">Result type</span>
+          <strong>{resultLabel}</strong>
           <small>{composerResult.activeRole} | {composerResult.providerStatus.selectedProvider} | {composerResult.providerStatus.mode}</small>
-        </div>
-        <div class="draft-actions">
-          {#if draft}
-            <button on:click={saveDraft}>Save Playlist</button>
-            <button on:click={enqueueDraft}>Queue All</button>
-          {/if}
-        </div>
-      </div>
-
-      <div class="intent-summary-grid">
-        <article class="summary-card">
-          <span class="summary-label">Lyra read</span>
-          <strong>{composerResult.intent.sourceEnergy} -> {composerResult.intent.destinationEnergy}</strong>
-          <small>{composerResult.action} | {composerResult.intent.transitionStyle}</small>
-          <small>{composerResult.intent.textureDescriptors.join(", ")}</small>
         </article>
-        <article class="summary-card">
-          <span class="summary-label">Taste stance</span>
-          <strong>{composerResult.intent.familiarityVsNovelty}</strong>
-          <small>{composerResult.intent.discoveryAggressiveness}</small>
+        <article class="result-card">
+          <span class="section-label">Lyra read</span>
+          <strong>{composerResult.intent.sourceEnergy} -> {composerResult.intent.destinationEnergy}</strong>
+          <small>{composerResult.intent.transitionStyle}</small>
+        </article>
+        <article class="result-card">
+          <span class="section-label">Fallback status</span>
+          <strong>{composerResult.framing.fallback.label}</strong>
           <small>{composerResult.framing.confidence.phrasing}</small>
         </article>
-        <article class="summary-card">
-          <span class="summary-label">Confidence</span>
-          <strong>{composerResult.framing.confidence.level}</strong>
-          <small>{composerResult.framing.detailDepth} detail | {composerResult.framing.posture}</small>
-          <small>{composerResult.framing.fallback.label}{composerResult.framing.memoryHint ? ` | ${composerResult.framing.memoryHint}` : ""}</small>
-        </article>
-      </div>
-
-      <div class="lyra-guidance">
-        <article class="guidance-card guidance-lead">
-          <span class="summary-label">Lyra</span>
+        <article class="result-card accent-card">
+          <span class="section-label">Lyra posture</span>
           <strong>{composerResult.framing.lead}</strong>
           <small>{composerResult.framing.rationale}</small>
         </article>
-        {#if composerResult.framing.presenceNote}
-          <article class="guidance-card">
-            <span class="summary-label">Presence</span>
-            <small>{composerResult.framing.presenceNote}</small>
+      </div>
+
+      {#if routeVariants.length}
+        <div class="route-comparison">
+          {#each routeVariants as variant}
+            <article
+              class="route-variant route-{variantTone(variant.flavor)}"
+              class:active-variant={recommendedFlavor === variant.flavor}
+            >
+              <span class="section-label">{variant.label}</span>
+              <strong>{variant.logic}</strong>
+              <small>Preserves: {variant.preserves.join(", ")}</small>
+              <small>Changes: {variant.changes.join(", ")}</small>
+              <small>{variant.riskNote}</small>
+              <small>{variant.rewardNote}</small>
+              {#if routeAuditionTracks(variant.flavor).length}
+                <div class="audition-strip">
+                  {#each routeAuditionTracks(variant.flavor) as item}
+                    <span>{item.track.artist} - {item.track.title}</span>
+                  {/each}
+                </div>
+                <div class="variant-actions">
+                  <button class="ghost-button" on:click={() => void playRouteAudition(variant.flavor)}>Play audition</button>
+                  <button class="ghost-button" on:click={() => void queueRouteAudition(variant.flavor)}>Queue teaser</button>
+                </div>
+              {/if}
+              <div class="variant-actions">
+                <button class="ghost-button" on:click={() => void recordRouteFeedback(variant.flavor, "accepted")}>This lane works</button>
+                <button class="ghost-button" on:click={() => void recordRouteFeedback(variant.flavor, "rejected")}>Not this lane</button>
+              </div>
+            </article>
+          {/each}
+        </div>
+      {/if}
+
+      <div class="result-canvas">
+        <div class="canvas-main">
+          {#if currentNarrative()}
+            <article class="narrative-panel">
+              <span class="section-label">Lyra's read</span>
+              <p>{currentNarrative()}</p>
+            </article>
+          {/if}
+
+          {#if composerResult.bridge}
+            <article class="canvas-panel">
+              <div class="canvas-title">
+                <div>
+                  <span class="section-label">Bridge route</span>
+                  <strong>{composerResult.bridge.sourceLabel} -> {composerResult.bridge.destinationLabel}</strong>
+                </div>
+                <small>{Math.round(composerResult.bridge.confidence * 100)}% confidence</small>
+              </div>
+              {#each composerResult.bridge.steps as step}
+                <div class="bridge-step">
+                  <div>
+                    <span class="step-role">{step.role}</span>
+                    <strong>{step.track.title}</strong>
+                    <small>{step.track.artist}</small>
+                  </div>
+                  <div class="step-notes">
+                    <small>Preserves: {step.preserves.join(", ")}</small>
+                    <small>Changes: {step.changes.join(", ")}</small>
+                    <small>{step.leadsToNext}</small>
+                  </div>
+                </div>
+              {/each}
+            </article>
+          {:else if composerResult.discovery}
+            <article class="canvas-panel">
+              <div class="canvas-title">
+                <div>
+                  <span class="section-label">Discovery routes</span>
+                  <strong>{composerResult.discovery.seedLabel}</strong>
+                </div>
+                <small>{Math.round(composerResult.discovery.confidence * 100)}% confidence</small>
+              </div>
+              {#each composerResult.discovery.directions as direction}
+                <div class="discovery-direction">
+                  <div>
+                    <span class="step-role">{direction.label}</span>
+                    <strong>{direction.description}</strong>
+                    <small>{direction.why}</small>
+                  </div>
+                  <div class="direction-meta">
+                    <small>Preserves: {direction.preserves.join(", ")}</small>
+                    <small>Changes: {direction.changes.join(", ")}</small>
+                    <small>{direction.rewardNote}</small>
+                  </div>
+                </div>
+              {/each}
+            </article>
+          {:else if composerResult.explanation}
+            <article class="canvas-panel">
+              <span class="section-label">Explanation</span>
+              <p>{composerResult.explanation}</p>
+            </article>
+          {/if}
+
+          <article class="canvas-panel">
+            <div class="canvas-title">
+              <div>
+                <span class="section-label">Result canvas</span>
+                <strong>{draft?.name ?? resultLabel}</strong>
+              </div>
+              <div class="draft-actions">
+                {#if draft}
+                  <button on:click={saveDraft}>Save playlist</button>
+                  <button on:click={enqueueDraft}>Queue all</button>
+                {/if}
+              </div>
+            </div>
+            <div class="preview-list">
+              {#each previewTracks as item}
+                <article class="preview-row">
+                  <div class="preview-top">
+                    <span class="preview-pos">{item.position + 1}</span>
+                    <div>
+                      <strong>{item.track.title}</strong>
+                      <small>{item.track.artist}</small>
+                    </div>
+                    <div class="preview-phase">
+                      <span>{item.phaseLabel}</span>
+                      <small>{Math.round(item.fitScore * 100)}%</small>
+                    </div>
+                  </div>
+                  <small>{item.reason.whyThisTrack}</small>
+                  <small>{item.reason.transitionNote}</small>
+                  <div class="preview-actions">
+                    <button on:click={() => inspectDraftTrack(item.track.id)}>Why</button>
+                    <button on:click={() => toggleDraftProof(item.track.id)}>
+                      {generatedProof[item.track.id] ? "Hide proof" : "Proof"}
+                    </button>
+                  </div>
+                  {#if generatedProof[item.track.id]}
+                    <div class="proof-inline">
+                      {#if generatedProof[item.track.id] === "loading"}
+                        <small>Loading provenance...</small>
+                      {:else}
+                        {@const proof = generatedProof[item.track.id] as TrackEnrichmentResult}
+                        <small>{proof.enrichmentState}{proof.primaryMbid ? ` | ${proof.primaryMbid}` : ""}</small>
+                        {#each proof.entries.slice(0, 2) as entry}
+                          <small>{entry.provider}: {entry.status} | {Math.round(entry.confidence * 100)}%</small>
+                        {/each}
+                      {/if}
+                    </div>
+                  {/if}
+                </article>
+              {/each}
+            </div>
           </article>
-        {/if}
-        {#if composerResult.framing.challenge}
-          <article class="guidance-card">
-            <span class="summary-label">Push</span>
-            <small>{composerResult.framing.challenge}</small>
+        </div>
+
+        <aside class="canvas-right">
+          <article class="panel">
+            <span class="section-label">Lyra read</span>
+            <strong class="memory-summary">{composerResult.framing.lyraRead.summary}</strong>
+            <small>{composerResult.framing.lyraRead.confidenceNote}</small>
+            {#if composerResult.framing.lyraRead.cues.length}
+              <div class="memory-list">
+                {#each composerResult.framing.lyraRead.cues as cue}
+                  <div class="memory-item">
+                    <small>{cue}</small>
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </article>
-        {/if}
-        {#if composerResult.framing.vibeGuard}
-          <article class="guidance-card">
-            <span class="summary-label">Protect the vibe</span>
-            <small>{composerResult.framing.vibeGuard}</small>
+
+          <article class="panel">
+            <span class="section-label">Parsed intent</span>
+            <strong>{composerResult.intent.familiarityVsNovelty}</strong>
+            <small>{composerResult.intent.discoveryAggressiveness}</small>
+            <small>{composerResult.intent.textureDescriptors.join(", ")}</small>
+            <small>{composerResult.intent.sequencingNotes.join(" ")}</small>
           </article>
-        {/if}
-        {#if composerResult.framing.routeComparison}
-          <article class="guidance-card">
-            <span class="summary-label">{composerResult.framing.routeComparison.headline}</span>
-            <small>{composerResult.framing.routeComparison.summary}</small>
+
+          <article class="panel">
+            <span class="section-label">Taste-memory cues</span>
+            <strong class="memory-summary">{composerResult.tasteMemory.sessionPosture.summary}</strong>
+            <small>{composerResult.tasteMemory.sessionPosture.confidenceNote}</small>
+            {#if composerResult.tasteMemory.rememberedPreferences.length}
+              <div class="memory-list">
+                {#each composerResult.tasteMemory.rememberedPreferences.slice(0, 3) as preference}
+                  <div class="memory-item">
+                    <span>{preference.axisLabel}</span>
+                    <strong>{preference.preferredPole}</strong>
+                    <small>{preference.recencyNote} | {preference.confidenceNote}</small>
+                  </div>
+                {/each}
+              </div>
+            {/if}
           </article>
-        {/if}
-        {#if composerResult.uncertainty.length}
-          <article class="guidance-card">
-            <span class="summary-label">Uncertainty</span>
+
+          <article class="panel">
+            <span class="section-label">Why this works</span>
+            <strong>{composerResult.framing.lead}</strong>
+            <small>{composerResult.framing.rationale}</small>
+            {#if composerResult.framing.routeComparison}
+              <small>{composerResult.framing.routeComparison.summary}</small>
+            {/if}
+            {#if composerResult.framing.challenge}
+              <small class="challenge-line">{composerResult.framing.challenge}</small>
+            {/if}
+          </article>
+
+          <article class="panel">
+            <span class="section-label">Confidence and fallback</span>
+            <small>{composerResult.framing.confidence.level}</small>
+            <small>{composerResult.framing.fallback.message}</small>
             {#each composerResult.uncertainty as note}
               <small>{note}</small>
             {/each}
           </article>
-        {/if}
-        <article class="guidance-card">
-          <span class="summary-label">Fallback</span>
-          <strong>{composerResult.framing.fallback.label}</strong>
-          <small>{composerResult.framing.fallback.message}</small>
-        </article>
-        <article class="guidance-card">
-          <span class="summary-label">Provider</span>
-          <strong>{composerResult.providerStatus.selectedProvider}</strong>
-          <small>{composerResult.providerStatus.providerKind} | {composerResult.providerStatus.mode}</small>
-          <small>{composerResult.providerStatus.fallbackReason ?? "Provider assisted language only; retrieval stayed local."}</small>
-        </article>
-        {#if composerResult.framing.sidewaysTemptations.length}
-          <article class="guidance-card">
-            <span class="summary-label">Better road</span>
-            {#each composerResult.framing.sidewaysTemptations as temptation}
-              <small>{temptation}</small>
-            {/each}
-          </article>
-        {/if}
+
+          {#if composerDiagnostics.length}
+            <article class="panel">
+              <span class="section-label">Composer diagnostics</span>
+              {#each composerDiagnostics.slice(0, 4) as diagnostic}
+                <div class="memory-item">
+                  <span>{diagnostic.eventType}</span>
+                  <strong>{diagnostic.message}</strong>
+                  <small>{diagnostic.provider} | {diagnostic.mode}{diagnostic.action ? ` | ${diagnostic.action}` : ""}</small>
+                </div>
+              {/each}
+            </article>
+          {/if}
+
+          {#if composerResult.framing.nextNudges.length}
+            <article class="panel">
+              <span class="section-label">Follow-on nudges</span>
+              {#each composerResult.framing.nextNudges as nudge}
+                <button class="prompt-chip" on:click={() => applyNudge(nudge)}>{nudge}</button>
+              {/each}
+            </article>
+          {/if}
+        </aside>
       </div>
-
-      {#if draft}
-        <div class="phase-strip">
-          {#each draft.phases as phase}
-            <article class="phase-card">
-              <span class="summary-label">{phase.label}</span>
-              <strong>{Math.round(phase.targetEnergy * 100)}% energy</strong>
-              <small>{phase.summary}</small>
-            </article>
-          {/each}
-        </div>
-      {:else if composerResult.bridge}
-        <div class="phase-strip">
-          {#each composerResult.bridge.steps as step}
-            <article class="phase-card">
-              <span class="summary-label">{step.role}</span>
-              <strong>{step.track.title}</strong>
-              <small>{step.track.artist}</small>
-            </article>
-          {/each}
-        </div>
-      {:else if composerResult.discovery}
-        <div class="phase-strip">
-          {#each composerResult.discovery.directions as direction}
-            <article class="phase-card">
-              <span class="summary-label">{direction.label}</span>
-              <strong>{direction.tracks.length} tracks</strong>
-              <small>{direction.description}</small>
-            </article>
-          {/each}
-        </div>
-      {/if}
-
-      {#if draft?.narrative}
-        <p class="narrative">{draft.narrative}</p>
-      {:else if composerResult.bridge?.narrative}
-        <p class="narrative">{composerResult.bridge.narrative}</p>
-      {:else if composerResult.discovery?.narrative}
-        <p class="narrative">{composerResult.discovery.narrative}</p>
-      {:else if composerResult.explanation}
-        <p class="narrative">{composerResult.explanation}</p>
-      {/if}
-
-      {#if composerResult.bridge}
-        <div class="route-card">
-          <strong>{composerResult.bridge.sourceLabel} -> {composerResult.bridge.destinationLabel}</strong>
-          <small>{Math.round(composerResult.bridge.confidence * 100)}% confidence</small>
-          {#each composerResult.bridge.alternateDirections as option}
-            <span class="route-option">{option}</span>
-          {/each}
-        </div>
-      {:else if composerResult.discovery}
-        <div class="route-card">
-          <strong>{composerResult.discovery.seedLabel}</strong>
-          {#each composerResult.discovery.directions as direction}
-            <small>{direction.label}: {direction.why}</small>
-          {/each}
-        </div>
-      {/if}
-
-      <div class="preview-list">
-        {#each previewTracks as item}
-          <article class="preview-row">
-            <span class="preview-pos">{item.position + 1}</span>
-            <div class="preview-info">
-              <strong>{item.track.title}</strong>
-              <small>{item.track.artist}</small>
-            </div>
-            <div class="preview-phase">
-              <span>{item.phaseLabel}</span>
-              <small>{Math.round(item.fitScore * 100)}%</small>
-            </div>
-            <span class="reason-badge" title={item.reason.summary}>{item.reason.summary}</span>
-            <div class="preview-actions">
-              <button on:click={() => inspectDraftTrack(item.track.id)}>Why</button>
-              <button on:click={() => toggleDraftProof(item.track.id)}>
-                {generatedProof[item.track.id] ? "Hide Proof" : "Proof"}
-              </button>
-            </div>
-            <div class="reason-detail">
-              <small>{item.reason.whyThisTrack}</small>
-              <small>{item.reason.transitionNote}</small>
-            </div>
-            {#if generatedProof[item.track.id]}
-              <div class="proof-inline">
-                {#if generatedProof[item.track.id] === "loading"}
-                  <small class="muted">Loading provenance...</small>
-                {:else}
-                  {@const proof = generatedProof[item.track.id] as TrackEnrichmentResult}
-                  <div class="proof-inline-row">
-                    <span>{proof.enrichmentState}</span>
-                    {#if proof.primaryMbid}
-                      <code>{proof.primaryMbid}</code>
-                    {/if}
-                  </div>
-                  {#each proof.entries.slice(0, 2) as entry}
-                    <div class="proof-inline-row">
-                      <strong>{entry.provider}</strong>
-                      <span>{entry.status} - {Math.round(entry.confidence * 100)}%</span>
-                    </div>
-                  {/each}
-                {/if}
-              </div>
-            {/if}
-          </article>
-        {/each}
-      </div>
-
-      {#if composerResult.alternativesConsidered.length}
-        <div class="route-card">
-          <strong>Alternate directions</strong>
-          {#each composerResult.alternativesConsidered as option}
-            <small>{option}</small>
-          {/each}
-        </div>
-      {/if}
-
-      {#if composerResult.framing.nextNudges.length}
-        <div class="route-card">
-          <strong>Keep steering</strong>
-          <div class="nudge-row">
-            {#each composerResult.framing.nextNudges as nudge}
-              <button class="nudge-btn" on:click={() => applyNudge(nudge)}>{nudge}</button>
-            {/each}
-          </div>
-        </div>
-      {/if}
     {/if}
 
     {#if saveMessage}
-      <p class="muted">{saveMessage}</p>
+      <p class="status-line">{saveMessage}</p>
     {/if}
-  </section>
-{/if}
-
-<div class="grid">
-  {#if !playlists.length}
-    <p class="muted">No playlists yet.</p>
-  {/if}
-  {#each playlists as playlist}
-    <a class="card" href={`/playlists/${playlist.id}`}>
-      <strong>{playlist.name}</strong>
-      <small>{playlist.itemCount} items</small>
-      <span>{playlist.description || "Ready for sequencing, queueing, and later refinement."}</span>
-    </a>
-  {/each}
-</div>
+  </div>
+</section>
 
 <style>
-  .eyebrow, .muted, small { color: #9cb2c7; }
-  .eyebrow { text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.72rem; }
-  .header { display: flex; justify-content: space-between; align-items: end; margin-bottom: 20px; gap: 12px; }
-  .create-row, .grid, .draft-head, .draft-actions, .compose-controls, .preview-actions, .proof-inline-row, .nudge-row { display: flex; gap: 12px; }
-  .grid { flex-wrap: wrap; }
-  .card,
-  .compose-panel,
-  .summary-card,
-  .phase-card,
-  .preview-row,
-  .route-card,
-  .guidance-card {
-    border-radius: 18px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
-    border: 1px solid rgba(255,255,255,0.08);
-    box-shadow: 0 16px 32px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.05);
+  .workspace-header,
+  .oracle-grid,
+  .workspace-main,
+  .composer-panel,
+  .steering-row,
+  .result-bar,
+  .route-comparison,
+  .result-canvas,
+  .preview-actions,
+  .header-actions {
+    display: flex;
+    gap: 1rem;
   }
-  .card {
-    width: min(320px, 100%);
-    padding: 18px;
+
+  .workspace-header,
+  .bridge-step,
+  .discovery-direction,
+  .preview-top,
+  .canvas-title {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .workspace-header {
+    align-items: end;
+    margin-bottom: 1rem;
+  }
+
+  .workspace-header h2,
+  .workspace-header p {
+    margin: 0;
+  }
+
+  .oracle-grid {
+    align-items: start;
+  }
+
+  .workspace-left {
+    width: 18rem;
     display: grid;
-    gap: 10px;
+    gap: 1rem;
   }
-  input, button, textarea, select {
-    padding: 10px 12px;
-    border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.055);
+
+  .workspace-main {
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .composer-panel,
+  .panel,
+  .result-card,
+  .route-variant,
+  .canvas-panel,
+  .narrative-panel {
+    border-radius: 22px;
+    border: 1px solid rgba(255, 244, 224, 0.08);
+    background:
+      radial-gradient(circle at top right, rgba(255, 210, 120, 0.1), transparent 30%),
+      radial-gradient(circle at bottom left, rgba(247, 141, 107, 0.07), transparent 28%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.026));
+    box-shadow: 0 22px 44px rgba(0, 0, 0, 0.2);
+  }
+
+  .composer-panel,
+  .panel,
+  .result-card,
+  .route-variant,
+  .canvas-panel,
+  .narrative-panel {
+    padding: 1rem;
+  }
+
+  .composer-panel,
+  .panel,
+  .canvas-panel,
+  .narrative-panel {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .composer-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .composer-panel {
+    background:
+      radial-gradient(circle at top left, rgba(246, 196, 114, 0.18), transparent 22%),
+      radial-gradient(circle at bottom right, rgba(247, 141, 107, 0.1), transparent 24%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  }
+
+  .steering-row {
+    flex-wrap: wrap;
+    align-items: end;
+  }
+
+  .steering-row label,
+  .result-toggle label {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .result-bar,
+  .route-comparison {
+    flex-wrap: wrap;
+  }
+
+  .result-card,
+  .route-variant {
+    flex: 1 1 14rem;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .variant-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+  }
+
+  .audition-strip {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: 14px;
+    background: rgba(9, 13, 20, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #c8d7e2;
+    font-size: 0.78rem;
+  }
+
+  .accent-card {
+    background:
+      radial-gradient(circle at top right, rgba(246, 196, 114, 0.18), transparent 26%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+  }
+
+  .active-variant {
+    border-color: rgba(246, 196, 114, 0.4);
+    background:
+      radial-gradient(circle at top right, rgba(246, 196, 114, 0.18), transparent 30%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+    transform: translateY(-2px);
+  }
+
+  .route-safe {
+    border-color: rgba(150, 214, 187, 0.16);
+  }
+
+  .route-interesting {
+    border-color: rgba(246, 196, 114, 0.18);
+  }
+
+  .route-dangerous {
+    border-color: rgba(247, 141, 107, 0.2);
+  }
+
+  .result-canvas {
+    align-items: start;
+  }
+
+  .canvas-main {
+    flex: 1;
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  .canvas-right {
+    width: 20rem;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .preview-list {
+    display: grid;
+    gap: 0.75rem;
+    max-height: 42rem;
+    overflow: auto;
+  }
+
+  .preview-row,
+  .playlist-link,
+  .history-link,
+  .prompt-chip,
+  button,
+  input,
+  textarea,
+  select {
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
     color: inherit;
     font: inherit;
   }
+
+  .preview-row,
+  .playlist-link,
+  .history-link {
+    padding: 0.8rem;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .prompt-chip,
+  button,
+  input,
+  textarea,
+  select {
+    padding: 0.72rem 0.86rem;
+  }
+
+  button {
+    transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+  }
+
+  button:hover,
+  .playlist-link:hover,
+  .history-link:hover,
+  .route-variant:hover {
+    transform: translateY(-1px);
+  }
+
   textarea {
-    width: 100%;
-    box-sizing: border-box;
+    min-height: 7.5rem;
     resize: vertical;
-    min-height: 88px;
+    background: rgba(10, 12, 17, 0.34);
   }
-  .compose-panel {
-    margin-bottom: 24px;
-    padding: 18px 20px;
-    display: grid;
-    gap: 14px;
+
+  .ask-btn {
+    background: linear-gradient(120deg, #f6c472 0%, #f78d6b 100%);
+    color: #21140c;
+    border-color: transparent;
   }
-  .compose-controls {
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
+
+  .ghost-button {
+    background: rgba(12, 16, 24, 0.34);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #dbe5ed;
   }
-  .compose-controls label,
-  .steering-grid label {
-    display: grid;
-    gap: 8px;
+
+  .eyebrow,
+  .section-label,
+  .subcopy,
+  small,
+  .status-line {
+    color: #9db2c2;
   }
-  .steering-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
+
+  h2,
+  .composer-head strong,
+  .canvas-title strong,
+  .result-card strong,
+  .panel strong,
+  .narrative-panel p {
+    font-family: "Georgia", "Times New Roman", serif;
   }
-  .gen-action-btn { color: #7affc6; border-color: rgba(122,255,198,0.3); }
-  .draft-head {
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
+
+  .eyebrow,
+  .section-label {
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 0.72rem;
   }
-  .intent-summary-grid,
-  .phase-strip,
-  .lyra-guidance {
-    display: grid;
-    gap: 12px;
+
+  .playlist-link strong,
+  .history-link strong,
+  .preview-top strong,
+  .canvas-title strong {
+    display: block;
   }
-  .intent-summary-grid {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+
+  .history-link {
+    text-align: left;
   }
-  .phase-strip {
-    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+
+  .history-link span {
+    color: #c7d5e0;
+    font-size: 0.84rem;
+    line-height: 1.35;
   }
-  .lyra-guidance {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  }
-  .summary-card,
-  .phase-card,
-  .route-card,
-  .guidance-card {
-    padding: 14px;
-    display: grid;
-    gap: 6px;
-  }
-  .guidance-lead {
-    background: linear-gradient(180deg, rgba(122,255,198,0.10), rgba(255,255,255,0.03));
-  }
-  .summary-label {
-    font-size: 0.68rem;
-    color: #88a8bf;
+
+  .preview-pos,
+  .step-role {
+    color: #f6c472;
     text-transform: uppercase;
     letter-spacing: 0.14em;
-  }
-  .narrative {
-    font-size: 0.9rem;
-    color: #d7e5f3;
-    line-height: 1.6;
-    margin: 0;
-    padding: 12px 14px;
-    border-left: 2px solid rgba(122,255,198,0.32);
-    background: rgba(255,255,255,0.03);
-    border-radius: 0 12px 12px 0;
-  }
-  .route-option {
-    display: inline-flex;
-    align-items: center;
-    padding: 6px 10px;
-    border-radius: 999px;
-    background: rgba(122,255,198,0.08);
-    color: #cdeee2;
-  }
-  .nudge-row {
-    flex-wrap: wrap;
-  }
-  .nudge-btn {
-    text-align: left;
-    border-color: rgba(122,255,198,0.24);
-  }
-  .preview-list {
-    display: grid;
-    gap: 8px;
-    max-height: 620px;
-    overflow-y: auto;
-  }
-  .preview-row {
-    padding: 12px 14px;
-    display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) 120px auto auto;
-    gap: 12px;
-    align-items: center;
-  }
-  .preview-pos { color: #6a8aab; text-align: right; }
-  .preview-info, .preview-phase, .reason-detail { display: grid; gap: 2px; }
-  .preview-info strong, .reason-badge { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .preview-phase {
-    padding: 4px 8px;
-    border-radius: 10px;
-    background: rgba(255,255,255,0.05);
-  }
-  .reason-badge {
     font-size: 0.72rem;
-    color: #a8c4e0;
-    max-width: 320px;
   }
-  .reason-detail {
-    grid-column: 2 / -1;
-    color: #a8c4e0;
-  }
-  .proof-inline {
-    grid-column: 2 / -1;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255,255,255,0.06);
-    display: grid;
-    gap: 6px;
-  }
-  code { color: #a8c4e0; }
-  .generate-btn { color: #a8c4e0; }
 
-  @media (max-width: 980px) {
-    .preview-row {
-      grid-template-columns: 32px minmax(0, 1fr);
+  .preview-phase,
+  .step-notes,
+  .direction-meta {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .memory-summary {
+    color: #eef4f8;
+    line-height: 1.5;
+  }
+
+  .memory-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .memory-chip {
+    padding: 0.3rem 0.62rem;
+    border-radius: 999px;
+    border: 1px solid rgba(246, 196, 114, 0.2);
+    background: rgba(246, 196, 114, 0.08);
+    color: #ecd8af;
+    font-size: 0.76rem;
+  }
+
+  .memory-list {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .compact-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .memory-item {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .spotify-gap-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .challenge-line {
+    color: #f0c983;
+  }
+
+  .proof-inline {
+    display: grid;
+    gap: 0.2rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  @media (max-width: 1280px) {
+    .oracle-grid,
+    .result-canvas {
+      flex-direction: column;
     }
-    .preview-phase,
-    .reason-badge,
-    .preview-actions {
-      grid-column: 2;
+
+    .workspace-left,
+    .canvas-right {
+      width: 100%;
     }
   }
 </style>
