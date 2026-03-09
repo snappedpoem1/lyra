@@ -16,6 +16,8 @@ pub enum LyraError {
     NotFound(&'static str),
     #[error("{0}")]
     InvalidInput(&'static str),
+    #[error("{0}")]
+    Message(String),
     #[error("playback backend unavailable")]
     PlaybackUnavailable,
     #[error("seek is not supported in the current playback engine")]

@@ -34,7 +34,10 @@ const defaultShell: AppShellState = {
     queuePanelOpen: true,
     playbackVolumeStep: 5,
     libraryAutoScan: false,
-    preferredOutputDevice: null
+    preferredOutputDevice: null,
+    composerProviderPreference: "auto",
+    composerDefaultTrackCount: 20,
+    composerExplanationDepth: "balanced"
   },
   providers: [],
   scanJobs: [],

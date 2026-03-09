@@ -2,61 +2,36 @@
 
 Last audited: March 8, 2026
 
-This file tracks active canonical product gaps only.
-
-## Gap Framing
-
-The most important open gaps are not generic player bugs.
-They are the missing or incomplete differentiators that should make Lyra feel like a self-owned music intelligence and curation system.
-
-Each gap below distinguishes between:
-
-- implemented now in the canonical runtime
-- partial or scaffolded in the canonical runtime
-- available as legacy behavior but not yet ported
-
-## Legacy-To-Canonical Rule
-
-Before closing any gap below:
-
-1. Inspect the relevant legacy Python or oracle logic first.
-2. Recover the solved workflow, payload shape, retry logic, explanation semantics, or ranking behavior.
-3. Port the useful behavior into Rust, Tauri, and Svelte.
-4. Do not recreate solved logic from memory.
-5. Do not restore legacy runtime architecture.
+This file tracks the open canonical product gaps that keep Lyra from fully matching its intended identity.
 
 ## Active Gap Matrix
 
 | ID | Area | Status | Implemented Now | Missing Or Partial | Legacy Sources To Inspect Next |
 | --- | --- | --- | --- | --- | --- |
-| G-060 | Acquisition workflow parity | implemented with transitional risk | Canonical acquisition queue now persists lifecycle state, queue order, cancellation, timestamps, provider/tier/worker diagnostics, validation confidence, destination-root routing, output paths, downstream organize/scan/index flags, backend lifecycle events, and UI-visible retry/clear/reorder/cancel/preflight controls in Rust/Tauri/Svelte; native `qobuz` service, `streamrip`, `slskd`, and `spotdl` execution can run without `.venv` Python; Prowlarr decoupled from acquisition execution (Prowlarr is now horizon intelligence via `oracle/horizon/`; T4 now uses `oracle/acquirers/magnet_sources.py` → `realdebrid.acquire_from_magnets()` without a Prowlarr gate; Prowlarr unavailable no longer blocks T4 entirely) | Transitional waterfall execution still needs external metadata-validator parity and eventual reduction of Python-bridge dependence, but guard checks, duplicate detection, taste-based priority seeding, destination selection, stronger active cancellation, and removal of the hard Python gate now live in Rust | `oracle/acquirers/waterfall.py`, `oracle/acquisition.py`, `oracle/acquirers/magnet_sources.py`, `oracle/acquirers/realdebrid.py`, `oracle/acquirers/guard.py`, `oracle/acquirers/validator.py`, `oracle/ingest_watcher.py` |
-| G-061 | Enrichment provenance and confidence | implemented, residual depth gaps | Canonical enrichment adapters, cache, track-level provenance summaries, artist-level MBID-first identity summaries, shell-visible inspector provenance, first-pass discovery and generated-playlist evidence hooks now exist; saved playlist detail shows per-track reasons, Why?/Proof toggles, degraded state chips, and dimmed not_configured rows; discover page provenance panel updated with degradedProviders and visual degraded treatment; MusicBrainz adapter ported to use legacy similarity-weighted confidence formula (artist_sim * 0.4 + title_sim * 0.6) * mb_score with 0.60 minimum gate; Rust provider config reads from same .env → SQLite path as Python, no parallel config system | Broader recommendation explanation depth (more detailed reasons, multi-hop provenance) and explanation coverage in new playlist/discovery flows remain thin | `oracle/enrichers/unified.py`, `oracle/explainability.py` |
-| G-063 | Playlist intelligence parity | partial | Canonical playlists and queue flows are functional | Authored act and narrative generation, durable reason payloads, and first-class "why this track?" playlist behavior are still incomplete | `oracle/vibes.py`, `oracle/playlust.py`, `oracle/explain.py`, related blueprint flows |
-| G-064 | Discovery graph depth | partial | Canonical artist and recommendation surfaces exist | Graph-backed exploration, bridge workflows, and constellation-style discovery remain thin | `oracle/graph_builder.py`, `oracle/scout.py`, `oracle/recommendation_broker.py` |
-| G-062 | Curation workflows | partial | Canonical library and playlist basics exist | Duplicate resolution, cleanup preview/apply, rollback metadata, and stewardship UX are not yet fully restored | `oracle/duplicates.py`, `oracle/curator.py`, `oracle/organizer.py`, `oracle/ingest_watcher.py` |
-| G-065 | Packaged desktop confidence | partial | Canonical runtime builds and launches locally | Clean-machine installer proof, packaged runtime confidence, and soak validation remain open | packaged validation scripts, installed-layout runtime checks, parity soak artifacts |
-
-## Integration And Config Reality
-
-Feature work is not blocked by a blank configuration story.
-The repo already has:
-
-- repo-root `.env` loading on Python surfaces
-- Rust `.env` import into `provider_configs`
-- provider capability metadata in Rust
-- provider validation hooks in Rust
-- OS keyring support in Rust
-
-Future agents should treat provider and config plumbing as existing infrastructure to reuse and normalize, not as a future prerequisite.
+| G-063 | Composer and playlist intelligence depth | partial, active | Canonical composer pipeline now exists in Rust/Tauri/Svelte: typed `PlaylistIntent`, local/cloud LLM provider abstraction, deterministic retrieval/reranking/sequencing, visible phases, provider fallback reporting, and persisted reason payloads on save | Prompt handling is still concentrated in playlist drafting; refinement loops, deeper semantic retrieval, stronger bridge scoring, and broader explanation coverage remain thin | `oracle/vibes.py`, `oracle/playlust.py`, `oracle/explain.py`, `oracle/arc.py` |
+| G-064 | Discovery graph and bridge depth | partial | Related-artist and graph scaffolding exist in the canonical runtime | Bridge prompts, adjacency journeys, and explanation-rich discovery are still too thin | `oracle/graph_builder.py`, `oracle/scout.py`, `oracle/recommendation_broker.py` |
+| G-061 | Explainability and provenance breadth | partial | Provenance, confidence, and saved reason summaries exist; composer drafts now carry structured reason payloads and provider mode | Inferred-vs-explicit reasoning, why-this-next coverage, and broader surface consistency remain incomplete | `oracle/explain.py`, `oracle/explainability.py`, `oracle/enrichers/unified.py` |
+| G-060 | Acquisition workflow parity | implemented with residual risk | Canonical acquisition lifecycle, queue authority, and horizon intelligence infrastructure exist | Remaining Python executor removal and metadata-validator parity still open | `oracle/acquirers/waterfall.py`, `oracle/acquirers/validator.py`, `oracle/acquisition.py` |
+| G-062 | Curation workflows | partial | Canonical library and playlist basics exist | Duplicate stewardship, cleanup preview depth, and rollback ergonomics remain incomplete | `oracle/duplicates.py`, `oracle/curator.py`, `oracle/organizer.py` |
+| G-065 | Packaged desktop confidence | partial | Canonical runtime builds and launches locally | Clean-machine installer and long-session packaged proof remain open | packaged validation scripts and soak artifacts |
 
 ## Execution Order
 
-1. `G-060` Acquisition workflow parity
-2. `G-061` Enrichment provenance and confidence
-3. `G-063` Playlist intelligence parity
-4. `G-064` Discovery graph depth
+1. `G-063` Composer and playlist intelligence depth
+2. `G-064` Discovery graph and bridge depth
+3. `G-061` Explainability and provenance breadth
+4. `G-060` Remaining acquisition runtime risk
 5. `G-062` Curation workflows
 6. `G-065` Packaged desktop confidence
 
-Current execution note:
-`G-060` now has live backend lifecycle authority, Rust-owned queue trust checks, destination routing, and library-complete completion semantics, so the next active implementation run should stay on `G-061` unless acquisition regressions are discovered.
+## Config Reality
+
+Provider and config plumbing already exists.
+Future work should continue to reuse:
+
+- provider config records in SQLite
+- capability metadata in Rust
+- provider validation hooks
+- OS keyring support
+
+Do not invent a parallel credential system for composer or LLM work.

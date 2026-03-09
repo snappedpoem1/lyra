@@ -6,6 +6,7 @@ import type {
   AppShellState,
   AudioOutputDevice,
   BootstrapPayload,
+  ComposedPlaylistDraft,
   CurationLogEntry,
   DiagnosticsReport,
   DiscoverySession,
@@ -174,6 +175,10 @@ export const api = {
   undoCuration: (logId: number) => invoke<void>("undo_curation", { logId }),
   previewLibraryCleanup: () => invoke<LibraryCleanupPreview>("preview_library_cleanup"),
   // --- G-063: Playlist Intelligence ---
+  composePlaylistDraft: (prompt: string, trackCount: number) =>
+    invoke<ComposedPlaylistDraft>("compose_playlist_draft", { prompt, trackCount }),
+  saveComposedPlaylist: (name: string, draft: ComposedPlaylistDraft) =>
+    invoke<PlaylistDetail>("save_composed_playlist", { name, draft }),
   generateActPlaylist: (intent: string, trackCount: number) =>
     invoke<GeneratedPlaylist>("generate_act_playlist", { intent, trackCount }),
   saveGeneratedPlaylist: (name: string, playlist: GeneratedPlaylist) =>

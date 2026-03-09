@@ -92,6 +92,26 @@ pub fn default_provider_capabilities() -> Vec<ProviderCapabilitySeed> {
             display_name: "AcoustID",
             capabilities: vec!["fingerprint", "identity"],
         },
+        ProviderCapabilitySeed {
+            provider_key: "ollama",
+            display_name: "Ollama",
+            capabilities: vec!["llm", "local-intent-parse", "local-explanation"],
+        },
+        ProviderCapabilitySeed {
+            provider_key: "openai",
+            display_name: "OpenAI",
+            capabilities: vec!["llm", "cloud-intent-parse", "cloud-explanation"],
+        },
+        ProviderCapabilitySeed {
+            provider_key: "openrouter",
+            display_name: "OpenRouter",
+            capabilities: vec!["llm", "cloud-intent-parse", "cloud-explanation"],
+        },
+        ProviderCapabilitySeed {
+            provider_key: "groq",
+            display_name: "Groq",
+            capabilities: vec!["llm", "cloud-intent-parse", "cloud-explanation"],
+        },
     ]
 }
 
@@ -151,6 +171,13 @@ pub fn provider_env_mappings() -> HashMap<&'static str, Vec<&'static str>> {
         ),
         ("acoustid", vec!["ACOUSTID_API_KEY"]),
         ("discogs", vec!["DISCOGS_TOKEN", "DISCOGS_USER_TOKEN"]),
+        ("ollama", vec!["OLLAMA_BASE_URL", "OLLAMA_MODEL"]),
+        ("openai", vec!["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL"]),
+        (
+            "openrouter",
+            vec!["OPENROUTER_API_KEY", "OPENROUTER_BASE_URL", "OPENROUTER_MODEL"],
+        ),
+        ("groq", vec!["GROQ_API_KEY", "GROQ_BASE_URL", "GROQ_MODEL"]),
     ])
 }
 
@@ -762,6 +789,80 @@ pub fn validate_provider(
                 });
             }
             Ok(Some(format!("api_key configured ({}...)", &api_key[..8.min(api_key.len())])))
+        }
+        "ollama" => {
+            let base_url = config
+                .get("base_url")
+                .or_else(|| config.get("ollama_base_url"))
+                .or_else(|| config.get("OLLAMA_BASE_URL"))
+                .and_then(Value::as_str)
+                .unwrap_or("http://127.0.0.1:11434");
+            let model = config
+                .get("model")
+                .or_else(|| config.get("ollama_model"))
+                .or_else(|| config.get("OLLAMA_MODEL"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if model.is_empty() {
+                return Ok(ProviderValidationResult {
+                    provider_key: provider_key.to_string(),
+                    valid: false,
+                    latency_ms: 0,
+                    error: Some("ollama model required".to_string()),
+                    detail: None,
+                });
+            }
+            ureq::get(&format!("{}/api/tags", base_url.trim_end_matches('/')))
+                .call()
+                .map(|_| Some(format!("model configured: {model}")))
+                .map_err(|e| e.to_string())
+        }
+        "openai" | "openrouter" | "groq" => {
+            let api_key = config
+                .get("api_key")
+                .or_else(|| config.get("token"))
+                .or_else(|| config.get("OPENAI_API_KEY"))
+                .or_else(|| config.get("OPENROUTER_API_KEY"))
+                .or_else(|| config.get("GROQ_API_KEY"))
+                .or_else(|| config.get("openai_api_key"))
+                .or_else(|| config.get("openrouter_api_key"))
+                .or_else(|| config.get("groq_api_key"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let base_url = config
+                .get("base_url")
+                .or_else(|| config.get("openai_base_url"))
+                .or_else(|| config.get("openrouter_base_url"))
+                .or_else(|| config.get("groq_base_url"))
+                .and_then(Value::as_str)
+                .unwrap_or(match provider_key {
+                    "openai" => "https://api.openai.com/v1",
+                    "openrouter" => "https://openrouter.ai/api/v1",
+                    "groq" => "https://api.groq.com/openai/v1",
+                    _ => unreachable!(),
+                });
+            let model = config
+                .get("model")
+                .or_else(|| config.get("cloud_model"))
+                .or_else(|| config.get("openai_model"))
+                .or_else(|| config.get("openrouter_model"))
+                .or_else(|| config.get("groq_model"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if api_key.is_empty() || model.is_empty() {
+                return Ok(ProviderValidationResult {
+                    provider_key: provider_key.to_string(),
+                    valid: false,
+                    latency_ms: 0,
+                    error: Some("api_key and model required".to_string()),
+                    detail: None,
+                });
+            }
+            ureq::get(&format!("{}/models", base_url.trim_end_matches('/')))
+                .set("Authorization", &format!("Bearer {api_key}"))
+                .call()
+                .map(|_| Some(format!("model configured: {model}")))
+                .map_err(|e| e.to_string())
         }
         _ => {
             // Unknown or not-yet-probed provider — check if credentials are at least configured.

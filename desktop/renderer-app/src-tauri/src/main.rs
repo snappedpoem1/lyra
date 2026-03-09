@@ -9,7 +9,7 @@ mod smtc;
 
 use lyra_core::commands::{
     AcquisitionEventPayload, AcquisitionPreflight, AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
-    CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist, GraphStats,
+    ComposedPlaylistDraft, CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist, GraphStats,
     LegacyImportReport, LibraryCleanupPreview, NativeCapabilities, PlaybackEvent,
     PlaybackState, PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
     ProviderValidationResult, QueueItemRecord, RecentPlayRecord, RecommendationResult, RelatedArtist,
@@ -1300,6 +1300,33 @@ fn preview_library_cleanup(state: State<'_, AppState>) -> Result<LibraryCleanupP
 // ── G-063: Playlist Intelligence ─────────────────────────────────────────────
 
 #[tauri::command]
+fn compose_playlist_draft(
+    state: State<'_, AppState>,
+    prompt: String,
+    track_count: usize,
+) -> Result<ComposedPlaylistDraft, String> {
+    state
+        .core
+        .compose_playlist_draft(prompt, track_count)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_composed_playlist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+    draft: ComposedPlaylistDraft,
+) -> Result<PlaylistDetail, String> {
+    let payload = state
+        .core
+        .save_composed_playlist(name, draft)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(payload)
+}
+
+#[tauri::command]
 fn generate_act_playlist(
     state: State<'_, AppState>,
     intent: String,
@@ -1636,6 +1663,8 @@ fn main() {
             undo_curation,
             preview_library_cleanup,
             // G-063: Playlist Intelligence
+            compose_playlist_draft,
+            save_composed_playlist,
             generate_act_playlist,
             save_generated_playlist,
             get_playlist_track_reasons,

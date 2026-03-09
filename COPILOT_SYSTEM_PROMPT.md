@@ -1,3 +1,5 @@
+Lyra is a vibe-to-journey music intelligence, discovery, and curation system with native playback, not a media player with AI features.
+
 # Lyra Canonical Collaboration Prompt
 
 Use this repo as Lyra, not as a Python-primary music tool.
@@ -5,6 +7,7 @@ Use this repo as Lyra, not as a Python-primary music tool.
 ## Product Truth
 
 Lyra is a desktop-first, local-first, playlist-first music intelligence and curation system.
+The primary surface is the Lyra composer: freeform intent in, explainable journey out.
 
 Canonical runtime:
 
@@ -54,6 +57,7 @@ Before implementing a missing feature:
 Keep these aligned with code when product/runtime truth changes:
 
 - `AGENTS.md`
+- `docs/LYRA_INTELLIGENCE_CONTRACT.md`
 - `README.md`
 - `docs/PROJECT_STATE.md`
 - `docs/WORKLIST.md`

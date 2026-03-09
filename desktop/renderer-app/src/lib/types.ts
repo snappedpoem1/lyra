@@ -85,6 +85,9 @@ export type SettingsPayload = {
   playbackVolumeStep: number;
   libraryAutoScan: boolean;
   preferredOutputDevice: string | null;
+  composerProviderPreference: string;
+  composerDefaultTrackCount: number;
+  composerExplanationDepth: string;
 };
 
 export type ProviderConfigRecord = {
@@ -374,6 +377,82 @@ export type PlaylistTrackWithReason = {
   track: TrackRecord;
   reason: string;
   position: number;
+};
+
+export type PlaylistIntentState = {
+  energy: string;
+  descriptors: string[];
+};
+
+export type PlaylistIntent = {
+  prompt: string;
+  promptRole: string;
+  sourceEnergy: string;
+  destinationEnergy: string;
+  openingState: PlaylistIntentState;
+  landingState: PlaylistIntentState;
+  transitionStyle: string;
+  emotionalArc: string[];
+  textureDescriptors: string[];
+  explicitEntities: string[];
+  familiarityVsNovelty: string;
+  discoveryAggressiveness: string;
+  userSteer: string[];
+  exclusions: string[];
+  explanationDepth: string;
+  sequencingNotes: string[];
+  confidenceNotes: string[];
+  confidence: number;
+};
+
+export type ComposerProviderStatus = {
+  requestedProvider: string;
+  selectedProvider: string;
+  providerKind: string;
+  mode: string;
+  fallbackReason?: string | null;
+};
+
+export type PlaylistPhase = {
+  key: string;
+  label: string;
+  summary: string;
+  targetEnergy: number;
+  targetValence: number;
+  targetTension: number;
+  targetWarmth: number;
+  targetSpace: number;
+  noveltyBias: number;
+};
+
+export type TrackReasonPayload = {
+  summary: string;
+  phase: string;
+  whyThisTrack: string;
+  transitionNote: string;
+  evidence: string[];
+  explicitFromPrompt: string[];
+  inferredByLyra: string[];
+  confidence: number;
+};
+
+export type ComposedPlaylistTrack = {
+  track: TrackRecord;
+  phaseKey: string;
+  phaseLabel: string;
+  fitScore: number;
+  reason: TrackReasonPayload;
+  position: number;
+};
+
+export type ComposedPlaylistDraft = {
+  name: string;
+  prompt: string;
+  intent: PlaylistIntent;
+  providerStatus: ComposerProviderStatus;
+  phases: PlaylistPhase[];
+  narrative?: string | null;
+  tracks: ComposedPlaylistTrack[];
 };
 
 export type GeneratedPlaylist = {

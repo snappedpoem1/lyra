@@ -7,6 +7,7 @@ pub mod db;
 pub mod diagnostics;
 pub mod enrichment;
 pub mod errors;
+pub mod intelligence;
 pub mod library;
 pub mod logging;
 pub mod native;
@@ -27,7 +28,7 @@ use std::sync::{Arc, Mutex};
 use chrono::Utc;
 use commands::{
     AcquisitionPreflight, AcquisitionPreflightCheck, AcquisitionQueueItem, ArtistConnection, ArtistProfile, AudioOutputDevice, BootstrapPayload,
-    DuplicateCluster, ExplainPayload, LegacyImportReport, LibraryOverview, LibraryRootRecord,
+    ComposedPlaylistDraft, DuplicateCluster, ExplainPayload, LegacyImportReport, LibraryOverview, LibraryRootRecord,
     NativeCapabilities, PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary,
     ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
     RecommendationResult, ScanJobRecord, SettingsPayload, TasteProfile, TrackDetail, TrackRecord,
@@ -1309,6 +1310,26 @@ impl LyraCore {
             }
         }
         Ok(results)
+    }
+
+    pub fn compose_playlist_draft(
+        &self,
+        prompt: String,
+        track_count: usize,
+    ) -> LyraResult<ComposedPlaylistDraft> {
+        let conn = self.conn()?;
+        let settings = state::load_settings(&conn)?;
+        intelligence::compose_playlist_draft(&conn, &settings, &prompt, track_count)
+    }
+
+    pub fn save_composed_playlist(
+        &self,
+        name: String,
+        draft: ComposedPlaylistDraft,
+    ) -> LyraResult<PlaylistDetail> {
+        let conn = self.conn()?;
+        let playlist_id = intelligence::save_composed_playlist(&conn, &name, &draft)?;
+        self.get_playlist_detail(playlist_id)
     }
 
     /// Generate an act-based playlist from a user intent.

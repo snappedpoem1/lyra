@@ -215,6 +215,9 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
           playlist_id INTEGER NOT NULL,
           track_id INTEGER NOT NULL,
           reason TEXT NOT NULL DEFAULT '',
+          reason_json TEXT,
+          phase_key TEXT,
+          phase_label TEXT,
           position INTEGER NOT NULL DEFAULT 0,
           PRIMARY KEY (playlist_id, track_id),
           FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
@@ -346,6 +349,16 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
          WHERE status = 'cancelled' AND cancelled_at IS NULL",
         [],
     );
+    for (col, typedef) in &[
+        ("reason_json", "TEXT"),
+        ("phase_key", "TEXT"),
+        ("phase_label", "TEXT"),
+    ] {
+        let _ = conn.execute(
+            &format!("ALTER TABLE playlist_track_reasons ADD COLUMN {col} {typedef}"),
+            [],
+        );
+    }
     Ok(())
 }
 

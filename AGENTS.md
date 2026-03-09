@@ -1,3 +1,5 @@
+Lyra is a vibe-to-journey music intelligence, discovery, and curation system with native playback, not a media player with AI features.
+
 # AGENTS.md - Lyra Runtime Guidance
 
 Read this file first. It is the authoritative entry point for repo-aware agents.
@@ -5,6 +7,7 @@ Read this file first. It is the authoritative entry point for repo-aware agents.
 ## Product Truth
 
 Lyra is a desktop-first, playlist-first, local-first music intelligence and curation system.
+Lyra is a vibe-to-journey system: the front door is creative intent, discovery, and guided curation, with playback acting as support infrastructure.
 
 Playback matters, but playback is not the product differentiator.
 Lyra exists to help a user understand, shape, and grow a music library through:
@@ -88,6 +91,7 @@ Do study them before replacing product logic or workflow behavior in Rust.
 ## Ground Truth Files
 
 - `README.md`
+- `docs/LYRA_INTELLIGENCE_CONTRACT.md`
 - `docs/PROJECT_STATE.md`
 - `docs/WORKLIST.md`
 - `docs/CANONICAL_PATHS.md`

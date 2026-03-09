@@ -4,146 +4,68 @@ Last updated: March 8, 2026
 
 ## Mission Lock
 
-Lyra is a desktop-first, playlist-first, local-first music intelligence and curation platform with native playback.
+Lyra is a vibe-to-journey music intelligence, discovery, and curation platform with native playback.
 
-It is not just a native player rewrite.
-The player, queue, library, and installer work exist to support the real product:
-
-- explainable recommendation
-- authored playlist journeys
-- bridge-track and related-artist discovery
-- visible taste and dimensional scoring
-- provenance-aware enrichment
-- graph and constellation exploration
-- self-owned listening intelligence
+The native runtime is real.
+The roadmap now exists to deepen Lyra identity, not to keep re-proving that a desktop shell can play audio.
 
 Canonical runtime:
 
-- Tauri 2 shell
+- Tauri 2 desktop shell
 - SvelteKit frontend
 - Rust application core
 - SQLite local store
-
-Python is not canonical runtime.
-Python is still a major migration source for solved process logic, provider integration behavior, and product intent that must be ported forward deliberately.
 
 ## Decision Lock
 
 1. No Python in canonical startup, playback, queue, library, or settings flow.
 2. No localhost backend dependency.
-3. Rust owns runtime state, DB, library, queue, playback surface, provider configs, and native integration.
+3. Rust owns runtime state, DB, retrieval, sequencing, provider config, and native integration.
 4. SvelteKit owns the active UI layer.
-5. Future intelligence work must extend the Rust core instead of reviving sidecars.
-6. Existing Python implementations should be mined for already-solved process flow before inventing replacement behavior.
-7. Existing environment/config/provider setup already exists and should be integrated into the canonical architecture, not recreated from scratch.
+5. LLMs may help parse and explain intent, but deterministic retrieval and sequencing stay local.
+6. Legacy Python intelligence must be mined before replacing product behavior.
 
 ## Current Milestone
 
-The native foundation is real and increasingly usable:
+The first real composer pipeline is landed in the canonical runtime:
 
-- Rust/Tauri/Svelte now own the canonical runtime
-- local playback, queue, playlists, scanning, settings, provider config records, and an event-backed acquisition workflow exist
-- recommendation, artist, enrichment, and taste surfaces are partially present in the canonical app
+- typed `PlaylistIntent`
+- local/cloud LLM provider abstraction
+- deterministic local reranking and sequencing
+- visible phases and provider mode in the UI
+- persisted reason payloads
 
-The gap is product identity, not just runtime correctness.
-Lyra still needs much stronger user-visible intelligence, explainability, authorship, and discovery depth before the product matches its intended shape.
+This is the start of the intelligence contract, not the end state.
 
 ## Forward Roadmap
 
-Wave names here map to G-IDs used in WORKLIST and MISSING_FEATURES_REGISTRY:
+### Wave 1 - Composer Depth
 
-| Wave | G-ID | Status |
-|---|---|---|
-| Wave 1 - Runtime Foundation And Provider Plumbing | G-060 + G-065 | G-060 implemented with transitional risk; G-065 open |
-| Wave 2 - Explainability And Provenance Surfaces | G-061 | partial, active |
-| Wave 3 - Playlist Intelligence And Authorship | G-063 | partial |
-| Wave 4 - Discovery Graph And Bridge Exploration | G-064 | partial |
-| Wave 5 - Visible Taste And Dimensional Scoring | (no G-ID yet) | not started |
-| Wave 6 - Curation Safety And Library Stewardship | G-062 | partial |
-| Wave 7 - Packaged Confidence And Long-Session Stability | G-065 | open |
+- broaden prompt handling beyond playlist drafting
+- add richer refinement loops
+- deepen local semantic retrieval and bridge scoring
 
-### Horizon Intelligence Subsystem (landed March 8, 2026)
+### Wave 2 - Discovery And Bridge Intelligence
 
-Prowlarr is no longer coupled to acquisition execution.
+- bridge-track prompts
+- adjacency exploration with explanation
+- shared composer/discovery reasoning surfaces
 
-- Prowlarr role: release discovery, upcoming releases, indexer health reporting
-- Code: `oracle/horizon/prowlarr_releases.py`, `/api/horizon/*`, `/routes/horizon/`
-- T4 acquisition: `oracle/acquirers/magnet_sources.py` → `realdebrid.acquire_from_magnets()`
-- Prowlarr unavailability no longer blocks T4 — waterfall continues to T5 if no magnets found
-- Horizon workspace surface added to frontend at `/horizon`
+### Wave 3 - Explainability Breadth
 
-### Wave 1 - Runtime Foundation And Provider Plumbing (G-060, G-065)
+- inferred-vs-explicit reasoning visibility
+- durable reason payloads across more product surfaces
+- honest provider/degraded-state visibility
 
-Keep this stable, but treat it as foundation work:
+### Wave 4 - Taste Steering
 
-- playback/session correctness
-- scan/import reliability
-- provider config records
-- credential import and safe storage
-- acquisition lifecycle authority, queue trust, and post-acquisition library follow-through
+- user steer and feedback loops that actually affect future output
+- visible taste memory and session-memory controls
 
-### Wave 2 - Explainability And Provenance Surfaces (G-061)
+### Wave 5 - Infrastructure Follow-Through
 
-Bring the intelligence layer into view early:
+- remaining acquisition runtime hardening
+- curation workflows
+- packaged desktop confidence
 
-- recommendation reasons that users can inspect
-- provider/source provenance in recommendation and enrichment flows
-- confidence visibility and degraded-state honesty
-- MBID-first identity surfaces where available
-
-### Wave 3 - Playlist Intelligence And Authorship (G-063)
-
-Move playlist identity forward instead of treating it as a late garnish:
-
-- act and narrative playlist generation
-- persisted per-track reason payloads
-- "Why is this track here?" surfaces
-- save/apply flows that preserve authored structure
-
-### Wave 4 - Discovery Graph And Bridge Exploration (G-064)
-
-Restore discovery depth as a first-class differentiator:
-
-- related-artist graph actions
-- bridge-track and bridge-artist workflows
-- constellation-style exploration
-- taste-aware discovery session memory
-
-### Wave 5 - Visible Taste And Dimensional Scoring
-
-Make the internal scoring layer legible and useful:
-
-- emotional and dimensional score surfaces
-- user-facing taste memory and session-memory signals
-- confidence-aware scoring explanations
-- actions that let the user steer future recommendations
-
-### Wave 6 - Curation Safety And Library Stewardship (G-062)
-
-Support the playlist-first intelligence system with trusted maintenance tools:
-
-- duplicate review and keeper selection
-- cleanup preview/apply flows
-- rollback-aware curation operations
-- enrichment-driven organization workflows
-
-### Wave 7 - Packaged Confidence And Long-Session Stability (G-065)
-
-Keep release work in scope, but do not let it dominate product identity:
-
-- packaged build validation
-- installer proof on clean machine
-- long-session playback/acquisition stability
-- failure recovery and diagnostics
-
-## Migration Discipline
-
-When implementing a capability in Rust/Tauri/Svelte:
-
-1. Check whether Python already solved the process logic or provider workflow.
-2. Preserve the useful behavior, even if the runtime shape changes.
-3. Reuse existing env/config/provider plumbing where possible.
-4. Avoid fake clean-slate abstractions that ignore working integrations already present in the repo.
-
-The migration goal is not "remove Python because it exists."
-The migration goal is "port Lyra's real intelligence product into the canonical native runtime."
+Infrastructure still matters, but it is no longer the message of the roadmap.

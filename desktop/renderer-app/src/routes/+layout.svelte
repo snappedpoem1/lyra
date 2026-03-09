@@ -190,22 +190,30 @@
     if (!raw) return;
     const command = raw.toLowerCase();
 
-    if (command.includes("library")) {
+    const isNavigationIntent =
+      /^(open|go to|show|take me to)\b/.test(command) ||
+      ["library", "queue", "settings", "horizon", "acquisition", "home"].some(
+        (keyword) => command === keyword || command === `open ${keyword}`,
+      );
+
+    if (isNavigationIntent && command.includes("library")) {
       await goto("/library");
-    } else if (command.includes("playlist")) {
+    } else if (isNavigationIntent && command.includes("playlist")) {
       await goto("/playlists");
-    } else if (command.includes("discover") || command.includes("bridge")) {
+    } else if (isNavigationIntent && (command.includes("discover") || command.includes("bridge"))) {
       await goto("/discover");
-    } else if (command.includes("acquire") || command.includes("wishlist")) {
+    } else if (isNavigationIntent && (command.includes("acquire") || command.includes("wishlist"))) {
       await goto("/acquisition");
       setInspectorTab("acquisition");
-    } else if (command.includes("queue")) {
+    } else if (isNavigationIntent && command.includes("queue")) {
       await goto("/queue");
       setInspectorTab("queue");
-    } else if (command.includes("settings")) {
+    } else if (isNavigationIntent && command.includes("settings")) {
       await goto("/settings");
-    } else if ($shell.playback.currentTrack?.artist && command.includes("artist")) {
+    } else if (isNavigationIntent && $shell.playback.currentTrack?.artist && command.includes("artist")) {
       await goto(`/artists/${encodeURIComponent($shell.playback.currentTrack.artist)}`);
+    } else {
+      await goto(`/playlists?compose=1&prompt=${encodeURIComponent(raw)}`);
     }
 
     setComposerText("");
@@ -257,8 +265,8 @@
     <aside class="nav-rail">
       <div class="rail-section brand-block">
         <p class="eyebrow">Lyra Oracle</p>
-        <h2>Playlist-first music intelligence</h2>
-        <p class="muted">Navigate the library, shape playlists, follow bridges, and keep acquisition visible.</p>
+        <h2>Vibe-to-journey intelligence</h2>
+        <p class="muted">Interpret intent, shape journeys, follow bridges, and keep playback in support of discovery.</p>
       </div>
 
       <nav class="nav-list rail-section">
@@ -454,16 +462,16 @@
 
   <section class="composer-line">
     <div class="composer-copy">
-      <p class="eyebrow">Lyra Input</p>
-      <small>Persistent oracle line for navigation, focus, and next-action intent.</small>
+      <p class="eyebrow">Lyra Composer</p>
+      <small>Freeform intent first. Use plain navigation verbs only when you want a page jump.</small>
     </div>
     <input
       value={$workspace.composerText}
       on:input={(event) => setComposerText((event.currentTarget as HTMLInputElement).value)}
       on:keydown={(event) => event.key === "Enter" && runComposer()}
-      placeholder="Type: discover bridge tracks, open acquisition, go to playlists, artist context..."
+      placeholder="edm fire storm trickling into chill undercurrent of lofi covers"
     />
-    <button on:click={runComposer}>Run</button>
+    <button on:click={runComposer}>Compose</button>
   </section>
 
   <footer class="transport">

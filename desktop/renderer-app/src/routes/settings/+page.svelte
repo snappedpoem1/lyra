@@ -209,6 +209,35 @@
   </article>
 
   <article>
+    <p class="eyebrow">Composer Intelligence</p>
+    <p class="settings-hint">Choose how Lyra handles creative-language parsing. Provider language helps interpretation and narration; retrieval and sequencing remain local and deterministic.</p>
+    <label>
+      Provider preference
+      <select bind:value={form.composerProviderPreference}>
+        <option value="auto">Auto</option>
+        <option value="disabled">Deterministic only</option>
+        <option value="ollama">Ollama (local)</option>
+        <option value="openrouter">OpenRouter (cloud)</option>
+        <option value="groq">Groq (cloud)</option>
+        <option value="openai">OpenAI (cloud)</option>
+      </select>
+    </label>
+    <label>
+      Default track count
+      <input type="number" bind:value={form.composerDefaultTrackCount} min="8" max="40" step="4" />
+    </label>
+    <label>
+      Explanation depth
+      <select bind:value={form.composerExplanationDepth}>
+        <option value="concise">Concise</option>
+        <option value="balanced">Balanced</option>
+        <option value="deep">Deep</option>
+      </select>
+    </label>
+    <button on:click={saveSettings}>Save composer settings</button>
+  </article>
+
+  <article>
     <p class="eyebrow">Sleep Timer</p>
     <p class="settings-hint">Automatically stop playback after a set time.</p>
     <label>Minutes <input type="number" bind:value={sleepMinutes} min="1" max="180" /></label>

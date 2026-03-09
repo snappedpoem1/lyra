@@ -425,7 +425,7 @@ pub fn build_dimension_affinity(conn: &Connection) -> usize {
     let now = chrono::Utc::now().to_rfc3339();
     let mut inserted = 0usize;
     for (a, b, sim) in &new_edges {
-        let weight = (*sim as f64).clamp(0.0, 1.0);
+        let weight = (*sim).clamp(0.0, 1.0);
         let evidence = format!(r#"{{"similarity":{:.4},"type":"dimension_affinity"}}"#, weight);
         let r1 = conn.execute(
             "INSERT OR IGNORE INTO connections (source, target, type, weight, evidence, updated_at) VALUES (?1, ?2, 'dimension_affinity', ?3, ?4, ?5)",
