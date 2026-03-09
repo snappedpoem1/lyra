@@ -365,6 +365,8 @@ pub struct PlaylistTrackWithReason {
 pub struct GeneratedPlaylist {
     pub name: String,
     pub intent: String,
+    /// LLM-generated liner notes narrative for the playlist journey.
+    pub narrative: Option<String>,
     pub tracks: Vec<PlaylistTrackWithReason>,
 }
 
@@ -392,6 +394,23 @@ pub struct DiscoveryInteraction {
 #[serde(rename_all = "camelCase")]
 pub struct DiscoverySession {
     pub recent: Vec<DiscoveryInteraction>,
+}
+
+/// Artist node in the dimension-affinity graph.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphNode {
+    pub artist: String,
+    pub degree: usize,
+}
+
+/// Summary statistics for the artist graph.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphStats {
+    pub total_artists: usize,
+    pub total_connections: usize,
+    pub top_connected: Vec<GraphNode>,
 }
 
 /// Per-provider enrichment entry with source/confidence metadata.

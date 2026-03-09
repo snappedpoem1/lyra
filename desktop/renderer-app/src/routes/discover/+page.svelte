@@ -9,13 +9,16 @@
     setWorkspaceProvenance,
     setWorkspaceTrack
   } from "$lib/stores/workspace";
-  import type { AcquisitionQueueItem, DiscoverySession, ExplainPayload, PlaylistSummary, RecentPlayRecord, RecommendationResult, TrackEnrichmentResult } from "$lib/types";
+  import type { AcquisitionQueueItem, DiscoverySession, ExplainPayload, GraphStats, PlaylistSummary, RecentPlayRecord, RecommendationResult, TrackEnrichmentResult } from "$lib/types";
 
   let vibePlaylists: PlaylistSummary[] = [];
   let acquisitionQueue: AcquisitionQueueItem[] = [];
-  // G-064: Discovery session
+  // G-064: Discovery session + graph
   let discoverySession: DiscoverySession | null = null;
   let discoveryLoaded = false;
+  let graphStats: GraphStats | null = null;
+  let graphBuilding = false;
+  let graphMessage = "";
   let statusFilter = "all";
   let addArtist = "";
   let addTitle = "";
@@ -75,8 +78,29 @@
     const all = await api.playlists();
     vibePlaylists = all.filter((p) => p.name.startsWith("[Vibe]"));
     await loadQueue();
-    // G-064: load discovery session in background
+    // G-064: load discovery session + graph stats in background
     loadDiscoverySession();
+    loadGraphStats();
+  }
+
+  async function loadGraphStats() {
+    try {
+      graphStats = await api.getGraphStats();
+    } catch { /* graph table may be empty */ }
+  }
+
+  async function buildGraph() {
+    graphBuilding = true;
+    graphMessage = "";
+    try {
+      const added = await api.buildArtistGraph();
+      graphMessage = `Graph built: ${added} new artist pairs.`;
+      await loadGraphStats();
+    } catch (e) {
+      graphMessage = e instanceof Error ? e.message : "Graph build failed.";
+    } finally {
+      graphBuilding = false;
+    }
   }
 
   async function loadDiscoverySession() {
@@ -368,6 +392,31 @@
   {/if}
 </div>
 
+<!-- G-064: Artist graph panel -->
+<div class="graph-panel">
+  <div class="panel-head-row">
+    <p class="panel-head eyebrow">Artist Graph</p>
+    <button class="load-btn" on:click={buildGraph} disabled={graphBuilding}>
+      {graphBuilding ? "Building..." : "Build Graph"}
+    </button>
+  </div>
+  {#if graphStats}
+    <div class="graph-stats">
+      <span>{graphStats.totalArtists} artists</span>
+      <span class="muted">·</span>
+      <span>{graphStats.totalConnections} edges</span>
+      {#if graphStats.topConnected.length > 0}
+        <span class="muted">· Top: {graphStats.topConnected.map(n => n.artist).join(", ")}</span>
+      {/if}
+    </div>
+  {:else}
+    <p class="muted">No graph data yet. Click "Build Graph" to compute dimension-affinity edges from your library.</p>
+  {/if}
+  {#if graphMessage}
+    <p class="muted" style="margin-top:6px">{graphMessage}</p>
+  {/if}
+</div>
+
 <!-- G-064: Recent Discovery panel -->
 {#if discoveryLoaded && discoverySession && discoverySession.recent.length > 0}
 <div class="discovery-panel">
@@ -596,6 +645,19 @@
   .queue-rows { display: flex; flex-direction: column; gap: 4px; }
   select { font: inherit; color: inherit; }
   @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* G-064: Artist graph panel */
+  .graph-panel {
+    margin-bottom: 20px;
+    padding: 14px 18px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(168,196,224,0.07), rgba(168,196,224,0.025));
+    border: 1px solid rgba(168,196,224,0.12);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .graph-stats { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; flex-wrap: wrap; }
 
   /* G-064: Recent Discovery panel */
   .discovery-panel {

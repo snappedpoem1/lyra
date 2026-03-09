@@ -275,13 +275,220 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
     }
 }
 
-/// Find related artists using co-play connections or enrichment data.
+/// Build dimension-affinity edges between artists based on their track_scores centroids.
+/// Ports graph_builder.py build_dimension_edges() — pure local DB computation.
+/// Returns the count of new edge pairs inserted.
+pub fn build_dimension_affinity(conn: &Connection) -> usize {
+    // Load per-artist average score vectors
+    let dim_cols: Vec<String> = DIMENSIONS.iter().map(|d| format!("AVG(ts.{})", d)).collect();
+    let select_cols = dim_cols.join(", ");
+    let sql = format!(
+        "SELECT ar.name, {select_cols}
+         FROM track_scores ts
+         JOIN tracks t ON t.id = ts.track_id
+         JOIN artists ar ON ar.id = t.artist_id
+         WHERE trim(COALESCE(ar.name, '')) != ''
+         GROUP BY ar.name
+         HAVING COUNT(ts.track_id) >= 2"
+    );
+    let rows: Vec<(String, [f64; 10])> = {
+        let mut stmt = match conn.prepare(&sql) {
+            Ok(s) => s,
+            Err(_) => return 0,
+        };
+        let raw: Vec<(String, Vec<f64>)> = stmt
+            .query_map([], |row| {
+                let name: String = row.get(0)?;
+                let vals: Vec<f64> = (1..=10)
+                    .map(|i| row.get::<_, f64>(i).unwrap_or(0.0))
+                    .collect();
+                Ok((name, vals))
+            })
+            .map(|rows| rows.filter_map(Result::ok).collect())
+            .unwrap_or_default();
+        raw.into_iter()
+            .filter_map(|(name, v)| {
+                if v.len() == 10 {
+                    let mut arr = [0f64; 10];
+                    arr.copy_from_slice(&v);
+                    Some((name, arr))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+
+    let n = rows.len();
+    if n < 2 {
+        return 0;
+    }
+
+    // Z-score standardise each dimension across all artists
+    let mut means = [0f64; 10];
+    let mut stds = [0f64; 10];
+    for (_, v) in &rows {
+        for i in 0..10 {
+            means[i] += v[i];
+        }
+    }
+    for m in &mut means {
+        *m /= n as f64;
+    }
+    for (_, v) in &rows {
+        for i in 0..10 {
+            let d = v[i] - means[i];
+            stds[i] += d * d;
+        }
+    }
+    for s in &mut stds {
+        *s = (*s / n as f64).sqrt();
+        if *s < 1e-9 {
+            *s = 1.0;
+        }
+    }
+
+    // Build normalised z-score vectors
+    let mut z_vecs: Vec<[f64; 10]> = rows
+        .iter()
+        .map(|(_, v)| {
+            let mut z = [0f64; 10];
+            for i in 0..10 {
+                z[i] = (v[i] - means[i]) / stds[i];
+            }
+            // L2 normalise
+            let norm: f64 = z.iter().map(|x| x * x).sum::<f64>().sqrt().max(1e-9);
+            z.iter_mut().for_each(|x| *x /= norm);
+            z
+        })
+        .collect();
+    let _ = &mut z_vecs; // suppress lint
+
+    // Compute pairwise cosine similarity and collect edges above threshold
+    const THRESHOLD: f64 = 0.60;
+    const TOP_K: usize = 8;
+    let artists: Vec<&str> = rows.iter().map(|(name, _)| name.as_str()).collect();
+    let norm_vecs = &z_vecs;
+
+    // Load existing pairs to avoid duplicates
+    let existing: std::collections::HashSet<(String, String)> = {
+        let mut stmt = conn
+            .prepare("SELECT source, target FROM connections WHERE type = 'dimension_affinity'")
+            .unwrap_or_else(|_| conn.prepare("SELECT '' AS source, '' AS target WHERE 0").unwrap());
+        stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map(|rows| rows.filter_map(Result::ok).collect())
+        .unwrap_or_default()
+    };
+
+    let mut new_edges: Vec<(String, String, f64)> = Vec::new();
+    let mut seen: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+
+    for i in 0..n {
+        // Compute similarities for artist i against all others
+        let mut sims: Vec<(usize, f64)> = (0..n)
+            .filter(|&j| j != i)
+            .map(|j| {
+                let sim: f64 = norm_vecs[i]
+                    .iter()
+                    .zip(norm_vecs[j].iter())
+                    .map(|(a, b)| a * b)
+                    .sum();
+                (j, sim)
+            })
+            .collect();
+        sims.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        for (j, sim) in sims.into_iter().take(TOP_K) {
+            if sim < THRESHOLD {
+                continue;
+            }
+            let lo = i.min(j);
+            let hi = i.max(j);
+            if seen.contains(&(lo, hi)) {
+                continue;
+            }
+            let a = artists[i].to_string();
+            let b = artists[j].to_string();
+            if existing.contains(&(a.clone(), b.clone())) || existing.contains(&(b.clone(), a.clone())) {
+                continue;
+            }
+            seen.insert((lo, hi));
+            new_edges.push((a, b, sim));
+        }
+    }
+
+    if new_edges.is_empty() {
+        return 0;
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut inserted = 0usize;
+    for (a, b, sim) in &new_edges {
+        let weight = (*sim as f64).clamp(0.0, 1.0);
+        let evidence = format!(r#"{{"similarity":{:.4},"type":"dimension_affinity"}}"#, weight);
+        let r1 = conn.execute(
+            "INSERT OR IGNORE INTO connections (source, target, type, weight, evidence, updated_at) VALUES (?1, ?2, 'dimension_affinity', ?3, ?4, ?5)",
+            params![a, b, weight, evidence, now],
+        );
+        let r2 = conn.execute(
+            "INSERT OR IGNORE INTO connections (source, target, type, weight, evidence, updated_at) VALUES (?1, ?2, 'dimension_affinity', ?3, ?4, ?5)",
+            params![b, a, weight, evidence, now],
+        );
+        if r1.is_ok() && r2.is_ok() {
+            inserted += 1;
+        }
+    }
+    inserted
+}
+
+/// Find related artists — checks connections table first, then falls back to co-play/genre.
 pub fn get_related_artists(
     artist_name: &str,
     limit: usize,
     conn: &Connection,
 ) -> Vec<RelatedArtist> {
-    // First try co-play connections from playback_history
+    let mut results: Vec<RelatedArtist> = Vec::new();
+
+    // First: query dimension_affinity + similar edges from connections table
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT target, weight, type FROM connections
+         WHERE lower(trim(source)) = lower(trim(?1))
+         ORDER BY weight DESC LIMIT ?2",
+    ) {
+        let rows = stmt.query_map(params![artist_name, limit as i64], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, f64>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        });
+        if let Ok(rows) = rows {
+            for row in rows.filter_map(Result::ok) {
+                let (name, weight, conn_type) = row;
+                let local_count: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM tracks t LEFT JOIN artists ar ON ar.id = t.artist_id
+                         WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))",
+                        params![name.as_str()],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(0);
+                results.push(RelatedArtist {
+                    name,
+                    connection_strength: weight as f32,
+                    connection_type: conn_type,
+                    local_track_count: local_count as usize,
+                });
+            }
+        }
+    }
+
+    if !results.is_empty() {
+        return results;
+    }
+
+    // Fallback: co-play connections from playback_history
     let co_play_result = conn.prepare(
         "SELECT COALESCE(ar2.name, '') AS related, COUNT(*) AS strength
          FROM playback_history p1
@@ -300,8 +507,6 @@ pub fn get_related_artists(
          LIMIT ?2",
     );
 
-    let mut results: Vec<RelatedArtist> = Vec::new();
-
     if let Ok(mut stmt) = co_play_result {
         let rows = stmt.query_map(params![artist_name, limit as i64], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
@@ -309,7 +514,6 @@ pub fn get_related_artists(
         if let Ok(rows) = rows {
             for row in rows.filter_map(Result::ok) {
                 let (name, strength) = row;
-                // Count local tracks for this artist
                 let local_count: i64 = conn
                     .query_row(
                         "SELECT COUNT(*) FROM tracks t LEFT JOIN artists ar ON ar.id = t.artist_id
@@ -318,12 +522,11 @@ pub fn get_related_artists(
                         |r| r.get(0),
                     )
                     .unwrap_or(0);
-                let max_strength = 100_i64;
-                let connection_strength = (strength as f32 / max_strength as f32).min(1.0);
+                let connection_strength = (strength as f32 / 100_f32).min(1.0);
                 results.push(RelatedArtist {
                     name,
                     connection_strength,
-                    connection_type: "similar".to_string(),
+                    connection_type: "co_play".to_string(),
                     local_track_count: local_count as usize,
                 });
             }
@@ -331,7 +534,7 @@ pub fn get_related_artists(
     }
 
     if results.is_empty() {
-        // Fallback: look for artists sharing genres from track metadata
+        // Final fallback: shared genre
         let genre_result = conn.prepare(
             "SELECT COALESCE(ar2.name, ''), COUNT(*) AS cnt
              FROM tracks t1

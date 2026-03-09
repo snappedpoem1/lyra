@@ -22,6 +22,7 @@
   let playSimilarBusy = false;
   let bridgeBusy = false;
   let bridgeTarget: RelatedArtist | null = null;
+  let huntMessage = "";
 
   async function loadProfile() {
     loading = true;
@@ -193,6 +194,17 @@
     return "#9cb2c7";
   }
 
+  // G-064: Add a non-library related artist to acquisition queue
+  async function huntArtist(artistName: string): Promise<void> {
+    huntMessage = "";
+    try {
+      await api.addToAcquisitionQueue(artistName, "discography", undefined, "discovery");
+      huntMessage = `Added ${artistName} to acquisition queue.`;
+    } catch (e) {
+      huntMessage = e instanceof Error ? e.message : "Failed to queue.";
+    }
+  }
+
   onMount(loadProfile);
 </script>
 
@@ -317,6 +329,11 @@
                     title="Queue bridge: mix current artist + {related.name}">
                     {bridgeBusy && bridgeTarget?.name === related.name ? 'Working...' : 'Queue Bridge'}
                   </button>
+                {:else}
+                  <button class="hunt-btn" on:click={() => huntArtist(related.name)}
+                    title="Add {related.name} to acquisition queue">
+                    Hunt
+                  </button>
                 {/if}
               </div>
             </div>
@@ -332,6 +349,9 @@
               <small>{connection.score} co-plays</small>
             </a>
           {/each}
+        {/if}
+        {#if huntMessage}
+          <p class="muted" style="margin-top:8px;font-size:0.8rem">{huntMessage}</p>
         {/if}
       </article>
 
@@ -401,6 +421,7 @@
   .related-actions { display: flex; gap: 6px; flex-shrink: 0; }
   .sim-btn { color: #7affc6; border-color: rgba(122,255,198,0.3); font-size: 0.78rem; padding: 4px 10px; }
   .bridge-btn { color: #ffd166; border-color: rgba(255,209,102,0.3); font-size: 0.78rem; padding: 4px 10px; }
+  .hunt-btn { color: #ff9f7a; border-color: rgba(255,159,122,0.3); font-size: 0.78rem; padding: 4px 10px; }
 
   @media (max-width: 900px) {
     .hero { grid-template-columns: 1fr; }

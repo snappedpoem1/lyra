@@ -7,7 +7,8 @@ Last updated: March 8, 2026
 - Rust, Tauri, and SvelteKit are the active runtime path.
 - Python and oracle code are migration source only, not canonical runtime.
 - The canonical shell contract is now real in code: collapsible rails, persistent mini player, and persistent Lyra composer line.
-- G-060 is at a usable baseline inside that shell.
+- G-060, G-061, G-063, G-064 are materially implemented in the canonical shell.
+- G-062 (Curation Workflows) is next.
 - Native playback, library, queue, settings, and provider plumbing are ahead of the remaining identity-depth lanes.
 
 ## Execution Rule
@@ -74,21 +75,21 @@ Current checkpoint: materially implemented in the canonical shell with live back
 
 Goal: restore playlist authorship as a first-class product behavior.
 
-- [ ] Port act and narrative playlist generation behavior from legacy playlist and vibe logic
-- [ ] Persist per-track reason payloads for generated playlists
-- [ ] Add "Why is this track here?" UI for generated playlists and saved runs
-- [ ] Keep playlist structure and authored reasoning durable when saving
-- [ ] Inspect `oracle/vibes.py`, `oracle/playlust.py`, `oracle/explain.py`, and related blueprint flows first
+- [x] Port act and narrative playlist generation behavior from legacy playlist and vibe logic
+- [x] Persist per-track reason payloads for generated playlists
+- [x] Add "Why is this track here?" UI for generated playlists and saved runs
+- [x] Keep playlist structure and authored reasoning durable when saving
+- [x] Inspect `oracle/vibes.py`, `oracle/playlust.py`, `oracle/explain.py`, and related blueprint flows first
 
 ### G-064 Discovery Graph Depth
 
 Goal: make discovery feel like Lyra rather than a flat recommendation page.
 
-- [ ] Port graph, constellation, and bridge-discovery logic from legacy discovery flows
-- [ ] Add related-artist and bridge actions connected to reasons and provenance
-- [ ] Add graph-backed exploration UI instead of flat lists only
-- [ ] Add session-memory signals that influence and explain discovery outputs
-- [ ] Inspect `oracle/graph_builder.py`, `oracle/scout.py`, and `oracle/recommendation_broker.py` first
+- [x] Port graph, constellation, and bridge-discovery logic from legacy discovery flows
+- [x] Add related-artist and bridge actions connected to reasons and provenance
+- [x] Add graph-backed exploration UI instead of flat lists only
+- [x] Add session-memory signals that influence and explain discovery outputs
+- [x] Inspect `oracle/graph_builder.py`, `oracle/scout.py`, and `oracle/recommendation_broker.py` first
 
 ### G-062 Curation Workflows
 

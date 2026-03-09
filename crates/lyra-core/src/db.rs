@@ -226,6 +226,17 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
           action TEXT NOT NULL,
           created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS connections (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source TEXT NOT NULL,
+          target TEXT NOT NULL,
+          type TEXT NOT NULL,
+          weight REAL NOT NULL DEFAULT 0.5,
+          evidence TEXT,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_connections_source ON connections(source);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_connections_pair ON connections(source, target, type);
         CREATE TABLE IF NOT EXISTS provider_health (
           provider_key TEXT PRIMARY KEY,
           status TEXT NOT NULL DEFAULT 'healthy',

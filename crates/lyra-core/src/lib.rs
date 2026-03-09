@@ -1373,6 +1373,49 @@ impl LyraCore {
         Ok(oracle::get_discovery_session(&conn))
     }
 
+    /// Build dimension-affinity edges between artists from local track_scores centroids.
+    /// Returns the count of new artist pairs inserted into the connections table.
+    pub fn build_artist_graph(&self) -> LyraResult<usize> {
+        let conn = self.conn()?;
+        Ok(oracle::build_dimension_affinity(&conn))
+    }
+
+    /// Return graph statistics: total artists, total connections, top connected artists.
+    pub fn get_graph_stats(&self) -> LyraResult<commands::GraphStats> {
+        let conn = self.conn()?;
+        let total_artists: i64 = conn
+            .query_row(
+                "SELECT COUNT(DISTINCT source) FROM connections",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        let total_connections: i64 = conn
+            .query_row("SELECT COUNT(*) FROM connections", [], |r| r.get(0))
+            .unwrap_or(0);
+        let top_connected: Vec<commands::GraphNode> = {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT source, COUNT(*) AS cnt FROM connections
+                     GROUP BY source ORDER BY cnt DESC LIMIT 5",
+                )
+                .map_err(crate::LyraError::Db)?;
+            stmt.query_map([], |row| {
+                Ok(commands::GraphNode {
+                    artist: row.get(0)?,
+                    degree: row.get::<_, i64>(1)? as usize,
+                })
+            })
+            .map(|rows| rows.filter_map(Result::ok).collect())
+            .unwrap_or_default()
+        };
+        Ok(commands::GraphStats {
+            total_artists: total_artists as usize,
+            total_connections: total_connections as usize,
+            top_connected,
+        })
+    }
+
     /// Returns a human-readable explanation for why a track matches the current taste profile.
     pub fn explain_recommendation(&self, track_id: i64) -> LyraResult<ExplainPayload> {
         let conn = self.conn()?;
@@ -1473,6 +1516,71 @@ impl LyraCore {
     pub fn retry_failed_acquisition(&self) -> LyraResult<i64> {
         let conn = self.conn()?;
         acquisition::retry_failed(&conn)
+    }
+
+    /// Seed the acquisition queue from the legacy Spotify liked library.
+    ///
+    /// Opens `lyra_registry.db` (or the path from `LYRA_DB_PATH` env var) and
+    /// imports any `spotify_library` liked tracks that are not yet owned locally
+    /// and not already in the acquisition queue.
+    ///
+    /// Returns the number of new items added.
+    pub fn seed_acquisition_from_spotify_library(&self) -> LyraResult<usize> {
+        let conn = self.conn()?;
+        let legacy_path = std::env::var("LYRA_DB_PATH")
+            .ok()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("lyra_registry.db"));
+        if !legacy_path.exists() {
+            return Ok(0);
+        }
+        let legacy = rusqlite::Connection::open(&legacy_path)?;
+        acquisition::import_spotify_library_as_queue(&conn, &legacy)
+    }
+
+    /// Bulk-add multiple tracks to the acquisition queue from a text list.
+    ///
+    /// Each entry is `(artist, title, album_opt, source)`. Duplicate detection
+    /// and priority scoring run per-track via the normal acquisition path.
+    ///
+    /// Returns the list of newly added queue items.
+    pub fn bulk_add_to_acquisition_queue(
+        &self,
+        entries: Vec<(String, String, Option<String>)>,
+        source: String,
+    ) -> LyraResult<Vec<AcquisitionQueueItem>> {
+        let conn = self.conn()?;
+        let mut added: Vec<AcquisitionQueueItem> = Vec::new();
+        for (artist, title, album) in entries {
+            if artist.trim().is_empty() || title.trim().is_empty() {
+                continue;
+            }
+            let validation = Self::validate_acquisition_request(
+                &conn, artist.trim(), title.trim(), album.as_deref(),
+            )?;
+            let (target_root_id, target_root_path) = Self::resolve_target_root(&conn, None)?;
+            let priority = acquisition::compute_initial_priority(
+                &conn,
+                &validation.artist,
+                &validation.title,
+                validation.album.as_deref(),
+                Some(source.as_str()),
+            )?;
+            let item = acquisition::add_acquisition_item(
+                &conn,
+                &validation.artist,
+                &validation.title,
+                validation.album.as_deref(),
+                Some(source.as_str()),
+                priority,
+                Some(validation.confidence),
+                Some(&validation.summary),
+                target_root_id,
+                target_root_path.as_deref(),
+            )?;
+            added.push(item);
+        }
+        Ok(added)
     }
 
     pub fn set_acquisition_priority(&self, id: i64, priority_score: f64) -> LyraResult<Vec<AcquisitionQueueItem>> {

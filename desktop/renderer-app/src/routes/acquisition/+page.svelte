@@ -56,6 +56,14 @@
   let newSource = "manual";
   let newTargetRootId = "";
 
+  // Bulk import panel
+  let bulkOpen = false;
+  let bulkText = "";
+  let bulkBusy = false;
+  let bulkMessage = "";
+  let seedingSpotify = false;
+  let seedSpotifyMessage = "";
+
   onMount(async () => {
     setWorkspacePage(
       "Acquisition",
@@ -208,6 +216,58 @@
       await loadPreflight();
     } finally {
       loading = false;
+    }
+  }
+
+  async function bulkAdd(): Promise<void> {
+    if (!bulkText.trim()) return;
+    bulkBusy = true;
+    bulkMessage = "";
+    try {
+      const lines = bulkText
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0 && !l.startsWith("#"));
+      const entries: [string, string, string | null][] = lines
+        .map((line) => {
+          // Formats: "Artist - Title" or "Artist\tTitle" or "Artist | Title"
+          const sep = line.includes(" - ") ? " - " : line.includes("\t") ? "\t" : " | ";
+          const parts = line.split(sep);
+          const artist = parts[0]?.trim() ?? "";
+          const title = parts.slice(1).join(sep).trim();
+          return [artist, title, null] as [string, string, null];
+        })
+        .filter(([a, t]) => a && t);
+      if (!entries.length) {
+        bulkMessage = "No valid entries found. Use 'Artist - Title' format, one per line.";
+        return;
+      }
+      const added = await api.bulkAddToAcquisitionQueue(entries, "bulk_import");
+      reconcileQueue(
+        [...items, ...added].reduce<typeof items>((acc, item) => {
+          if (!acc.find((i) => i.id === item.id)) acc.push(item);
+          return acc;
+        }, []),
+        added.at(-1)?.id ?? null
+      );
+      bulkMessage = `Added ${added.length} of ${entries.length} tracks to the queue.`;
+      bulkText = "";
+    } finally {
+      bulkBusy = false;
+    }
+  }
+
+  async function seedFromSpotifyLibrary(): Promise<void> {
+    seedingSpotify = true;
+    seedSpotifyMessage = "";
+    try {
+      const count = await api.seedAcquisitionFromSpotifyLibrary();
+      seedSpotifyMessage = count > 0
+        ? `Seeded ${count} missing Spotify liked tracks into the acquisition queue.`
+        : "No new tracks to seed — all Spotify liked tracks are already owned or queued.";
+      if (count > 0) await loadQueue();
+    } finally {
+      seedingSpotify = false;
     }
   }
 
@@ -432,6 +492,48 @@
         </div>
       </section>
 
+      <!-- Bulk import panel -->
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Bulk import</h2>
+            <p>Paste a track list (one "Artist - Title" per line) to seed the queue from an external playlist or wishlist.</p>
+          </div>
+          <button class="dim-btn" on:click={() => (bulkOpen = !bulkOpen)}>
+            {bulkOpen ? "Hide" : "Show"}
+          </button>
+        </div>
+        {#if bulkOpen}
+          <div class="bulk-body">
+            <textarea
+              class="bulk-textarea"
+              bind:value={bulkText}
+              placeholder={"Artist - Title\nArtist - Title\n# Lines starting with # are ignored"}
+              rows="8"
+            ></textarea>
+            <div class="bulk-actions">
+              <button on:click={bulkAdd} disabled={bulkBusy || !bulkText.trim()}>
+                {bulkBusy ? "Adding..." : "Add All to Queue"}
+              </button>
+              <button
+                class="seed-btn"
+                on:click={seedFromSpotifyLibrary}
+                disabled={seedingSpotify}
+                title="Import missing Spotify liked tracks from the local Spotify history database"
+              >
+                {seedingSpotify ? "Seeding..." : "Seed from Spotify Liked"}
+              </button>
+            </div>
+            {#if bulkMessage}
+              <p class="bulk-msg">{bulkMessage}</p>
+            {/if}
+            {#if seedSpotifyMessage}
+              <p class="bulk-msg">{seedSpotifyMessage}</p>
+            {/if}
+          </div>
+        {/if}
+      </section>
+
       <section class="panel">
         <div class="panel-head">
           <div>
@@ -650,6 +752,18 @@
   button:disabled { opacity: 0.55; cursor: default; }
   .btn-small { padding: 0.35rem 0.55rem; font-size: 0.84rem; }
   .btn-danger { color: #ff9a9a; }
+  .dim-btn { color: #97adbf; border-color: rgba(145, 176, 201, 0.14); background: transparent; }
+  .bulk-body { display: grid; gap: 0.75rem; }
+  .bulk-textarea {
+    width: 100%; box-sizing: border-box;
+    padding: 0.75rem; border-radius: 10px;
+    border: 1px solid rgba(145, 176, 201, 0.16);
+    background: rgba(3, 8, 13, 0.72); color: inherit;
+    font: inherit; font-size: 0.84rem; resize: vertical;
+  }
+  .bulk-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+  .seed-btn { color: #7affc6; border-color: rgba(122, 255, 198, 0.3); }
+  .bulk-msg { color: #97adbf; font-size: 0.84rem; margin: 0; }
   .status-indicator { padding: 0.55rem 0.8rem; border-radius: 999px; border: 1px solid rgba(122, 162, 191, 0.18); background: rgba(255, 255, 255, 0.035); }
   .status-indicator.running { color: #7cf0b1; }
   .status-indicator.stopped { color: #ff9c8f; }

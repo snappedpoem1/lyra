@@ -10,6 +10,7 @@ import type {
   DiagnosticsReport,
   DiscoverySession,
   DuplicateCluster,
+  GraphStats,
   ExplainPayload,
   GeneratedPlaylist,
   LegacyImportReport,
@@ -179,12 +180,21 @@ export const api = {
     invoke<PlaylistDetail>("save_generated_playlist", { name, playlist }),
   getPlaylistTrackReasons: (playlistId: number) =>
     invoke<[number, string][]>("get_playlist_track_reasons", { playlistId }),
+  // --- Acquisition Seeding ---
+  seedAcquisitionFromSpotifyLibrary: () =>
+    invoke<number>("seed_acquisition_from_spotify_library"),
+  bulkAddToAcquisitionQueue: (
+    entries: [string, string, string | null][],
+    source: string,
+  ) => invoke<AcquisitionQueueItem[]>("bulk_add_to_acquisition_queue", { entries, source }),
   // --- G-064: Discovery Graph Depth ---
   getRelatedArtists: (artistName: string, limit: number) =>
     invoke<RelatedArtist[]>("get_related_artists", { artistName, limit }),
   playSimilarToArtist: (artistName: string, limit: number) =>
     invoke<QueueItemRecord[]>("play_similar_to_artist", { artistName, limit }),
   getDiscoverySession: () => invoke<DiscoverySession>("get_discovery_session"),
+  buildArtistGraph: () => invoke<number>("build_artist_graph"),
+  getGraphStats: () => invoke<GraphStats>("get_graph_stats"),
   on<T>(event: string, callback: (payload: T) => void) {
     return listen<T>(event, (message) => callback(message.payload));
   }

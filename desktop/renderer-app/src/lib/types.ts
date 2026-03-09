@@ -379,6 +379,7 @@ export type PlaylistTrackWithReason = {
 export type GeneratedPlaylist = {
   name: string;
   intent: string;
+  narrative?: string;
   tracks: PlaylistTrackWithReason[];
 };
 
@@ -398,4 +399,15 @@ export type DiscoveryInteraction = {
 
 export type DiscoverySession = {
   recent: DiscoveryInteraction[];
+};
+
+export type GraphNode = {
+  artist: string;
+  degree: number;
+};
+
+export type GraphStats = {
+  totalArtists: number;
+  totalConnections: number;
+  topConnected: GraphNode[];
 };

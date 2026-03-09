@@ -9,7 +9,7 @@ mod smtc;
 
 use lyra_core::commands::{
     AcquisitionEventPayload, AcquisitionPreflight, AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
-    CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist,
+    CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist, GraphStats,
     LegacyImportReport, LibraryCleanupPreview, NativeCapabilities, PlaybackEvent,
     PlaybackState, PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
     ProviderValidationResult, QueueItemRecord, RecentPlayRecord, RecommendationResult, RelatedArtist,
@@ -1329,6 +1329,42 @@ fn get_playlist_track_reasons(
     state.core.get_playlist_track_reasons(playlist_id).map_err(|e| e.to_string())
 }
 
+// ── Acquisition Seeding ───────────────────────────────────────────────────────
+
+#[tauri::command]
+fn seed_acquisition_from_spotify_library(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<usize, String> {
+    let count = state.core.seed_acquisition_from_spotify_library().map_err(|e| e.to_string())?;
+    if count > 0 {
+        emit_shell(&app, &state.core);
+    }
+    Ok(count)
+}
+
+#[tauri::command]
+fn bulk_add_to_acquisition_queue(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    // Vec of [artist, title, album_or_null]
+    entries: Vec<Vec<serde_json::Value>>,
+    source: String,
+) -> Result<Vec<AcquisitionQueueItem>, String> {
+    let parsed: Vec<(String, String, Option<String>)> = entries
+        .into_iter()
+        .filter_map(|entry| {
+            let artist = entry.first()?.as_str()?.to_string();
+            let title = entry.get(1)?.as_str()?.to_string();
+            let album = entry.get(2).and_then(|v| v.as_str()).map(|s| s.to_string());
+            Some((artist, title, album))
+        })
+        .collect();
+    let items = state.core.bulk_add_to_acquisition_queue(parsed, source).map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    Ok(items)
+}
+
 // ── G-064: Discovery Graph Depth ─────────────────────────────────────────────
 
 #[tauri::command]
@@ -1356,6 +1392,16 @@ fn play_similar_to_artist(
 #[tauri::command]
 fn get_discovery_session(state: State<'_, AppState>) -> Result<DiscoverySession, String> {
     state.core.get_discovery_session().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn build_artist_graph(state: State<'_, AppState>) -> Result<usize, String> {
+    state.core.build_artist_graph().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_graph_stats(state: State<'_, AppState>) -> Result<GraphStats, String> {
+    state.core.get_graph_stats().map_err(|e| e.to_string())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1593,10 +1639,15 @@ fn main() {
             generate_act_playlist,
             save_generated_playlist,
             get_playlist_track_reasons,
+            // Acquisition seeding
+            seed_acquisition_from_spotify_library,
+            bulk_add_to_acquisition_queue,
             // G-064: Discovery Graph Depth
             get_related_artists,
             play_similar_to_artist,
-            get_discovery_session
+            get_discovery_session,
+            build_artist_graph,
+            get_graph_stats
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
