@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$ComposeFile = Join-Path $ProjectRoot "docker-compose.yml"
+$ComposeFile = Join-Path $ProjectRoot "archive\legacy-ops\docker-compose.yml"
 
 function Test-DockerDaemon {
     try {

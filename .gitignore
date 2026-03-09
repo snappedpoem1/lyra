@@ -72,8 +72,6 @@ Backups/
 !.beets/config.example.yaml
 
 # Archives & Binaries
-_archive/
-_backups/
 *.rar
 *.zip
 *.gguf
@@ -93,3 +91,4 @@ Desktop.ini
 
 # Docker runtime config (mounted volumes)
 Lyra_Oracle_System/config/prowlarr/
+archive/legacy-runtime/Lyra_Oracle_System/config/prowlarr/

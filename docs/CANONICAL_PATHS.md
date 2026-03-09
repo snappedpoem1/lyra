@@ -22,7 +22,6 @@
 
 | Surface | Path | Status |
 | --- | --- | --- |
-| Python runtime | `oracle/`, `lyra_api.py` | Not part of canonical runtime |
+| Python runtime | `oracle/`, `lyra_api.py`, `archive/legacy-runtime/` | Not part of canonical runtime |
 | React renderer | `desktop/renderer-app/legacy/react_renderer_reference/` | Preserved as reference |
-| Python-first launcher scripts | `scripts/start_lyra_unified.ps1` and related sidecar flows | Reference only |
-
+| Python-first launcher scripts | `archive/legacy-runtime/` and related sidecar flows under `scripts/` | Reference only |
