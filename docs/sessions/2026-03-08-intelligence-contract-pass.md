@@ -42,6 +42,7 @@ The canonical runtime was already Rust + Tauri + SvelteKit, but the repo still h
 
 - `crates/lyra-core/src/intelligence.rs` - new canonical composer pipeline
 - `crates/lyra-core/src/commands.rs` - typed intent, provider status, phases, reason payloads, composer settings
+- `crates/lyra-core/src/playlists.rs` - retained and aligned the existing 4-act generator with the current generated-playlist contract
 - `crates/lyra-core/src/lib.rs` - core methods for compose/save draft
 - `crates/lyra-core/src/db.rs` - persisted structured reason payload columns
 - `crates/lyra-core/src/providers.rs` - local/cloud LLM provider capability and validation scaffolding
