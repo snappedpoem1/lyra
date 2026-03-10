@@ -85,6 +85,8 @@ Goal: make adjacency exploration feel like a core Lyra capability.
 - [x] Bring graph evidence and route memory into the composer and discovery surfaces together
 - [x] Bias scene-exit routes toward adjacent and contrast scene families instead of treating every detour as generic novelty
 - [x] Carry the new scene-exit / route-audition language deeper into artist pages — Scout exits panel with 3-lane UI, lazy-loaded, with play/bridge/hunt/Ask Lyra actions per artist
+- [x] Surface cross-genre hunt UI on Discover — genre pair selector, bridge-artist chips, Scout target results, Ask Lyra prompts
+- [x] Surface Deep Cuts panel on Discover — deepcut_hunt wired, obscurity/rank display, Ask Lyra shortcut
 
 ### G-061 Explainability And Provenance Breadth
 
