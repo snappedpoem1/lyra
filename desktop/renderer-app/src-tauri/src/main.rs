@@ -19,7 +19,10 @@ use lyra_core::commands::{
     RouteFeedbackPayload, ScanJobRecord, SettingsPayload, SpotifyGapSummary, SteerPayload,
     TasteMemorySnapshot, TasteProfile, TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
 };
+use lyra_core::classifier::{ClassifyResult, LibrarySummary};
 use lyra_core::logging::initialize_logging;
+use lyra_core::taste_prioritizer::{PrioritizeStats, QueueItem};
+use lyra_core::validator::ValidationResult;
 use lyra_core::LyraCore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -1197,6 +1200,31 @@ fn get_artist_profile(
 }
 
 #[tauri::command]
+fn classify_track(state: State<'_, AppState>, track_id: i64) -> Result<ClassifyResult, String> {
+    state.core.classify_track(track_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn classify_library(state: State<'_, AppState>, limit: usize) -> Result<LibrarySummary, String> {
+    state.core.classify_library(limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn validate_track_text(state: State<'_, AppState>, artist: String, title: String) -> ValidationResult {
+    state.core.validate_track_text(&artist, &title)
+}
+
+#[tauri::command]
+fn prioritize_acquisition_queue(state: State<'_, AppState>, limit: usize) -> Result<PrioritizeStats, String> {
+    state.core.prioritize_acquisition_queue(limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_priority_batch(state: State<'_, AppState>, limit: usize) -> Result<Vec<QueueItem>, String> {
+    state.core.get_priority_batch(limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn find_duplicates(state: State<'_, AppState>) -> Result<Vec<DuplicateCluster>, String> {
     state.core.find_duplicates().map_err(|e| e.to_string())
 }
@@ -1773,6 +1801,11 @@ fn main() {
             record_playback_event,
             get_track_detail,
             get_artist_profile,
+            classify_track,
+            classify_library,
+            validate_track_text,
+            prioritize_acquisition_queue,
+            get_priority_batch,
             find_duplicates,
             list_provider_health,
             get_provider_health,

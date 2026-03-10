@@ -7,6 +7,7 @@
 //!
 //! Priority scale: 0.0–10.0. Cosine similarity 1.0 → 9.5, 0.0 → 1.0.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use rusqlite::{params, Connection};
@@ -142,7 +143,7 @@ fn compute_priority(taste: &DimVec, track_scores: &DimVec) -> f64 {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
 pub struct PrioritizeStats {
     pub updated:  usize,
     pub skipped:  usize,
@@ -231,7 +232,7 @@ pub fn get_next_priority_batch(
     Ok(items)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct QueueItem {
     pub id:             i64,
     pub artist:         String,

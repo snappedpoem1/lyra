@@ -10,6 +10,7 @@
 
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::errors::LyraResult;
@@ -48,7 +49,7 @@ static SPECIAL_TOKENS: &[&str] = &[
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum VersionType {
     Original,
     Remix,
@@ -79,7 +80,7 @@ impl std::fmt::Display for VersionType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ClassifyResult {
     pub version_type: VersionType,
     pub confidence: f64,
@@ -217,7 +218,7 @@ pub fn classify_library(conn: &Connection, limit: usize) -> LyraResult<LibrarySu
     Ok(summary)
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
 pub struct LibrarySummary {
     pub total:    usize,
     pub original: usize,

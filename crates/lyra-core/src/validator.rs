@@ -11,6 +11,7 @@
 //! Mass library re-validation (`validate_and_fix_library`) is
 //! **[Mass Validation Pipeline?]** — deferred, no Tauri caller yet.
 
+use serde::{Deserialize, Serialize};
 use rusqlite::{params, Connection};
 
 use crate::errors::LyraResult;
@@ -40,7 +41,7 @@ static RECORD_LABELS: &[&str] = &[
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ValidationSource {
     Clean,          // passed text cleaning + junk guard, no network lookup
     MusicBrainz,
@@ -63,7 +64,7 @@ impl ValidationSource {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationResult {
     pub valid:             bool,
     pub confidence:        f64,

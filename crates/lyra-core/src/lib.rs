@@ -3079,6 +3079,56 @@ impl LyraCore {
         }
         Ok(dispatched)
     }
+
+    // ── Classifier ───────────────────────────────────────────────────────────
+
+    pub fn classify_track(&self, track_id: i64) -> LyraResult<classifier::ClassifyResult> {
+        let conn = self.conn()?;
+        classifier::classify_and_update(&conn, track_id)
+    }
+
+    pub fn classify_library(&self, limit: usize) -> LyraResult<classifier::LibrarySummary> {
+        let conn = self.conn()?;
+        classifier::classify_library(&conn, limit)
+    }
+
+    // ── Validator ────────────────────────────────────────────────────────────
+
+    pub fn validate_track_text(
+        &self,
+        artist: &str,
+        title: &str,
+    ) -> validator::ValidationResult {
+        validator::validate_track_text(artist, title)
+    }
+
+    pub fn mark_track_validated(
+        &self,
+        track_id: i64,
+        result: &validator::ValidationResult,
+    ) -> LyraResult<()> {
+        let conn = self.conn()?;
+        validator::ensure_validation_table(&conn)?;
+        validator::mark_validated(&conn, track_id, result)
+    }
+
+    // ── Taste prioritizer ────────────────────────────────────────────────────
+
+    pub fn prioritize_acquisition_queue(
+        &self,
+        limit: usize,
+    ) -> LyraResult<taste_prioritizer::PrioritizeStats> {
+        let conn = self.conn()?;
+        taste_prioritizer::prioritize_queue(&conn, limit)
+    }
+
+    pub fn get_priority_batch(
+        &self,
+        limit: usize,
+    ) -> LyraResult<Vec<taste_prioritizer::QueueItem>> {
+        let conn = self.conn()?;
+        taste_prioritizer::get_next_priority_batch(&conn, limit, "pending")
+    }
 }
 
 fn create_dir_all_if_missing(path: &Path) -> std::io::Result<()> {
