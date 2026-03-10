@@ -80,6 +80,32 @@
     color: DIM_COLORS[d] ?? "#9cb2c7",
   }));
 
+  // Taste seeding from Spotify history
+  let seedPending = false;
+  let seedResult: string | null = null;
+
+  async function reseedFromSpotify(force = false) {
+    seedPending = true;
+    seedResult = null;
+    try {
+      const matched = await api.seedTasteFromSpotifyHistory(force);
+      if (matched === 0) {
+        seedResult = force
+          ? "No scored local tracks matched Spotify history."
+          : "Profile already confident — use Force to override.";
+      } else {
+        seedResult = `Seeded from ${matched} matched tracks.`;
+        // Reload shell state so the taste bars update.
+        const updated = await api.tasteProfile();
+        shell.update(s => ({ ...s, tasteProfile: updated }));
+      }
+    } catch (e) {
+      seedResult = "Seed failed.";
+    } finally {
+      seedPending = false;
+    }
+  }
+
   // Playback history
   let recentPlays: RecentPlayRecord[] = [];
   let recentLoaded = false;
@@ -694,7 +720,15 @@
 <div class="taste-panel">
   <div class="taste-head">
     <p class="panel-head eyebrow">Your taste profile</p>
-    <span class="taste-meta">{tasteProfile.totalSignals} signals - confidence {Math.round(tasteProfile.confidence * 100)}%</span>
+    <span class="taste-meta">{tasteProfile.totalSignals} signals · confidence {Math.round(tasteProfile.confidence * 100)}%</span>
+    <div class="taste-seed-row">
+      <button class="seed-btn" disabled={seedPending} on:click={() => reseedFromSpotify(false)}>
+        {seedPending ? 'Seeding…' : 'Seed from Spotify history'}
+      </button>
+      <button class="seed-btn seed-force" disabled={seedPending} on:click={() => reseedFromSpotify(true)}
+        title="Override existing profile">Force reseed</button>
+      {#if seedResult}<span class="seed-result muted">{seedResult}</span>{/if}
+    </div>
   </div>
   <div class="taste-bars">
     {#each tasteDimsList as { dim, val, color }}
@@ -707,6 +741,18 @@
       </div>
     {/each}
   </div>
+</div>
+{/if}
+
+<!-- Empty-profile seed prompt -->
+{#if !tasteProfile || tasteProfile.totalSignals === 0}
+<div class="taste-cold-prompt">
+  <p class="eyebrow">Taste profile</p>
+  <p class="muted">No taste signals yet. Seed your profile from your Spotify history to make Lyra routes personal immediately.</p>
+  <button class="seed-btn" disabled={seedPending} on:click={() => reseedFromSpotify(false)}>
+    {seedPending ? 'Seeding…' : 'Seed from Spotify history'}
+  </button>
+  {#if seedResult}<span class="seed-result muted">{seedResult}</span>{/if}
 </div>
 {/if}
 
@@ -1301,8 +1347,16 @@
 
   /* Taste profile */
   .taste-panel { margin-bottom: 20px; padding: 16px 18px; border-radius: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.035)); border: 1px solid rgba(255,255,255,0.1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06); }
-  .taste-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .taste-head { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
   .taste-meta { font-size: 0.72rem; color: #9cb2c7; }
+  .taste-seed-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .seed-btn { font-size: 0.78rem; padding: 5px 11px; border-radius: 8px; background: rgba(140,217,74,0.1); border: 1px solid rgba(140,217,74,0.25); color: #8cd94a; cursor: pointer; }
+  .seed-btn:hover { background: rgba(140,217,74,0.18); }
+  .seed-btn:disabled { opacity: 0.5; cursor: default; }
+  .seed-force { background: rgba(255,180,50,0.08); border-color: rgba(255,180,50,0.2); color: #ffb432; }
+  .seed-force:hover { background: rgba(255,180,50,0.14); }
+  .seed-result { font-size: 0.75rem; }
+  .taste-cold-prompt { margin-bottom: 20px; padding: 14px 16px; border-radius: 14px; background: rgba(140,217,74,0.04); border: 1px solid rgba(140,217,74,0.12); display: flex; flex-direction: column; gap: 8px; }
   .taste-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
   .taste-row { display: flex; align-items: center; gap: 8px; }
   .dim-label { font-size: 0.72rem; color: #9cb2c7; width: 72px; text-align: right; text-transform: capitalize; flex-shrink: 0; }

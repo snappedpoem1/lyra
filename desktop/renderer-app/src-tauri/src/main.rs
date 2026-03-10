@@ -15,7 +15,7 @@ use lyra_core::commands::{
     GeneratedPlaylist, GraphStats, LegacyImportReport, LibraryCleanupPreview, NativeCapabilities,
     PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary, PlaylistTrackReasonRecord,
     ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
-    RecentPlayRecord, RecommendationBundle, RecommendationResult, RelatedArtist,
+    RecentPlayRecord, RecommendationBundle, RecommendationResult, RelatedArtist, ScoutExitPlan,
     RouteFeedbackPayload, ScanJobRecord, SettingsPayload, SpotifyGapSummary, SteerPayload,
     TasteMemorySnapshot, TasteProfile, TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
 };
@@ -23,7 +23,10 @@ use lyra_core::classifier::{ClassifyResult, LibrarySummary};
 use lyra_core::deepcut::{DeepCutStats, DeepCutTrack};
 use lyra_core::logging::initialize_logging;
 use lyra_core::scout::{BridgeArtist, MoodSearchResult, ScoutTarget};
-use lyra_core::search::{RemixResult, SearchFilters, SearchResult, SortBy};
+use lyra_core::search::{
+    RemixResult, SearchExcavationResult, SearchFilters, SearchResult, SearchSemanticCapability,
+    SortBy,
+};
 use lyra_core::taste_prioritizer::{PrioritizeStats, QueueItem};
 use lyra_core::validator::ValidationResult;
 use lyra_core::LyraCore;
@@ -908,6 +911,17 @@ fn get_taste_profile(state: State<'_, AppState>) -> Result<TasteProfile, String>
 }
 
 #[tauri::command]
+fn seed_taste_from_spotify_history(
+    state: State<'_, AppState>,
+    force: Option<bool>,
+) -> Result<usize, String> {
+    state
+        .core
+        .seed_taste_from_spotify_history(force.unwrap_or(false))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_recommendations(
     state: State<'_, AppState>,
     limit: Option<usize>,
@@ -1554,6 +1568,18 @@ fn get_related_artists(
 }
 
 #[tauri::command]
+fn get_scout_exit_plan(
+    state: State<'_, AppState>,
+    artist_name: String,
+    limit_per_lane: Option<usize>,
+) -> Result<ScoutExitPlan, String> {
+    state
+        .core
+        .get_scout_exit_plan(artist_name, limit_per_lane.unwrap_or(5))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn play_similar_to_artist(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1589,13 +1615,34 @@ fn get_graph_stats(state: State<'_, AppState>) -> Result<GraphStats, String> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-#[tauri::command]
 fn fallback_text_search(
     state: State<'_, AppState>,
     query: String,
     limit: usize,
 ) -> Result<Vec<SearchResult>, String> {
     state.core.fallback_text_search(query, limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn search_excavation_surface(
+    state: State<'_, AppState>,
+    query: String,
+    limit: Option<usize>,
+) -> Result<SearchExcavationResult, String> {
+    state
+        .core
+        .search_excavation_surface(query, limit.unwrap_or(24))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_semantic_search_capability(
+    state: State<'_, AppState>,
+) -> Result<SearchSemanticCapability, String> {
+    state
+        .core
+        .get_semantic_search_capability()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1769,6 +1816,9 @@ fn main() {
                     }
                 }
             }
+            // Seed taste from Spotify history if profile is cold (force=false).
+            let _ = state.core.seed_taste_from_spotify_history(false);
+
             app.manage(state.clone());
 
             // Windows SMTC: register the bridge against the main window.
@@ -1923,6 +1973,7 @@ fn main() {
             get_native_capabilities,
             get_track_scores,
             get_taste_profile,
+            seed_taste_from_spotify_history,
             get_recommendations,
             get_recommendation_bundle,
             explain_recommendation,
@@ -1988,11 +2039,14 @@ fn main() {
             bulk_add_to_acquisition_queue,
             // G-064: Discovery Graph Depth
             get_related_artists,
+            get_scout_exit_plan,
             play_similar_to_artist,
             get_discovery_session,
             build_artist_graph,
             get_graph_stats,
             fallback_text_search,
+            search_excavation_surface,
+            get_semantic_search_capability,
             find_remixes,
             hybrid_search,
             cross_genre_hunt,

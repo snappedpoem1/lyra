@@ -1363,6 +1363,14 @@ impl LyraCore {
         taste::get_taste_profile(&conn)
     }
 
+    /// Seed the taste profile from Spotify history play counts + local track scores.
+    /// `force=false` skips if average confidence is already ≥ 0.5.
+    /// Returns the number of tracks that contributed to the seed.
+    pub fn seed_taste_from_spotify_history(&self, force: bool) -> LyraResult<usize> {
+        let conn = self.conn()?;
+        taste::seed_taste_from_spotify_history(&conn, force)
+    }
+
     /// Returns up to `limit` tracks recommended by the broker with multi-lane evidence.
     /// Lanes: local/taste, local/deep_cut, scout/bridge (cross-genre), graph/co_play.
     pub fn get_recommendations(&self, limit: usize) -> LyraResult<Vec<RecommendationResult>> {
@@ -1840,6 +1848,21 @@ impl LyraCore {
         let conn = self.conn()?;
         oracle::record_discovery_interaction(&artist_name, "view_related", &conn);
         Ok(oracle::get_related_artists(&artist_name, limit, &conn))
+    }
+
+    /// Return scout-style exits (safe / interesting / dangerous) from a seed artist.
+    pub fn get_scout_exit_plan(
+        &self,
+        artist_name: String,
+        limit_per_lane: usize,
+    ) -> LyraResult<commands::ScoutExitPlan> {
+        let conn = self.conn()?;
+        oracle::record_discovery_interaction(&artist_name, "view_scout_exits", &conn);
+        Ok(oracle::build_scout_exit_plan(
+            &artist_name,
+            limit_per_lane,
+            &conn,
+        ))
     }
 
     /// Queue tracks from artists similar to the given artist.
@@ -3180,6 +3203,23 @@ impl LyraCore {
     ) -> LyraResult<Vec<search::SearchResult>> {
         let conn = self.conn()?;
         search::fallback_text_search(&conn, &query, limit)
+    }
+
+    pub fn search_excavation_surface(
+        &self,
+        query: String,
+        limit: usize,
+    ) -> LyraResult<search::SearchExcavationResult> {
+        let conn = self.conn()?;
+        search::search_excavation_surface(&conn, &query, limit, Some(&self.paths.app_data_dir))
+    }
+
+    pub fn get_semantic_search_capability(&self) -> LyraResult<search::SearchSemanticCapability> {
+        let conn = self.conn()?;
+        Ok(search::semantic_search_capability(
+            &conn,
+            Some(&self.paths.app_data_dir),
+        ))
     }
 
     pub fn find_remixes(

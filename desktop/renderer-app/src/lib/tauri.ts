@@ -106,6 +106,8 @@ export const api = {
   // --- scores / taste / acquisition / history ---
   trackScores: (trackId: number) => invoke<TrackScores | null>("get_track_scores", { trackId }),
   tasteProfile: () => invoke<TasteProfile>("get_taste_profile"),
+  seedTasteFromSpotifyHistory: (force?: boolean) =>
+    invoke<number>("seed_taste_from_spotify_history", { force }),
   acquisitionQueue: (statusFilter?: string) =>
     invoke<AcquisitionQueueItem[]>("get_acquisition_queue", { statusFilter }),
   addToAcquisitionQueue: (artist: string, title: string, album?: string, source?: string, targetRootId?: number) =>
