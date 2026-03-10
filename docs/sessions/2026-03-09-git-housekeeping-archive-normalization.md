@@ -26,8 +26,13 @@ Bullet list of completed work:
 - [x] Moved legacy Docker assets into `archive/legacy-ops/`.
 - [x] Moved one-off historical report into `archive/historical-docs/`.
 - [x] Moved prior `_archive` snapshot content into `archive/legacy-archive/`.
+- [x] Moved `lyra_api.py` into `archive/legacy-runtime/lyra_api.py`.
+- [x] Moved the full `oracle/` legacy runtime tree into `archive/legacy-runtime/oracle/`.
+- [x] Moved Python tests into `archive/legacy-runtime/tests-python/`.
+- [x] Moved legacy Python utility scripts into `archive/legacy-runtime/scripts/`.
 - [x] Updated `.gitignore` policy to stop ignoring `_archive` and keep archive history tracked.
 - [x] Updated `scripts/ensure_workspace_docker.ps1` to use archived docker-compose location.
+- [x] Updated `scripts/build_backend_sidecar.ps1` and `scripts/build_runtime_tools.ps1` to use archived Python entrypoints.
 - [x] Updated canonical-path docs to reflect archive placement.
 
 ---
@@ -44,8 +49,12 @@ Bullet list of completed work:
 
 - `archive/README.md` - defines archive policy and layout.
 - `archive/legacy-runtime/*` - relocated legacy runtime scripts and historical exports.
+- `archive/legacy-runtime/oracle/*` - relocated full legacy Python source tree.
+- `archive/legacy-runtime/tests-python/*` - relocated Python test suite.
 - `archive/legacy-ops/*` - relocated non-canonical Docker assets.
 - `scripts/ensure_workspace_docker.ps1` - points to `archive/legacy-ops/docker-compose.yml`.
+- `scripts/build_backend_sidecar.ps1` - points to `archive/legacy-runtime/lyra_api.py`.
+- `scripts/build_runtime_tools.ps1` - points to `archive/legacy-runtime/scripts/`.
 - `.gitignore` - removed `_archive` archive-ignore behavior; kept runtime-secret ignore scope.
 - `docs/CANONICAL_PATHS.md` - updated legacy/reference path mapping.
 
@@ -56,8 +65,8 @@ Bullet list of completed work:
 Did the session accomplish its goal? What is now true that was not true before?
 
 Yes. Historical and non-canonical runtime artifacts are now segregated under a tracked
-`archive/` tree instead of being mixed through repo root, while active canonical runtime
-surfaces remain in place.
+`archive/` tree instead of being mixed through repo root, and tracked Python files are now
+fully archived under `archive/legacy-runtime/`.
 
 ---
 
@@ -75,6 +84,6 @@ surfaces remain in place.
 
 What is the single most important thing to do next?
 
-Run a short path-audit pass in scripts/docs to update any remaining hardcoded references
-that still assume legacy assets live at repo root.
+Continue normalizing historical doc references so they explicitly point to
+`archive/legacy-runtime/` paths where useful.
 

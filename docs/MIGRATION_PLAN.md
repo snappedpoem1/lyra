@@ -32,8 +32,8 @@ Current canonical direction:
 
 Legacy-heavy surfaces include:
 
-- `oracle/`
-- `lyra_api.py`
+- `archive/legacy-runtime/oracle/`
+- `archive/legacy-runtime/lyra_api.py`
 - Python-first startup/build scripts
 - old React renderer moved under `desktop/renderer-app/legacy/react_renderer_reference/`
 

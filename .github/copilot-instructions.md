@@ -18,12 +18,12 @@ Stack:
 - Always use module logger, never `print()`
 - Always use parameterized SQL (`?`)
 - Type hints on all function signatures
-- Runtime paths come from `oracle/config.py`
+- Legacy Python runtime paths (reference only) come from `archive/legacy-runtime/oracle/config.py`
 - Do not invent emotional dimensions
 
 ## Canonical Playback Contract
 
-- Backend player (`oracle/player/*`) is source of truth
+- Legacy backend player reference lives in `archive/legacy-runtime/oracle/player/*`
 - UI transport actions call `/api/player/*`
 - `/ws/player` is an SSE stream endpoint
 - `/api/playback/record` is compatibility-only
@@ -33,7 +33,7 @@ Stack:
 - Run `scripts/new_session.ps1` for behavior-changing work
 - Update session artifacts when behavior or repo truth changes
 - If a task affects roadmap/state/worklist/registry/agent coordination, update docs first before implementation
-- Runtime paths come from `oracle/config.py`
+- Legacy Python runtime paths (reference only) come from `archive/legacy-runtime/oracle/config.py`
 - Tauri is the only supported desktop host path
 - If working in parallel with another agent on the same wave, read `docs/agent_briefs/tandem-wave-protocol.md` and stay inside the assigned non-overlapping file set
 

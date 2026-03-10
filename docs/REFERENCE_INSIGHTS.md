@@ -25,7 +25,7 @@ Useful implications for the current project:
 - cross-genre bridge tracks are part of the design, not noise in the results
 - per-track reasoning is a core differentiator, not decoration
 
-This directly supports the existing direction in [`oracle/playlust.py`](../oracle/playlust.py), [`oracle/explain.py`](../oracle/explain.py), and the playlist persistence schema.
+This directly supports the existing direction in [`oracle/playlust.py`](../archive/legacy-runtime/oracle/playlust.py), [`oracle/explain.py`](../archive/legacy-runtime/oracle/explain.py), and the playlist persistence schema.
 
 ## 2. Product Principles
 

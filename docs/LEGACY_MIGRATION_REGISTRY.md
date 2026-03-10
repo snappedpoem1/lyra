@@ -27,7 +27,7 @@ Read this alongside:
 The repo already contains real provider/config plumbing.
 Relevant surfaces include:
 
-- Python `.env` loading in `oracle/config.py`, `oracle/api/app.py`, `lyra_api.py`, and integration modules
+- Python `.env` loading in `archive/legacy-runtime/oracle/config.py`, `archive/legacy-runtime/oracle/api/app.py`, `archive/legacy-runtime/lyra_api.py`, and integration modules
 - Rust env import and provider mapping in `crates/lyra-core/src/providers.rs`
 - Rust `provider_configs` persistence
 - Rust provider validation and OS keyring support

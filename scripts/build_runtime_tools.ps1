@@ -96,7 +96,7 @@ $runtimeBin = Join-Path $runtimeRoot "bin"
 $tauriRuntimeBin = Join-Path $repoRoot ".lyra-build\bin\runtime\bin"
 $workRoot = Join-Path $tmpRoot "build"
 $specRoot = Join-Path $tmpRoot "spec"
-$entrypointRoot = Join-Path $repoRoot "scripts\runtime_tool_entrypoints"
+$entrypointRoot = Join-Path $repoRoot "archive\legacy-runtime\scripts"
 
 if (-not (Test-Path $pythonExe)) {
   throw "python executable not found at '$pythonExe'"

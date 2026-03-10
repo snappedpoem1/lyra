@@ -70,8 +70,8 @@ Distinguish legacy Python surfaces carefully:
 
 Reference-heavy surfaces include:
 
-- `oracle/`
-- `lyra_api.py`
+- `archive/legacy-runtime/oracle/`
+- `archive/legacy-runtime/lyra_api.py`
 - Python-first runtime/build scripts
 - legacy renderer code moved under `desktop/renderer-app/legacy/`
 

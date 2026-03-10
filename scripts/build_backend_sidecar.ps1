@@ -12,7 +12,7 @@ function Write-Step {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $pythonExe = Join-Path $repoRoot ".venv\Scripts\python.exe"
-$entrypoint = Join-Path $repoRoot "lyra_api.py"
+$entrypoint = Join-Path $repoRoot "archive\legacy-runtime\lyra_api.py"
 $distDir = Join-Path $repoRoot ".lyra-build\bin"
 $tmpRoot = Join-Path $repoRoot ".tmp\pyinstaller"
 $runStamp = Get-Date -Format "yyyyMMddHHmmssfff"
