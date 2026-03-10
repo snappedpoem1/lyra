@@ -34,6 +34,8 @@ Bullet list of completed work:
 - [x] Updated `scripts/ensure_workspace_docker.ps1` to use archived docker-compose location.
 - [x] Updated `scripts/build_backend_sidecar.ps1` and `scripts/build_runtime_tools.ps1` to use archived Python entrypoints.
 - [x] Updated canonical-path docs to reflect archive placement.
+- [x] Added `archive/INVENTORY.md` with full move manifest (`what was -> what is`) and archive category inventory.
+- [x] Verified no `.py` files remain outside `archive/`.
 
 ---
 
@@ -41,13 +43,16 @@ Bullet list of completed work:
 
 | SHA (short) | Message |
 |---|---|
-| `-` | `Uncommitted local changes in working tree` |
+| `dad2a3f` | `[S-20260309-05] refactor: normalize root and archive legacy artifacts` |
+| `fa0d377` | `[S-20260309-05] refactor: archive all legacy python surfaces` |
+| `(pending)` | `[S-20260309-05] docs: add archive inventory ledger` |
 
 ---
 
 ## Key Files Changed
 
 - `archive/README.md` - defines archive policy and layout.
+- `archive/INVENTORY.md` - inventory ledger of archived files, markdown records, and move manifest.
 - `archive/legacy-runtime/*` - relocated legacy runtime scripts and historical exports.
 - `archive/legacy-runtime/oracle/*` - relocated full legacy Python source tree.
 - `archive/legacy-runtime/tests-python/*` - relocated Python test suite.
