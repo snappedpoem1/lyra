@@ -38,7 +38,12 @@ import type {
   AcquisitionLead,
   RelatedArtist,
   ScoutExitPlan,
+  ScoutTarget,
+  BridgeArtist,
+  MoodSearchResult,
+  DeepCutTrack,
   ScanJobRecord,
+  SearchSemanticCapability,
   SettingsPayload,
   SpotifyGapSummary,
   SteerPayload,
@@ -231,11 +236,21 @@ export const api = {
     invoke<RelatedArtist[]>("get_related_artists", { artistName, limit }),
   getScoutExitPlan: (artistName: string, limitPerLane?: number) =>
     invoke<ScoutExitPlan>("get_scout_exit_plan", { artistName, limitPerLane }),
+  crossGenreHunt: (genreA: string, genreB: string, limit: number) =>
+    invoke<ScoutTarget[]>("cross_genre_hunt", { genreA, genreB, limit }),
+  findLocalBridgeArtists: (genreA: string, genreB: string) =>
+    invoke<BridgeArtist[]>("find_local_bridge_artists", { genreA, genreB }),
+  discoverByMood: (mood: string, limit: number) =>
+    invoke<MoodSearchResult[]>("discover_by_mood", { mood, limit }),
+  deepcutHunt: (genre: string | null, artist: string | null, minObscurity: number, limit: number) =>
+    invoke<DeepCutTrack[]>("deepcut_hunt", { genre, artist, minObscurity, limit }),
   playSimilarToArtist: (artistName: string, limit: number) =>
     invoke<QueueItemRecord[]>("play_similar_to_artist", { artistName, limit }),
   getDiscoverySession: () => invoke<DiscoverySession>("get_discovery_session"),
   buildArtistGraph: () => invoke<number>("build_artist_graph"),
   getGraphStats: () => invoke<GraphStats>("get_graph_stats"),
+  getSemanticSearchCapability: () =>
+    invoke<SearchSemanticCapability>("get_semantic_search_capability"),
   on<T>(event: string, callback: (payload: T) => void) {
     return listen<T>(event, (message) => callback(message.payload));
   }

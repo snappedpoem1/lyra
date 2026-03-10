@@ -183,6 +183,14 @@ export type TrackScores = {
   scoreVersion?: number | null;
 };
 
+export type SearchSemanticCapability = {
+  providerKey: string;
+  status: string;
+  detail: string;
+  supportsQuery: boolean;
+  supportsIndexing: boolean;
+};
+
 export type TasteProfile = {
   dimensions: Record<string, number>;
   confidence: number;
@@ -801,6 +809,52 @@ export type ScoutExitLane = {
 export type ScoutExitPlan = {
   seedArtist: string;
   lanes: ScoutExitLane[];
+};
+
+// G-064: Scout / genre-hunt types
+export type ScoutTarget = {
+  artist: string;
+  title: string;
+  album: string;
+  year: number | null;
+  genre: string;
+  path: string;
+  tags: string[];
+  priority: number;
+};
+
+export type BridgeArtist = {
+  name: string;
+  genreA: string;
+  genreB: string;
+  trackCount: number;
+  source: string; // "local" | "discogs"
+};
+
+export type MoodSearchResult = {
+  trackId: number;
+  artist: string;
+  title: string;
+  album: string;
+  genre: string;
+  path: string;
+  source: string;
+};
+
+export type DeepCutTrack = {
+  trackId: number;
+  artist: string;
+  title: string;
+  album: string;
+  genre: string;
+  path: string;
+  obscurityScore: number;
+  acclaimScore: number;
+  popularityPercentile: number;
+  localPlayCount: number;
+  tasteAlignment: number;
+  deepCutRank: number;
+  tags: string[];
 };
 
 export type GraphNode = {

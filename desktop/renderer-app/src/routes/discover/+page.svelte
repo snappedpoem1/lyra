@@ -16,12 +16,15 @@
     AcquisitionEventPayload,
     AcquisitionLeadOutcome,
     AcquisitionQueueItem,
+    BridgeArtist,
+    DeepCutTrack,
     DiscoverySession,
     ExplainPayload,
     GraphStats,
     PlaylistSummary,
     RecentPlayRecord,
     RecommendationResult,
+    ScoutTarget,
     SpotifyGapSummary,
     TrackEnrichmentResult
   } from "$lib/types";
@@ -35,6 +38,26 @@
   let graphStats: GraphStats | null = null;
   let graphBuilding = false;
   let graphMessage = "";
+
+  // G-064: Genre hunt
+  const GENRE_PAIRS: [string, string][] = [
+    ["rock", "electronic"], ["rock", "jazz"], ["rock", "folk"],
+    ["electronic", "jazz"], ["electronic", "classical"], ["electronic", "hip hop"],
+    ["hip hop", "jazz"], ["hip hop", "r&b"], ["hip hop", "electronic"],
+    ["metal", "jazz"], ["metal", "classical"], ["folk", "electronic"],
+    ["ambient", "classical"], ["punk", "jazz"], ["indie", "folk"],
+  ];
+  let huntGenreA = "rock";
+  let huntGenreB = "electronic";
+  let huntResults: ScoutTarget[] = [];
+  let huntBridgeArtists: BridgeArtist[] = [];
+  let huntLoading = false;
+  let huntMessage = "";
+  let huntOpen = false;
+  let deepcutResults: DeepCutTrack[] = [];
+  let deepcutLoading = false;
+  let deepcutOpen = false;
+
   let statusFilter = "all";
   let addArtist = "";
   let addTitle = "";
@@ -428,6 +451,45 @@
     }
   }
 
+  async function runGenreHunt(): Promise<void> {
+    huntLoading = true;
+    huntMessage = "";
+    huntResults = [];
+    huntBridgeArtists = [];
+    try {
+      const [targets, bridges] = await Promise.all([
+        api.crossGenreHunt(huntGenreA, huntGenreB, 12),
+        api.findLocalBridgeArtists(huntGenreA, huntGenreB),
+      ]);
+      huntResults = targets;
+      huntBridgeArtists = bridges;
+      if (!huntResults.length && !huntBridgeArtists.length) {
+        huntMessage = "No local tracks found spanning these genres. Try a different pair.";
+      }
+    } catch (e) {
+      huntMessage = e instanceof Error ? e.message : "Genre hunt failed.";
+    } finally {
+      huntLoading = false;
+    }
+  }
+
+  async function runDeepcutHunt(): Promise<void> {
+    deepcutLoading = true;
+    try {
+      deepcutResults = await api.deepcutHunt(null, null, 0.35, 16);
+    } catch {
+      deepcutResults = [];
+    } finally {
+      deepcutLoading = false;
+    }
+  }
+
+  async function queueScoutTarget(target: ScoutTarget): Promise<void> {
+    await api.addToAcquisitionQueue(target.artist, target.title, target.album || undefined, "genre_hunt");
+    huntMessage = `Queued ${target.artist} — ${target.title} for acquisition.`;
+    await loadQueue();
+  }
+
   function scoreBar(score: number): string {
     const pct = Math.round(score * 100);
     return `${pct}%`;
@@ -520,6 +582,112 @@
     {/if}
   </div>
 {/if}
+
+<!-- G-064: Genre Hunt panel -->
+<div class="hunt-panel">
+  <div class="panel-head-row">
+    <div>
+      <p class="panel-head eyebrow">Genre Hunt</p>
+      <small class="muted">Find local tracks spanning two genre worlds</small>
+    </div>
+    <button class="load-btn" on:click={() => { huntOpen = !huntOpen; }}>
+      {huntOpen ? 'Hide' : 'Open hunt'}
+    </button>
+  </div>
+  {#if huntOpen}
+    <div class="hunt-controls">
+      <select bind:value={huntGenreA} class="genre-select">
+        {#each ["rock","electronic","hip hop","jazz","metal","folk","ambient","classical","punk","indie","pop","r&b","country","blues","reggae"] as g}
+          <option value={g}>{g}</option>
+        {/each}
+      </select>
+      <span class="hunt-arrow">→</span>
+      <select bind:value={huntGenreB} class="genre-select">
+        {#each ["electronic","jazz","folk","classical","hip hop","r&b","ambient","drone","noise","bluegrass","world","soul","dub"] as g}
+          <option value={g}>{g}</option>
+        {/each}
+      </select>
+      <button class="load-btn" disabled={huntLoading} on:click={runGenreHunt}>
+        {huntLoading ? 'Hunting...' : 'Hunt'}
+      </button>
+      <div class="preset-chips">
+        {#each GENRE_PAIRS.slice(0, 6) as [a, b]}
+          <button class="route-chip" on:click={() => { huntGenreA = a; huntGenreB = b; runGenreHunt(); }}>
+            {a} → {b}
+          </button>
+        {/each}
+      </div>
+    </div>
+    {#if huntMessage}
+      <p class="muted">{huntMessage}</p>
+    {/if}
+    {#if huntBridgeArtists.length}
+      <div class="bridge-artist-row">
+        <p class="eyebrow" style="margin:8px 0 4px">Bridge artists in library</p>
+        {#each huntBridgeArtists as ba}
+          <a class="bridge-artist-chip" href={`/artists/${encodeURIComponent(ba.name)}`}>
+            {ba.name} <small>({ba.trackCount} tracks)</small>
+          </a>
+        {/each}
+      </div>
+    {/if}
+    {#if huntResults.length}
+      <div class="hunt-results">
+        {#each huntResults as target}
+          <div class="hunt-track">
+            <div class="hunt-track-info">
+              <span class="hunt-title">{target.title}</span>
+              <a class="hunt-artist" href={`/artists/${encodeURIComponent(target.artist)}`}>{target.artist}</a>
+              <small class="muted">{target.album}{target.year ? ` · ${target.year}` : ''} · {target.genre}</small>
+              {#if target.tags.length}
+                <small class="muted">{target.tags.slice(0, 3).join(', ')}</small>
+              {/if}
+            </div>
+            <div class="hunt-track-actions">
+              <button class="sim-btn" on:click={() => openLyraPrompt(`bridge from ${huntGenreA} into ${huntGenreB} starting from ${target.artist}`)}>Ask Lyra</button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  {/if}
+</div>
+
+<!-- G-063: Deep Cuts panel -->
+<div class="hunt-panel">
+  <div class="panel-head-row">
+    <div>
+      <p class="panel-head eyebrow">Deep Cuts</p>
+      <small class="muted">High acclaim, low popularity — your underrated library</small>
+    </div>
+    <button class="load-btn" on:click={() => { deepcutOpen = !deepcutOpen; if (deepcutOpen && !deepcutResults.length && !deepcutLoading) runDeepcutHunt(); }}>
+      {deepcutOpen ? 'Hide' : 'Surface cuts'}
+    </button>
+  </div>
+  {#if deepcutOpen}
+    {#if deepcutLoading}
+      <p class="muted">Surfacing cuts...</p>
+    {:else if deepcutResults.length}
+      <div class="hunt-results">
+        {#each deepcutResults.slice(0, 12) as cut}
+          <div class="hunt-track">
+            <div class="hunt-track-info">
+              <span class="hunt-title">{cut.title}</span>
+              <a class="hunt-artist" href={`/artists/${encodeURIComponent(cut.artist)}`}>{cut.artist}</a>
+              <small class="muted">{cut.album} · {cut.genre}</small>
+              <small class="deep-cut-rank">obscurity {Math.round(cut.obscurityScore * 100)} · rank {Math.round(cut.deepCutRank * 100)}</small>
+            </div>
+            <div class="hunt-track-actions">
+              <button class="sim-btn" on:click={() => openLyraPrompt(`give me more like ${cut.artist} — ${cut.title}, the underrated side`)}>Ask Lyra</button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <p class="muted">No deep cuts found. Enrich your library to score obscurity.</p>
+    {/if}
+  {/if}
+</div>
 
 <!-- Taste profile panel -->
 {#if tasteProfile && tasteProfile.totalSignals > 0}
@@ -888,6 +1056,24 @@
 </div>
 
 <style>
+  /* G-064: Genre Hunt + Deep Cuts */
+  .hunt-panel { border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); padding: 14px 16px; display: grid; gap: 10px; margin-bottom: 14px; }
+  .hunt-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .genre-select { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; color: #d0e8f8; padding: 6px 10px; font: inherit; cursor: pointer; }
+  .hunt-arrow { color: #8cd94a; font-weight: bold; padding: 0 2px; }
+  .preset-chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; margin-top: 4px; }
+  .bridge-artist-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .bridge-artist-chip { padding: 4px 10px; border-radius: 999px; background: rgba(140,217,74,0.1); border: 1px solid rgba(140,217,74,0.25); color: #8cd94a; font-size: 0.8rem; text-decoration: none; }
+  .hunt-results { display: grid; gap: 6px; margin-top: 4px; }
+  .hunt-track { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .hunt-track:last-child { border-bottom: none; }
+  .hunt-track-info { display: grid; gap: 2px; flex: 1; min-width: 0; }
+  .hunt-title { font-size: 0.9rem; color: #d0e8f8; }
+  .hunt-artist { color: #a8c4e0; text-decoration: underline; font-size: 0.8rem; }
+  .hunt-track-actions { flex-shrink: 0; }
+  .deep-cut-rank { color: #8cd94a; font-size: 0.72rem; }
+  .sim-btn { color: #7affc6; border: 1px solid rgba(122,255,198,0.3); border-radius: 8px; background: none; padding: 4px 10px; font: inherit; cursor: pointer; font-size: 0.78rem; }
+
   .eyebrow { text-transform: uppercase; letter-spacing: 0.16em; color: #9cb2c7; font-size: 0.72rem; }
   .muted { color: #9cb2c7; }
   .error { color: #e55; font-size: 0.85rem; }
