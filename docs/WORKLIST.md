@@ -70,7 +70,8 @@ Goal: make the Lyra composer the real front door to the product.
 - [x] Add a Lyra-read surface and route-audition teaser mode that expose pressure, route feel, and fallback honesty directly in Cassette
 - [x] Persist recent composer runs so Lyra routes can be reopened with full structured reasoning from the shell
 - [x] Surface Spotify history/library gap evidence in the main Lyra workspace so missing-world recovery is visible during composition
-- [ ] Continue the legacy semantic port beyond the current `oracle/arc.py`, `oracle/explain.py`, `oracle/scout.py`, mood-pressure shaping, graph-context lift, and playlust-style act shaping so adjacency relies on richer semantic/graph evidence, not only local scoring and transition optimization
+- [x] Add artist graph evidence (connections table, top-3 by strength) into `explain_track` ExplainPayload — source=graph, type=artist_connection, with connection type labels
+- [ ] Continue the legacy semantic port beyond arc templates and playlust act authorship so adjacency relies on even richer semantic evidence
 
 ### G-064 Discovery Graph And Bridge Depth
 
@@ -80,10 +81,10 @@ Goal: make adjacency exploration feel like a core Lyra capability.
 - [x] Add typed safe / interesting / dangerous discovery routes plus direct / scenic / contrast bridge variants
 - [x] Add bridge-step preserve/change/adjacency explanation scaffolding that stays grounded in route logic
 - [x] Pull graph-backed artist adjacency into composer route scoring and evidence where local connections exist
-- [ ] Expand related-artist and graph surfaces into the same adjacency language used by the composer
+- [x] Expand related-artist and graph surfaces into the same adjacency language used by the composer — scout exit lanes (safe/interesting/dangerous) now visible on Artist page
 - [x] Bring graph evidence and route memory into the composer and discovery surfaces together
 - [x] Bias scene-exit routes toward adjacent and contrast scene families instead of treating every detour as generic novelty
-- [ ] Carry the new scene-exit / route-audition language deeper into artist and discovery pages outside the composer workspace
+- [x] Carry the new scene-exit / route-audition language deeper into artist pages — Scout exits panel with 3-lane UI, lazy-loaded, with play/bridge/hunt/Ask Lyra actions per artist
 
 ### G-061 Explainability And Provenance Breadth
 
@@ -92,6 +93,7 @@ Goal: keep the intelligence layer legible everywhere it matters.
 - [x] Carry the new reason payload model into saved playlists and their revisit surface
 - [x] Expose inferred-vs-explicit reasoning consistently in live and saved playlist detail
 - [x] Carry the same persisted reason payload model into recommendation detail and non-composer discovery surfaces — Discover now has EvidenceItem + whyThisTrack + inferredByLyra at composer payload depth
+- [x] Add a canonical backend search-excavation surface (`search_excavation_surface`) with grouped artist/album facets and route hints
 - [ ] Replace the current Library excavation handoff layer with a deeper canonical search surface instead of leaving excavation partially embedded inside catalog UI
 - [x] Keep degraded provider states explicit in composer and explanation surfaces
 - [x] Persist composer diagnostics so deploy-time failures can be inspected from inside Cassette during first-session testing
@@ -111,3 +113,6 @@ Goal: preserve trust in the support infrastructure without letting it dominate r
 
 - [x] Build a Cassette-branded packaged installer after the current intelligence pass
 - [ ] Run clean-machine installer and long-session confidence proof after the packaged build
+
+
+
