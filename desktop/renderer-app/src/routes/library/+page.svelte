@@ -4,11 +4,14 @@
   import { api } from "$lib/tauri";
   import { shell } from "$lib/stores/lyra";
   import { setComposerText, setWorkspaceExplanation, setWorkspacePage, setWorkspaceProvenance, setWorkspaceTrack } from "$lib/stores/workspace";
-  import type { CurationLogEntry, DuplicateCluster, ExplainPayload, LibraryCleanupPreview, PlaylistSummary, TrackEnrichmentResult, TrackRecord, TrackScores } from "$lib/types";
+  import type { CurationLogEntry, DuplicateCluster, ExplainPayload, LibraryCleanupPreview, PlaylistSummary, SearchExcavationResult, SearchSemanticCapability, TrackEnrichmentResult, TrackRecord, TrackScores } from "$lib/types";
 
   const SCORE_DIMS = ["energy","valence","tension","density","warmth","movement","space","rawness","complexity","nostalgia"] as const;
 
   let query = "";
+  let excavation: SearchExcavationResult | null = null;
+  let excavationLoading = false;
+  let semanticCapability: SearchSemanticCapability | null = null;
   let tracks: TrackRecord[] = [];
   let playlists: PlaylistSummary[] = [];
   let addToPlaylistTrackId: number | null = null;
@@ -38,6 +41,19 @@
       tracks = await api.tracks(undefined, "recently_added");
     } else {
       tracks = await api.tracks(query);
+    }
+  }
+
+  async function runExcavation() {
+    const q = query.trim();
+    if (!q) { excavation = null; return; }
+    excavationLoading = true;
+    try {
+      excavation = await api.searchExcavationSurface(q, 24);
+    } catch {
+      excavation = null;
+    } finally {
+      excavationLoading = false;
     }
   }
 
@@ -153,6 +169,13 @@
       "Inspect tracks, enrichment evidence, and curation risk inside the canonical shell.",
       "provenance"
     );
+    api.getSemanticSearchCapability()
+      .then((capability) => {
+        semanticCapability = capability;
+      })
+      .catch(() => {
+        semanticCapability = null;
+      });
     loadTracks();
   });
 
@@ -222,8 +245,8 @@
   <div class="search-row">
     <input bind:value={query} placeholder="Search title, artist, or album"
       disabled={viewMode === 'liked'}
-      on:keydown={(e) => e.key === 'Enter' && loadTracks()} />
-    <button on:click={loadTracks} disabled={viewMode === 'liked'}>Search</button>
+      on:keydown={(e) => { if (e.key === 'Enter') { loadTracks(); runExcavation(); } }} />
+    <button on:click={() => { loadTracks(); runExcavation(); }} disabled={viewMode === 'liked'}>Search</button>
     <button class="dups-btn" on:click={() => dupsLoaded ? (curationOpen = !curationOpen) : loadDuplicates()}
       title="Curation workflows">Curation{duplicates.length ? ` (${duplicates.length} dups)` : ''}</button>
     <button class="enrich-btn" on:click={runEnrichLibrary} disabled={enrichLibraryPending}
@@ -234,10 +257,51 @@
 </section>
 
 <section class="excavation-panel">
-  <div>
+  <div class="excavation-header">
     <p class="eyebrow">Excavation</p>
-    <strong>{query.trim() ? `Treat "${query.trim()}" like a world, not a filter.` : "Search should hand off into routes, not stop at matching rows."}</strong>
+    <strong>{query.trim() ? `"${query.trim()}" as a world, not a filter` : "Search hands off into routes, not just matching rows."}</strong>
+    {#if semanticCapability}
+      <p class="semantic-status semantic-{semanticCapability.status}">
+        {semanticCapability.providerKey} · {semanticCapability.status}
+      </p>
+    {/if}
   </div>
+
+  {#if excavation}
+    <div class="excavation-facets">
+      {#if excavation.topArtists.length}
+        <div class="facet-group">
+          <span class="facet-label">Artists</span>
+          {#each excavation.topArtists.slice(0, 6) as f}
+            <button class="facet-chip" on:click={() => { query = f.value; loadTracks(); runExcavation(); }}>
+              {f.value} <span class="facet-count">{f.count}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+      {#if excavation.topAlbums.length}
+        <div class="facet-group">
+          <span class="facet-label">Albums</span>
+          {#each excavation.topAlbums.slice(0, 4) as f}
+            <button class="facet-chip" on:click={() => { query = f.value; loadTracks(); runExcavation(); }}>
+              {f.value} <span class="facet-count">{f.count}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+      {#if excavation.routeHints.length}
+        <div class="facet-group">
+          <span class="facet-label">Route hints</span>
+          {#each excavation.routeHints as hint}
+            <button class="excavation-chip" on:click={() => openLyraPrompt(hint)}>{hint}</button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {:else if excavationLoading}
+    <p class="muted exc-loading">Mapping the surface…</p>
+  {/if}
+
   <div class="excavation-actions">
     <button class="excavation-chip" on:click={() => openLyraPrompt(query.trim() ? `build a route out of ${query.trim()} and take me less obvious` : "take me somewhere adjacent but don’t give me the canon")}>
       Less obvious route
@@ -615,6 +679,26 @@
     gap: 12px;
   }
   .excavation-panel strong { color: #dcecf6; }
+  .semantic-status {
+    margin: 8px 0 2px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #9cb2c7;
+  }
+  .semantic-status.semantic-ready { color: #7affc6; }
+  .semantic-status.semantic-unavailable { color: #ffd166; }
+  .semantic-status.semantic-unavailable_runtime_unwired { color: #ffd166; }
+  .semantic-status.semantic-unavailable_model_missing { color: #ff8f70; }
+  .semantic-status.semantic-not_configured { color: #9cb2c7; }
+  .semantic-detail { color: #7a95a8; font-size: 0.72rem; line-height: 1.35; }
+  .excavation-header { display: flex; flex-direction: column; gap: 4px; }
+  .excavation-facets { display: flex; flex-direction: column; gap: 10px; }
+  .facet-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .facet-label { font-size: 0.72rem; color: #7a95a8; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
+  .facet-chip { border-radius: 999px; padding: 4px 10px; font-size: 0.82rem; background: rgba(140,217,74,0.08); border: 1px solid rgba(140,217,74,0.18); color: #c8e8a0; cursor: pointer; }
+  .facet-chip:hover { background: rgba(140,217,74,0.15); }
+  .facet-count { opacity: 0.6; font-size: 0.78em; }
+  .exc-loading { margin: 4px 0; font-size: 0.82rem; }
   .excavation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .excavation-chip { border-radius: 999px; padding: 7px 12px; }
   .track-list { display: flex; flex-direction: column; gap: 4px; }

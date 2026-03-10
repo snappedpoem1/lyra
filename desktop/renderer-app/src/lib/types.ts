@@ -183,6 +183,19 @@ export type TrackScores = {
   scoreVersion?: number | null;
 };
 
+export type SearchFacetBucket = {
+  value: string;
+  count: number;
+};
+
+export type SearchExcavationResult = {
+  query: string;
+  tracks: Array<{ trackId: number; artist: string; title: string; album: string; genre: string; score: number }>;
+  topArtists: SearchFacetBucket[];
+  topAlbums: SearchFacetBucket[];
+  routeHints: string[];
+};
+
 export type SearchSemanticCapability = {
   providerKey: string;
   status: string;

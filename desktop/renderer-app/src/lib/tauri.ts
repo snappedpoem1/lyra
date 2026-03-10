@@ -43,6 +43,7 @@ import type {
   MoodSearchResult,
   DeepCutTrack,
   ScanJobRecord,
+  SearchExcavationResult,
   SearchSemanticCapability,
   SettingsPayload,
   SpotifyGapSummary,
@@ -251,6 +252,8 @@ export const api = {
   getGraphStats: () => invoke<GraphStats>("get_graph_stats"),
   getSemanticSearchCapability: () =>
     invoke<SearchSemanticCapability>("get_semantic_search_capability"),
+  searchExcavationSurface: (query: string, limit?: number) =>
+    invoke<SearchExcavationResult>("search_excavation_surface", { query, limit }),
   on<T>(event: string, callback: (payload: T) => void) {
     return listen<T>(event, (message) => callback(message.payload));
   }

@@ -96,7 +96,7 @@ Goal: keep the intelligence layer legible everywhere it matters.
 - [x] Expose inferred-vs-explicit reasoning consistently in live and saved playlist detail
 - [x] Carry the same persisted reason payload model into recommendation detail and non-composer discovery surfaces — Discover now has EvidenceItem + whyThisTrack + inferredByLyra at composer payload depth
 - [x] Add a canonical backend search-excavation surface (`search_excavation_surface`) with grouped artist/album facets and route hints
-- [ ] Replace the current Library excavation handoff layer with a deeper canonical search surface instead of leaving excavation partially embedded inside catalog UI
+- [x] Replace the current Library excavation handoff layer with a deeper canonical search surface instead of leaving excavation partially embedded inside catalog UI
 - [x] Keep degraded provider states explicit in composer and explanation surfaces
 - [x] Persist composer diagnostics so deploy-time failures can be inspected from inside Cassette during first-session testing
 
