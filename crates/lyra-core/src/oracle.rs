@@ -8,7 +8,7 @@ use serde_json::Value;
 use crate::commands::{
     AcquisitionLead, AcquisitionLeadHandoffReport, AcquisitionLeadOutcome, DiscoveryInteraction,
     DiscoverySession, EvidenceItem, ExplainPayload, RecommendationBundle, RecommendationResult,
-    RelatedArtist, TasteProfile, TrackScores,
+    RelatedArtist, ScoutExitLane, ScoutExitPlan, TasteProfile, TrackScores,
 };
 
 /// Static cross-genre bridge map ported from oracle/recommendation_broker.py `_SCOUT_GENRE_BRIDGES`.
@@ -1534,6 +1534,81 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
         }
     }
 
+    // G-063: Graph/adjacency evidence — pull connection signals for this track's artist
+    let track_artist: Option<String> = conn
+        .query_row(
+            "SELECT artist FROM tracks WHERE id = ?1",
+            params![track_id],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if let Some(ref artist) = track_artist {
+        // Find strongest connections for this artist from the graph
+        struct ConnRow {
+            other: String,
+            strength: f64,
+            conn_type: String,
+        }
+        let mut stmt = conn
+            .prepare(
+                "SELECT
+                    CASE WHEN artist_a = ?1 THEN artist_b ELSE artist_a END AS other_artist,
+                    connection_strength,
+                    connection_type
+                 FROM connections
+                 WHERE artist_a = ?1 OR artist_b = ?1
+                 ORDER BY connection_strength DESC
+                 LIMIT 3",
+            )
+            .ok();
+        let connections: Vec<ConnRow> = if let Some(ref mut s) = stmt {
+            s.query_map(params![artist], |row| {
+                Ok(ConnRow {
+                    other: row.get(0)?,
+                    strength: row.get(1)?,
+                    conn_type: row.get(2)?,
+                })
+            })
+            .map(|rows| rows.flatten().collect())
+            .unwrap_or_default()
+        } else {
+            vec![]
+        };
+
+        if !connections.is_empty() {
+            let top = &connections[0];
+            let label = match top.conn_type.as_str() {
+                "dimension_affinity" => "dimensional affinity",
+                "lastfm_similar" => "Last.fm similarity",
+                "co_play" => "co-play history",
+                _ => "artist graph",
+            };
+            evidence_items.push(EvidenceItem {
+                type_label: "artist_connection".to_string(),
+                source: "graph".to_string(),
+                text: format!(
+                    "Artist graph: {} connects to {} via {} (strength {:.0}%).",
+                    artist,
+                    top.other,
+                    label,
+                    top.strength * 100.0
+                ),
+                weight: (top.strength * 0.55).clamp(0.0, 1.0),
+            });
+            if connections.len() > 1 {
+                let others: Vec<String> = connections[1..]
+                    .iter()
+                    .map(|c| c.other.clone())
+                    .collect();
+                reasons.push(format!(
+                    "Artist graph also connects to: {}.",
+                    others.join(", ")
+                ));
+            }
+        }
+    }
+
     // Inferred signals (Lyra's read, not stated by the user)
     let mut inferred_by_lyra = vec![format!(
         "Mood profile '{}' inferred from local CLAP/score dimensions.",
@@ -1890,6 +1965,98 @@ pub fn get_related_artists(
     results
 }
 
+/// Build scout-style exits (safe / interesting / dangerous) from local related-artist signals.
+pub fn build_scout_exit_plan(artist_name: &str, limit_per_lane: usize, conn: &Connection) -> ScoutExitPlan {
+    let related = get_related_artists(artist_name, 48, conn);
+    let limit = limit_per_lane.max(1);
+
+    let mut safe_ranked = related.clone();
+    safe_ranked.sort_by(|left, right| {
+        safe_lane_score(right)
+            .partial_cmp(&safe_lane_score(left))
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+
+    let mut interesting_ranked = related.clone();
+    interesting_ranked.sort_by(|left, right| {
+        interesting_lane_score(right)
+            .partial_cmp(&interesting_lane_score(left))
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+
+    let mut dangerous_ranked = related;
+    dangerous_ranked.sort_by(|left, right| {
+        dangerous_lane_score(right)
+            .partial_cmp(&dangerous_lane_score(left))
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+
+    ScoutExitPlan {
+        seed_artist: artist_name.to_string(),
+        lanes: vec![
+            ScoutExitLane {
+                flavor: "safe".to_string(),
+                label: "Safe exit".to_string(),
+                description: "Hold scene continuity first, then move the edge.".to_string(),
+                artists: safe_ranked.into_iter().take(limit).collect(),
+            },
+            ScoutExitLane {
+                flavor: "interesting".to_string(),
+                label: "Interesting exit".to_string(),
+                description: "Leave the obvious lane without dropping the emotional thread.".to_string(),
+                artists: interesting_ranked.into_iter().take(limit).collect(),
+            },
+            ScoutExitLane {
+                flavor: "dangerous".to_string(),
+                label: "Dangerous exit".to_string(),
+                description: "Rewarding risk: weaker paper link, stronger discovery pressure."
+                    .to_string(),
+                artists: dangerous_ranked.into_iter().take(limit).collect(),
+            },
+        ],
+    }
+}
+
+fn owned_pressure(artist: &RelatedArtist) -> f32 {
+    (artist.local_track_count as f32 / 6.0).clamp(0.0, 1.0)
+}
+
+fn safe_lane_score(artist: &RelatedArtist) -> f32 {
+    let owned = owned_pressure(artist);
+    let mut score = artist.connection_strength * 0.66 + owned * 0.26;
+    if artist.connection_type == "genre" || artist.connection_type == "dimension_affinity" {
+        score += 0.08;
+    }
+    score.clamp(0.0, 1.0)
+}
+
+fn interesting_lane_score(artist: &RelatedArtist) -> f32 {
+    let owned = owned_pressure(artist);
+    let center = 1.0_f32 - ((artist.connection_strength - 0.56_f32).abs() / 0.56_f32).min(1.0);
+    let mut score = center * 0.58 + artist.connection_strength * 0.22 + owned * 0.16;
+    if artist.connection_type == "co_play" || artist.connection_type == "dimension_affinity" {
+        score += 0.08;
+    }
+    score.clamp(0.0, 1.0)
+}
+
+fn dangerous_lane_score(artist: &RelatedArtist) -> f32 {
+    let unowned = 1.0_f32 - owned_pressure(artist);
+    let mut score = (1.0_f32 - artist.connection_strength) * 0.52 + unowned * 0.34;
+    if artist.connection_type == "co_play" {
+        score += 0.05;
+    }
+    if artist.local_track_count == 0 {
+        score += 0.12;
+    } else if artist.local_track_count <= 2 {
+        score += 0.06;
+    }
+    score.clamp(0.0, 1.0)
+}
+
 fn related_artist_story(
     connection_type: &str,
     connection_strength: f32,
@@ -2117,9 +2284,12 @@ fn describe_texture(space: f64, density: f64, rawness: f64) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{enqueue_acquisition_leads, record_recommendation_feedback, RecommendationBroker};
+    use super::{
+        build_scout_exit_plan, enqueue_acquisition_leads, record_recommendation_feedback,
+        RecommendationBroker,
+    };
     use crate::commands::TasteProfile;
-    use rusqlite::Connection;
+    use rusqlite::{params, Connection};
     use std::collections::HashMap;
 
     #[test]
@@ -2960,5 +3130,100 @@ mod tests {
                 .iter()
                 .any(|outcome| outcome.status == "duplicate_active")
         );
+    }
+
+    #[test]
+    fn scout_exit_plan_returns_safe_interesting_and_dangerous_lanes() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite");
+        conn.execute_batch(
+            "
+            CREATE TABLE artists (
+              id INTEGER PRIMARY KEY,
+              name TEXT NOT NULL
+            );
+            CREATE TABLE tracks (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              title TEXT NOT NULL
+            );
+            CREATE TABLE connections (
+              source TEXT NOT NULL,
+              target TEXT NOT NULL,
+              type TEXT NOT NULL,
+              weight REAL NOT NULL
+            );
+            ",
+        )
+        .expect("schema");
+
+        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')", [])
+            .expect("seed");
+        conn.execute("INSERT INTO artists (id, name) VALUES (2, 'Close Pal')", [])
+            .expect("close");
+        conn.execute("INSERT INTO artists (id, name) VALUES (3, 'Edge Pulse')", [])
+            .expect("edge");
+        conn.execute("INSERT INTO artists (id, name) VALUES (4, 'Unknown Rift')", [])
+            .expect("unknown");
+
+        for i in 0..5 {
+            conn.execute(
+                "INSERT INTO tracks (id, artist_id, title) VALUES (?1, 2, ?2)",
+                params![100 + i, format!("Close Track {}", i)],
+            )
+            .expect("close track");
+        }
+        for i in 0..2 {
+            conn.execute(
+                "INSERT INTO tracks (id, artist_id, title) VALUES (?1, 3, ?2)",
+                params![200 + i, format!("Edge Track {}", i)],
+            )
+            .expect("edge track");
+        }
+
+        conn.execute(
+            "INSERT INTO connections (source, target, type, weight)
+             VALUES ('Seed Artist', 'Close Pal', 'genre', 0.92)",
+            [],
+        )
+        .expect("safe edge");
+        conn.execute(
+            "INSERT INTO connections (source, target, type, weight)
+             VALUES ('Seed Artist', 'Edge Pulse', 'co_play', 0.58)",
+            [],
+        )
+        .expect("interesting edge");
+        conn.execute(
+            "INSERT INTO connections (source, target, type, weight)
+             VALUES ('Seed Artist', 'Unknown Rift', 'co_play', 0.22)",
+            [],
+        )
+        .expect("dangerous edge");
+
+        let plan = build_scout_exit_plan("Seed Artist", 2, &conn);
+        assert_eq!(plan.lanes.len(), 3);
+
+        let safe = plan
+            .lanes
+            .iter()
+            .find(|lane| lane.flavor == "safe")
+            .expect("safe lane");
+        let interesting = plan
+            .lanes
+            .iter()
+            .find(|lane| lane.flavor == "interesting")
+            .expect("interesting lane");
+        let dangerous = plan
+            .lanes
+            .iter()
+            .find(|lane| lane.flavor == "dangerous")
+            .expect("dangerous lane");
+
+        assert!(!safe.artists.is_empty());
+        assert!(!interesting.artists.is_empty());
+        assert!(!dangerous.artists.is_empty());
+
+        assert_eq!(safe.artists[0].name, "Close Pal");
+        assert_eq!(interesting.artists[0].name, "Edge Pulse");
+        assert_eq!(dangerous.artists[0].name, "Unknown Rift");
     }
 }

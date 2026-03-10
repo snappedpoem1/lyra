@@ -13,7 +13,7 @@
     setWorkspaceProvenance,
     setWorkspaceTrack
   } from "$lib/stores/workspace";
-  import type { ArtistProfile, ExplainPayload, RelatedArtist, TrackEnrichmentResult } from "$lib/types";
+  import type { ArtistProfile, ExplainPayload, RelatedArtist, ScoutExitPlan, TrackEnrichmentResult } from "$lib/types";
 
   let profile: ArtistProfile | null = null;
   let loading = true;
@@ -26,6 +26,12 @@
   let bridgeBusy = false;
   let bridgeTarget: RelatedArtist | null = null;
   let huntMessage = "";
+
+  // G-064: Scout exit lanes
+  let scoutExitPlan: ScoutExitPlan | null = null;
+  let scoutExitLoading = false;
+  let scoutExitOpen = false;
+
   let expandedExplain: Record<number, ExplainPayload | "loading"> = {};
   let expandedProof: Record<number, TrackEnrichmentResult | "loading"> = {};
 
@@ -83,6 +89,17 @@
       );
     } finally {
       relatedLoading = false;
+    }
+  }
+
+  async function loadScoutExits(artistName: string): Promise<void> {
+    scoutExitLoading = true;
+    try {
+      scoutExitPlan = await api.getScoutExitPlan(artistName, 4);
+    } catch {
+      scoutExitPlan = null;
+    } finally {
+      scoutExitLoading = false;
     }
   }
 
@@ -289,6 +306,9 @@
           </button>
         </div>
         <div class="route-chip-row">
+          <button class="route-chip route-chip--scout" on:click={() => { scoutExitOpen = !scoutExitOpen; if (scoutExitOpen && !scoutExitPlan && !scoutExitLoading) loadScoutExits(profile!.artist); }}>
+            {scoutExitOpen ? 'Hide exits' : 'Scout exits'}
+          </button>
           <button class="route-chip" on:click={() => openLyraPrompt(`give me three exits from ${profile!.artist}, one safe, one interesting, one dangerous`)}>
             Three exits
           </button>
@@ -301,6 +321,44 @@
         </div>
       </div>
     </header>
+
+    {#if scoutExitOpen}
+      <section class="panel scout-panel">
+        <p class="eyebrow">Scout Exits — {profile.artist}</p>
+        {#if scoutExitLoading}
+          <p class="muted">Building exit lanes...</p>
+        {:else if scoutExitPlan && scoutExitPlan.lanes.length}
+          <div class="scout-lanes">
+            {#each scoutExitPlan.lanes as lane}
+              <div class="scout-lane scout-lane--{lane.flavor}">
+                <p class="scout-lane-label">{lane.label}</p>
+                <p class="scout-lane-desc">{lane.description}</p>
+                {#each lane.artists as artist}
+                  <div class="scout-artist">
+                    <a class="scout-artist-name" href={`/artists/${encodeURIComponent(artist.name)}`}>{artist.name}</a>
+                    <small class="route-why">{artist.why}</small>
+                    {#if artist.riskNote}
+                      <small class="route-risk">{artist.riskNote}</small>
+                    {/if}
+                    <div class="scout-artist-actions">
+                      {#if artist.localTrackCount > 0}
+                        <button class="sim-btn" on:click={() => playSimilar(artist.name)}>Play</button>
+                        <button class="bridge-btn" on:click={() => queueBridge(artist)}>Bridge</button>
+                      {:else}
+                        <button class="hunt-btn" on:click={() => huntArtist(artist.name)}>Hunt</button>
+                      {/if}
+                      <button class="route-chip" style="font-size:0.72rem;padding:3px 8px" on:click={() => openLyraPrompt(`take me from ${profile!.artist} into ${artist.name} — ${lane.flavor} route`)}>Ask Lyra</button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="muted">No exit data yet — build the artist graph first.</p>
+        {/if}
+      </section>
+    {/if}
 
     <section class="panel">
       <div class="panel-head">
@@ -542,10 +600,29 @@
   .bridge-btn { color: #ffd166; border-color: rgba(255,209,102,0.3); font-size: 0.78rem; padding: 4px 10px; }
   .hunt-btn { color: #ff9f7a; border-color: rgba(255,159,122,0.3); font-size: 0.78rem; padding: 4px 10px; }
 
+  /* G-064: Scout exit lanes */
+  .scout-panel { border: 1px solid rgba(140,217,74,0.18); }
+  .route-chip--scout { color: #8cd94a; border-color: rgba(140,217,74,0.35); }
+  .scout-lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+  .scout-lane { border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+  .scout-lane--safe { background: rgba(122,255,198,0.07); border: 1px solid rgba(122,255,198,0.18); }
+  .scout-lane--interesting { background: rgba(255,209,102,0.07); border: 1px solid rgba(255,209,102,0.18); }
+  .scout-lane--dangerous { background: rgba(255,107,107,0.07); border: 1px solid rgba(255,107,107,0.18); }
+  .scout-lane-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; margin: 0; }
+  .scout-lane--safe .scout-lane-label { color: #7affc6; }
+  .scout-lane--interesting .scout-lane-label { color: #ffd166; }
+  .scout-lane--dangerous .scout-lane-label { color: #ff6b6b; }
+  .scout-lane-desc { font-size: 0.75rem; color: #9cb2c7; margin: 0; line-height: 1.35; }
+  .scout-artist { padding: 6px 0; border-top: 1px solid rgba(255,255,255,0.07); display: grid; gap: 3px; }
+  .scout-artist:first-of-type { border-top: none; }
+  .scout-artist-name { color: #a8c4e0; text-decoration: underline; font-size: 0.85rem; }
+  .scout-artist-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+
   @media (max-width: 900px) {
     .hero { grid-template-columns: 1fr; }
     .hero-art { width: 100%; max-width: 240px; }
     .identity-grid { grid-template-columns: 1fr; }
     .grid { grid-template-columns: 1fr; }
+    .scout-lanes { grid-template-columns: 1fr; }
   }
 </style>

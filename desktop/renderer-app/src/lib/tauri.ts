@@ -37,6 +37,7 @@ import type {
   RecommendationResult,
   AcquisitionLead,
   RelatedArtist,
+  ScoutExitPlan,
   ScanJobRecord,
   SettingsPayload,
   SpotifyGapSummary,
@@ -228,6 +229,8 @@ export const api = {
   // --- G-064: Discovery Graph Depth ---
   getRelatedArtists: (artistName: string, limit: number) =>
     invoke<RelatedArtist[]>("get_related_artists", { artistName, limit }),
+  getScoutExitPlan: (artistName: string, limitPerLane?: number) =>
+    invoke<ScoutExitPlan>("get_scout_exit_plan", { artistName, limitPerLane }),
   playSimilarToArtist: (artistName: string, limit: number) =>
     invoke<QueueItemRecord[]>("play_similar_to_artist", { artistName, limit }),
   getDiscoverySession: () => invoke<DiscoverySession>("get_discovery_session"),

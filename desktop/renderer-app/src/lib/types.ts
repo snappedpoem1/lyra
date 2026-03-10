@@ -791,6 +791,18 @@ export type DiscoverySession = {
   recent: DiscoveryInteraction[];
 };
 
+export type ScoutExitLane = {
+  flavor: string; // safe | interesting | dangerous
+  label: string;
+  description: string;
+  artists: RelatedArtist[];
+};
+
+export type ScoutExitPlan = {
+  seedArtist: string;
+  lanes: ScoutExitLane[];
+};
+
 export type GraphNode = {
   artist: string;
   degree: number;
