@@ -1,14 +1,12 @@
 //! Cross-genre discovery — local-library bridge-artist and mood-based surfacing.
 //!
-//! Deterministic pass only: queries local DB for artists who appear in multiple
-//! genre buckets and maps abstract mood keywords to concrete genre lists.
-//!
-//! **[Discogs Scout API?]** — `_find_bridge_artists` fallback (Discogs search for
-//! artists tagged with both genres) requires a network call + token. Deferred.
-//! The Rust layer performs the local-library pass and mood mapping only.
+//! Local pass: DB query for artists spanning two genre buckets.
+//! Discogs fallback: when local library has no bridge artists, queries the
+//! Discogs `/database/search` API for artists tagged with both genres.
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::errors::LyraResult;
@@ -88,6 +86,69 @@ pub struct MoodSearchResult {
     pub source:    String,
 }
 
+// ── Credential loading ────────────────────────────────────────────────────────
+
+fn load_discogs_token(conn: &Connection) -> Option<String> {
+    conn.query_row(
+        "SELECT config_json FROM provider_configs WHERE provider_key = 'discogs'",
+        [], |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+    .and_then(|v| {
+        v.get("discogs_token")
+            .or_else(|| v.get("DISCOGS_TOKEN"))
+            .and_then(Value::as_str)
+            .map(String::from)
+    })
+    .filter(|s| !s.is_empty())
+}
+
+// ── Discogs bridge artist API ─────────────────────────────────────────────────
+
+const DISCOGS_BASE:    &str = "https://api.discogs.com";
+const DISCOGS_UA:      &str = "Lyra/0.1 +https://github.com/snappedpoem1/lyra";
+const DISCOGS_RATE_MS: u64  = 1100;
+
+/// Query Discogs for artists tagged with both genres.
+/// Returns up to 50 candidates sourced as "discogs".
+pub fn fetch_discogs_bridge_artists(
+    token: &str,
+    genre_a: &str,
+    genre_b: &str,
+) -> Vec<BridgeArtist> {
+    std::thread::sleep(std::time::Duration::from_millis(DISCOGS_RATE_MS));
+
+    let data: Value = match ureq::get(&format!("{}/database/search", DISCOGS_BASE))
+        .set("User-Agent", DISCOGS_UA)
+        .set("Authorization", &format!("Discogs token={}", token))
+        .query("type", "artist")
+        .query("style", &format!("{},{}", genre_a, genre_b))
+        .query("per_page", "50")
+        .call()
+    {
+        Ok(r)  => r.into_json().unwrap_or(Value::Null),
+        Err(_) => return vec![],
+    };
+
+    data.get("results")
+        .and_then(|r| r.as_array())
+        .map(|results| {
+            results
+                .iter()
+                .filter_map(|r| r.get("title").and_then(Value::as_str))
+                .map(|name| BridgeArtist {
+                    name:        name.to_string(),
+                    genre_a:     genre_a.to_string(),
+                    genre_b:     genre_b.to_string(),
+                    track_count: 0,
+                    source:      "discogs".to_string(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 // ── Bridge artist discovery ───────────────────────────────────────────────────
 
 /// Find artists in the local library whose tracks span both genre strings.
@@ -143,8 +204,9 @@ pub fn find_local_bridge_artists(
 
 /// Cross-genre hunt — returns local library tracks by bridge artists.
 ///
-/// **[Discogs Scout API?]** — fallback to Discogs when local library has no bridge
-/// artists is deferred. This function returns local-only results only.
+/// Local pass first. If the library has no bridge artists AND a Discogs token
+/// is configured, falls back to Discogs API to find bridge artist names, then
+/// surfaces any matching tracks from the local library.
 pub fn cross_genre_hunt(
     conn: &Connection,
     genre_a: &str,
@@ -152,7 +214,14 @@ pub fn cross_genre_hunt(
     limit: usize,
 ) -> LyraResult<Vec<ScoutTarget>> {
     let limit = limit.clamp(1, 500);
-    let bridge_artists = find_local_bridge_artists(conn, genre_a, genre_b)?;
+    let mut bridge_artists = find_local_bridge_artists(conn, genre_a, genre_b)?;
+
+    // Discogs fallback when local library has no bridge artists
+    if bridge_artists.is_empty() {
+        if let Some(token) = load_discogs_token(conn) {
+            bridge_artists = fetch_discogs_bridge_artists(&token, genre_a, genre_b);
+        }
+    }
 
     if bridge_artists.is_empty() {
         return Ok(vec![]);

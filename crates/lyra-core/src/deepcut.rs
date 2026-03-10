@@ -3,18 +3,13 @@
 //! Surfaces tracks that are acclaimed relative to their mainstream visibility.
 //! Algorithm: `obscurity = acclaim / (popularity_percentile + ε)`
 //!
-//! **[Last.fm DeepCut API?]** — `listeners` and `playcount` come from Last.fm
-//! `track.getInfo`. Without that data the popularity is derived from local
-//! `playback_history` as a proxy.
-//!
-//! **[Discogs DeepCut API?]** — community rating from Discogs `/releases/{id}`.
-//! Without it the acclaim defaults to a neutral 0.5 prior.
-//!
-//! The Rust layer owns: DB queries, local-play-count percentile computation,
-//! L1-distance taste alignment, obscurity math, tag building, and result ranking.
+//! External APIs (both optional — degrade gracefully to local-only fallback):
+//! - Last.fm `track.getInfo` → real listener/playcount for popularity percentile
+//! - Discogs `/database/search` + `/releases/{id}` → community rating for acclaim
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::errors::LyraResult;
@@ -321,12 +316,154 @@ fn get_taste_aligned_candidates(
     Ok(scored.into_iter().take(limit).map(|(_, row)| row).collect())
 }
 
+// ── Credential loading ────────────────────────────────────────────────────────
+
+fn load_lastfm_api_key(conn: &Connection) -> Option<String> {
+    conn.query_row(
+        "SELECT config_json FROM provider_configs WHERE provider_key = 'lastfm'",
+        [], |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+    .and_then(|v| {
+        v.get("lastfm_api_key")
+            .or_else(|| v.get("LASTFM_API_KEY"))
+            .and_then(Value::as_str)
+            .map(String::from)
+    })
+    .filter(|s| !s.is_empty())
+}
+
+fn load_discogs_token(conn: &Connection) -> Option<String> {
+    conn.query_row(
+        "SELECT config_json FROM provider_configs WHERE provider_key = 'discogs'",
+        [], |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+    .and_then(|v| {
+        v.get("discogs_token")
+            .or_else(|| v.get("DISCOGS_TOKEN"))
+            .and_then(Value::as_str)
+            .map(String::from)
+    })
+    .filter(|s| !s.is_empty())
+}
+
+// ── Last.fm API ───────────────────────────────────────────────────────────────
+
+const LASTFM_BASE: &str = "https://ws.audioscrobbler.com/2.0/";
+const LASTFM_UA:   &str = "Lyra/0.1 (https://github.com/snappedpoem1/lyra)";
+const LASTFM_RATE_MS: u64 = 250;
+
+#[derive(Debug, Default)]
+pub struct LastFmTrackInfo {
+    pub listeners:  i64,
+    pub playcount:  i64,
+}
+
+/// Fetch Last.fm track.getInfo — listeners + playcount.
+/// Returns zeroes on any network/parse failure (graceful degradation).
+pub fn fetch_lastfm_track_info(api_key: &str, artist: &str, title: &str) -> LastFmTrackInfo {
+    std::thread::sleep(std::time::Duration::from_millis(LASTFM_RATE_MS));
+    let resp = ureq::get(LASTFM_BASE)
+        .set("User-Agent", LASTFM_UA)
+        .query("method", "track.getInfo")
+        .query("api_key", api_key)
+        .query("format", "json")
+        .query("autocorrect", "1")
+        .query("artist", artist)
+        .query("track", title)
+        .call();
+
+    let data: Value = match resp {
+        Ok(r) => r.into_json().unwrap_or(Value::Null),
+        Err(_) => return LastFmTrackInfo::default(),
+    };
+
+    let track = data.get("track").unwrap_or(&Value::Null);
+    LastFmTrackInfo {
+        listeners: track.get("listeners")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
+        playcount: track.get("playcount")
+            .and_then(Value::as_str)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0),
+    }
+}
+
+// ── Discogs API (acclaim) ─────────────────────────────────────────────────────
+
+const DISCOGS_BASE: &str = "https://api.discogs.com";
+const DISCOGS_UA:   &str = "Lyra/0.1 +https://github.com/snappedpoem1/lyra";
+const DISCOGS_RATE_MS: u64 = 1100; // ~55 req/min to stay under 60/min limit
+
+/// Fetch Discogs community rating for an artist + track/album.
+/// Returns 0.0 on not-found or API failure.
+pub fn fetch_discogs_rating(token: &str, artist: &str, title: &str) -> f64 {
+    std::thread::sleep(std::time::Duration::from_millis(DISCOGS_RATE_MS));
+
+    let search: Value = match ureq::get(&format!("{}/database/search", DISCOGS_BASE))
+        .set("User-Agent", DISCOGS_UA)
+        .set("Authorization", &format!("Discogs token={}", token))
+        .query("artist", artist)
+        .query("track", title)
+        .query("type", "release")
+        .query("per_page", "1")
+        .call()
+    {
+        Ok(r) => r.into_json().unwrap_or(Value::Null),
+        Err(_) => return 0.0,
+    };
+
+    let release_id = search
+        .get("results")
+        .and_then(|r| r.as_array())
+        .and_then(|a| a.first())
+        .and_then(|r| r.get("id"))
+        .and_then(Value::as_i64);
+
+    let release_id = match release_id {
+        Some(id) => id,
+        None => return 0.0,
+    };
+
+    std::thread::sleep(std::time::Duration::from_millis(DISCOGS_RATE_MS));
+
+    let detail: Value = match ureq::get(&format!("{}/releases/{}", DISCOGS_BASE, release_id))
+        .set("User-Agent", DISCOGS_UA)
+        .set("Authorization", &format!("Discogs token={}", token))
+        .call()
+    {
+        Ok(r) => r.into_json().unwrap_or(Value::Null),
+        Err(_) => return 0.0,
+    };
+
+    let votes = detail
+        .get("community").and_then(|c| c.get("rating"))
+        .and_then(|r| r.get("count"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+
+    if votes < 3 {
+        return 0.0; // too few votes to be meaningful
+    }
+
+    detail
+        .get("community").and_then(|c| c.get("rating"))
+        .and_then(|r| r.get("average"))
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0)
+}
+
 // ── Scoring ───────────────────────────────────────────────────────────────────
 
 fn score_row(row: LibraryRow, buckets: &[(f64, i64)]) -> DeepCutTrack {
-    // Use local play count as popularity proxy (Last.fm deferred)
+    // Use local play count as popularity proxy (no API key available)
     let pop_pct = compute_popularity_percentile(row.local_plays, buckets);
-    let acclaim  = compute_acclaim(0.0); // Discogs deferred → neutral 0.5
+    let acclaim  = compute_acclaim(0.0); // neutral 0.5 without Discogs data
     let obscurity = acclaim / (pop_pct + EPSILON);
 
     let deep_cut_rank =
@@ -351,12 +488,41 @@ fn score_row(row: LibraryRow, buckets: &[(f64, i64)]) -> DeepCutTrack {
     }
 }
 
+fn score_row_enriched(
+    row: LibraryRow,
+    listeners: i64,
+    discogs_rating: f64,
+    buckets: &[(f64, i64)],
+) -> DeepCutTrack {
+    let pop_pct   = compute_popularity_percentile(listeners.max(row.local_plays), buckets);
+    let acclaim   = compute_acclaim(discogs_rating);
+    let obscurity = acclaim / (pop_pct + EPSILON);
+    let deep_cut_rank = obscurity.clamp(0.0, 5.0) * 0.6 + row.taste_alignment * 0.4;
+    let tags = build_tags(obscurity, acclaim, pop_pct, &row.genre);
+    DeepCutTrack {
+        track_id:              row.track_id,
+        artist:                row.artist,
+        title:                 row.title,
+        album:                 row.album,
+        genre:                 row.genre,
+        path:                  row.path,
+        obscurity_score:       (obscurity * 1000.0).round() / 1000.0,
+        acclaim_score:         (acclaim   * 1000.0).round() / 1000.0,
+        popularity_percentile: (pop_pct   * 1000.0).round() / 1000.0,
+        local_play_count:      row.local_plays,
+        taste_alignment:       (row.taste_alignment * 1000.0).round() / 1000.0,
+        deep_cut_rank:         (deep_cut_rank * 1000.0).round() / 1000.0,
+        tags,
+    }
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Hunt for deep cuts by genre/artist, ranked by obscurity score.
 ///
-/// Uses local play count as popularity proxy (no Last.fm call).
-/// **[Last.fm DeepCut API?]** — real listener counts would improve ranking.
+/// Uses Last.fm for real listener counts (popularity) and Discogs for community
+/// rating (acclaim) when API keys are configured. Falls back to local play count
+/// + neutral prior when credentials are unavailable.
 pub fn hunt_by_obscurity(
     conn: &Connection,
     genre: Option<&str>,
@@ -372,14 +538,22 @@ pub fn hunt_by_obscurity(
         return Ok(vec![]);
     }
 
-    let buckets = local_play_count_percentile_buckets(conn)?;
+    let buckets      = local_play_count_percentile_buckets(conn)?;
+    let lfm_key      = load_lastfm_api_key(conn);
+    let discogs_tok  = load_discogs_token(conn);
 
     let mut scored: Vec<DeepCutTrack> = candidates
         .into_iter()
-        .map(|row| score_row(row, &buckets))
-        .filter(|t| {
-            t.obscurity_score >= min_obscurity && t.obscurity_score <= max_obscurity
+        .map(|row| {
+            let listeners = lfm_key.as_deref().map(|key| {
+                fetch_lastfm_track_info(key, &row.artist, &row.title).listeners
+            }).unwrap_or(0);
+            let discogs_rating = discogs_tok.as_deref().map(|tok| {
+                fetch_discogs_rating(tok, &row.artist, &row.title)
+            }).unwrap_or(0.0);
+            score_row_enriched(row, listeners, discogs_rating, &buckets)
         })
+        .filter(|t| t.obscurity_score >= min_obscurity && t.obscurity_score <= max_obscurity)
         .collect();
 
     scored.sort_by(|a, b| {
@@ -408,11 +582,21 @@ pub fn hunt_with_taste_context(
         candidates = get_library_candidates(conn, None, None, limit * 5)?;
     }
 
-    let buckets = local_play_count_percentile_buckets(conn)?;
+    let buckets     = local_play_count_percentile_buckets(conn)?;
+    let lfm_key     = load_lastfm_api_key(conn);
+    let discogs_tok = load_discogs_token(conn);
 
     let mut scored: Vec<DeepCutTrack> = candidates
         .into_iter()
-        .map(|row| score_row(row, &buckets))
+        .map(|row| {
+            let listeners = lfm_key.as_deref().map(|key| {
+                fetch_lastfm_track_info(key, &row.artist, &row.title).listeners
+            }).unwrap_or(0);
+            let discogs_rating = discogs_tok.as_deref().map(|tok| {
+                fetch_discogs_rating(tok, &row.artist, &row.title)
+            }).unwrap_or(0.0);
+            score_row_enriched(row, listeners, discogs_rating, &buckets)
+        })
         .collect();
 
     scored.sort_by(|a, b| {
