@@ -6,6 +6,58 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::commands::TasteProfile;
 use crate::errors::LyraResult;
 
+/// Detect whether the DB uses the normalized schema (has `artists` table) or legacy flat schema.
+fn has_artists_table(conn: &Connection) -> bool {
+    conn.query_row(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='artists'",
+        [],
+        |_| Ok(()),
+    )
+    .is_ok()
+}
+
+/// Resolve (artist_lc, title_lc) → track_id TEXT (legacy flat schema).
+/// Returns None if not found or no track_scores row exists.
+fn resolve_track_flat(
+    conn: &Connection,
+    artist_lc: &str,
+    title_lc: &str,
+) -> Option<[f64; 10]> {
+    let track_id: Option<String> = conn
+        .query_row(
+            "SELECT track_id FROM tracks
+             WHERE LOWER(TRIM(artist)) = ?1 AND LOWER(TRIM(title)) = ?2
+             LIMIT 1",
+            params![artist_lc, title_lc],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten();
+    let tid = track_id?;
+    conn.query_row(
+        "SELECT energy, valence, tension, density, warmth,
+                movement, space, rawness, complexity, nostalgia
+         FROM track_scores WHERE track_id = ?1",
+        params![tid],
+        |row| {
+            Ok([
+                row.get::<_, f64>(0)?,
+                row.get::<_, f64>(1)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, f64>(3)?,
+                row.get::<_, f64>(4)?,
+                row.get::<_, f64>(5)?,
+                row.get::<_, f64>(6)?,
+                row.get::<_, f64>(7)?,
+                row.get::<_, f64>(8)?,
+                row.get::<_, f64>(9)?,
+            ])
+        },
+    )
+    .ok()
+}
+
 const DIMS: &[&str] = &[
     "energy",
     "valence",
@@ -245,44 +297,53 @@ pub fn seed_taste_from_spotify_history(conn: &Connection, force: bool) -> LyraRe
         return Ok(0);
     }
 
+    let flat_schema = !has_artists_table(conn);
     let mut matched = 0_usize;
 
     for sp in &groups {
-        let track_id: Option<i64> = conn
-            .query_row(
-                "SELECT t.id
-                 FROM tracks t
-                 LEFT JOIN artists ar ON ar.id = t.artist_id
-                 WHERE LOWER(TRIM(COALESCE(ar.name, ''))) = ?1
-                   AND LOWER(TRIM(t.title)) = ?2
-                 LIMIT 1",
-                params![sp.artist, sp.title],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let Some(tid) = track_id else { continue };
-
-        let scores = conn.query_row(
-            "SELECT energy, valence, tension, density, warmth,
-                    movement, space, rawness, complexity, nostalgia
-             FROM track_scores WHERE track_id = ?1",
-            params![tid],
-            |row| {
-                Ok([
-                    row.get::<_, f64>(0)?,
-                    row.get::<_, f64>(1)?,
-                    row.get::<_, f64>(2)?,
-                    row.get::<_, f64>(3)?,
-                    row.get::<_, f64>(4)?,
-                    row.get::<_, f64>(5)?,
-                    row.get::<_, f64>(6)?,
-                    row.get::<_, f64>(7)?,
-                    row.get::<_, f64>(8)?,
-                    row.get::<_, f64>(9)?,
-                ])
-            },
-        );
-        let Ok(s) = scores else { continue };
+        let s = if flat_schema {
+            match resolve_track_flat(conn, &sp.artist, &sp.title) {
+                Some(s) => s,
+                None => continue,
+            }
+        } else {
+            let track_id: Option<i64> = conn
+                .query_row(
+                    "SELECT t.id
+                     FROM tracks t
+                     LEFT JOIN artists ar ON ar.id = t.artist_id
+                     WHERE LOWER(TRIM(COALESCE(ar.name, ''))) = ?1
+                       AND LOWER(TRIM(t.title)) = ?2
+                     LIMIT 1",
+                    params![sp.artist, sp.title],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let Some(tid) = track_id else { continue };
+            match conn.query_row(
+                "SELECT energy, valence, tension, density, warmth,
+                        movement, space, rawness, complexity, nostalgia
+                 FROM track_scores WHERE track_id = ?1",
+                params![tid],
+                |row| {
+                    Ok([
+                        row.get::<_, f64>(0)?,
+                        row.get::<_, f64>(1)?,
+                        row.get::<_, f64>(2)?,
+                        row.get::<_, f64>(3)?,
+                        row.get::<_, f64>(4)?,
+                        row.get::<_, f64>(5)?,
+                        row.get::<_, f64>(6)?,
+                        row.get::<_, f64>(7)?,
+                        row.get::<_, f64>(8)?,
+                        row.get::<_, f64>(9)?,
+                    ])
+                },
+            ) {
+                Ok(s) => s,
+                Err(_) => continue,
+            }
+        };
 
         let non_skips = sp.plays - sp.skips;
         let avg_ms = if sp.plays > 0 { sp.total_ms / sp.plays } else { 0 };
@@ -442,45 +503,54 @@ pub fn sync_taste_from_lastfm(
         *counts.entry(key).or_insert(0) += 1;
     }
 
+    let flat_schema = !has_artists_table(conn);
     let mut matched = 0_usize;
     let mut written = 0_usize;
 
     for ((artist_lc, title_lc), count) in &counts {
-        let track_id: Option<i64> = conn
-            .query_row(
-                "SELECT t.id
-                 FROM tracks t
-                 LEFT JOIN artists ar ON ar.id = t.artist_id
-                 WHERE LOWER(TRIM(COALESCE(ar.name, ''))) = ?1
-                   AND LOWER(TRIM(t.title)) = ?2
-                 LIMIT 1",
-                params![artist_lc, title_lc],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let Some(tid) = track_id else { continue };
-
-        let scores = conn.query_row(
-            "SELECT energy, valence, tension, density, warmth,
-                    movement, space, rawness, complexity, nostalgia
-             FROM track_scores WHERE track_id = ?1",
-            params![tid],
-            |row| {
-                Ok([
-                    row.get::<_, f64>(0)?,
-                    row.get::<_, f64>(1)?,
-                    row.get::<_, f64>(2)?,
-                    row.get::<_, f64>(3)?,
-                    row.get::<_, f64>(4)?,
-                    row.get::<_, f64>(5)?,
-                    row.get::<_, f64>(6)?,
-                    row.get::<_, f64>(7)?,
-                    row.get::<_, f64>(8)?,
-                    row.get::<_, f64>(9)?,
-                ])
-            },
-        );
-        let Ok(s) = scores else { continue };
+        let s = if flat_schema {
+            match resolve_track_flat(conn, artist_lc, title_lc) {
+                Some(s) => s,
+                None => continue,
+            }
+        } else {
+            let track_id: Option<i64> = conn
+                .query_row(
+                    "SELECT t.id
+                     FROM tracks t
+                     LEFT JOIN artists ar ON ar.id = t.artist_id
+                     WHERE LOWER(TRIM(COALESCE(ar.name, ''))) = ?1
+                       AND LOWER(TRIM(t.title)) = ?2
+                     LIMIT 1",
+                    params![artist_lc, title_lc],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let Some(tid) = track_id else { continue };
+            match conn.query_row(
+                "SELECT energy, valence, tension, density, warmth,
+                        movement, space, rawness, complexity, nostalgia
+                 FROM track_scores WHERE track_id = ?1",
+                params![tid],
+                |row| {
+                    Ok([
+                        row.get::<_, f64>(0)?,
+                        row.get::<_, f64>(1)?,
+                        row.get::<_, f64>(2)?,
+                        row.get::<_, f64>(3)?,
+                        row.get::<_, f64>(4)?,
+                        row.get::<_, f64>(5)?,
+                        row.get::<_, f64>(6)?,
+                        row.get::<_, f64>(7)?,
+                        row.get::<_, f64>(8)?,
+                        row.get::<_, f64>(9)?,
+                    ])
+                },
+            ) {
+                Ok(s) => s,
+                Err(_) => continue,
+            }
+        };
 
         // Last.fm plays are all-positive signals (no skip data)
         let weight = ((*count as f64 + 1.0).log2()).min(3.0);
