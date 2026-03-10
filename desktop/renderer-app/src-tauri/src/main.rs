@@ -8,16 +8,16 @@ use std::time::Duration;
 mod smtc;
 
 use lyra_core::commands::{
-    AcquisitionEventPayload, AcquisitionPreflight, AcquisitionQueueItem, AppShellState,
-    ArtistProfile, AudioOutputDevice, BootstrapPayload, ComposedPlaylistDraft,
-    ComposerDiagnosticEntry, ComposerResponse, ComposerRunDetail, ComposerRunRecord,
-    CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload, GeneratedPlaylist,
-    GraphStats, LegacyImportReport, LibraryCleanupPreview, NativeCapabilities, PlaybackEvent,
-    PlaybackState, PlaylistDetail, PlaylistSummary, PlaylistTrackReasonRecord,
+    AcquisitionEventPayload, AcquisitionLead, AcquisitionLeadHandoffReport, AcquisitionPreflight,
+    AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
+    ComposedPlaylistDraft, ComposerDiagnosticEntry, ComposerResponse, ComposerRunDetail,
+    ComposerRunRecord, CurationLogEntry, DiscoverySession, DuplicateCluster, ExplainPayload,
+    GeneratedPlaylist, GraphStats, LegacyImportReport, LibraryCleanupPreview, NativeCapabilities,
+    PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary, PlaylistTrackReasonRecord,
     ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
-    RecentPlayRecord, RecommendationResult, RelatedArtist, RouteFeedbackPayload, ScanJobRecord,
-    SettingsPayload, SpotifyGapSummary, SteerPayload, TasteMemorySnapshot, TasteProfile,
-    TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
+    RecentPlayRecord, RecommendationBundle, RecommendationResult, RelatedArtist,
+    RouteFeedbackPayload, ScanJobRecord, SettingsPayload, SpotifyGapSummary, SteerPayload,
+    TasteMemorySnapshot, TasteProfile, TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
 };
 use lyra_core::logging::initialize_logging;
 use lyra_core::LyraCore;
@@ -913,6 +913,17 @@ fn get_recommendations(
 }
 
 #[tauri::command]
+fn get_recommendation_bundle(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<RecommendationBundle, String> {
+    state
+        .core
+        .get_recommendation_bundle(limit.unwrap_or(20))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn explain_recommendation(
     state: State<'_, AppState>,
     track_id: i64,
@@ -921,6 +932,21 @@ fn explain_recommendation(
         .core
         .explain_recommendation(track_id)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn enqueue_recommendation_leads(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    leads: Vec<AcquisitionLead>,
+) -> Result<AcquisitionLeadHandoffReport, String> {
+    let report = state
+        .core
+        .enqueue_recommendation_leads(leads)
+        .map_err(|e| e.to_string())?;
+    emit_shell(&app, &state.core);
+    emit_acquisition(&app, &state.core, None);
+    Ok(report)
 }
 
 #[tauri::command]
@@ -1725,7 +1751,9 @@ fn main() {
             get_track_scores,
             get_taste_profile,
             get_recommendations,
+            get_recommendation_bundle,
             explain_recommendation,
+            enqueue_recommendation_leads,
             get_acquisition_queue,
             add_to_acquisition_queue,
             update_acquisition_item,

@@ -32,13 +32,14 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use commands::{
-    AcquisitionPreflight, AcquisitionPreflightCheck, AcquisitionQueueItem, ArtistConnection,
-    ArtistProfile, AudioOutputDevice, BootstrapPayload, ComposedPlaylistDraft, ComposerResponse,
-    DuplicateCluster, ExplainPayload, LegacyImportReport, LibraryOverview, LibraryRootRecord,
-    NativeCapabilities, PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary,
-    ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
-    RecommendationResult, ScanJobRecord, SettingsPayload, SteerPayload, TasteMemorySnapshot,
-    TasteProfile, TrackDetail, TrackRecord, TrackScores,
+    AcquisitionLead, AcquisitionLeadHandoffReport, AcquisitionPreflight, AcquisitionPreflightCheck,
+    AcquisitionQueueItem, ArtistConnection, ArtistProfile, AudioOutputDevice, BootstrapPayload,
+    ComposedPlaylistDraft, ComposerResponse, DuplicateCluster, ExplainPayload, LegacyImportReport,
+    LibraryOverview, LibraryRootRecord, NativeCapabilities, PlaybackEvent, PlaybackState,
+    PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
+    ProviderValidationResult, QueueItemRecord, RecommendationBundle, RecommendationResult,
+    ScanJobRecord, SettingsPayload, SteerPayload, TasteMemorySnapshot, TasteProfile, TrackDetail,
+    TrackRecord, TrackScores,
 };
 use config::AppPaths;
 use db::{connect, init_database};
@@ -1361,6 +1362,21 @@ impl LyraCore {
         let taste = taste::get_taste_profile(&conn)?;
         let broker = oracle::RecommendationBroker::new(&conn);
         Ok(broker.recommend_with_evidence(&taste, limit))
+    }
+
+    pub fn get_recommendation_bundle(&self, limit: usize) -> LyraResult<RecommendationBundle> {
+        let conn = self.conn()?;
+        let taste = taste::get_taste_profile(&conn)?;
+        let broker = oracle::RecommendationBroker::new(&conn);
+        Ok(broker.recommend_with_evidence_and_leads(&taste, limit))
+    }
+
+    pub fn enqueue_recommendation_leads(
+        &self,
+        leads: Vec<AcquisitionLead>,
+    ) -> LyraResult<AcquisitionLeadHandoffReport> {
+        let conn = self.conn()?;
+        oracle::enqueue_acquisition_leads(&conn, &leads)
     }
 
     pub fn compose_playlist_draft(

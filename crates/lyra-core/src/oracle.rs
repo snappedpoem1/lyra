@@ -3,9 +3,11 @@ use std::collections::HashMap;
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::commands::{
-    DiscoveryInteraction, DiscoverySession, EvidenceItem, ExplainPayload, RecommendationResult,
+    AcquisitionLead, AcquisitionLeadHandoffReport, AcquisitionLeadOutcome, DiscoveryInteraction,
+    DiscoverySession, EvidenceItem, ExplainPayload, RecommendationBundle, RecommendationResult,
     RelatedArtist, TasteProfile, TrackScores,
 };
 
@@ -44,6 +46,8 @@ const DIMENSIONS: &[&str] = &[
     "complexity",
     "nostalgia",
 ];
+const FEEDBACK_LOOKBACK_SECONDS: i64 = 60 * 60 * 24 * 90;
+const LISTENBRAINZ_WEATHER_WEIGHT: f64 = 0.10;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,6 +83,658 @@ impl MoodInterpreter {
 }
 
 // ExplainPayload is defined in commands.rs and re-exported here for callers.
+
+fn ensure_feedback_table(conn: &Connection) {
+    let _ = conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS recommendation_feedback (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          track_id INTEGER,
+          feedback_type TEXT NOT NULL,
+          created_at REAL NOT NULL DEFAULT (unixepoch('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_track_created
+          ON recommendation_feedback(track_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_recommendation_feedback_type_created
+          ON recommendation_feedback(feedback_type, created_at DESC);
+        ",
+    );
+}
+
+fn feedback_weight(feedback_type: &str) -> f64 {
+    match feedback_type {
+        "accepted" => 0.18,
+        "queued" => 0.12,
+        "replayed" => 0.08,
+        "skipped" => -0.2,
+        "keep" => 0.15,
+        "play" => 0.2,
+        "dismiss" => -0.25,
+        _ => 0.0,
+    }
+}
+
+fn load_feedback_bias(conn: &Connection, track_ids: &[i64]) -> HashMap<i64, f64> {
+    if track_ids.is_empty() {
+        return HashMap::new();
+    }
+
+    ensure_feedback_table(conn);
+
+    let placeholders = std::iter::repeat_n("?", track_ids.len())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let query = format!(
+        "
+        SELECT track_id, feedback_type, COUNT(*)
+        FROM recommendation_feedback
+        WHERE track_id IN ({placeholders})
+          AND created_at >= ?
+        GROUP BY track_id, feedback_type
+        "
+    );
+    let lookback_threshold = (chrono::Utc::now().timestamp() - FEEDBACK_LOOKBACK_SECONDS) as f64;
+    let mut stmt = match conn.prepare(&query) {
+        Ok(stmt) => stmt,
+        Err(_) => return HashMap::new(),
+    };
+
+    let mut params_list: Vec<rusqlite::types::Value> = Vec::with_capacity(track_ids.len() + 1);
+    params_list.extend(
+        track_ids
+            .iter()
+            .map(|track_id| rusqlite::types::Value::Integer(*track_id)),
+    );
+    params_list.push(rusqlite::types::Value::Real(lookback_threshold));
+
+    let rows = match stmt.query_map(rusqlite::params_from_iter(params_list), |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, i64>(2)?,
+        ))
+    }) {
+        Ok(rows) => rows,
+        Err(_) => return HashMap::new(),
+    };
+
+    let mut tallies: HashMap<i64, f64> = HashMap::new();
+    for (track_id, feedback_type, count) in rows.filter_map(Result::ok) {
+        let weight = feedback_weight(feedback_type.trim().to_ascii_lowercase().as_str());
+        if weight == 0.0 {
+            continue;
+        }
+        let next = tallies.get(&track_id).copied().unwrap_or(0.0) + (weight * count as f64);
+        tallies.insert(track_id, next);
+    }
+
+    tallies
+        .into_iter()
+        .map(|(track_id, score)| (track_id, score.clamp(-0.35, 0.35)))
+        .collect()
+}
+
+pub fn record_recommendation_feedback(conn: &Connection, track_id: i64, feedback_type: &str) {
+    ensure_feedback_table(conn);
+    let _ = conn.execute(
+        "INSERT INTO recommendation_feedback (track_id, feedback_type, created_at) VALUES (?1, ?2, ?3)",
+        params![
+            track_id,
+            feedback_type.trim().to_ascii_lowercase(),
+            chrono::Utc::now().timestamp() as f64
+        ],
+    );
+}
+
+fn merge_recommendation_result(
+    merged: &mut HashMap<i64, RecommendationResult>,
+    candidate: RecommendationResult,
+) {
+    let track_id = candidate.track.id;
+    if let Some(existing) = merged.get_mut(&track_id) {
+        let previous_score = existing.score;
+        existing.score = (existing.score + candidate.score).clamp(0.0, 1.0);
+        if candidate.score >= previous_score {
+            existing.why_this_track = candidate.why_this_track;
+        }
+        existing.evidence.extend(candidate.evidence);
+
+        let mut providers: Vec<String> = existing
+            .provider
+            .split(", ")
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect();
+        if !providers.iter().any(|provider| provider == &candidate.provider) {
+            providers.push(candidate.provider);
+            providers.sort();
+        }
+        existing.provider = providers.join(", ");
+    } else {
+        merged.insert(track_id, candidate);
+    }
+}
+
+fn merge_acquisition_lead(leads: &mut HashMap<String, AcquisitionLead>, candidate: AcquisitionLead) {
+    let key = format!(
+        "{}\u{1f}{}",
+        candidate.artist.trim().to_ascii_lowercase(),
+        candidate.title.trim().to_ascii_lowercase()
+    );
+    if let Some(existing) = leads.get_mut(&key) {
+        let previous_score = existing.score;
+        existing.score = (existing.score + candidate.score).clamp(0.0, 1.0);
+        if candidate.score >= previous_score {
+            existing.reason = candidate.reason.clone();
+        }
+        existing.evidence.extend(candidate.evidence.clone());
+        if !existing.provider.contains(&candidate.provider) {
+            existing.provider = format!("{}, {}", existing.provider, candidate.provider);
+        }
+    } else {
+        leads.insert(key, candidate);
+    }
+}
+
+pub fn enqueue_acquisition_leads(
+    conn: &Connection,
+    leads: &[AcquisitionLead],
+) -> crate::errors::LyraResult<AcquisitionLeadHandoffReport> {
+    let mut outcomes: Vec<AcquisitionLeadOutcome> = Vec::new();
+    let mut added = 0_usize;
+    let mut duplicates = 0_usize;
+    let mut errors = 0_usize;
+    let mut queue_position: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(queue_position), 0) FROM acquisition_queue",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    for lead in leads {
+        let duplicate_active: i64 = conn
+            .query_row(
+                "SELECT COUNT(*)
+                 FROM acquisition_queue
+                 WHERE LOWER(TRIM(artist)) = LOWER(TRIM(?1))
+                   AND LOWER(TRIM(title)) = LOWER(TRIM(?2))
+                   AND status IN ('queued', 'validating', 'acquiring', 'staging', 'scanning', 'organizing', 'indexing')",
+                params![lead.artist, lead.title],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if duplicate_active > 0 {
+            duplicates += 1;
+            outcomes.push(AcquisitionLeadOutcome {
+                artist: lead.artist.clone(),
+                title: lead.title.clone(),
+                provider: lead.provider.clone(),
+                status: "duplicate_active".to_string(),
+                detail: "Already queued or in active acquisition lifecycle.".to_string(),
+                queue_item_id: None,
+            });
+            continue;
+        }
+
+        queue_position += 1;
+        let now = chrono::Utc::now().to_rfc3339();
+        let reason = lead.reason.trim();
+        let summary = if reason.is_empty() {
+            None
+        } else {
+            Some(reason)
+        };
+        let insert_result = conn.execute(
+                "INSERT INTO acquisition_queue
+                 (artist, title, album, status, queue_position, priority_score, source, added_at,
+                  status_message, validation_confidence, validation_summary, lifecycle_stage,
+                  lifecycle_progress, lifecycle_note, updated_at)
+                 VALUES (?1, ?2, NULL, 'queued', ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'queued', 0.0, ?7, ?6)",
+                params![
+                    lead.artist,
+                    lead.title,
+                    queue_position,
+                    lead.score.clamp(0.0, 1.0),
+                    lead.provider,
+                    now,
+                    summary.unwrap_or("Queued from recommendation lead"),
+                    lead.score.clamp(0.0, 1.0),
+                    summary,
+                ],
+            );
+        match insert_result {
+            Ok(_) => {
+                added += 1;
+                outcomes.push(AcquisitionLeadOutcome {
+                    artist: lead.artist.clone(),
+                    title: lead.title.clone(),
+                    provider: lead.provider.clone(),
+                    status: "queued".to_string(),
+                    detail: "Queued from recommendation lead.".to_string(),
+                    queue_item_id: Some(conn.last_insert_rowid()),
+                });
+            }
+            Err(error) => {
+                errors += 1;
+                outcomes.push(AcquisitionLeadOutcome {
+                    artist: lead.artist.clone(),
+                    title: lead.title.clone(),
+                    provider: lead.provider.clone(),
+                    status: "error".to_string(),
+                    detail: error.to_string(),
+                    queue_item_id: None,
+                });
+            }
+        }
+    }
+    Ok(AcquisitionLeadHandoffReport {
+        outcomes,
+        queued_count: i64::try_from(added).unwrap_or(0),
+        duplicate_count: i64::try_from(duplicates).unwrap_or(0),
+        error_count: i64::try_from(errors).unwrap_or(0),
+    })
+}
+
+#[derive(Clone, Debug)]
+struct WeatherRecording {
+    artist: String,
+    title: String,
+    listen_count: i64,
+    similarity_score: f64,
+    source_artist: String,
+}
+
+#[derive(Clone, Debug)]
+struct SimilarArtist {
+    mbid: String,
+    name: String,
+    similarity: f64,
+}
+
+#[derive(Clone, Debug)]
+struct ListenBrainzRuntimeConfig {
+    token: String,
+    base_url: String,
+}
+
+fn parse_weather_row(row: &Value) -> Option<WeatherRecording> {
+    let artist = row.get("artist")?.as_str()?.trim().to_string();
+    let title = row.get("title")?.as_str()?.trim().to_string();
+    if artist.is_empty() || title.is_empty() {
+        return None;
+    }
+    let listen_count = row
+        .get("listen_count")
+        .or_else(|| row.get("play_count"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        .max(0);
+    let similarity_score = row
+        .get("similarity_score")
+        .or_else(|| row.get("similarity"))
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0)
+        .clamp(0.0, 1.0);
+    let source_artist = row
+        .get("source_artist")
+        .and_then(Value::as_str)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| artist.clone());
+
+    Some(WeatherRecording {
+        artist,
+        title,
+        listen_count,
+        similarity_score,
+        source_artist,
+    })
+}
+
+fn load_listenbrainz_runtime_config(conn: &Connection) -> Result<ListenBrainzRuntimeConfig, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT enabled, config_json
+             FROM provider_configs
+             WHERE provider_key = 'listenbrainz'
+             LIMIT 1",
+        )
+        .map_err(|_| "provider config table unavailable".to_string())?;
+    let row = stmt
+        .query_row([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|_| "listenbrainz provider config missing".to_string())?;
+
+    if row.0 == 0 {
+        return Err("listenbrainz provider disabled".to_string());
+    }
+    let parsed = serde_json::from_str::<Value>(&row.1)
+        .map_err(|_| "listenbrainz config is invalid json".to_string())?;
+    let token = parsed
+        .get("listenbrainz_token")
+        .or_else(|| parsed.get("LISTENBRAINZ_TOKEN"))
+        .and_then(Value::as_str)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "listenbrainz token missing".to_string())?;
+    let base_url = parsed
+        .get("listenbrainz_base_url")
+        .and_then(Value::as_str)
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "https://api.listenbrainz.org/1".to_string());
+
+    Ok(ListenBrainzRuntimeConfig { token, base_url })
+}
+
+fn fetch_artist_mbid(artist_name: &str) -> Result<String, String> {
+    let response = ureq::get("https://musicbrainz.org/ws/2/artist")
+        .set("User-Agent", "Lyra/0.1")
+        .set("Accept", "application/json")
+        .query("query", &format!("artist:{}", artist_name))
+        .query("fmt", "json")
+        .query("limit", "1")
+        .timeout(std::time::Duration::from_millis(2500))
+        .call()
+        .map_err(|error| format!("mbid lookup failed: {error}"))?;
+    let body: Value = response
+        .into_json()
+        .map_err(|error| format!("mbid response json parse failed: {error}"))?;
+    body.get("artists")
+        .and_then(Value::as_array)
+        .and_then(|artists| artists.first())
+        .and_then(|artist| artist.get("id"))
+        .and_then(Value::as_str)
+        .map(|value| value.to_string())
+        .ok_or_else(|| "mbid not found".to_string())
+}
+
+fn fetch_similar_artists(
+    config: &ListenBrainzRuntimeConfig,
+    seed_mbid: &str,
+    count: usize,
+) -> Result<Vec<SimilarArtist>, String> {
+    let endpoint = format!("{}/similarity/artist/{}/", config.base_url, seed_mbid);
+    let response = ureq::get(&endpoint)
+        .set("User-Agent", "Lyra/0.1")
+        .set("Accept", "application/json")
+        .set("Authorization", &format!("Token {}", config.token))
+        .query("count", &count.to_string())
+        .timeout(std::time::Duration::from_millis(2500))
+        .call()
+        .map_err(|error| format!("similar-artists fetch failed: {error}"))?;
+    let body: Value = response
+        .into_json()
+        .map_err(|error| format!("similar-artists json parse failed: {error}"))?;
+
+    let raw = if body.is_array() {
+        body.as_array().cloned().unwrap_or_default()
+    } else {
+        body.get("similar_artists")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    let mut artists: Vec<SimilarArtist> = raw
+        .into_iter()
+        .filter_map(|item| {
+            let mbid = item
+                .get("artist_mbid")
+                .or_else(|| item.get("mbid"))
+                .and_then(Value::as_str)?
+                .trim()
+                .to_string();
+            let name = item
+                .get("name")
+                .or_else(|| item.get("artist_name"))
+                .and_then(Value::as_str)?
+                .trim()
+                .to_string();
+            if mbid.is_empty() || name.is_empty() {
+                return None;
+            }
+            let similarity = item
+                .get("similarity")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0)
+                .clamp(0.0, 1.0);
+            Some(SimilarArtist {
+                mbid,
+                name,
+                similarity,
+            })
+        })
+        .collect();
+
+    artists.sort_by(|a, b| {
+        b.similarity
+            .partial_cmp(&a.similarity)
+            .unwrap_or(Ordering::Equal)
+    });
+    artists.truncate(count);
+    Ok(artists)
+}
+
+fn fetch_top_recordings(
+    config: &ListenBrainzRuntimeConfig,
+    artist_mbid: &str,
+    artist_name: &str,
+    count: usize,
+) -> Result<Vec<WeatherRecording>, String> {
+    let endpoint = format!(
+        "{}/popularity/top-recordings-for-artist/{}",
+        config.base_url, artist_mbid
+    );
+    let response = ureq::get(&endpoint)
+        .set("User-Agent", "Lyra/0.1")
+        .set("Accept", "application/json")
+        .set("Authorization", &format!("Token {}", config.token))
+        .query("count", &count.to_string())
+        .timeout(std::time::Duration::from_millis(2500))
+        .call()
+        .map_err(|error| format!("top-recordings fetch failed: {error}"))?;
+    let body: Value = response
+        .into_json()
+        .map_err(|error| format!("top-recordings json parse failed: {error}"))?;
+
+    let rows = if body.is_array() {
+        body.as_array().cloned().unwrap_or_default()
+    } else {
+        body.get("recordings")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    let mut recordings: Vec<WeatherRecording> = rows
+        .into_iter()
+        .filter_map(|row| {
+            let title = row
+                .get("recording_name")
+                .or_else(|| row.get("title"))
+                .and_then(Value::as_str)?
+                .trim()
+                .to_string();
+            if title.is_empty() {
+                return None;
+            }
+            let artist = row
+                .get("artist_name")
+                .and_then(Value::as_str)
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| artist_name.to_string());
+            let listen_count = row
+                .get("total_listen_count")
+                .or_else(|| row.get("listen_count"))
+                .and_then(Value::as_i64)
+                .unwrap_or(0)
+                .max(0);
+            Some(WeatherRecording {
+                artist,
+                title,
+                listen_count,
+                similarity_score: 0.0,
+                source_artist: artist_name.to_string(),
+            })
+        })
+        .collect();
+    recordings.truncate(count);
+    Ok(recordings)
+}
+
+fn cache_weather_recordings(conn: &Connection, seed_artist: &str, rows: &[WeatherRecording]) {
+    let payload = Value::Array(
+        rows.iter()
+            .map(|row| {
+                serde_json::json!({
+                    "artist": row.artist,
+                    "title": row.title,
+                    "listen_count": row.listen_count,
+                    "similarity_score": row.similarity_score,
+                    "source_artist": row.source_artist
+                })
+            })
+            .collect(),
+    );
+    let lookup_key = seed_artist.trim().to_ascii_lowercase();
+    let _ = conn.execute(
+        "INSERT INTO enrich_cache (provider, lookup_key, payload_json, fetched_at)
+         VALUES ('listenbrainz_weather', ?1, ?2, ?3)
+         ON CONFLICT(provider, lookup_key) DO UPDATE SET
+           payload_json = excluded.payload_json,
+           fetched_at = excluded.fetched_at",
+        params![
+            lookup_key,
+            serde_json::json!({ "recordings": payload }).to_string(),
+            chrono::Utc::now().to_rfc3339()
+        ],
+    );
+}
+
+fn fetch_live_weather_recordings(
+    conn: &Connection,
+    seed_artist: &str,
+    limit: usize,
+) -> Result<Vec<WeatherRecording>, String> {
+    let config = load_listenbrainz_runtime_config(conn)?;
+    let seed_mbid = fetch_artist_mbid(seed_artist)?;
+    let similar_count = std::cmp::max(2, std::cmp::min(5, limit));
+    let recordings_per_artist = std::cmp::max(1, std::cmp::min(4, limit / 2));
+    let similar_artists = fetch_similar_artists(&config, &seed_mbid, similar_count)?;
+    if similar_artists.is_empty() {
+        return Err("no similar artists found".to_string());
+    }
+
+    let mut rows = Vec::new();
+    for similar in similar_artists {
+        let top_recordings =
+            fetch_top_recordings(&config, &similar.mbid, &similar.name, recordings_per_artist)?;
+        for mut row in top_recordings {
+            row.similarity_score = similar.similarity;
+            row.source_artist = seed_artist.to_string();
+            rows.push(row);
+        }
+    }
+    if rows.is_empty() {
+        return Err("no weather recordings found".to_string());
+    }
+
+    rows.sort_by(|a, b| {
+        weather_score(b)
+            .partial_cmp(&weather_score(a))
+            .unwrap_or(Ordering::Equal)
+    });
+    rows.truncate(limit);
+    cache_weather_recordings(conn, seed_artist, &rows);
+    Ok(rows)
+}
+
+fn parse_weather_payload(payload: &Value) -> Vec<WeatherRecording> {
+    let rows = payload
+        .get("recordings")
+        .and_then(Value::as_array)
+        .or_else(|| payload.get("similar_artist_recordings").and_then(Value::as_array))
+        .or_else(|| payload.get("data").and_then(Value::as_array))
+        .or_else(|| payload.as_array());
+
+    rows.map(|items| {
+        items
+            .iter()
+            .filter_map(parse_weather_row)
+            .collect::<Vec<WeatherRecording>>()
+    })
+    .unwrap_or_default()
+}
+
+fn weather_score(recording: &WeatherRecording) -> f64 {
+    let popularity = (recording.listen_count.max(10) as f64).log10() / 5.0;
+    (0.25 + 0.5 * recording.similarity_score + 0.15 * popularity.clamp(0.0, 1.0)).clamp(0.0, 1.0)
+}
+
+fn find_local_track_by_artist_title(conn: &Connection, artist: &str, title: &str) -> Option<i64> {
+    conn.query_row(
+        "SELECT t.id
+         FROM tracks t
+         LEFT JOIN artists ar ON ar.id = t.artist_id
+         WHERE LOWER(TRIM(COALESCE(ar.name, ''))) = LOWER(TRIM(?1))
+           AND LOWER(TRIM(t.title)) = LOWER(TRIM(?2))
+         ORDER BY t.id DESC
+         LIMIT 1",
+        params![artist, title],
+        |row| row.get::<_, i64>(0),
+    )
+    .ok()
+}
+
+fn load_cached_weather_recordings(
+    conn: &Connection,
+    seed_artist: &str,
+    limit: usize,
+) -> Vec<WeatherRecording> {
+    let normalized = seed_artist.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return Vec::new();
+    }
+
+    let mut rows = Vec::new();
+    let query = conn.prepare(
+        "SELECT payload_json
+         FROM enrich_cache
+         WHERE provider = 'listenbrainz_weather'
+         ORDER BY fetched_at DESC
+         LIMIT 12",
+    );
+    let Ok(mut stmt) = query else {
+        return Vec::new();
+    };
+
+    let mapped = stmt.query_map([], |row| row.get::<_, String>(0));
+    if let Ok(mapped) = mapped {
+        for raw_json in mapped.filter_map(Result::ok) {
+            let Ok(payload) = serde_json::from_str::<Value>(&raw_json) else {
+                continue;
+            };
+            for entry in parse_weather_payload(&payload) {
+                let source = entry.source_artist.trim().to_ascii_lowercase();
+                if source == normalized {
+                    rows.push(entry);
+                }
+            }
+        }
+    }
+
+    rows.sort_by(|a, b| {
+        weather_score(b)
+            .partial_cmp(&weather_score(a))
+            .unwrap_or(Ordering::Equal)
+    });
+    rows.truncate(limit);
+    rows
+}
 
 pub struct RecommendationBroker<'conn> {
     conn: &'conn Connection,
@@ -209,22 +865,40 @@ impl<'conn> RecommendationBroker<'conn> {
     /// - local/deep_cut (implicit): low-play tracks that score well
     /// - scout/bridge (0.10): cross-genre bridge candidates from local library
     /// - graph/co_play (0.10): artists with graph affinity to taste anchors
-    pub fn recommend_with_evidence(
+    pub fn recommend_with_evidence_and_leads(
         &self,
         taste: &TasteProfile,
         limit: usize,
-    ) -> Vec<RecommendationResult> {
+    ) -> RecommendationBundle {
         use crate::library;
 
         if taste.dimensions.is_empty() || limit == 0 {
-            return Vec::new();
+            return RecommendationBundle {
+                recommendations: Vec::new(),
+                acquisition_leads: Vec::new(),
+            };
         }
 
         let interpreter = MoodInterpreter;
         let taste_label = interpreter.label(&taste.dimensions);
 
         // --- Lane 1: local taste alignment ---
-        let local_scored = self.recommend_scored(taste, limit * 2);
+        let mut local_scored = self.recommend_scored(taste, limit * 2);
+        let feedback_bias = load_feedback_bias(
+            self.conn,
+            &local_scored
+                .iter()
+                .map(|(track_id, _)| *track_id)
+                .collect::<Vec<_>>(),
+        );
+        if !feedback_bias.is_empty() {
+            for (track_id, score) in &mut local_scored {
+                if let Some(bias) = feedback_bias.get(track_id) {
+                    *score = (*score + *bias).clamp(0.0, 1.0);
+                }
+            }
+            local_scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        }
 
         // Load play counts for deep-cut detection
         let play_counts: HashMap<i64, i64> = {
@@ -282,8 +956,8 @@ impl<'conn> RecommendationBroker<'conn> {
             map
         };
 
-        let mut results: Vec<RecommendationResult> = Vec::new();
-        let mut seen_ids: std::collections::HashSet<i64> = std::collections::HashSet::new();
+        let mut merged_results: HashMap<i64, RecommendationResult> = HashMap::new();
+        let mut merged_leads: HashMap<String, AcquisitionLead> = HashMap::new();
 
         for (track_id, raw_score) in &local_scored {
             let track_id = *track_id;
@@ -308,6 +982,7 @@ impl<'conn> RecommendationBroker<'conn> {
                 .map(|sr| interpreter.label(&scores_to_map(sr)))
                 .unwrap_or_default();
 
+            let feedback_delta = feedback_bias.get(&track_id).copied().unwrap_or(0.0);
             let is_deep_cut = play_count <= 3 && raw_score >= 0.55;
             let provider = if is_deep_cut {
                 "local/deep_cut"
@@ -359,27 +1034,43 @@ impl<'conn> RecommendationBroker<'conn> {
                 "Cosine similarity inferred from local taste profile.".to_string()
             };
 
-            results.push(RecommendationResult {
-                track,
-                score: raw_score,
-                provider: provider.clone(),
-                why_this_track: why,
-                evidence: vec![
-                    EvidenceItem {
-                        type_label: evidence_type.to_string(),
-                        source: provider,
-                        text: evidence_text,
-                        weight: 0.45,
+            let mut evidence = vec![
+                EvidenceItem {
+                    type_label: evidence_type.to_string(),
+                    source: provider.clone(),
+                    text: evidence_text,
+                    weight: 0.45,
+                },
+                EvidenceItem {
+                    type_label: "inferred".to_string(),
+                    source: "local".to_string(),
+                    text: inferred_note,
+                    weight: 0.1,
+                },
+            ];
+            if feedback_delta != 0.0 {
+                evidence.push(EvidenceItem {
+                    type_label: "feedback_history".to_string(),
+                    source: "broker".to_string(),
+                    text: if feedback_delta > 0.0 {
+                        "Past accepts and replays are reinforcing this pick.".to_string()
+                    } else {
+                        "Past skips are suppressing this pick.".to_string()
                     },
-                    EvidenceItem {
-                        type_label: "inferred".to_string(),
-                        source: "local".to_string(),
-                        text: inferred_note,
-                        weight: 0.1,
-                    },
-                ],
-            });
-            seen_ids.insert(track_id);
+                    weight: feedback_delta.abs(),
+                });
+            }
+
+            merge_recommendation_result(
+                &mut merged_results,
+                RecommendationResult {
+                    track,
+                    score: raw_score,
+                    provider: provider.clone(),
+                    why_this_track: why,
+                    evidence,
+                },
+            );
         }
 
         // --- Lane 2: scout/bridge — find local tracks in bridge genres ---
@@ -421,9 +1112,6 @@ impl<'conn> RecommendationBroker<'conn> {
                 };
 
                 for bridge_id in bridge_ids {
-                    if seen_ids.contains(&bridge_id) {
-                        continue;
-                    }
                     let Ok(Some(track)) = library::get_track_by_id(self.conn, bridge_id) else {
                         continue;
                     };
@@ -454,19 +1142,21 @@ impl<'conn> RecommendationBroker<'conn> {
                         bridge_score * 100.0
                     );
 
-                    results.push(RecommendationResult {
-                        track,
-                        score: bridge_score * 0.82,
-                        provider: "scout/bridge".to_string(),
-                        why_this_track: why,
-                        evidence: vec![EvidenceItem {
-                            type_label: "scout_bridge".to_string(),
-                            source: "scout".to_string(),
-                            text: evidence_text,
-                            weight: 0.10,
-                        }],
-                    });
-                    seen_ids.insert(bridge_id);
+                    merge_recommendation_result(
+                        &mut merged_results,
+                        RecommendationResult {
+                            track,
+                            score: bridge_score * 0.82,
+                            provider: "scout/bridge".to_string(),
+                            why_this_track: why,
+                            evidence: vec![EvidenceItem {
+                                type_label: "scout_bridge".to_string(),
+                                source: "scout".to_string(),
+                                text: evidence_text,
+                                weight: 0.10,
+                            }],
+                        },
+                    );
                 }
             }
         }
@@ -520,10 +1210,30 @@ impl<'conn> RecommendationBroker<'conn> {
                         )
                         .ok();
 
-                    let Some(track_id) = track_row else { continue };
-                    if seen_ids.contains(&track_id) {
+                    let Some(track_id) = track_row else {
+                        let lead_score = ((graph_score as f64 / 100.0) * 0.6).clamp(0.0, 1.0);
+                        let reason = format!(
+                            "Scout graph lead: {} is strongly adjacent to {} but has no owned track match yet.",
+                            connected_artist, anchor
+                        );
+                        merge_acquisition_lead(
+                            &mut merged_leads,
+                            AcquisitionLead {
+                                artist: connected_artist.clone(),
+                                title: "Top track (scout lead)".to_string(),
+                                provider: "scout/graph".to_string(),
+                                score: lead_score,
+                                reason: reason.clone(),
+                                evidence: vec![EvidenceItem {
+                                    type_label: "scout_graph_artist_lead".to_string(),
+                                    source: "scout".to_string(),
+                                    text: reason,
+                                    weight: lead_score,
+                                }],
+                            },
+                        );
                         continue;
-                    }
+                    };
                     let Ok(Some(track)) = library::get_track_by_id(self.conn, track_id) else {
                         continue;
                     };
@@ -534,49 +1244,132 @@ impl<'conn> RecommendationBroker<'conn> {
                         anchor, connected_artist
                     );
 
-                    results.push(RecommendationResult {
-                        track,
-                        score: co_score * 0.72,
-                        provider: "graph/co_play".to_string(),
-                        why_this_track: why.clone(),
-                        evidence: vec![EvidenceItem {
-                            type_label: "co_play".to_string(),
-                            source: "graph".to_string(),
-                            text: format!(
-                                "Artist graph connection: {} → {}. Affinity score {}.",
-                                anchor, connected_artist, graph_score
-                            ),
-                            weight: 0.10,
-                        }],
-                    });
-                    seen_ids.insert(track_id);
+                    merge_recommendation_result(
+                        &mut merged_results,
+                        RecommendationResult {
+                            track,
+                            score: co_score * 0.72,
+                            provider: "graph/co_play".to_string(),
+                            why_this_track: why.clone(),
+                            evidence: vec![EvidenceItem {
+                                type_label: "co_play".to_string(),
+                                source: "graph".to_string(),
+                                text: format!(
+                                    "Artist graph connection: {} → {}. Affinity score {}.",
+                                    anchor, connected_artist, graph_score
+                                ),
+                                weight: 0.10,
+                            }],
+                        },
+                    );
                 }
             }
         }
 
-        // Sort: local taste first by score, then scout, then graph
-        results.sort_by(|a, b| {
-            let provider_rank = |p: &str| -> u8 {
-                if p.starts_with("local/taste") {
-                    0
-                } else if p.starts_with("local/deep_cut") {
-                    1
-                } else if p.starts_with("scout") {
-                    2
-                } else {
-                    3
-                }
+        // --- Lane 4: listenbrainz/weather — cached similar-artist community recordings ---
+        let weather_seed_artists: Vec<String> = local_scored
+            .iter()
+            .take(3)
+            .filter_map(|(track_id, _)| {
+                library::get_track_by_id(self.conn, *track_id)
+                    .ok()
+                    .flatten()
+                    .map(|track| track.artist)
+            })
+            .collect();
+
+        for seed_artist in weather_seed_artists.iter().take(2) {
+            let live_result = fetch_live_weather_recordings(self.conn, seed_artist, limit * 3);
+            let (weather_candidates, weather_source_mode) = match live_result {
+                Ok(rows) if !rows.is_empty() => (rows, "live"),
+                Ok(_) => (
+                    load_cached_weather_recordings(self.conn, seed_artist, limit * 3),
+                    "cache",
+                ),
+                Err(_) => (
+                    load_cached_weather_recordings(self.conn, seed_artist, limit * 3),
+                    "cache_fallback",
+                ),
             };
-            let pa = provider_rank(&a.provider);
-            let pb = provider_rank(&b.provider);
-            if pa != pb {
-                return pa.cmp(&pb);
+            for recording in weather_candidates {
+                let maybe_track_id =
+                    find_local_track_by_artist_title(self.conn, &recording.artist, &recording.title);
+
+                let raw = weather_score(&recording);
+                let weighted = (raw * 0.68).clamp(0.0, 1.0);
+                let mut reason = format!(
+                    "Community weather: listeners around {} also move toward {} — {} global plays.",
+                    recording.source_artist, recording.artist, recording.listen_count
+                );
+                if weather_source_mode == "cache_fallback" {
+                    reason.push_str(" Using cached fallback because live weather was unavailable.");
+                } else if weather_source_mode == "cache" {
+                    reason.push_str(" Using cached weather evidence.");
+                }
+                let evidence_type = if weather_source_mode == "live" {
+                    "community_similar_artist"
+                } else {
+                    "community_similar_artist_cached"
+                };
+
+                let evidence = vec![EvidenceItem {
+                    type_label: evidence_type.to_string(),
+                    source: "listenbrainz_weather".to_string(),
+                    text: reason.clone(),
+                    weight: (raw * LISTENBRAINZ_WEATHER_WEIGHT).clamp(0.0, 1.0),
+                }];
+
+                if let Some(track_id) = maybe_track_id {
+                    let Ok(Some(track)) = library::get_track_by_id(self.conn, track_id) else {
+                        continue;
+                    };
+                    merge_recommendation_result(
+                        &mut merged_results,
+                        RecommendationResult {
+                            track,
+                            score: weighted,
+                            provider: "listenbrainz/weather".to_string(),
+                            why_this_track: reason.clone(),
+                            evidence,
+                        },
+                    );
+                } else {
+                    merge_acquisition_lead(
+                        &mut merged_leads,
+                        AcquisitionLead {
+                            artist: recording.artist.clone(),
+                            title: recording.title.clone(),
+                            provider: "listenbrainz/weather".to_string(),
+                            score: weighted,
+                            reason,
+                            evidence,
+                        },
+                    );
+                }
             }
-            b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal)
-        });
+        }
+
+        let mut results: Vec<RecommendationResult> = merged_results.into_values().collect();
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
 
         results.truncate(limit);
-        results
+        let mut acquisition_leads: Vec<AcquisitionLead> = merged_leads.into_values().collect();
+        acquisition_leads.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        acquisition_leads.truncate(limit);
+
+        RecommendationBundle {
+            recommendations: results,
+            acquisition_leads,
+        }
+    }
+
+    pub fn recommend_with_evidence(
+        &self,
+        taste: &TasteProfile,
+        limit: usize,
+    ) -> Vec<RecommendationResult> {
+        self.recommend_with_evidence_and_leads(taste, limit)
+            .recommendations
     }
 }
 
@@ -1319,5 +2112,853 @@ fn describe_texture(space: f64, density: f64, rawness: f64) -> &'static str {
         "close"
     } else {
         "balanced"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{enqueue_acquisition_leads, record_recommendation_feedback, RecommendationBroker};
+    use crate::commands::TasteProfile;
+    use rusqlite::Connection;
+    use std::collections::HashMap;
+
+    #[test]
+    fn feedback_bias_can_reorder_local_recommendations() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite");
+        conn.execute_batch(
+            "
+            CREATE TABLE artists (
+              id INTEGER PRIMARY KEY,
+              name TEXT NOT NULL
+            );
+            CREATE TABLE albums (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              title TEXT NOT NULL
+            );
+            CREATE TABLE tracks (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              album_id INTEGER,
+              title TEXT NOT NULL,
+              path TEXT NOT NULL UNIQUE,
+              duration_seconds REAL NOT NULL DEFAULT 0,
+              genre TEXT,
+              year TEXT,
+              bpm REAL,
+              key_signature TEXT,
+              liked_at TEXT,
+              status TEXT NOT NULL DEFAULT 'active'
+            );
+            CREATE TABLE track_scores (
+              track_id INTEGER PRIMARY KEY,
+              energy REAL,
+              valence REAL,
+              tension REAL,
+              density REAL,
+              warmth REAL,
+              movement REAL,
+              space REAL,
+              rawness REAL,
+              complexity REAL,
+              nostalgia REAL,
+              bpm REAL,
+              key_signature TEXT,
+              scored_at TEXT NOT NULL,
+              score_version INTEGER NOT NULL DEFAULT 2
+            );
+            CREATE TABLE playback_history (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              track_id INTEGER NOT NULL,
+              ts TEXT NOT NULL
+            );
+            ",
+        )
+        .expect("schema");
+
+        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Artist A')", [])
+            .expect("artist a");
+        conn.execute("INSERT INTO artists (id, name) VALUES (2, 'Artist B')", [])
+            .expect("artist b");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'Album A')",
+            [],
+        )
+        .expect("album a");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (2, 2, 'Album B')",
+            [],
+        )
+        .expect("album b");
+
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, status)
+             VALUES (1, 1, 1, 'Track One', 'C:/tmp/one.mp3', 200, 'active')",
+            [],
+        )
+        .expect("track one");
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, status)
+             VALUES (2, 2, 2, 'Track Two', 'C:/tmp/two.mp3', 210, 'active')",
+            [],
+        )
+        .expect("track two");
+
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia,
+               bpm, key_signature, scored_at, score_version
+             )
+             VALUES (1, 0.58, 0.58, 0.58, 0.58, 0.58, 0.58, 0.58, 0.58, 0.58, 0.58, NULL, NULL, '2026-03-09T00:00:00Z', 2)",
+            [],
+        )
+        .expect("score one");
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia,
+               bpm, key_signature, scored_at, score_version
+             )
+             VALUES (2, 0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 0.62, NULL, NULL, '2026-03-09T00:00:00Z', 2)",
+            [],
+        )
+        .expect("score two");
+
+        let taste = TasteProfile {
+            dimensions: HashMap::from([
+                ("energy".to_string(), 0.62),
+                ("valence".to_string(), 0.62),
+                ("tension".to_string(), 0.62),
+                ("density".to_string(), 0.62),
+                ("warmth".to_string(), 0.62),
+                ("movement".to_string(), 0.62),
+                ("space".to_string(), 0.62),
+                ("rawness".to_string(), 0.62),
+                ("complexity".to_string(), 0.62),
+                ("nostalgia".to_string(), 0.62),
+            ]),
+            confidence: 1.0,
+            total_signals: 10,
+            source: "test".to_string(),
+        };
+
+        let broker = RecommendationBroker::new(&conn);
+        let before = broker.recommend_with_evidence(&taste, 2);
+        assert_eq!(before.len(), 2);
+        assert_eq!(before[0].track.id, 2);
+
+        record_recommendation_feedback(&conn, 1, "play");
+        record_recommendation_feedback(&conn, 1, "play");
+        record_recommendation_feedback(&conn, 2, "dismiss");
+
+        let after = broker.recommend_with_evidence(&taste, 2);
+        assert_eq!(after.len(), 2);
+        assert_eq!(after[0].track.id, 1);
+        assert!(
+            after[0]
+                .evidence
+                .iter()
+                .any(|item| item.type_label == "feedback_history")
+        );
+    }
+
+    #[test]
+    fn listenbrainz_weather_lane_uses_cached_recordings() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite");
+        conn.execute_batch(
+            "
+            CREATE TABLE artists (
+              id INTEGER PRIMARY KEY,
+              name TEXT NOT NULL
+            );
+            CREATE TABLE albums (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              title TEXT NOT NULL
+            );
+            CREATE TABLE tracks (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              album_id INTEGER,
+              title TEXT NOT NULL,
+              path TEXT NOT NULL UNIQUE,
+              duration_seconds REAL NOT NULL DEFAULT 0,
+              genre TEXT,
+              year TEXT,
+              bpm REAL,
+              key_signature TEXT,
+              liked_at TEXT,
+              status TEXT NOT NULL DEFAULT 'active'
+            );
+            CREATE TABLE track_scores (
+              track_id INTEGER PRIMARY KEY,
+              energy REAL,
+              valence REAL,
+              tension REAL,
+              density REAL,
+              warmth REAL,
+              movement REAL,
+              space REAL,
+              rawness REAL,
+              complexity REAL,
+              nostalgia REAL,
+              bpm REAL,
+              key_signature TEXT,
+              scored_at TEXT NOT NULL,
+              score_version INTEGER NOT NULL DEFAULT 2
+            );
+            CREATE TABLE playback_history (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              track_id INTEGER NOT NULL,
+              ts TEXT NOT NULL
+            );
+            CREATE TABLE enrich_cache (
+              provider TEXT NOT NULL,
+              lookup_key TEXT NOT NULL,
+              payload_json TEXT NOT NULL,
+              fetched_at TEXT NOT NULL,
+              PRIMARY KEY(provider, lookup_key)
+            );
+            ",
+        )
+        .expect("schema");
+
+        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')", [])
+            .expect("seed artist");
+        conn.execute("INSERT INTO artists (id, name) VALUES (2, 'Weather Artist')", [])
+            .expect("weather artist");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'Seed Album')",
+            [],
+        )
+        .expect("seed album");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (2, 2, 'Weather Album')",
+            [],
+        )
+        .expect("weather album");
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, status)
+             VALUES (1, 1, 1, 'Seed Song', 'C:/tmp/seed.mp3', 180, 'active')",
+            [],
+        )
+        .expect("seed track");
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, status)
+             VALUES (2, 2, 2, 'Weather Song', 'C:/tmp/weather.mp3', 220, 'active')",
+            [],
+        )
+        .expect("weather track");
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia,
+               bpm, key_signature, scored_at, score_version
+             )
+             VALUES (1, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80, NULL, NULL, '2026-03-09T00:00:00Z', 2)",
+            [],
+        )
+        .expect("seed score");
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia,
+               bpm, key_signature, scored_at, score_version
+             )
+             VALUES (2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, NULL, NULL, '2026-03-09T00:00:00Z', 2)",
+            [],
+        )
+        .expect("weather score");
+
+        let payload = r#"{
+          "recordings": [
+            {
+              "artist": "Weather Artist",
+              "title": "Weather Song",
+              "listen_count": 42000,
+              "similarity_score": 0.88,
+              "source_artist": "Seed Artist"
+            }
+          ]
+        }"#;
+        conn.execute(
+            "INSERT INTO enrich_cache (provider, lookup_key, payload_json, fetched_at)
+             VALUES ('listenbrainz_weather', 'seed-artist', ?1, '2026-03-09T00:00:00Z')",
+            [payload],
+        )
+        .expect("cached weather payload");
+
+        let taste = TasteProfile {
+            dimensions: HashMap::from([
+                ("energy".to_string(), 0.80),
+                ("valence".to_string(), 0.80),
+                ("tension".to_string(), 0.80),
+                ("density".to_string(), 0.80),
+                ("warmth".to_string(), 0.80),
+                ("movement".to_string(), 0.80),
+                ("space".to_string(), 0.80),
+                ("rawness".to_string(), 0.80),
+                ("complexity".to_string(), 0.80),
+                ("nostalgia".to_string(), 0.80),
+            ]),
+            confidence: 1.0,
+            total_signals: 10,
+            source: "test".to_string(),
+        };
+
+        let broker = RecommendationBroker::new(&conn);
+        let recommendations = broker.recommend_with_evidence(&taste, 8);
+
+        let weather_hit = recommendations
+            .iter()
+            .find(|item| item.provider.contains("listenbrainz/weather") && item.track.id == 2);
+        assert!(weather_hit.is_some());
+        let weather_hit = weather_hit.expect("weather recommendation");
+        assert!(
+            weather_hit
+                .evidence
+                .iter()
+                .any(|item| item.type_label == "community_similar_artist_cached")
+        );
+    }
+
+    #[test]
+    fn listenbrainz_weather_falls_back_to_cache_when_live_fetch_fails() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite");
+        conn.execute_batch(
+            "
+            CREATE TABLE artists (
+              id INTEGER PRIMARY KEY,
+              name TEXT NOT NULL
+            );
+            CREATE TABLE albums (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              title TEXT NOT NULL
+            );
+            CREATE TABLE tracks (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              album_id INTEGER,
+              title TEXT NOT NULL,
+              path TEXT NOT NULL UNIQUE,
+              duration_seconds REAL NOT NULL DEFAULT 0,
+              genre TEXT,
+              year TEXT,
+              bpm REAL,
+              key_signature TEXT,
+              liked_at TEXT,
+              status TEXT NOT NULL DEFAULT 'active'
+            );
+            CREATE TABLE track_scores (
+              track_id INTEGER PRIMARY KEY,
+              energy REAL,
+              valence REAL,
+              tension REAL,
+              density REAL,
+              warmth REAL,
+              movement REAL,
+              space REAL,
+              rawness REAL,
+              complexity REAL,
+              nostalgia REAL,
+              bpm REAL,
+              key_signature TEXT,
+              scored_at TEXT NOT NULL,
+              score_version INTEGER NOT NULL DEFAULT 2
+            );
+            CREATE TABLE playback_history (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              track_id INTEGER NOT NULL,
+              ts TEXT NOT NULL
+            );
+            CREATE TABLE enrich_cache (
+              provider TEXT NOT NULL,
+              lookup_key TEXT NOT NULL,
+              payload_json TEXT NOT NULL,
+              fetched_at TEXT NOT NULL,
+              PRIMARY KEY(provider, lookup_key)
+            );
+            CREATE TABLE provider_configs (
+              provider_key TEXT PRIMARY KEY,
+              enabled INTEGER NOT NULL DEFAULT 0,
+              config_json TEXT NOT NULL DEFAULT '{}'
+            );
+            ",
+        )
+        .expect("schema");
+
+        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')", [])
+            .expect("seed artist");
+        conn.execute("INSERT INTO artists (id, name) VALUES (2, 'Weather Artist')", [])
+            .expect("weather artist");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'Seed Album')",
+            [],
+        )
+        .expect("seed album");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (2, 2, 'Weather Album')",
+            [],
+        )
+        .expect("weather album");
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, status)
+             VALUES (1, 1, 1, 'Seed Song', 'C:/tmp/seed2.mp3', 180, 'active')",
+            [],
+        )
+        .expect("seed track");
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, status)
+             VALUES (2, 2, 2, 'Weather Song', 'C:/tmp/weather2.mp3', 220, 'active')",
+            [],
+        )
+        .expect("weather track");
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia,
+               bpm, key_signature, scored_at, score_version
+             )
+             VALUES (1, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80, 0.80, NULL, NULL, '2026-03-09T00:00:00Z', 2)",
+            [],
+        )
+        .expect("seed score");
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia,
+               bpm, key_signature, scored_at, score_version
+             )
+             VALUES (2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, NULL, NULL, '2026-03-09T00:00:00Z', 2)",
+            [],
+        )
+        .expect("weather score");
+        conn.execute(
+            "INSERT INTO provider_configs (provider_key, enabled, config_json)
+             VALUES ('listenbrainz', 1, '{\"listenbrainz_token\":\"x\",\"listenbrainz_base_url\":\"http://127.0.0.1:1/1\"}')",
+            [],
+        )
+        .expect("listenbrainz config");
+
+        let payload = r#"{
+          "recordings": [
+            {
+              "artist": "Weather Artist",
+              "title": "Weather Song",
+              "listen_count": 8000,
+              "similarity_score": 0.75,
+              "source_artist": "Seed Artist"
+            }
+          ]
+        }"#;
+        conn.execute(
+            "INSERT INTO enrich_cache (provider, lookup_key, payload_json, fetched_at)
+             VALUES ('listenbrainz_weather', 'seed-artist', ?1, '2026-03-09T00:00:00Z')",
+            [payload],
+        )
+        .expect("cached weather");
+
+        let taste = TasteProfile {
+            dimensions: HashMap::from([
+                ("energy".to_string(), 0.80),
+                ("valence".to_string(), 0.80),
+                ("tension".to_string(), 0.80),
+                ("density".to_string(), 0.80),
+                ("warmth".to_string(), 0.80),
+                ("movement".to_string(), 0.80),
+                ("space".to_string(), 0.80),
+                ("rawness".to_string(), 0.80),
+                ("complexity".to_string(), 0.80),
+                ("nostalgia".to_string(), 0.80),
+            ]),
+            confidence: 1.0,
+            total_signals: 10,
+            source: "test".to_string(),
+        };
+
+        let broker = RecommendationBroker::new(&conn);
+        let recommendations = broker.recommend_with_evidence(&taste, 8);
+        let weather = recommendations
+            .iter()
+            .find(|item| item.provider.contains("listenbrainz/weather") && item.track.id == 2)
+            .expect("weather from cache fallback");
+        assert!(
+            weather
+                .evidence
+                .iter()
+                .any(|item| item.type_label == "community_similar_artist_cached")
+        );
+        assert!(
+            weather
+                .why_this_track
+                .contains("cached fallback")
+        );
+    }
+
+    #[test]
+    fn provider_fusion_can_rerank_when_weather_and_local_merge() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite");
+        conn.execute_batch(
+            "
+            CREATE TABLE artists (
+              id INTEGER PRIMARY KEY,
+              name TEXT NOT NULL
+            );
+            CREATE TABLE albums (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              title TEXT NOT NULL
+            );
+            CREATE TABLE tracks (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              album_id INTEGER,
+              title TEXT NOT NULL,
+              path TEXT NOT NULL UNIQUE,
+              duration_seconds REAL NOT NULL DEFAULT 0,
+              genre TEXT,
+              year TEXT,
+              bpm REAL,
+              key_signature TEXT,
+              liked_at TEXT,
+              status TEXT NOT NULL DEFAULT 'active'
+            );
+            CREATE TABLE track_scores (
+              track_id INTEGER PRIMARY KEY,
+              energy REAL,
+              valence REAL,
+              tension REAL,
+              density REAL,
+              warmth REAL,
+              movement REAL,
+              space REAL,
+              rawness REAL,
+              complexity REAL,
+              nostalgia REAL,
+              bpm REAL,
+              key_signature TEXT,
+              scored_at TEXT NOT NULL,
+              score_version INTEGER NOT NULL DEFAULT 2
+            );
+            CREATE TABLE playback_history (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              track_id INTEGER NOT NULL,
+              ts TEXT NOT NULL
+            );
+            CREATE TABLE enrich_cache (
+              provider TEXT NOT NULL,
+              lookup_key TEXT NOT NULL,
+              payload_json TEXT NOT NULL,
+              fetched_at TEXT NOT NULL,
+              PRIMARY KEY(provider, lookup_key)
+            );
+            ",
+        )
+        .expect("schema");
+
+        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')", [])
+            .expect("artist 1");
+        conn.execute("INSERT INTO artists (id, name) VALUES (2, 'Fused Artist')", [])
+            .expect("artist 2");
+        conn.execute("INSERT INTO artists (id, name) VALUES (3, 'Control Artist')", [])
+            .expect("artist 3");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'A')",
+            [],
+        )
+        .expect("album 1");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (2, 2, 'B')",
+            [],
+        )
+        .expect("album 2");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (3, 3, 'C')",
+            [],
+        )
+        .expect("album 3");
+
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, status)
+             VALUES (1, 1, 1, 'Seed Song', 'C:/tmp/fuse-seed.mp3', 180, 'active')",
+            [],
+        )
+        .expect("seed track");
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, status)
+             VALUES (2, 2, 2, 'Fused Song', 'C:/tmp/fuse-target.mp3', 200, 'active')",
+            [],
+        )
+        .expect("fused track");
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, status)
+             VALUES (3, 3, 3, 'Control Song', 'C:/tmp/fuse-control.mp3', 210, 'active')",
+            [],
+        )
+        .expect("control track");
+
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia,
+               bpm, key_signature, scored_at, score_version
+             )
+             VALUES (1, 0.88, 0.88, 0.88, 0.88, 0.88, 0.88, 0.88, 0.88, 0.88, 0.88, NULL, NULL, '2026-03-09T00:00:00Z', 2)",
+            [],
+        )
+        .expect("score seed");
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia,
+               bpm, key_signature, scored_at, score_version
+             )
+             VALUES (2, 0.86, 0.86, 0.86, 0.86, 0.86, 0.86, 0.86, 0.86, 0.86, 0.86, NULL, NULL, '2026-03-09T00:00:00Z', 2)",
+            [],
+        )
+        .expect("score fused");
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia,
+               bpm, key_signature, scored_at, score_version
+             )
+             VALUES (3, 0.89, 0.89, 0.89, 0.89, 0.89, 0.89, 0.89, 0.89, 0.89, 0.89, NULL, NULL, '2026-03-09T00:00:00Z', 2)",
+            [],
+        )
+        .expect("score control");
+
+        let payload = r#"{
+          "recordings": [
+            {
+              "artist": "Fused Artist",
+              "title": "Fused Song",
+              "listen_count": 99000,
+              "similarity_score": 0.92,
+              "source_artist": "Seed Artist"
+            }
+          ]
+        }"#;
+        conn.execute(
+            "INSERT INTO enrich_cache (provider, lookup_key, payload_json, fetched_at)
+             VALUES ('listenbrainz_weather', 'seed-artist', ?1, '2026-03-09T00:00:00Z')",
+            [payload],
+        )
+        .expect("weather payload");
+
+        let taste = TasteProfile {
+            dimensions: HashMap::from([
+                ("energy".to_string(), 0.90),
+                ("valence".to_string(), 0.90),
+                ("tension".to_string(), 0.90),
+                ("density".to_string(), 0.90),
+                ("warmth".to_string(), 0.90),
+                ("movement".to_string(), 0.90),
+                ("space".to_string(), 0.90),
+                ("rawness".to_string(), 0.90),
+                ("complexity".to_string(), 0.90),
+                ("nostalgia".to_string(), 0.90),
+            ]),
+            confidence: 1.0,
+            total_signals: 10,
+            source: "test".to_string(),
+        };
+
+        let broker = RecommendationBroker::new(&conn);
+        let results = broker.recommend_with_evidence(&taste, 5);
+        assert!(!results.is_empty());
+
+        let fused = results
+            .iter()
+            .find(|item| item.track.id == 2)
+            .expect("fused result");
+        assert!(fused.provider.contains("local/"));
+        assert!(fused.provider.contains("listenbrainz/weather"));
+        assert!(
+            fused
+                .evidence
+                .iter()
+                .any(|item| item.type_label == "community_similar_artist_cached")
+        );
+
+        assert_eq!(results[0].track.id, 2);
+    }
+
+    #[test]
+    fn non_local_weather_candidates_can_be_handed_off_to_acquisition_queue() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite");
+        conn.execute_batch(
+            "
+            CREATE TABLE artists (
+              id INTEGER PRIMARY KEY,
+              name TEXT NOT NULL
+            );
+            CREATE TABLE albums (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              title TEXT NOT NULL
+            );
+            CREATE TABLE tracks (
+              id INTEGER PRIMARY KEY,
+              artist_id INTEGER,
+              album_id INTEGER,
+              title TEXT NOT NULL,
+              path TEXT NOT NULL UNIQUE,
+              duration_seconds REAL NOT NULL DEFAULT 0,
+              genre TEXT,
+              year TEXT,
+              bpm REAL,
+              key_signature TEXT,
+              liked_at TEXT,
+              status TEXT NOT NULL DEFAULT 'active'
+            );
+            CREATE TABLE track_scores (
+              track_id INTEGER PRIMARY KEY,
+              energy REAL,
+              valence REAL,
+              tension REAL,
+              density REAL,
+              warmth REAL,
+              movement REAL,
+              space REAL,
+              rawness REAL,
+              complexity REAL,
+              nostalgia REAL,
+              bpm REAL,
+              key_signature TEXT,
+              scored_at TEXT NOT NULL,
+              score_version INTEGER NOT NULL DEFAULT 2
+            );
+            CREATE TABLE playback_history (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              track_id INTEGER NOT NULL,
+              ts TEXT NOT NULL
+            );
+            CREATE TABLE enrich_cache (
+              provider TEXT NOT NULL,
+              lookup_key TEXT NOT NULL,
+              payload_json TEXT NOT NULL,
+              fetched_at TEXT NOT NULL,
+              PRIMARY KEY(provider, lookup_key)
+            );
+            CREATE TABLE acquisition_queue (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              artist TEXT NOT NULL DEFAULT '',
+              title TEXT NOT NULL DEFAULT '',
+              album TEXT,
+              status TEXT NOT NULL DEFAULT 'queued',
+              queue_position INTEGER NOT NULL DEFAULT 0,
+              priority_score REAL NOT NULL DEFAULT 0.0,
+              source TEXT,
+              added_at TEXT NOT NULL,
+              status_message TEXT,
+              validation_confidence REAL,
+              validation_summary TEXT,
+              lifecycle_stage TEXT,
+              lifecycle_progress REAL,
+              lifecycle_note TEXT,
+              updated_at TEXT
+            );
+            ",
+        )
+        .expect("schema");
+
+        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')", [])
+            .expect("seed artist");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'Seed Album')",
+            [],
+        )
+        .expect("seed album");
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, status)
+             VALUES (1, 1, 1, 'Seed Song', 'C:/tmp/lead-seed.mp3', 180, 'active')",
+            [],
+        )
+        .expect("seed track");
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia,
+               bpm, key_signature, scored_at, score_version
+             )
+             VALUES (1, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, 0.85, NULL, NULL, '2026-03-09T00:00:00Z', 2)",
+            [],
+        )
+        .expect("score seed");
+
+        let payload = r#"{
+          "recordings": [
+            {
+              "artist": "Unowned Artist",
+              "title": "Unowned Song",
+              "listen_count": 70000,
+              "similarity_score": 0.81,
+              "source_artist": "Seed Artist"
+            }
+          ]
+        }"#;
+        conn.execute(
+            "INSERT INTO enrich_cache (provider, lookup_key, payload_json, fetched_at)
+             VALUES ('listenbrainz_weather', 'seed-artist', ?1, '2026-03-09T00:00:00Z')",
+            [payload],
+        )
+        .expect("weather payload");
+
+        let taste = TasteProfile {
+            dimensions: HashMap::from([
+                ("energy".to_string(), 0.85),
+                ("valence".to_string(), 0.85),
+                ("tension".to_string(), 0.85),
+                ("density".to_string(), 0.85),
+                ("warmth".to_string(), 0.85),
+                ("movement".to_string(), 0.85),
+                ("space".to_string(), 0.85),
+                ("rawness".to_string(), 0.85),
+                ("complexity".to_string(), 0.85),
+                ("nostalgia".to_string(), 0.85),
+            ]),
+            confidence: 1.0,
+            total_signals: 10,
+            source: "test".to_string(),
+        };
+
+        let broker = RecommendationBroker::new(&conn);
+        let bundle = broker.recommend_with_evidence_and_leads(&taste, 8);
+        assert!(!bundle.acquisition_leads.is_empty());
+        let lead = bundle
+            .acquisition_leads
+            .iter()
+            .find(|item| item.artist == "Unowned Artist" && item.title == "Unowned Song")
+            .expect("expected weather lead");
+        assert!(lead.provider.contains("listenbrainz/weather"));
+
+        let first_report = enqueue_acquisition_leads(&conn, &bundle.acquisition_leads)
+            .expect("enqueue acquisition leads");
+        assert!(first_report.queued_count >= 1);
+        assert_eq!(first_report.duplicate_count, 0);
+        assert_eq!(first_report.error_count, 0);
+        assert!(
+            first_report
+                .outcomes
+                .iter()
+                .any(|outcome| outcome.status == "queued")
+        );
+
+        let queue_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM acquisition_queue
+                 WHERE LOWER(artist) = LOWER('Unowned Artist')
+                   AND LOWER(title) = LOWER('Unowned Song')
+                   AND status = 'queued'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("queue count");
+        assert_eq!(queue_count, 1);
+
+        let second_report = enqueue_acquisition_leads(&conn, &bundle.acquisition_leads)
+            .expect("enqueue acquisition leads duplicate check");
+        assert_eq!(second_report.queued_count, 0);
+        assert!(second_report.duplicate_count >= 1);
+        assert_eq!(second_report.error_count, 0);
+        assert!(
+            second_report
+                .outcomes
+                .iter()
+                .any(|outcome| outcome.status == "duplicate_active")
+        );
     }
 }

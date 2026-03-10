@@ -976,6 +976,46 @@ pub struct RecommendationResult {
     pub evidence: Vec<EvidenceItem>,
 }
 
+/// Non-local recommendation output that can be handed off into acquisition.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcquisitionLead {
+    pub artist: String,
+    pub title: String,
+    pub provider: String,
+    pub score: f64,
+    pub reason: String,
+    pub evidence: Vec<EvidenceItem>,
+}
+
+/// Broker output including both owned-library recommendations and acquisition leads.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecommendationBundle {
+    pub recommendations: Vec<RecommendationResult>,
+    pub acquisition_leads: Vec<AcquisitionLead>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcquisitionLeadOutcome {
+    pub artist: String,
+    pub title: String,
+    pub provider: String,
+    pub status: String, // queued | duplicate_active | error
+    pub detail: String,
+    pub queue_item_id: Option<i64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcquisitionLeadHandoffReport {
+    pub outcomes: Vec<AcquisitionLeadOutcome>,
+    pub queued_count: i64,
+    pub duplicate_count: i64,
+    pub error_count: i64,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistConnection {

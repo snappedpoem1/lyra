@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
+  AcquisitionLeadHandoffReport,
   AcquisitionQueueItem,
   AcquisitionPreflight,
   AppShellState,
@@ -32,7 +33,9 @@ import type {
   ProviderValidationResult,
   QueueItemRecord,
   RecentPlayRecord,
+  RecommendationBundle,
   RecommendationResult,
+  AcquisitionLead,
   RelatedArtist,
   ScanJobRecord,
   SettingsPayload,
@@ -150,8 +153,12 @@ export const api = {
   // --- recommendations / oracle ---
   getRecommendations: (limit?: number) =>
     invoke<RecommendationResult[]>("get_recommendations", { limit }),
+  getRecommendationBundle: (limit?: number) =>
+    invoke<RecommendationBundle>("get_recommendation_bundle", { limit }),
   explainRecommendation: (trackId: number) =>
     invoke<ExplainPayload>("explain_recommendation", { trackId }),
+  enqueueRecommendationLeads: (leads: AcquisitionLead[]) =>
+    invoke<AcquisitionLeadHandoffReport>("enqueue_recommendation_leads", { leads }),
   // --- keyring / secure credentials ---
   keyringSave: (providerKey: string, keyName: string, secret: string) =>
     invoke<void>("keyring_save", { providerKey, keyName, secret }),

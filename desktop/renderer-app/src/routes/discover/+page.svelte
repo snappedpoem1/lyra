@@ -11,10 +11,24 @@
     setWorkspaceProvenance,
     setWorkspaceTrack
   } from "$lib/stores/workspace";
-  import type { AcquisitionQueueItem, DiscoverySession, ExplainPayload, GraphStats, PlaylistSummary, RecentPlayRecord, RecommendationResult, SpotifyGapSummary, TrackEnrichmentResult } from "$lib/types";
+  import type {
+    AcquisitionLead,
+    AcquisitionEventPayload,
+    AcquisitionLeadOutcome,
+    AcquisitionQueueItem,
+    DiscoverySession,
+    ExplainPayload,
+    GraphStats,
+    PlaylistSummary,
+    RecentPlayRecord,
+    RecommendationResult,
+    SpotifyGapSummary,
+    TrackEnrichmentResult
+  } from "$lib/types";
 
   let vibePlaylists: PlaylistSummary[] = [];
   let acquisitionQueue: AcquisitionQueueItem[] = [];
+  let acquisitionQueueAll: AcquisitionQueueItem[] = [];
   // G-064: Discovery session + graph
   let discoverySession: DiscoverySession | null = null;
   let discoveryLoaded = false;
@@ -61,9 +75,14 @@
 
   // Recommendations
   let recommendations: RecommendationResult[] = [];
+  let recommendationLeads: AcquisitionLead[] = [];
   let recsLoading = false;
   let recsError = "";
   let recsLoaded = false;
+  let leadsQueueBusy = false;
+  let leadsQueueMessage = "";
+  let leadOutcomeByKey: Record<string, AcquisitionLeadOutcome> = {};
+  let leadQueueItemByKey: Record<string, AcquisitionQueueItem> = {};
   let expandedExplain: Record<number, ExplainPayload | "loading"> = {};
   let expandedProvenance: Record<number, TrackEnrichmentResult | "loading"> = {};
   let aiPlaylistBusy = false;
@@ -132,15 +151,22 @@
   }
 
   async function loadQueue() {
-    const filter = statusFilter === "all" ? undefined : statusFilter;
-    acquisitionQueue = await api.acquisitionQueue(filter);
+    acquisitionQueueAll = await api.acquisitionQueue(undefined);
+    leadQueueItemByKey = indexLeadQueueItems(acquisitionQueueAll);
+    acquisitionQueue = statusFilter === "all"
+      ? acquisitionQueueAll
+      : acquisitionQueueAll.filter((item) => item.status === statusFilter);
   }
 
   async function loadRecommendations() {
     recsLoading = true;
     recsError = "";
+    leadsQueueMessage = "";
+    leadOutcomeByKey = {};
     try {
-      recommendations = await api.getRecommendations(25);
+      const bundle = await api.getRecommendationBundle(25);
+      recommendations = bundle.recommendations;
+      recommendationLeads = bundle.acquisitionLeads;
       recsLoaded = true;
       const topRecommendation = recommendations[0];
       setWorkspaceBridgeActions(buildDiscoverActions(topRecommendation?.track.artist ?? null));
@@ -256,6 +282,89 @@
     setWorkspaceTrack(recommendations.find((rec) => rec.track.id === trackId)?.track ?? null);
   }
 
+  async function enqueueRecommendationLead(lead: AcquisitionLead): Promise<void> {
+    leadsQueueBusy = true;
+    leadsQueueMessage = "";
+    try {
+      const report = await api.enqueueRecommendationLeads([lead]);
+      applyLeadOutcomeReport(report.outcomes);
+      leadsQueueMessage = formatLeadHandoffSummary(report);
+      await loadQueue();
+    } catch (e) {
+      leadsQueueMessage = e instanceof Error ? e.message : "Failed to queue lead.";
+    } finally {
+      leadsQueueBusy = false;
+    }
+  }
+
+  async function enqueueAllRecommendationLeads(): Promise<void> {
+    if (!recommendationLeads.length) return;
+    leadsQueueBusy = true;
+    leadsQueueMessage = "";
+    try {
+      const report = await api.enqueueRecommendationLeads(recommendationLeads);
+      applyLeadOutcomeReport(report.outcomes);
+      leadsQueueMessage = formatLeadHandoffSummary(report);
+      await loadQueue();
+    } catch (e) {
+      leadsQueueMessage = e instanceof Error ? e.message : "Failed to queue recommendation leads.";
+    } finally {
+      leadsQueueBusy = false;
+    }
+  }
+
+  function leadKey(lead: Pick<AcquisitionLead, "artist" | "title" | "provider">): string {
+    return `${lead.artist.toLowerCase()}::${lead.title.toLowerCase()}`;
+  }
+
+  function applyLeadOutcomeReport(outcomes: AcquisitionLeadOutcome[]): void {
+    const next = { ...leadOutcomeByKey };
+    for (const outcome of outcomes) {
+      next[leadKey(outcome)] = outcome;
+    }
+    leadOutcomeByKey = next;
+  }
+
+  function indexLeadQueueItems(queue: AcquisitionQueueItem[]): Record<string, AcquisitionQueueItem> {
+    const byKey: Record<string, AcquisitionQueueItem> = {};
+    for (const item of queue) {
+      const key = `${item.artist.toLowerCase()}::${item.title.toLowerCase()}`;
+      const existing = byKey[key];
+      if (!existing || item.id > existing.id) {
+        byKey[key] = item;
+      }
+    }
+    return byKey;
+  }
+
+  function isLeadActive(status?: string): boolean {
+    if (!status) return false;
+    return ["queued", "validating", "acquiring", "staging", "scanning", "organizing", "indexing"].includes(status);
+  }
+
+  function leadLiveClass(status: string): string {
+    return `lead-live-${status}`;
+  }
+
+  function leadLiveLabel(status: string): string {
+    if (isLeadActive(status)) {
+      return `In ${status}`;
+    }
+    if (status === "completed") return "Completed";
+    if (status === "failed") return "Failed";
+    if (status === "cancelled") return "Cancelled";
+    if (status === "skipped") return "Skipped";
+    return status;
+  }
+
+  function formatLeadHandoffSummary(report: {
+    queuedCount: number;
+    duplicateCount: number;
+    errorCount: number;
+  }): string {
+    return `Lead handoff: ${report.queuedCount} queued, ${report.duplicateCount} already active, ${report.errorCount} failed.`;
+  }
+
   async function toggleProvenance(trackId: number) {
     if (expandedProvenance[trackId]) {
       const next = { ...expandedProvenance };
@@ -325,6 +434,22 @@
   }
 
   onMount(() => {
+    let unlistenAcquisition: (() => void) | null = null;
+    api
+      .on<AcquisitionEventPayload>("lyra://acquisition-updated", (payload) => {
+        acquisitionQueueAll = payload.queue;
+        leadQueueItemByKey = indexLeadQueueItems(payload.queue);
+        acquisitionQueue = statusFilter === "all"
+          ? payload.queue
+          : payload.queue.filter((item) => item.status === statusFilter);
+      })
+      .then((unlisten) => {
+        unlistenAcquisition = unlisten;
+      })
+      .catch(() => {
+        unlistenAcquisition = null;
+      });
+
     setWorkspacePage(
       "Discover",
       "Oracle discovery workspace",
@@ -333,6 +458,12 @@
     );
     setWorkspaceBridgeActions(buildDiscoverActions(null));
     load();
+
+    return () => {
+      if (unlistenAcquisition) {
+        unlistenAcquisition();
+      }
+    };
   });
 </script>
 
@@ -462,6 +593,68 @@
   {:else if !recommendations.length}
     <p class="muted">No scored tracks yet. Run a library scan and enrich your library to generate recommendations.</p>
   {:else}
+    {#if recommendationLeads.length}
+      <div class="lead-panel">
+        <div class="panel-head-row">
+          <p class="panel-head eyebrow">Acquisition leads</p>
+          <button class="load-btn" on:click={enqueueAllRecommendationLeads} disabled={leadsQueueBusy}>
+            {leadsQueueBusy ? "Queueing..." : "Queue all leads"}
+          </button>
+        </div>
+        {#if leadsQueueMessage}
+          <p class="muted">{leadsQueueMessage}</p>
+        {/if}
+        <div class="lead-grid">
+          {#each recommendationLeads as lead}
+            {@const outcome = leadOutcomeByKey[leadKey(lead)]}
+            {@const liveQueueItem = leadQueueItemByKey[leadKey(lead)]}
+            <div class="lead-card">
+              <div class="lead-title-row">
+                <strong>{lead.title}</strong>
+                <span class="provider-badge">{lead.provider}</span>
+              </div>
+              <a class="rec-artist" href={`/artists/${encodeURIComponent(lead.artist)}`}>{lead.artist}</a>
+              <p class="muted">{lead.reason}</p>
+              {#if liveQueueItem}
+                <p class={`lead-live ${leadLiveClass(liveQueueItem.status)}`}>
+                  {leadLiveLabel(liveQueueItem.status)}
+                  <span> · #{liveQueueItem.id}</span>
+                </p>
+              {/if}
+              {#if outcome}
+                <p class="lead-outcome lead-outcome-{outcome.status}">
+                  {outcome.status === "queued" ? "Queued" : outcome.status === "duplicate_active" ? "Already active" : "Queue failed"}
+                  {#if outcome.queueItemId}
+                    <span> · #{outcome.queueItemId}</span>
+                  {/if}
+                </p>
+                {#if outcome.detail}
+                  <p class="lead-outcome-detail">{outcome.detail}</p>
+                {/if}
+              {/if}
+              <div class="score-row">
+                <div class="score-bar-bg">
+                  <div class="score-bar-fill" style={`width:${Math.round(lead.score * 100)}%`}></div>
+                </div>
+                <span class="score-label">{Math.round(lead.score * 100)}%</span>
+              </div>
+              <button on:click={() => enqueueRecommendationLead(lead)} disabled={leadsQueueBusy || isLeadActive(liveQueueItem?.status) || liveQueueItem?.status === "completed" || outcome?.status === "duplicate_active"}>
+                {#if isLeadActive(liveQueueItem?.status)}
+                  In {liveQueueItem?.status}
+                {:else if liveQueueItem?.status === "completed"}
+                  Completed
+                {:else if outcome?.status === "duplicate_active"}
+                  Already active
+                {:else}
+                  Queue lead
+                {/if}
+              </button>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <div class="discover-route-bar">
       <button class="route-chip accent" on:click={() => openLyraPrompt("give me three exits from this scene, one safe, one interesting, one dangerous")}>Safe / interesting / dangerous</button>
       <button class="route-chip" on:click={() => openLyraPrompt("stay in the ache, lose the gloss")}>Lose the gloss</button>
@@ -753,6 +946,58 @@
 
   /* Recommendations */
   .recs-panel { margin-bottom: 24px; display: flex; flex-direction: column; gap: 12px; }
+  .lead-panel {
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+    display: grid;
+    gap: 10px;
+  }
+  .lead-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+  .lead-card {
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    display: grid;
+    gap: 6px;
+  }
+  .lead-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .lead-outcome {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .lead-live {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #9cb2c7;
+  }
+  .lead-live-queued,
+  .lead-live-validating,
+  .lead-live-acquiring,
+  .lead-live-staging,
+  .lead-live-scanning,
+  .lead-live-organizing,
+  .lead-live-indexing {
+    color: #7affc6;
+  }
+  .lead-live-completed { color: #a8f5cf; }
+  .lead-live-failed,
+  .lead-live-cancelled { color: #ff9a9a; }
+  .lead-live-skipped { color: #9cb2c7; }
+  .lead-outcome-queued { color: #7affc6; }
+  .lead-outcome-duplicate_active { color: #ffd166; }
+  .lead-outcome-error { color: #ff9a9a; }
+  .lead-outcome-detail {
+    margin: -2px 0 0;
+    font-size: 0.7rem;
+    color: #9cb2c7;
+  }
   .load-btn { padding: 6px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.07); color: inherit; cursor: pointer; font: inherit; }
   .rec-head-actions { display: flex; gap: 8px; }
   .recs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }

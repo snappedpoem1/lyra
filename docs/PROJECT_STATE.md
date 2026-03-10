@@ -99,6 +99,13 @@ Current product framing:
     - `ExplainPayload` upgraded from flat `reasons: Vec<String>` to `whyThisTrack`, `evidenceItems`, `explicitFromPrompt`, `inferredByLyra`
     - `RecommendationBroker` now runs three lanes: `local/taste`, `local/deep_cut`, and `scout/bridge` (cross-genre bridge from local library using ported genre adjacency map)
     - `graph/co_play` lane pulls artist-connection evidence from the local artist graph
+    - ranking now applies bounded recommendation-feedback bias from recent accepts/replays/skips (`recommendation_feedback`), with explicit `feedback_history` evidence when bias changes ordering
+    - `listenbrainz/weather` lane now attempts live community-weather fetch (MusicBrainz MBID + ListenBrainz similar-artist/top-recordings) with automatic cached `enrich_cache` fallback and explicit cached-evidence labeling when live fetch is degraded
+    - per-track provider evidence is now merged across lanes (`local/scout/weather/graph`) instead of first-hit-wins suppression, so multi-signal tracks carry combined score pressure and provider/evidence payloads
+    - broker now emits explicit non-local acquisition leads (weather and scout graph artist leads), and those leads can be handed off to `acquisition_queue` with provider/evidence-aware queue metadata
+    - `RecommendationBundle` is now surfaced through Tauri and Discover, and Discover can queue recommendation leads directly through native lead-handoff invoke without manual copy or fallback queue flows
+    - lead handoff now returns per-lead outcomes (`queued`, `duplicate_active`, `error`) and Discover surfaces those outcomes inline on each lead card
+    - Discover lead cards now listen to live `lyra://acquisition-updated` events and keep lead lifecycle state in sync (queued/validating/acquiring/.../completed/failed) after handoff
     - Discover cards show a provider badge per recommendation and inline evidence chips; the Why? panel now renders structured evidence rows instead of a flat reason list
   - Cassette-branded shell framing with a more prototype-faithful Lyra workspace for intelligence evaluation
   - Cassette now owns installer/window/app-shell branding while Lyra remains the intelligence layer inside it

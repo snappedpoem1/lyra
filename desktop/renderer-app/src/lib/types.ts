@@ -385,6 +385,36 @@ export type RecommendationResult = {
   evidence: EvidenceItem[];
 };
 
+export type AcquisitionLead = {
+  artist: string;
+  title: string;
+  provider: string;
+  score: number;
+  reason: string;
+  evidence: EvidenceItem[];
+};
+
+export type RecommendationBundle = {
+  recommendations: RecommendationResult[];
+  acquisitionLeads: AcquisitionLead[];
+};
+
+export type AcquisitionLeadOutcome = {
+  artist: string;
+  title: string;
+  provider: string;
+  status: string;
+  detail: string;
+  queueItemId?: number | null;
+};
+
+export type AcquisitionLeadHandoffReport = {
+  outcomes: AcquisitionLeadOutcome[];
+  queuedCount: number;
+  duplicateCount: number;
+  errorCount: number;
+};
+
 export type ArtistConnection = {
   artist: string;
   score: number;
