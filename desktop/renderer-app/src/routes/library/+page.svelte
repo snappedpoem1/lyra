@@ -192,9 +192,17 @@
     try {
       await api.resolveDuplicateCluster(keepId, removeIds);
       duplicates = duplicates.filter((_, i) => i !== clusterIdx);
+      // Reload main track list so quarantined tracks disappear immediately
+      await loadTracks();
     } finally {
       resolvingCluster = null;
     }
+  }
+
+  function formatHint(path: string): string {
+    const ext = path.split('.').pop()?.toLowerCase() ?? '';
+    const labels: Record<string, string> = { flac: 'FLAC', mp3: 'MP3', ogg: 'OGG', m4a: 'AAC', wav: 'WAV', opus: 'OPUS' };
+    return labels[ext] ?? ext.toUpperCase();
   }
 
   async function loadCleanupPreview() {
@@ -346,9 +354,11 @@
           <div class="dup-cluster">
             {#each cluster.tracks as track, ti}
               <div class="dup-row">
+                <span class="dup-fmt">{formatHint(track.path)}</span>
                 <span class="dup-title">{track.title}</span>
                 <span class="dup-artist">{track.artist}</span>
-                <span class="dup-path">{track.path}</span>
+                <span class="dup-album muted">{track.album}</span>
+                <span class="dup-path muted" title={track.path}>{track.path.split(/[\\/]/).slice(-2).join('/')}</span>
                 <button on:click={() => play(track.id)}>Play</button>
                 <button class="keep-btn"
                   disabled={resolvingCluster === ci}
@@ -381,8 +391,13 @@
               <span class="badge" style="color:{severityColor(issue.severity)}">{issue.severity}</span>
               <span class="issue-type">{issue.issueType.replace(/_/g, ' ')}</span>
               <span class="issue-current">{issue.currentValue}</span>
-              <span class="issue-arrow">-&gt;</span>
+              <span class="issue-arrow">→</span>
               <span class="issue-suggested muted">{issue.suggestedValue}</span>
+              {#if issue.issueType === 'missing_artist' || issue.issueType === 'missing_album'}
+                <button class="enrich-toggle" style="margin-left:auto" on:click={() => toggleEnrich(issue.trackId)}>Enrich</button>
+              {:else if issue.issueType === 'suspected_duplicate'}
+                <button class="tab-btn" style="margin-left:auto" on:click={() => { curationTab = 'duplicates'; if (!dupsLoaded) loadDuplicates(); }}>Review</button>
+              {/if}
             </div>
           {/each}
         </div>
@@ -860,9 +875,11 @@
     font-size: 0.85rem;
   }
   .dup-row:last-child { border-bottom: none; }
+  .dup-fmt { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 4px; background: rgba(140,217,74,0.12); color: #8cd94a; min-width: 40px; text-align: center; }
   .dup-title { font-weight: 600; min-width: 140px; }
-  .dup-artist { color: #9cb2c7; min-width: 120px; }
-  .dup-path { flex: 1; font-size: 0.72rem; color: #6a8aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dup-artist { color: #9cb2c7; min-width: 100px; }
+  .dup-album { min-width: 90px; font-size: 0.8rem; }
+  .dup-path { flex: 1; font-size: 0.72rem; color: #6a8aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
   .keep-btn { color: #7affc6; border-color: rgba(122,255,198,0.3); }
   .cleanup-head { display: flex; gap: 10px; }
   .cleanup-table { display: flex; flex-direction: column; gap: 6px; }

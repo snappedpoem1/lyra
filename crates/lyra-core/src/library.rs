@@ -69,6 +69,7 @@ pub fn list_tracks(
                 FROM tracks t
                 LEFT JOIN artists ar ON ar.id = t.artist_id
                 LEFT JOIN albums al ON al.id = t.album_id
+                WHERE (t.quarantined IS NULL OR t.quarantined = 0)
                 ORDER BY t.imported_at DESC
                 LIMIT 200
                 ",
@@ -84,6 +85,7 @@ pub fn list_tracks(
             FROM tracks t
             LEFT JOIN artists ar ON ar.id = t.artist_id
             LEFT JOIN albums al ON al.id = t.album_id
+            WHERE (t.quarantined IS NULL OR t.quarantined = 0)
             ORDER BY ar.name ASC, al.title ASC, t.title ASC
             LIMIT 500
             ",
@@ -104,6 +106,7 @@ pub fn list_tracks(
             LEFT JOIN albums al ON al.id = t.album_id
             JOIN tracks_fts ON tracks_fts.rowid = t.id
             WHERE tracks_fts MATCH ?1
+              AND (t.quarantined IS NULL OR t.quarantined = 0)
             ORDER BY rank
             LIMIT 200
             ",
@@ -127,7 +130,8 @@ pub fn list_tracks(
         FROM tracks t
         LEFT JOIN artists ar ON ar.id = t.artist_id
         LEFT JOIN albums al ON al.id = t.album_id
-        WHERE t.title LIKE ?1 OR ar.name LIKE ?1 OR al.title LIKE ?1
+        WHERE (t.title LIKE ?1 OR ar.name LIKE ?1 OR al.title LIKE ?1)
+          AND (t.quarantined IS NULL OR t.quarantined = 0)
         ORDER BY ar.name ASC, al.title ASC, t.title ASC
         LIMIT 200
         ",
@@ -160,6 +164,7 @@ pub fn find_duplicates(conn: &Connection) -> LyraResult<Vec<DuplicateCluster>> {
         SELECT GROUP_CONCAT(t.id) AS ids
         FROM tracks t
         LEFT JOIN artists ar ON ar.id = t.artist_id
+        WHERE (t.quarantined IS NULL OR t.quarantined = 0)
         GROUP BY LOWER(t.title), LOWER(COALESCE(ar.name, ''))
         HAVING COUNT(*) > 1
         ORDER BY COUNT(*) DESC
@@ -721,10 +726,12 @@ pub fn preview_library_cleanup(conn: &Connection) -> LyraResult<LibraryCleanupPr
         "SELECT t.id, t.title, COALESCE(ar.name, '')
          FROM tracks t
          LEFT JOIN artists ar ON ar.id = t.artist_id
-         WHERE (LOWER(t.title), LOWER(COALESCE(ar.name, ''))) IN (
+         WHERE (t.quarantined IS NULL OR t.quarantined = 0)
+           AND (LOWER(t.title), LOWER(COALESCE(ar.name, ''))) IN (
              SELECT LOWER(t2.title), LOWER(COALESCE(ar2.name, ''))
              FROM tracks t2
              LEFT JOIN artists ar2 ON ar2.id = t2.artist_id
+             WHERE (t2.quarantined IS NULL OR t2.quarantined = 0)
              GROUP BY LOWER(t2.title), LOWER(COALESCE(ar2.name, ''))
              HAVING COUNT(*) > 1
          )

@@ -109,7 +109,7 @@ Goal: preserve trust in the support infrastructure without letting it dominate r
 
 ### G-062 Curation Workflows
 
-- [ ] Restore duplicate review, keeper selection, cleanup preview, and undo depth
+- [x] Restore duplicate review, keeper selection, cleanup preview, and undo depth
 
 ### G-065 Packaged Desktop Confidence
 
