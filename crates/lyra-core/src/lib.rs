@@ -25,6 +25,7 @@ pub mod providers;
 pub mod queue;
 pub mod scores;
 pub mod scrobble;
+pub mod search;
 pub mod state;
 pub mod taste;
 pub mod taste_memory;
@@ -3128,6 +3129,45 @@ impl LyraCore {
     ) -> LyraResult<Vec<taste_prioritizer::QueueItem>> {
         let conn = self.conn()?;
         taste_prioritizer::get_next_priority_batch(&conn, limit, "pending")
+    }
+
+    // ── Search ────────────────────────────────────────────────────────────────
+
+    pub fn fallback_text_search(
+        &self,
+        query: String,
+        limit: usize,
+    ) -> LyraResult<Vec<search::SearchResult>> {
+        let conn = self.conn()?;
+        search::fallback_text_search(&conn, &query, limit)
+    }
+
+    pub fn find_remixes(
+        &self,
+        artist: String,
+        album: String,
+        track: String,
+        limit: usize,
+    ) -> LyraResult<Vec<search::RemixResult>> {
+        let conn = self.conn()?;
+        let a = if artist.is_empty() { None } else { Some(artist.as_str()) };
+        let al = if album.is_empty() { None } else { Some(album.as_str()) };
+        let tr = if track.is_empty() { None } else { Some(track.as_str()) };
+        search::find_remixes(&conn, a, al, tr, limit, true, "relevance")
+    }
+
+    pub fn hybrid_search(
+        &self,
+        candidate_ids: Vec<i64>,
+        filters: search::SearchFilters,
+        dimension_ranges: std::collections::HashMap<String, (f64, f64)>,
+        sort_by: search::SortBy,
+        sort_dim: Option<String>,
+        descending: bool,
+        top_k: usize,
+    ) -> LyraResult<Vec<search::SearchResult>> {
+        let conn = self.conn()?;
+        search::hybrid_search(&conn, &candidate_ids, &filters, &dimension_ranges, sort_by, sort_dim.as_deref(), descending, top_k)
     }
 }
 

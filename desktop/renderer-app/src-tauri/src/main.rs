@@ -21,6 +21,7 @@ use lyra_core::commands::{
 };
 use lyra_core::classifier::{ClassifyResult, LibrarySummary};
 use lyra_core::logging::initialize_logging;
+use lyra_core::search::{RemixResult, SearchFilters, SearchResult, SortBy};
 use lyra_core::taste_prioritizer::{PrioritizeStats, QueueItem};
 use lyra_core::validator::ValidationResult;
 use lyra_core::LyraCore;
@@ -1586,6 +1587,44 @@ fn get_graph_stats(state: State<'_, AppState>) -> Result<GraphStats, String> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
+#[tauri::command]
+fn fallback_text_search(
+    state: State<'_, AppState>,
+    query: String,
+    limit: usize,
+) -> Result<Vec<SearchResult>, String> {
+    state.core.fallback_text_search(query, limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn find_remixes(
+    state: State<'_, AppState>,
+    artist: String,
+    album: String,
+    track: String,
+    limit: usize,
+) -> Result<Vec<RemixResult>, String> {
+    state.core.find_remixes(artist, album, track, limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn hybrid_search(
+    state: State<'_, AppState>,
+    candidate_ids: Vec<i64>,
+    filters: SearchFilters,
+    dimension_ranges: std::collections::HashMap<String, (f64, f64)>,
+    sort_by: SortBy,
+    sort_dim: Option<String>,
+    descending: bool,
+    top_k: usize,
+) -> Result<Vec<SearchResult>, String> {
+    state
+        .core
+        .hybrid_search(candidate_ids, filters, dimension_ranges, sort_by, sort_dim, descending, top_k)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn create_playlist_from_queue(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1846,7 +1885,10 @@ fn main() {
             play_similar_to_artist,
             get_discovery_session,
             build_artist_graph,
-            get_graph_stats
+            get_graph_stats,
+            fallback_text_search,
+            find_remixes,
+            hybrid_search
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
