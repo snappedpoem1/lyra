@@ -23,6 +23,8 @@ pub mod playback;
 pub mod playlists;
 pub mod providers;
 pub mod queue;
+pub mod deepcut;
+pub mod scout;
 pub mod scores;
 pub mod scrobble;
 pub mod search;
@@ -3168,6 +3170,70 @@ impl LyraCore {
     ) -> LyraResult<Vec<search::SearchResult>> {
         let conn = self.conn()?;
         search::hybrid_search(&conn, &candidate_ids, &filters, &dimension_ranges, sort_by, sort_dim.as_deref(), descending, top_k)
+    }
+
+    // ── Scout ─────────────────────────────────────────────────────────────────
+
+    pub fn cross_genre_hunt(
+        &self,
+        genre_a: String,
+        genre_b: String,
+        limit: usize,
+    ) -> LyraResult<Vec<scout::ScoutTarget>> {
+        let conn = self.conn()?;
+        scout::cross_genre_hunt(&conn, &genre_a, &genre_b, limit)
+    }
+
+    pub fn discover_by_mood(
+        &self,
+        mood: String,
+        limit: usize,
+    ) -> LyraResult<Vec<scout::MoodSearchResult>> {
+        let conn = self.conn()?;
+        scout::discover_by_mood(&conn, &mood, limit)
+    }
+
+    pub fn find_local_bridge_artists(
+        &self,
+        genre_a: String,
+        genre_b: String,
+    ) -> LyraResult<Vec<scout::BridgeArtist>> {
+        let conn = self.conn()?;
+        scout::find_local_bridge_artists(&conn, &genre_a, &genre_b)
+    }
+
+    // ── DeepCut ───────────────────────────────────────────────────────────────
+
+    pub fn deepcut_hunt(
+        &self,
+        genre: Option<String>,
+        artist: Option<String>,
+        min_obscurity: f64,
+        limit: usize,
+    ) -> LyraResult<Vec<deepcut::DeepCutTrack>> {
+        let conn = self.conn()?;
+        deepcut::hunt_by_obscurity(
+            &conn,
+            genre.as_deref(),
+            artist.as_deref(),
+            min_obscurity,
+            5.0,
+            limit,
+        )
+    }
+
+    pub fn deepcut_hunt_taste(
+        &self,
+        taste: std::collections::HashMap<String, f64>,
+        limit: usize,
+    ) -> LyraResult<Vec<deepcut::DeepCutTrack>> {
+        let conn = self.conn()?;
+        deepcut::hunt_with_taste_context(&conn, &taste, limit)
+    }
+
+    pub fn deepcut_stats(&self) -> LyraResult<deepcut::DeepCutStats> {
+        let conn = self.conn()?;
+        deepcut::get_stats(&conn)
     }
 }
 

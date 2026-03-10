@@ -20,7 +20,9 @@ use lyra_core::commands::{
     TasteMemorySnapshot, TasteProfile, TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
 };
 use lyra_core::classifier::{ClassifyResult, LibrarySummary};
+use lyra_core::deepcut::{DeepCutStats, DeepCutTrack};
 use lyra_core::logging::initialize_logging;
+use lyra_core::scout::{BridgeArtist, MoodSearchResult, ScoutTarget};
 use lyra_core::search::{RemixResult, SearchFilters, SearchResult, SortBy};
 use lyra_core::taste_prioritizer::{PrioritizeStats, QueueItem};
 use lyra_core::validator::ValidationResult;
@@ -1624,6 +1626,66 @@ fn hybrid_search(
         .map_err(|e| e.to_string())
 }
 
+// ── Scout commands ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn cross_genre_hunt(
+    state: State<'_, AppState>,
+    genre_a: String,
+    genre_b: String,
+    limit: usize,
+) -> Result<Vec<ScoutTarget>, String> {
+    state.core.cross_genre_hunt(genre_a, genre_b, limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn discover_by_mood(
+    state: State<'_, AppState>,
+    mood: String,
+    limit: usize,
+) -> Result<Vec<MoodSearchResult>, String> {
+    state.core.discover_by_mood(mood, limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn find_local_bridge_artists(
+    state: State<'_, AppState>,
+    genre_a: String,
+    genre_b: String,
+) -> Result<Vec<BridgeArtist>, String> {
+    state.core.find_local_bridge_artists(genre_a, genre_b).map_err(|e| e.to_string())
+}
+
+// ── DeepCut commands ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn deepcut_hunt(
+    state: State<'_, AppState>,
+    genre: Option<String>,
+    artist: Option<String>,
+    min_obscurity: f64,
+    limit: usize,
+) -> Result<Vec<DeepCutTrack>, String> {
+    state
+        .core
+        .deepcut_hunt(genre, artist, min_obscurity, limit)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn deepcut_hunt_taste(
+    state: State<'_, AppState>,
+    taste: std::collections::HashMap<String, f64>,
+    limit: usize,
+) -> Result<Vec<DeepCutTrack>, String> {
+    state.core.deepcut_hunt_taste(taste, limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn deepcut_stats(state: State<'_, AppState>) -> Result<DeepCutStats, String> {
+    state.core.deepcut_stats().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn create_playlist_from_queue(
     app: AppHandle,
@@ -1888,7 +1950,13 @@ fn main() {
             get_graph_stats,
             fallback_text_search,
             find_remixes,
-            hybrid_search
+            hybrid_search,
+            cross_genre_hunt,
+            discover_by_mood,
+            find_local_bridge_artists,
+            deepcut_hunt,
+            deepcut_hunt_taste,
+            deepcut_stats
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
