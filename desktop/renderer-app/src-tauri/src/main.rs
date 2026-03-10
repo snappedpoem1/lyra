@@ -1687,6 +1687,50 @@ fn deepcut_stats(state: State<'_, AppState>) -> Result<DeepCutStats, String> {
 }
 
 #[tauri::command]
+fn build_graph_incremental(
+    state: State<'_, AppState>,
+    top_k_lastfm: usize,
+    local_targets_only: bool,
+) -> Result<lyra_core::graph_builder::GraphBuildResult, String> {
+    state
+        .core
+        .build_graph_incremental(top_k_lastfm, local_targets_only)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn build_graph_full(
+    state: State<'_, AppState>,
+    top_k_lastfm: usize,
+    local_targets_only: bool,
+) -> Result<lyra_core::graph_builder::GraphBuildResult, String> {
+    state
+        .core
+        .build_graph_full(top_k_lastfm, local_targets_only)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn graph_stats(
+    state: State<'_, AppState>,
+) -> Result<lyra_core::graph_builder::GraphStats, String> {
+    state.core.graph_stats().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_artist_neighbours(
+    state: State<'_, AppState>,
+    artist: String,
+    edge_type: Option<String>,
+    limit: usize,
+) -> Result<Vec<lyra_core::graph_builder::GraphEdge>, String> {
+    state
+        .core
+        .get_artist_neighbours(artist, edge_type, limit)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn create_playlist_from_queue(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1956,7 +2000,11 @@ fn main() {
             find_local_bridge_artists,
             deepcut_hunt,
             deepcut_hunt_taste,
-            deepcut_stats
+            deepcut_stats,
+            build_graph_incremental,
+            build_graph_full,
+            graph_stats,
+            get_artist_neighbours
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

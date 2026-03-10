@@ -24,6 +24,7 @@ pub mod playlists;
 pub mod providers;
 pub mod queue;
 pub mod deepcut;
+pub mod graph_builder;
 pub mod scout;
 pub mod scores;
 pub mod scrobble;
@@ -1901,6 +1902,43 @@ impl LyraCore {
             total_connections: total_connections as usize,
             top_connected,
         })
+    }
+
+    /// Build Last.fm similar-artist + dimension-affinity edges (incremental).
+    pub fn build_graph_incremental(
+        &self,
+        top_k_lastfm:      usize,
+        local_targets_only: bool,
+    ) -> LyraResult<graph_builder::GraphBuildResult> {
+        let conn = self.conn()?;
+        graph_builder::build_incremental(&conn, top_k_lastfm, local_targets_only)
+    }
+
+    /// Full graph rebuild (dimension-affinity + Last.fm similar).
+    pub fn build_graph_full(
+        &self,
+        top_k_lastfm:      usize,
+        local_targets_only: bool,
+    ) -> LyraResult<graph_builder::GraphBuildResult> {
+        let conn = self.conn()?;
+        graph_builder::build_full(&conn, top_k_lastfm, local_targets_only)
+    }
+
+    /// Return graph statistics (artist count, edge count, last run, top nodes).
+    pub fn graph_stats(&self) -> LyraResult<graph_builder::GraphStats> {
+        let conn = self.conn()?;
+        graph_builder::graph_stats(&conn)
+    }
+
+    /// Return direct neighbours of an artist from the connections table.
+    pub fn get_artist_neighbours(
+        &self,
+        artist:    String,
+        edge_type: Option<String>,
+        limit:     usize,
+    ) -> LyraResult<Vec<graph_builder::GraphEdge>> {
+        let conn = self.conn()?;
+        graph_builder::get_neighbours(&conn, &artist, edge_type.as_deref(), limit)
     }
 
     /// Returns a human-readable explanation for why a track matches the current taste profile.
