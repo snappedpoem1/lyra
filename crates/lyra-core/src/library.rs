@@ -395,7 +395,7 @@ fn read_audio_tags(path: &Path) -> AudioTags {
     let artist = tag
         .artist()
         .filter(|s| !s.is_empty())
-        .map(|s| strip_feat(&s.to_string()))
+        .map(|s| strip_feat(s.as_ref()))
         .unwrap_or(fallback_artist);
     let album = tag
         .album()
