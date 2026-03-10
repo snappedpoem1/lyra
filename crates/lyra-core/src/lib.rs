@@ -9,6 +9,7 @@ pub mod classifier;
 pub mod db;
 pub mod duplicates;
 pub mod validator;
+pub mod taste_prioritizer;
 pub mod diagnostics;
 pub mod enrichment;
 pub mod errors;
