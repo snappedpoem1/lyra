@@ -173,23 +173,20 @@ pub fn import_taste_from_legacy(conn: &Connection, legacy: &Connection) -> LyraR
 
 /// Seed the taste profile from `spotify_history` play counts and local track scores.
 ///
-/// The algorithm:
-///   1. Join spotify_history → tracks (by lower artist + title match) → track_scores.
-///   2. Weight each track by: play_count * ln(1 + total_ms_played / 30_000).
-///   3. Compute a weighted average across all 10 dimensions.
-///   4. Write to taste_profile with confidence = matched_tracks / (matched_tracks + 20).clamp(0,1).
+/// Matches legacy `taste_backfill.py` semantics:
+///   - Skip inference: ms_played < 30 000 ms counts as a skip
+///   - Signal: positive when non_skip_count > skip_count AND avg_ms >= 30 s
+///   - Weight: min(log2(play_count + 1), 3.0) — log-scaled, capped
+///   - Positive: EMA nudge toward track scores; Negative: nudge away
 ///
 /// `force`: if false, skips when taste_profile already has avg confidence ≥ 0.5.
 /// Returns the number of tracks that contributed to the seed.
 pub fn seed_taste_from_spotify_history(conn: &Connection, force: bool) -> LyraResult<usize> {
-    // Guard: skip if existing profile is already confident and force is false.
     if !force {
         let avg_conf: f64 = conn
-            .query_row(
-                "SELECT AVG(confidence) FROM taste_profile",
-                [],
-                |row| row.get::<_, Option<f64>>(0),
-            )
+            .query_row("SELECT AVG(confidence) FROM taste_profile", [], |row| {
+                row.get::<_, Option<f64>>(0)
+            })
             .unwrap_or(None)
             .unwrap_or(0.0);
         if avg_conf >= 0.5 {
@@ -197,7 +194,6 @@ pub fn seed_taste_from_spotify_history(conn: &Connection, force: bool) -> LyraRe
         }
     }
 
-    // Check that spotify_history exists.
     let has_table: bool = conn
         .query_row(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='spotify_history'",
@@ -210,11 +206,14 @@ pub fn seed_taste_from_spotify_history(conn: &Connection, force: bool) -> LyraRe
         return Ok(0);
     }
 
-    // Pull play-count + total ms per artist/track combo.
+    // Aggregate: plays, skips (ms < 30s), total_ms per artist+track.
     let mut stmt = conn.prepare(
         "SELECT LOWER(TRIM(sh.artist)), LOWER(TRIM(sh.track)),
-                COUNT(*) AS plays, COALESCE(SUM(sh.ms_played), 0) AS total_ms
+                COUNT(*) AS plays,
+                SUM(CASE WHEN sh.ms_played < 30000 THEN 1 ELSE 0 END) AS skips,
+                COALESCE(SUM(sh.ms_played), 0) AS total_ms
          FROM spotify_history sh
+         WHERE sh.artist IS NOT NULL AND sh.track IS NOT NULL
          GROUP BY LOWER(TRIM(sh.artist)), LOWER(TRIM(sh.track))
          HAVING plays >= 2
          ORDER BY plays DESC
@@ -222,35 +221,33 @@ pub fn seed_taste_from_spotify_history(conn: &Connection, force: bool) -> LyraRe
     )?;
 
     struct SpotifyPlay {
-        artist: String,
-        title: String,
-        plays: i64,
+        artist:   String,
+        title:    String,
+        plays:    i64,
+        skips:    i64,
         total_ms: i64,
     }
 
-    let plays: Vec<SpotifyPlay> = stmt
+    let groups: Vec<SpotifyPlay> = stmt
         .query_map([], |row| {
             Ok(SpotifyPlay {
-                artist: row.get(0)?,
-                title:  row.get(1)?,
-                plays:  row.get(2)?,
-                total_ms: row.get(3)?,
+                artist:   row.get(0)?,
+                title:    row.get(1)?,
+                plays:    row.get(2)?,
+                skips:    row.get(3)?,
+                total_ms: row.get(4)?,
             })
         })?
         .filter_map(Result::ok)
         .collect();
 
-    if plays.is_empty() {
+    if groups.is_empty() {
         return Ok(0);
     }
 
-    // For each entry try to join to a scored local track.
-    let mut dim_weight_sum: [f64; 10] = [0.0; 10];
-    let mut total_weight = 0.0_f64;
     let mut matched = 0_usize;
 
-    for sp in &plays {
-        // Resolve track_id by fuzzy artist+title match.
+    for sp in &groups {
         let track_id: Option<i64> = conn
             .query_row(
                 "SELECT t.id
@@ -263,10 +260,8 @@ pub fn seed_taste_from_spotify_history(conn: &Connection, force: bool) -> LyraRe
                 |row| row.get(0),
             )
             .optional()?;
-
         let Some(tid) = track_id else { continue };
 
-        // Load scores.
         let scores = conn.query_row(
             "SELECT energy, valence, tension, density, warmth,
                     movement, space, rawness, complexity, nostalgia
@@ -289,35 +284,210 @@ pub fn seed_taste_from_spotify_history(conn: &Connection, force: bool) -> LyraRe
         );
         let Ok(s) = scores else { continue };
 
-        // Weight: play count × log-scaled listening time.
-        let minutes = sp.total_ms as f64 / 60_000.0;
-        let weight = sp.plays as f64 * (1.0 + minutes.ln().max(0.0));
+        let non_skips = sp.plays - sp.skips;
+        let avg_ms = if sp.plays > 0 { sp.total_ms / sp.plays } else { 0 };
+        let positive = non_skips > sp.skips && avg_ms >= 30_000;
+        // log2-capped weight, matching legacy taste_backfill.py
+        let weight = ((sp.plays as f64 + 1.0).log2()).min(3.0);
 
-        for i in 0..10 {
-            dim_weight_sum[i] += s[i] * weight;
-        }
-        total_weight += weight;
+        apply_taste_nudge(conn, &s, positive, weight)?;
         matched += 1;
     }
 
-    if matched == 0 || total_weight == 0.0 {
-        return Ok(0);
-    }
+    Ok(matched)
+}
 
-    // Confidence proportional to matched coverage, capped at 0.85.
-    let confidence = (matched as f64 / (matched as f64 + 20.0)).min(0.85);
+/// Apply a single EMA nudge to all taste dimensions toward (positive) or
+/// away from (negative) the given track score vector.
+/// alpha = 0.03 per nudge × weight (weight typically 1.0–3.0).
+fn apply_taste_nudge(
+    conn: &Connection,
+    track_scores: &[f64; 10],
+    positive: bool,
+    weight: f64,
+) -> LyraResult<()> {
+    // Ensure rows exist for all dimensions.
     let now = Utc::now().to_rfc3339();
-
-    for (i, &dim) in DIMS.iter().enumerate() {
-        let value = (dim_weight_sum[i] / total_weight).clamp(0.0, 1.0);
+    for &dim in DIMS {
         conn.execute(
-            "INSERT INTO taste_profile (dimension, value, confidence, last_updated)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(dimension) DO UPDATE SET
-               value=excluded.value, confidence=excluded.confidence, last_updated=excluded.last_updated",
-            params![dim, value, confidence, now],
+            "INSERT OR IGNORE INTO taste_profile (dimension, value, confidence, last_updated)
+             VALUES (?1, 0.5, 0.0, ?2)",
+            params![dim, now],
         )?;
     }
 
-    Ok(matched)
+    let existing: Vec<(String, f64, f64)> = {
+        let mut stmt = conn.prepare(
+            "SELECT dimension, value, confidence FROM taste_profile ORDER BY dimension ASC",
+        )?;
+        let rows: Vec<_> = stmt
+            .query_map([], |row| Ok((row.get::<_,String>(0)?, row.get::<_,f64>(1)?, row.get::<_,f64>(2)?)))?
+            .filter_map(Result::ok)
+            .collect();
+        rows
+    };
+
+    let dim_map: HashMap<String, (f64, f64)> =
+        existing.into_iter().map(|(d, v, c)| (d, (v, c))).collect();
+
+    let alpha = (0.03 * weight).min(0.12); // scale with weight, cap at 12%
+    for (i, &dim) in DIMS.iter().enumerate() {
+        let (old_val, old_conf) = dim_map.get(dim).copied().unwrap_or((0.5, 0.0));
+        let target = if positive {
+            track_scores[i]
+        } else {
+            1.0 - track_scores[i]
+        };
+        let new_val = (old_val * (1.0 - alpha) + target * alpha).clamp(0.0, 1.0);
+        let new_conf = (old_conf + 0.005).min(1.0);
+        conn.execute(
+            "UPDATE taste_profile SET value=?1, confidence=?2, last_updated=?3
+             WHERE dimension=?4",
+            params![new_val, new_conf, now, dim],
+        )?;
+    }
+    Ok(())
+}
+
+/// Pull recent scrobbles from the Last.fm API and apply them as taste signals.
+///
+/// Requires env vars: LASTFM_API_KEY, LASTFM_USERNAME.
+/// `lookback_days`: how many days to fetch (default 7 for incremental, up to 365 for full seed).
+/// Returns (fetched, matched, written).
+pub fn sync_taste_from_lastfm(
+    conn: &Connection,
+    lookback_days: u32,
+) -> LyraResult<(usize, usize, usize)> {
+    let api_key = std::env::var("LASTFM_API_KEY").unwrap_or_default();
+    let username = std::env::var("LASTFM_USERNAME").unwrap_or_default();
+    if api_key.is_empty() || username.is_empty() {
+        return Ok((0, 0, 0));
+    }
+
+    let since_ts = {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        now.saturating_sub(lookback_days as u64 * 86_400)
+    };
+
+    // Fetch pages from Last.fm user.getRecentTracks
+    let mut all_plays: Vec<(String, String)> = Vec::new(); // (artist, title)
+    let mut page = 1u32;
+    let page_limit = 200u32;
+
+    loop {
+        let url = format!(
+            "https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks\
+             &user={username}&api_key={api_key}&format=json\
+             &limit={page_limit}&from={since_ts}&page={page}"
+        );
+
+        let body = match ureq::get(&url).call() {
+            Ok(resp) => match resp.into_string() {
+                Ok(s) => s,
+                Err(_) => break,
+            },
+            Err(_) => break,
+        };
+
+        let json: serde_json::Value = match serde_json::from_str(&body) {
+            Ok(v) => v,
+            Err(_) => break,
+        };
+
+        let tracks = match json["recenttracks"]["track"].as_array() {
+            Some(t) => t.clone(),
+            None => break,
+        };
+        if tracks.is_empty() {
+            break;
+        }
+
+        let total_pages: u32 = json["recenttracks"]["@attr"]["totalPages"]
+            .as_str()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1);
+
+        for t in &tracks {
+            // Skip the currently-playing track (has @attr.nowplaying)
+            if t["@attr"]["nowplaying"].as_str().is_some() {
+                continue;
+            }
+            let artist = t["artist"]["#text"].as_str().unwrap_or("").trim().to_string();
+            let title  = t["name"].as_str().unwrap_or("").trim().to_string();
+            if !artist.is_empty() && !title.is_empty() {
+                all_plays.push((artist, title));
+            }
+        }
+
+        if page >= total_pages {
+            break;
+        }
+        page += 1;
+        // Rate-limit: Last.fm allows ~5 req/s; be polite
+        std::thread::sleep(std::time::Duration::from_millis(220));
+    }
+
+    let fetched = all_plays.len();
+    if fetched == 0 {
+        return Ok((0, 0, 0));
+    }
+
+    // Aggregate play counts per artist+title
+    let mut counts: HashMap<(String, String), usize> = HashMap::new();
+    for (artist, title) in all_plays {
+        let key = (artist.to_lowercase(), title.to_lowercase());
+        *counts.entry(key).or_insert(0) += 1;
+    }
+
+    let mut matched = 0_usize;
+    let mut written = 0_usize;
+
+    for ((artist_lc, title_lc), count) in &counts {
+        let track_id: Option<i64> = conn
+            .query_row(
+                "SELECT t.id
+                 FROM tracks t
+                 LEFT JOIN artists ar ON ar.id = t.artist_id
+                 WHERE LOWER(TRIM(COALESCE(ar.name, ''))) = ?1
+                   AND LOWER(TRIM(t.title)) = ?2
+                 LIMIT 1",
+                params![artist_lc, title_lc],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(tid) = track_id else { continue };
+
+        let scores = conn.query_row(
+            "SELECT energy, valence, tension, density, warmth,
+                    movement, space, rawness, complexity, nostalgia
+             FROM track_scores WHERE track_id = ?1",
+            params![tid],
+            |row| {
+                Ok([
+                    row.get::<_, f64>(0)?,
+                    row.get::<_, f64>(1)?,
+                    row.get::<_, f64>(2)?,
+                    row.get::<_, f64>(3)?,
+                    row.get::<_, f64>(4)?,
+                    row.get::<_, f64>(5)?,
+                    row.get::<_, f64>(6)?,
+                    row.get::<_, f64>(7)?,
+                    row.get::<_, f64>(8)?,
+                    row.get::<_, f64>(9)?,
+                ])
+            },
+        );
+        let Ok(s) = scores else { continue };
+
+        // Last.fm plays are all-positive signals (no skip data)
+        let weight = ((*count as f64 + 1.0).log2()).min(3.0);
+        apply_taste_nudge(conn, &s, true, weight)?;
+        matched += 1;
+        written += 1;
+    }
+
+    Ok((fetched, matched, written))
 }

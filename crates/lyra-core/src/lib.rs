@@ -46,8 +46,8 @@ use commands::{
     LibraryOverview, LibraryRootRecord, NativeCapabilities, PlaybackEvent, PlaybackState,
     PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
     ProviderValidationResult, QueueItemRecord, RecommendationBundle, RecommendationResult,
-    ScanJobRecord, SettingsPayload, SteerPayload, TasteMemorySnapshot, TasteProfile, TrackDetail,
-    TrackRecord, TrackScores,
+    LastfmSyncResult, ScanJobRecord, SettingsPayload, SteerPayload, TasteMemorySnapshot,
+    TasteProfile, TrackDetail, TrackRecord, TrackScores,
 };
 use config::AppPaths;
 use db::{connect, init_database};
@@ -1369,6 +1369,14 @@ impl LyraCore {
     pub fn seed_taste_from_spotify_history(&self, force: bool) -> LyraResult<usize> {
         let conn = self.conn()?;
         taste::seed_taste_from_spotify_history(&conn, force)
+    }
+
+    /// Pull recent Last.fm scrobbles and apply them as taste signals.
+    /// Returns (fetched, matched, written) as a JSON-friendly struct.
+    pub fn sync_taste_from_lastfm(&self, lookback_days: u32) -> LyraResult<LastfmSyncResult> {
+        let conn = self.conn()?;
+        let (fetched, matched, written) = taste::sync_taste_from_lastfm(&conn, lookback_days)?;
+        Ok(LastfmSyncResult { fetched, matched, written })
     }
 
     /// Returns up to `limit` tracks recommended by the broker with multi-lane evidence.

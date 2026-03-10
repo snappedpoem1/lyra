@@ -80,9 +80,11 @@
     color: DIM_COLORS[d] ?? "#9cb2c7",
   }));
 
-  // Taste seeding from Spotify history
+  // Taste seeding from Spotify history + Last.fm live sync
   let seedPending = false;
   let seedResult: string | null = null;
+  let lastfmPending = false;
+  let lastfmResult: string | null = null;
 
   async function reseedFromSpotify(force = false) {
     seedPending = true;
@@ -95,14 +97,32 @@
           : "Profile already confident — use Force to override.";
       } else {
         seedResult = `Seeded from ${matched} matched tracks.`;
-        // Reload shell state so the taste bars update.
         const updated = await api.tasteProfile();
         shell.update(s => ({ ...s, tasteProfile: updated }));
       }
-    } catch (e) {
+    } catch {
       seedResult = "Seed failed.";
     } finally {
       seedPending = false;
+    }
+  }
+
+  async function syncLastfm(lookbackDays = 30) {
+    lastfmPending = true;
+    lastfmResult = null;
+    try {
+      const r = await api.syncTasteFromLastfm(lookbackDays);
+      if (r.fetched === 0) {
+        lastfmResult = "No recent scrobbles found or credentials missing.";
+      } else {
+        lastfmResult = `Fetched ${r.fetched} scrobbles · ${r.matched} matched · ${r.written} applied.`;
+        const updated = await api.tasteProfile();
+        shell.update(s => ({ ...s, tasteProfile: updated }));
+      }
+    } catch {
+      lastfmResult = "Last.fm sync failed.";
+    } finally {
+      lastfmPending = false;
     }
   }
 
@@ -728,6 +748,14 @@
       <button class="seed-btn seed-force" disabled={seedPending} on:click={() => reseedFromSpotify(true)}
         title="Override existing profile">Force reseed</button>
       {#if seedResult}<span class="seed-result muted">{seedResult}</span>{/if}
+    </div>
+    <div class="taste-seed-row">
+      <button class="seed-btn seed-lastfm" disabled={lastfmPending} on:click={() => syncLastfm(30)}>
+        {lastfmPending ? 'Syncing…' : 'Sync Last.fm (30 days)'}
+      </button>
+      <button class="seed-btn seed-lastfm" disabled={lastfmPending} on:click={() => syncLastfm(365)}
+        title="Pull full year of scrobbles">Last.fm full year</button>
+      {#if lastfmResult}<span class="seed-result muted">{lastfmResult}</span>{/if}
     </div>
   </div>
   <div class="taste-bars">
@@ -1355,6 +1383,8 @@
   .seed-btn:disabled { opacity: 0.5; cursor: default; }
   .seed-force { background: rgba(255,180,50,0.08); border-color: rgba(255,180,50,0.2); color: #ffb432; }
   .seed-force:hover { background: rgba(255,180,50,0.14); }
+  .seed-lastfm { background: rgba(188,30,30,0.08); border-color: rgba(188,80,80,0.25); color: #e87070; }
+  .seed-lastfm:hover { background: rgba(188,30,30,0.16); }
   .seed-result { font-size: 0.75rem; }
   .taste-cold-prompt { margin-bottom: 20px; padding: 14px 16px; border-radius: 14px; background: rgba(140,217,74,0.04); border: 1px solid rgba(140,217,74,0.12); display: flex; flex-direction: column; gap: 8px; }
   .taste-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }

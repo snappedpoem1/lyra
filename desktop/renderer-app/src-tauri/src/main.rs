@@ -922,6 +922,17 @@ fn seed_taste_from_spotify_history(
 }
 
 #[tauri::command]
+fn sync_taste_from_lastfm(
+    state: State<'_, AppState>,
+    lookback_days: Option<u32>,
+) -> Result<lyra_core::commands::LastfmSyncResult, String> {
+    state
+        .core
+        .sync_taste_from_lastfm(lookback_days.unwrap_or(30))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_recommendations(
     state: State<'_, AppState>,
     limit: Option<usize>,
@@ -1974,6 +1985,7 @@ fn main() {
             get_track_scores,
             get_taste_profile,
             seed_taste_from_spotify_history,
+            sync_taste_from_lastfm,
             get_recommendations,
             get_recommendation_bundle,
             explain_recommendation,

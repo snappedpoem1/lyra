@@ -196,6 +196,12 @@ export type SearchExcavationResult = {
   routeHints: string[];
 };
 
+export type LastfmSyncResult = {
+  fetched: number;
+  matched: number;
+  written: number;
+};
+
 export type SearchSemanticCapability = {
   providerKey: string;
   status: string;

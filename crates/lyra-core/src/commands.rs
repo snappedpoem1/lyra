@@ -830,6 +830,24 @@ pub struct RelatedArtist {
     pub risk_note: String,
 }
 
+/// A flavored scout lane from a seed artist.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScoutExitLane {
+    pub flavor: String, // safe | interesting | dangerous
+    pub label: String,
+    pub description: String,
+    pub artists: Vec<RelatedArtist>,
+}
+
+/// Scout-style exits grouped into safe/interesting/dangerous lanes.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScoutExitPlan {
+    pub seed_artist: String,
+    pub lanes: Vec<ScoutExitLane>,
+}
+
 /// A single discovery interaction in the session.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1039,4 +1057,13 @@ pub struct ArtistProfile {
     pub provenance: Vec<EnrichmentEntry>,
     pub top_tracks: Vec<TrackRecord>,
     pub connections: Vec<ArtistConnection>,
+}
+
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastfmSyncResult {
+    pub fetched: usize,
+    pub matched: usize,
+    pub written: usize,
 }

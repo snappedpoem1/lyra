@@ -42,6 +42,7 @@ import type {
   BridgeArtist,
   MoodSearchResult,
   DeepCutTrack,
+  LastfmSyncResult,
   ScanJobRecord,
   SearchExcavationResult,
   SearchSemanticCapability,
@@ -108,6 +109,8 @@ export const api = {
   tasteProfile: () => invoke<TasteProfile>("get_taste_profile"),
   seedTasteFromSpotifyHistory: (force?: boolean) =>
     invoke<number>("seed_taste_from_spotify_history", { force }),
+  syncTasteFromLastfm: (lookbackDays?: number) =>
+    invoke<LastfmSyncResult>("sync_taste_from_lastfm", { lookbackDays }),
   acquisitionQueue: (statusFilter?: string) =>
     invoke<AcquisitionQueueItem[]>("get_acquisition_queue", { statusFilter }),
   addToAcquisitionQueue: (artist: string, title: string, album?: string, source?: string, targetRootId?: number) =>
