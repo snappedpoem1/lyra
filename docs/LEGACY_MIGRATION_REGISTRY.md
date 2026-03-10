@@ -6,6 +6,9 @@ Last updated: March 8, 2026
 
 This file is the authoritative cross-reference between legacy Python capabilities and their Rust migration targets.
 
+> Capabilities marked "Mostly unported" or "Largely unported" are tagged as dormant in `docs/BACKLOG_TAGS.md`.
+> Consult that file before starting any port — do not attempt to implement dormant tags without first promoting them to WORKLIST.md.
+
 It is not just a port checklist.
 It identifies which legacy behaviors matter most because they embody Lyra's real product identity:
 

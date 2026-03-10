@@ -16,6 +16,9 @@ It is not a wish dump. Each item here is either:
 - implemented in legacy and still owed to the canonical runtime
 - explicitly spec-backed or research-backed and intentionally promoted into the build
 
+> Unchecked items that are explicitly backlogged or unported are tagged in `docs/BACKLOG_TAGS.md` as `**[ConceptName?]**`.
+> Do not attempt to implement a dormant tag; move it to WORKLIST.md first.
+
 ## Product Shell
 
 - [x] Cassette is the shell identity and Lyra is the intelligence identity

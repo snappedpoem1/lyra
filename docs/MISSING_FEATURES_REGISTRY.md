@@ -24,6 +24,12 @@ This file tracks the open canonical product gaps that keep Lyra from fully match
 5. `G-062` Curation workflows
 6. `G-065` Packaged desktop confidence
 
+## Dormant Concept Tags
+
+Concepts explicitly identified as backlogged, unported, or not-yet-started are tagged in `docs/BACKLOG_TAGS.md`.
+Each is marked `**[ConceptName?]**` — acknowledged and dormant, not in active execution.
+Consult that file before starting work on any capability listed as "Mostly unported" or "Not started" above.
+
 ## Config Reality
 
 Provider and config plumbing already exists.

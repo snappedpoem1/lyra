@@ -8,6 +8,9 @@ Last updated: March 9, 2026
 - The canonical composer contract now has a first real implementation slice in code.
 - Acquisition, provenance, and horizon infrastructure remain valuable, but they are not Lyra's identity.
 
+> Backlogged and dormant concepts are tagged in `docs/BACKLOG_TAGS.md`.
+> Consult it before starting work on anything listed as "not started" or "unported" below.
+
 ## Execution Rule
 
 Prioritize the work that makes Lyra feel like a music intelligence system:
@@ -40,6 +43,7 @@ Goal: turn the product dream into a grounded, checkable build program instead of
 - [x] Feed Spotify-derived missing-world and taste pressure into Lyra route generation instead of leaving it as summary and acquisition data only
 - [x] Carry Spotify missing-world recovery and route handoff into Discover and Acquisition so the intelligence stops peaking only inside the main Lyra workspace
 - [x] Push Lyra explanation and route handoff into Artist and Library so non-composer surfaces stop collapsing back into plain catalog controls
+- [x] Add canonical backend scout-exit planner (`safe` / `interesting` / `dangerous`) for seed-artist discovery routes
 - [ ] Promote Scout, search-as-excavation, and broader route language deeper into Discover and Artist surfaces
 - [ ] Close the next highest-value product-defining boxes from `docs/WHOLE_DREAM_CHECKLIST.md`
 
