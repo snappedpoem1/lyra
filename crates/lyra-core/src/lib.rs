@@ -2,6 +2,7 @@ pub mod acquisition;
 pub mod acquisition_dispatcher;
 pub mod acquisition_planning;
 pub mod acquisition_worker;
+pub mod artist_intelligence;
 pub mod audio_data;
 pub mod catalog;
 pub mod classifier;
@@ -36,6 +37,7 @@ pub mod state;
 pub mod taste;
 pub mod taste_memory;
 pub mod taste_prioritizer;
+pub mod track_audio_features;
 pub mod validator;
 pub mod waterfall;
 
@@ -2037,6 +2039,89 @@ impl LyraCore {
     ) -> LyraResult<Vec<graph_builder::GraphEdge>> {
         let conn = self.conn()?;
         graph_builder::get_neighbours(&conn, &artist, edge_type.as_deref(), limit)
+    }
+
+    // ── Artist intelligence ───────────────────────────────────────────────────
+
+    /// Ingest MusicBrainz relationship edges for up to `limit` library artists
+    /// that don't yet have verified lineage edges.
+    pub fn ingest_artist_relationships(
+        &self,
+        limit: usize,
+    ) -> LyraResult<artist_intelligence::IngestResult> {
+        let conn = self.conn()?;
+        artist_intelligence::ingest_artist_relationships(&conn, limit)
+    }
+
+    /// How many library artists are still waiting for MB lineage ingestion.
+    pub fn pending_artist_ingestion_count(&self) -> usize {
+        self.conn()
+            .map(|c| artist_intelligence::pending_ingestion_count(&c))
+            .unwrap_or(0)
+    }
+
+    /// Return current lineage ingest status (pending count + last run summary).
+    pub fn get_lineage_ingest_status(&self) -> artist_intelligence::LineageIngestStatus {
+        self.conn()
+            .map(|c| artist_intelligence::ingest_status(&c))
+            .unwrap_or(artist_intelligence::LineageIngestStatus {
+                pending_artists: 0,
+                last_run_at: None,
+                last_run_artists_processed: None,
+                last_run_edges_inserted: None,
+                last_run_errors: None,
+                total_verified_edges: 0,
+            })
+    }
+
+    // ── Audio feature extraction ──────────────────────────────────────────────
+
+    /// Extract audio features for up to `limit` library tracks that don't yet have them.
+    pub fn extract_audio_features_batch(
+        &self,
+        limit: usize,
+        force: bool,
+    ) -> track_audio_features::BatchExtractResult {
+        match self.conn() {
+            Ok(conn) => track_audio_features::batch_extract(&conn, limit, force),
+            Err(_) => track_audio_features::BatchExtractResult {
+                processed: 0,
+                succeeded: 0,
+                failed: 0,
+                skipped_already_extracted: 0,
+            },
+        }
+    }
+
+    /// Return audio features for a single track, if extracted.
+    pub fn get_track_audio_features(
+        &self,
+        track_id: i64,
+    ) -> Option<track_audio_features::TrackAudioFeatures> {
+        self.conn()
+            .ok()
+            .and_then(|c| track_audio_features::load_features(&c, track_id))
+    }
+
+    /// How many library tracks still need audio feature extraction.
+    pub fn pending_audio_extraction_count(&self) -> i64 {
+        self.conn()
+            .map(|c| track_audio_features::pending_extraction_count(&c))
+            .unwrap_or(0)
+    }
+
+    /// Return current audio extraction status (pending count + last run summary).
+    pub fn get_audio_extraction_status(&self) -> track_audio_features::AudioExtractionStatus {
+        self.conn()
+            .map(|c| track_audio_features::extraction_status(&c))
+            .unwrap_or(track_audio_features::AudioExtractionStatus {
+                pending_tracks: 0,
+                last_run_at: None,
+                last_run_processed: None,
+                last_run_succeeded: None,
+                last_run_failed: None,
+                total_with_features: 0,
+            })
     }
 
     /// Returns a human-readable explanation for why a track matches the current taste profile.

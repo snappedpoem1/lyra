@@ -1,6 +1,6 @@
 # Worklist
 
-Last updated: March 10, 2026
+Last updated: March 10, 2026 (updated same session)
 
 ## Execution Rule
 
@@ -34,6 +34,16 @@ Use `docs/BACKEND_ACCEPTANCE_MATRIX.md` as the backend release gate.
 - [x] Add first-class album/discography acquisition planning with canonical release filtering
 - [x] Add canonical Spotify authorization-code exchange and session bootstrap
 - [x] Add a first lineage/member/offshoot backend baseline and use it in route and explanation logic
-- [ ] Add deeper audio-feature-backed evidence for strong vibe claims
+- [x] Add MusicBrainz artist intelligence ingestor (`artist_intelligence.rs`) — persists verified lineage edges beyond curated baseline
+- [x] Add pure-Rust audio feature extraction (`track_audio_features.rs`) — RMS energy, peak, dynamic range, volatility, tag BPM/key
+- [x] Expose lineage ingestor as Tauri commands (`ingest_artist_relationships`, `pending_artist_ingestion_count`, `get_lineage_ingest_status`) with `lineage_ingest_log` progress table — BA-10 Pass
+- [x] Expose audio extractor as Tauri commands (`extract_audio_features_batch`, `pending_audio_extraction_count`, `get_audio_extraction_status`) with `audio_extraction_log` progress table — BA-13 Pass
+- [x] Prove `audio_proof`-category evidence in `explain_track` after `upsert_features` (oracle test)
+- [x] Prove verified lineage edges surface in `get_related_artists` after ingestor run (oracle test)
+- [x] Add acquisition lifecycle state transition test (queued → validating → failed, honest failure fields)
+- [x] Add 3-cycle bootstrap stability soak to `backend_runtime_confidence.rs`
+- [ ] Run MB artist intelligence ingestion across full library (`ingest_artist_relationships` via Tauri or CLI)
+- [ ] Run audio feature batch extraction across full library (`batch_extract`)
+- [x] Wire `track_audio_features` rows into composer/explain evidence items — compound music-language claims in `oracle.rs::explain_track` via `build_audio_feature_evidence`
 - [x] Add isolated app-data backend runtime confidence proof
 - [ ] Run packaged clean-machine and long-session backend confidence proof

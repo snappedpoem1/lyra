@@ -1,6 +1,6 @@
 # Lyra Project State
 
-Last audited: March 10, 2026
+Last audited: March 10, 2026 (updated same session)
 
 ## Canonical Runtime Truth
 
@@ -27,14 +27,18 @@ What is already true:
 - Rust now owns single-track, album, and discography acquisition planning with canonical catalog filtering and persisted plan state.
 - Provider transport, config validation, Spotify auth bootstrap/exchange, session persistence, and refresh behavior exist in Rust and are no longer frontend-only concerns.
 - Recommendation and explain surfaces emit evidence-bearing payloads with evidence categories and grades, and discovery can hand non-local leads into acquisition.
-- The backend now has a first curated lineage/member/offshoot graph baseline and can surface examples such as `Cursive -> The Good Life` and `At The Drive-In -> Sparta / The Mars Volta` with honest evidence levels.
-- There is now an isolated app-data backend runtime proof for canonical startup and discography planning outside repo-root assumptions.
+- The backend now has a curated lineage/member/offshoot graph baseline and can surface examples such as `Cursive -> The Good Life` and `At The Drive-In -> Sparta / The Mars Volta` with honest evidence levels.
+- `artist_intelligence.rs` exposes a MusicBrainz relationship ingestor as Tauri commands (`ingest_artist_relationships`, `pending_artist_ingestion_count`, `get_lineage_ingest_status`). Progress is tracked in `lineage_ingest_log`. Tests in `backend_runtime_confidence.rs` prove that cached MB edges are persisted and surface in `get_related_artists`.
+- `track_audio_features.rs` exposes a pure-Rust audio feature extractor as Tauri commands (`extract_audio_features_batch`, `pending_audio_extraction_count`, `get_audio_extraction_status`). Progress is tracked in `audio_extraction_log`. When features exist, `explain_track` surfaces `audio_proof`-category evidence items (proven by oracle test).
+- There is an isolated app-data backend runtime proof for canonical startup, discography planning, acquisition lifecycle state transitions, and 3-cycle bootstrap stability.
+- BA-10 (lineage population pipeline) and BA-13 (audio extraction + deep evidence path) both reach Pass. BA-11 and BA-14 remain Partial.
 
 What is not yet true:
 
-- Broad lineage/influence ingestion is still missing. The current lineage graph is a curated backend baseline, not a complete artist-intelligence corpus.
-- Deep vibe claims such as `mind-blowing EDM drops` are still heuristic. The backend can be honest about that, but it does not yet have a dedicated proof path.
-- Packaged clean-machine and long-session backend confidence are still unproven. The current proof is isolated-app-data backend runtime confidence, not a full packaged soak.
+- The artist intelligence ingestor has not yet been run against the full library. Pending count reflects all artists without verified MB edges.
+- Audio feature extraction has not yet been run across the real library. Batch extract is wired and ready; it needs a run against real files.
+- Packaged clean-machine and long-session backend confidence are still unproven. The current proof is isolated-app-data + 3-cycle soak, not a full packaged clean-machine proof.
+- Explainability is not yet universal across all composer/explanation outputs (BA-11 Partial remains).
 
 The backend source of truth for pass/fail acceptance is `docs/BACKEND_ACCEPTANCE_MATRIX.md`.
 
@@ -46,11 +50,13 @@ The backend source of truth for pass/fail acceptance is `docs/BACKEND_ACCEPTANCE
 - Rust-owned acquisition planning for single tracks, albums, and discographies
 - Backend-owned Spotify auth/session lifecycle
 - Evidence-aware recommendation payloads, lineage-aware adjacency, and non-local acquisition lead handoff
+- Library-wide lineage ingestion pipeline (Tauri commands, progress tracking, MB-verified edge persistence)
+- Library-wide audio feature extraction pipeline (Tauri commands, PCM analysis, audio_proof evidence in explain_track)
 
 ## Highest-Value Missing Backend Work
 
-1. Replace the remaining optional migration bridge with a fully native acquisition executor proof path end to end.
-2. Expand lineage/member/influence intelligence beyond the curated baseline into a broader backend graph source.
-3. Carry evidence categories and provenance uniformly through all composer/explanation surfaces.
-4. Deepen audio-feature-backed evidence so strong vibe claims are backed by more than score heuristics.
-5. Run clean-machine packaged validation and longer backend soak proof.
+1. Run `ingest_artist_relationships` against the full library to populate MB-verified lineage edges beyond the curated baseline.
+2. Run `batch_extract` (audio features) across the library to populate `track_audio_features` for all active tracks.
+3. Carry evidence categories and provenance uniformly through all composer/explanation surfaces (BA-11 Partial gap).
+4. Run clean-machine packaged validation and longer backend soak proof (BA-14 Partial gap).
+5. Replace the remaining optional migration bridge with a fully native acquisition executor proof path end to end.

@@ -438,6 +438,22 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
           expires_at TEXT NOT NULL,
           completed_at TEXT
         ) STRICT;
+        CREATE TABLE IF NOT EXISTS track_audio_features (
+          track_id INTEGER PRIMARY KEY,
+          tag_bpm REAL,
+          tag_key TEXT,
+          rms_energy REAL,
+          peak_amplitude REAL,
+          dynamic_range REAL,
+          energy_volatility REAL,
+          has_high_volatility INTEGER,
+          is_loud INTEGER,
+          is_dynamic INTEGER,
+          extracted_at TEXT NOT NULL,
+          extraction_method TEXT NOT NULL DEFAULT 'none',
+          FOREIGN KEY(track_id) REFERENCES tracks(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_taf_track ON track_audio_features(track_id);
         CREATE TABLE IF NOT EXISTS taste_memory_preferences (
           axis_key TEXT PRIMARY KEY,
           axis_label TEXT NOT NULL,
@@ -458,6 +474,23 @@ pub fn init_database(conn: &Connection) -> LyraResult<()> {
           observed_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_taste_route_history_observed ON taste_route_history(observed_at DESC);
+        CREATE TABLE IF NOT EXISTS lineage_ingest_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          run_at TEXT NOT NULL,
+          artists_processed INTEGER NOT NULL DEFAULT 0,
+          edges_inserted INTEGER NOT NULL DEFAULT 0,
+          artists_skipped INTEGER NOT NULL DEFAULT 0,
+          error_count INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_lineage_ingest_log_run_at ON lineage_ingest_log(run_at DESC);
+        CREATE TABLE IF NOT EXISTS audio_extraction_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          run_at TEXT NOT NULL,
+          tracks_processed INTEGER NOT NULL DEFAULT 0,
+          tracks_succeeded INTEGER NOT NULL DEFAULT 0,
+          tracks_failed INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_audio_extraction_log_run_at ON audio_extraction_log(run_at DESC);
         ",
     )?;
     // Backfill FTS index for any tracks not yet indexed

@@ -27,7 +27,9 @@ use lyra_core::search::{
     RemixResult, SearchExcavationResult, SearchFilters, SearchResult, SearchSemanticCapability,
     SortBy,
 };
+use lyra_core::artist_intelligence::{IngestResult, LineageIngestStatus};
 use lyra_core::taste_prioritizer::{PrioritizeStats, QueueItem};
+use lyra_core::track_audio_features::{AudioExtractionStatus, BatchExtractResult};
 use lyra_core::validator::ValidationResult;
 use lyra_core::LyraCore;
 use serde::{Deserialize, Serialize};
@@ -1618,6 +1620,52 @@ fn build_artist_graph(state: State<'_, AppState>) -> Result<usize, String> {
     state.core.build_artist_graph().map_err(|e| e.to_string())
 }
 
+// ── BA-10: Lineage population ─────────────────────────────────────────────────
+
+#[tauri::command]
+fn ingest_artist_relationships(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<IngestResult, String> {
+    state
+        .core
+        .ingest_artist_relationships(limit.unwrap_or(50))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn pending_artist_ingestion_count(state: State<'_, AppState>) -> usize {
+    state.core.pending_artist_ingestion_count()
+}
+
+#[tauri::command]
+fn get_lineage_ingest_status(state: State<'_, AppState>) -> LineageIngestStatus {
+    state.core.get_lineage_ingest_status()
+}
+
+// ── BA-13: Audio extraction population ───────────────────────────────────────
+
+#[tauri::command]
+fn extract_audio_features_batch(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+    force: Option<bool>,
+) -> BatchExtractResult {
+    state
+        .core
+        .extract_audio_features_batch(limit.unwrap_or(100), force.unwrap_or(false))
+}
+
+#[tauri::command]
+fn pending_audio_extraction_count(state: State<'_, AppState>) -> i64 {
+    state.core.pending_audio_extraction_count()
+}
+
+#[tauri::command]
+fn get_audio_extraction_status(state: State<'_, AppState>) -> AudioExtractionStatus {
+    state.core.get_audio_extraction_status()
+}
+
 #[tauri::command]
 fn get_graph_stats(state: State<'_, AppState>) -> Result<GraphStats, String> {
     state.core.get_graph_stats().map_err(|e| e.to_string())
@@ -2057,6 +2105,14 @@ fn main() {
             get_discovery_session,
             build_artist_graph,
             get_graph_stats,
+            // BA-10: lineage population
+            ingest_artist_relationships,
+            pending_artist_ingestion_count,
+            get_lineage_ingest_status,
+            // BA-13: audio extraction population
+            extract_audio_features_batch,
+            pending_audio_extraction_count,
+            get_audio_extraction_status,
             fallback_text_search,
             search_excavation_surface,
             get_semantic_search_capability,
