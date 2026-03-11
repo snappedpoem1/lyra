@@ -34,33 +34,33 @@ const META_KEY_LAST_RUN: &str = "graph_builder_last_run_ts";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphEdge {
-    pub source:   String,
-    pub target:   String,
+    pub source: String,
+    pub target: String,
     pub edge_type: String,
-    pub weight:   f64,
+    pub weight: f64,
     pub evidence: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GraphBuildResult {
     /// Number of new edge pairs (bidirectional) inserted.
-    pub new_pairs:          usize,
-    pub dimension_pairs:    usize,
-    pub lastfm_pairs:       usize,
-    pub artists_processed:  usize,
+    pub new_pairs: usize,
+    pub dimension_pairs: usize,
+    pub lastfm_pairs: usize,
+    pub artists_processed: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GraphStats {
-    pub total_artists:    usize,
+    pub total_artists: usize,
     pub total_connections: usize,
-    pub last_run_ts:      f64,
-    pub top_connected:    Vec<GraphNode>,
+    pub last_run_ts: f64,
+    pub top_connected: Vec<GraphNode>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GraphNode {
-    pub artist:      String,
+    pub artist: String,
     pub connections: usize,
 }
 
@@ -107,7 +107,7 @@ fn set_last_run_ts(conn: &Connection, ts: f64) {
 
 #[derive(Debug)]
 struct SimilarArtist {
-    name:  String,
+    name: String,
     match_score: f64,
 }
 
@@ -161,11 +161,11 @@ fn fetch_lastfm_similar(api_key: &str, artist: &str, top_k: usize) -> Vec<Simila
 ///
 /// Returns the number of new unique edge pairs inserted.
 pub fn build_lastfm_similarity_edges(
-    conn:              &Connection,
-    api_key:           &str,
-    top_k:             usize,
+    conn: &Connection,
+    api_key: &str,
+    top_k: usize,
     local_targets_only: bool,
-    limit_artists:     Option<usize>,
+    limit_artists: Option<usize>,
 ) -> LyraResult<usize> {
     let top_k = top_k.clamp(1, 50);
 
@@ -185,7 +185,7 @@ pub fn build_lastfm_similarity_edges(
             .collect();
         match limit_artists {
             Some(n) => all.into_iter().take(n).collect(),
-            None    => all,
+            None => all,
         }
     };
 
@@ -193,18 +193,19 @@ pub fn build_lastfm_similarity_edges(
 
     // Load existing similar edges to skip duplicates
     let existing: HashSet<(String, String)> = {
-        let mut stmt = conn.prepare(
-            "SELECT source, target FROM connections WHERE type = 'similar'",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT source, target FROM connections WHERE type = 'similar'")?;
         let rows_collected: Vec<(String, String)> = stmt
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
             .filter_map(Result::ok)
             .collect();
         rows_collected.into_iter().collect()
     };
 
-    let mut seen_pairs:  HashSet<(String, String)> = HashSet::new();
-    let mut new_edges:   Vec<GraphEdge>             = Vec::new();
+    let mut seen_pairs: HashSet<(String, String)> = HashSet::new();
+    let mut new_edges: Vec<GraphEdge> = Vec::new();
 
     for artist_name in &library_artists {
         let similar = fetch_lastfm_similar(api_key, artist_name, top_k);
@@ -216,8 +217,16 @@ pub fn build_lastfm_similarity_edges(
             if local_targets_only && !library_set.contains(&s.name) {
                 continue;
             }
-            let lo = if artist_name < &s.name { artist_name.clone() } else { s.name.clone() };
-            let hi = if artist_name < &s.name { s.name.clone() } else { artist_name.clone() };
+            let lo = if artist_name < &s.name {
+                artist_name.clone()
+            } else {
+                s.name.clone()
+            };
+            let hi = if artist_name < &s.name {
+                s.name.clone()
+            } else {
+                artist_name.clone()
+            };
             let pair = (lo.clone(), hi.clone());
             if seen_pairs.contains(&pair) {
                 continue;
@@ -235,15 +244,15 @@ pub fn build_lastfm_similarity_edges(
                 s.match_score
             );
             new_edges.push(GraphEdge {
-                source:    artist_name.clone(),
-                target:    s.name.clone(),
+                source: artist_name.clone(),
+                target: s.name.clone(),
                 edge_type: "similar".to_string(),
                 weight,
-                evidence:  evidence.clone(),
+                evidence: evidence.clone(),
             });
             new_edges.push(GraphEdge {
-                source:    s.name.clone(),
-                target:    artist_name.clone(),
+                source: s.name.clone(),
+                target: artist_name.clone(),
                 edge_type: "similar".to_string(),
                 weight,
                 evidence,
@@ -279,14 +288,16 @@ pub fn build_lastfm_similarity_edges(
 ///
 /// Returns counts of new edge pairs per type.
 pub fn build_incremental(
-    conn:              &Connection,
-    top_k_lastfm:      usize,
+    conn: &Connection,
+    top_k_lastfm: usize,
     local_targets_only: bool,
 ) -> LyraResult<GraphBuildResult> {
-    let dim_pairs  = build_dimension_affinity(conn);
-    let lfm_pairs  = match load_lastfm_api_key(conn) {
-        Some(key) => build_lastfm_similarity_edges(conn, &key, top_k_lastfm, local_targets_only, None)?,
-        None      => 0,
+    let dim_pairs = build_dimension_affinity(conn);
+    let lfm_pairs = match load_lastfm_api_key(conn) {
+        Some(key) => {
+            build_lastfm_similarity_edges(conn, &key, top_k_lastfm, local_targets_only, None)?
+        }
+        None => 0,
     };
 
     set_last_run_ts(conn, chrono::Utc::now().timestamp() as f64);
@@ -303,17 +314,17 @@ pub fn build_incremental(
         .unwrap_or(0);
 
     Ok(GraphBuildResult {
-        new_pairs:         dim_pairs + lfm_pairs,
-        dimension_pairs:   dim_pairs,
-        lastfm_pairs:      lfm_pairs,
+        new_pairs: dim_pairs + lfm_pairs,
+        dimension_pairs: dim_pairs,
+        lastfm_pairs: lfm_pairs,
         artists_processed: artists_processed as usize,
     })
 }
 
 /// Full rebuild — same as incremental but ignores last-run timestamp.
 pub fn build_full(
-    conn:              &Connection,
-    top_k_lastfm:      usize,
+    conn: &Connection,
+    top_k_lastfm: usize,
     local_targets_only: bool,
 ) -> LyraResult<GraphBuildResult> {
     // Reset timestamp so incremental logic processes everything
@@ -325,7 +336,9 @@ pub fn build_full(
 
 pub fn graph_stats(conn: &Connection) -> LyraResult<GraphStats> {
     let total_artists: i64 = conn
-        .query_row("SELECT COUNT(DISTINCT source) FROM connections", [], |r| r.get(0))
+        .query_row("SELECT COUNT(DISTINCT source) FROM connections", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     let total_connections: i64 = conn
@@ -340,7 +353,7 @@ pub fn graph_stats(conn: &Connection) -> LyraResult<GraphStats> {
         let rows_collected: Vec<GraphNode> = stmt
             .query_map([], |row| {
                 Ok(GraphNode {
-                    artist:      row.get(0)?,
+                    artist: row.get(0)?,
                     connections: row.get::<_, i64>(1)? as usize,
                 })
             })?
@@ -350,9 +363,9 @@ pub fn graph_stats(conn: &Connection) -> LyraResult<GraphStats> {
     };
 
     Ok(GraphStats {
-        total_artists:     total_artists as usize,
+        total_artists: total_artists as usize,
         total_connections: total_connections as usize,
-        last_run_ts:       get_last_run_ts(conn),
+        last_run_ts: get_last_run_ts(conn),
         top_connected,
     })
 }
@@ -362,10 +375,10 @@ pub fn graph_stats(conn: &Connection) -> LyraResult<GraphStats> {
 /// Return all direct neighbours of `artist` in the connections table,
 /// optionally filtered by edge type.
 pub fn get_neighbours(
-    conn:      &Connection,
-    artist:    &str,
+    conn: &Connection,
+    artist: &str,
     edge_type: Option<&str>,
-    limit:     usize,
+    limit: usize,
 ) -> LyraResult<Vec<GraphEdge>> {
     let limit = limit.clamp(1, 500);
 
@@ -393,11 +406,11 @@ pub fn get_neighbours(
     let edges: Vec<GraphEdge> = stmt
         .query_map(refs.as_slice(), |row| {
             Ok(GraphEdge {
-                source:    row.get(0)?,
-                target:    row.get(1)?,
+                source: row.get(0)?,
+                target: row.get(1)?,
                 edge_type: row.get(2)?,
-                weight:    row.get(3)?,
-                evidence:  row.get(4)?,
+                weight: row.get(3)?,
+                evidence: row.get(4)?,
             })
         })?
         .filter_map(Result::ok)
@@ -410,9 +423,7 @@ pub fn get_neighbours(
 
 /// Return a map of edge_type → count across all connections.
 pub fn edge_type_counts(conn: &Connection) -> LyraResult<HashMap<String, usize>> {
-    let mut stmt = conn.prepare(
-        "SELECT type, COUNT(*) FROM connections GROUP BY type",
-    )?;
+    let mut stmt = conn.prepare("SELECT type, COUNT(*) FROM connections GROUP BY type")?;
     let map: HashMap<String, usize> = stmt
         .query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as usize))

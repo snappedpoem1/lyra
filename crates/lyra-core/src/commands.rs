@@ -69,6 +69,12 @@ pub struct SpotifyMissingCandidate {
 pub struct SpotifyGapSummary {
     pub available: bool,
     pub db_path: Option<String>,
+    pub source_mode: String,
+    pub legacy_import_observed: bool,
+    pub last_legacy_import_at: Option<String>,
+    pub last_legacy_imported_history: i64,
+    pub last_legacy_imported_library: i64,
+    pub last_legacy_imported_features: i64,
     pub history_count: i64,
     pub library_count: i64,
     pub features_count: i64,
@@ -312,6 +318,54 @@ pub struct AcquisitionQueueItem {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AcquisitionPlanRecord {
+    pub id: i64,
+    pub kind: String,
+    pub status: String,
+    pub source: Option<String>,
+    pub requested_artist: Option<String>,
+    pub requested_title: Option<String>,
+    pub requested_album: Option<String>,
+    pub canonical_artist: Option<String>,
+    pub canonical_album: Option<String>,
+    pub summary: String,
+    pub total_items: i64,
+    pub queued_items: i64,
+    pub blocked_items: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcquisitionPlanItemRecord {
+    pub id: i64,
+    pub plan_id: i64,
+    pub item_kind: String,
+    pub status: String,
+    pub artist: String,
+    pub title: String,
+    pub album: Option<String>,
+    pub release_group_mbid: Option<String>,
+    pub release_date: Option<String>,
+    pub disc_number: Option<i64>,
+    pub track_number: Option<i64>,
+    pub queue_item_id: Option<i64>,
+    pub evidence_level: String,
+    pub evidence_summary: String,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcquisitionPlanResult {
+    pub plan: AcquisitionPlanRecord,
+    pub items: Vec<AcquisitionPlanItemRecord>,
+    pub queue_items: Vec<AcquisitionQueueItem>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AcquisitionPreflightCheck {
     pub key: String,
     pub label: String,
@@ -432,6 +486,27 @@ pub struct ProviderValidationResult {
     pub latency_ms: u64,
     pub error: Option<String>,
     pub detail: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpotifyOauthSession {
+    pub token_type: String,
+    pub scopes: Vec<String>,
+    pub access_token_expires_at: Option<String>,
+    pub refreshed_at: String,
+    pub has_refresh_token: bool,
+    pub access_token_ready: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpotifyOauthBootstrap {
+    pub authorization_url: String,
+    pub state: String,
+    pub redirect_uri: String,
+    pub scopes: Vec<String>,
+    pub expires_at: String,
 }
 
 /// A track with a reason for its inclusion in a generated playlist.
@@ -824,6 +899,8 @@ pub struct RelatedArtist {
     pub connection_strength: f32,
     pub connection_type: String, // "similar", "collab", "genre"
     pub local_track_count: usize,
+    pub evidence_level: String,
+    pub evidence_summary: String,
     pub why: String,
     pub preserves: Vec<String>,
     pub changes: Vec<String>,
@@ -955,6 +1032,10 @@ pub struct EvidenceItem {
     pub type_label: String,
     /// Which subsystem produced this signal: "local", "scout", "graph", "feedback"
     pub source: String,
+    /// Evidence bucket used for honest explainability rollups.
+    pub category: String,
+    /// Concrete anchor for where the evidence came from.
+    pub anchor: String,
     /// Human-readable explanation sentence.
     pub text: String,
     /// Relative weight of this signal in the final score (0.0–1.0).
@@ -968,6 +1049,8 @@ pub struct ExplainPayload {
     pub track_id: i64,
     /// Short single-sentence "why" at composer payload depth.
     pub why_this_track: String,
+    /// Overall evidence posture for this explanation.
+    pub evidence_grade: String,
     /// Legacy flat reasons list (kept for backward compat).
     pub reasons: Vec<String>,
     /// Structured evidence items mirroring TrackReasonPayload depth.
@@ -990,6 +1073,8 @@ pub struct RecommendationResult {
     pub provider: String,
     /// Single-sentence reason at composer payload depth.
     pub why_this_track: String,
+    /// Overall evidence posture for this candidate.
+    pub evidence_grade: String,
     /// Structured evidence items.
     pub evidence: Vec<EvidenceItem>,
 }
@@ -1003,6 +1088,7 @@ pub struct AcquisitionLead {
     pub provider: String,
     pub score: f64,
     pub reason: String,
+    pub evidence_grade: String,
     pub evidence: Vec<EvidenceItem>,
 }
 
@@ -1058,7 +1144,6 @@ pub struct ArtistProfile {
     pub top_tracks: Vec<TrackRecord>,
     pub connections: Vec<ArtistConnection>,
 }
-
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -7,7 +7,7 @@ edition = "2021"
 chrono = { version = "0.4", features = ["serde"] }
 cpal = "0.15"
 dotenvy = "0.15"
-keyring = "3"
+keyring = { version = "3", features = ["windows-native"] }
 lofty = "0.22"
 rodio = "0.20"
 rusqlite = { version = "0.32", features = ["bundled", "chrono"] }

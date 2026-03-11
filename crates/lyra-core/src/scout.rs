@@ -16,18 +16,27 @@ use crate::errors::LyraResult;
 /// Static mood keyword → genre list table.
 fn mood_genre_map() -> &'static [(&'static str, &'static [&'static str])] {
     &[
-        ("aggressive",    &["Punk", "Hardcore", "Metal", "Industrial"]),
-        ("euphoric",      &["Trance", "Progressive House", "Uplifting"]),
-        ("melancholic",   &["Post-Rock", "Ambient", "Shoegaze", "Slowcore"]),
-        ("energetic",     &["Drum and Bass", "Breakcore", "Techno"]),
-        ("dark",          &["Darkwave", "EBM", "Dark Ambient", "Witch House"]),
-        ("rebellious",    &["Punk", "Garage Rock", "Grunge"]),
-        ("introspective", &["Indie Folk", "Singer-Songwriter", "Chamber Pop"]),
-        ("chill",         &["Lo-fi", "Chillhop", "Downtempo", "Ambient"]),
-        ("romantic",      &["Soul", "R&B", "Jazz", "Bossa Nova"]),
-        ("nostalgic",     &["Classic Rock", "Oldies", "Blues", "Folk"]),
-        ("focused",       &["Classical", "Minimalism", "Ambient", "Post-Rock"]),
-        ("party",         &["Electronic", "EDM", "Hip-Hop", "Pop"]),
+        ("aggressive", &["Punk", "Hardcore", "Metal", "Industrial"]),
+        ("euphoric", &["Trance", "Progressive House", "Uplifting"]),
+        (
+            "melancholic",
+            &["Post-Rock", "Ambient", "Shoegaze", "Slowcore"],
+        ),
+        ("energetic", &["Drum and Bass", "Breakcore", "Techno"]),
+        ("dark", &["Darkwave", "EBM", "Dark Ambient", "Witch House"]),
+        ("rebellious", &["Punk", "Garage Rock", "Grunge"]),
+        (
+            "introspective",
+            &["Indie Folk", "Singer-Songwriter", "Chamber Pop"],
+        ),
+        ("chill", &["Lo-fi", "Chillhop", "Downtempo", "Ambient"]),
+        ("romantic", &["Soul", "R&B", "Jazz", "Bossa Nova"]),
+        ("nostalgic", &["Classic Rock", "Oldies", "Blues", "Folk"]),
+        (
+            "focused",
+            &["Classical", "Minimalism", "Ambient", "Post-Rock"],
+        ),
+        ("party", &["Electronic", "EDM", "Hip-Hop", "Pop"]),
     ]
 }
 
@@ -55,35 +64,35 @@ pub fn mood_to_genres(mood: &str) -> Vec<String> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BridgeArtist {
-    pub name:         String,
-    pub genre_a:      String,
-    pub genre_b:      String,
-    pub track_count:  i64,
+    pub name: String,
+    pub genre_a: String,
+    pub genre_b: String,
+    pub track_count: i64,
     /// "local" = found in library; "discogs" = from Discogs API (deferred)
-    pub source:       String,
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoutTarget {
-    pub artist:       String,
-    pub title:        String,
-    pub album:        String,
-    pub year:         Option<i32>,
-    pub genre:        String,
-    pub path:         String,
-    pub tags:         Vec<String>,
-    pub priority:     f64,
+    pub artist: String,
+    pub title: String,
+    pub album: String,
+    pub year: Option<i32>,
+    pub genre: String,
+    pub path: String,
+    pub tags: Vec<String>,
+    pub priority: f64,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct MoodSearchResult {
-    pub track_id:  i64,
-    pub artist:    String,
-    pub title:     String,
-    pub album:     String,
-    pub genre:     String,
-    pub path:      String,
-    pub source:    String,
+    pub track_id: i64,
+    pub artist: String,
+    pub title: String,
+    pub album: String,
+    pub genre: String,
+    pub path: String,
+    pub source: String,
 }
 
 // ── Credential loading ────────────────────────────────────────────────────────
@@ -91,7 +100,8 @@ pub struct MoodSearchResult {
 fn load_discogs_token(conn: &Connection) -> Option<String> {
     conn.query_row(
         "SELECT config_json FROM provider_configs WHERE provider_key = 'discogs'",
-        [], |row| row.get::<_, String>(0),
+        [],
+        |row| row.get::<_, String>(0),
     )
     .ok()
     .and_then(|j| serde_json::from_str::<Value>(&j).ok())
@@ -106,9 +116,9 @@ fn load_discogs_token(conn: &Connection) -> Option<String> {
 
 // ── Discogs bridge artist API ─────────────────────────────────────────────────
 
-const DISCOGS_BASE:    &str = "https://api.discogs.com";
-const DISCOGS_UA:      &str = "Lyra/0.1 +https://github.com/snappedpoem1/lyra";
-const DISCOGS_RATE_MS: u64  = 1100;
+const DISCOGS_BASE: &str = "https://api.discogs.com";
+const DISCOGS_UA: &str = "Lyra/0.1 +https://github.com/snappedpoem1/lyra";
+const DISCOGS_RATE_MS: u64 = 1100;
 
 /// Query Discogs for artists tagged with both genres.
 /// Returns up to 50 candidates sourced as "discogs".
@@ -127,7 +137,7 @@ pub fn fetch_discogs_bridge_artists(
         .query("per_page", "50")
         .call()
     {
-        Ok(r)  => r.into_json().unwrap_or(Value::Null),
+        Ok(r) => r.into_json().unwrap_or(Value::Null),
         Err(_) => return vec![],
     };
 
@@ -138,11 +148,11 @@ pub fn fetch_discogs_bridge_artists(
                 .iter()
                 .filter_map(|r| r.get("title").and_then(Value::as_str))
                 .map(|name| BridgeArtist {
-                    name:        name.to_string(),
-                    genre_a:     genre_a.to_string(),
-                    genre_b:     genre_b.to_string(),
+                    name: name.to_string(),
+                    genre_a: genre_a.to_string(),
+                    genre_b: genre_b.to_string(),
                     track_count: 0,
-                    source:      "discogs".to_string(),
+                    source: "discogs".to_string(),
                 })
                 .collect()
         })
@@ -189,11 +199,11 @@ pub fn find_local_bridge_artists(
         .prepare(sql)?
         .query_map(params![like_a, like_b], |row| {
             Ok(BridgeArtist {
-                name:        row.get::<_, String>(0)?,
-                genre_a:     genre_a.to_string(),
-                genre_b:     genre_b.to_string(),
+                name: row.get::<_, String>(0)?,
+                genre_a: genre_a.to_string(),
+                genre_b: genre_b.to_string(),
                 track_count: row.get(1)?,
-                source:      "local".to_string(),
+                source: "local".to_string(),
             })
         })?
         .filter_map(Result::ok)
@@ -237,8 +247,8 @@ pub fn cross_genre_hunt(
 
     for name in &artist_names {
         let like_name = format!("%{}%", name.to_lowercase());
-        let like_a    = format!("%{}%", genre_a.to_lowercase());
-        let like_b    = format!("%{}%", genre_b.to_lowercase());
+        let like_a = format!("%{}%", genre_a.to_lowercase());
+        let like_b = format!("%{}%", genre_b.to_lowercase());
 
         let tracks: Vec<ScoutTarget> = conn
             .prepare(
@@ -260,13 +270,17 @@ pub fn cross_genre_hunt(
                 let priority = compute_scout_priority(year, &genre, genre_a, genre_b);
                 Ok(ScoutTarget {
                     artist: row.get(1)?,
-                    title:  row.get(2)?,
-                    album:  row.get(3)?,
+                    title: row.get(2)?,
+                    album: row.get(3)?,
                     year,
-                    genre:  genre.clone(),
-                    path:   row.get(6)?,
-                    tags:   vec![
-                        format!("fusion:{}_{}", genre_a.to_lowercase(), genre_b.to_lowercase()),
+                    genre: genre.clone(),
+                    path: row.get(6)?,
+                    tags: vec![
+                        format!(
+                            "fusion:{}_{}",
+                            genre_a.to_lowercase(),
+                            genre_b.to_lowercase()
+                        ),
                         "context:bridge".into(),
                         "scout:cross_genre".into(),
                     ],
@@ -282,7 +296,11 @@ pub fn cross_genre_hunt(
         }
     }
 
-    results.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap_or(std::cmp::Ordering::Equal));
+    results.sort_by(|a, b| {
+        b.priority
+            .partial_cmp(&a.priority)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     results.truncate(limit);
     Ok(results)
 }
@@ -349,9 +367,7 @@ pub fn discover_by_mood(
 
     let mut bound: Vec<Box<dyn rusqlite::types::ToSql>> = genres
         .iter()
-        .map(|g| -> Box<dyn rusqlite::types::ToSql> {
-            Box::new(format!("%{}%", g.to_lowercase()))
-        })
+        .map(|g| -> Box<dyn rusqlite::types::ToSql> { Box::new(format!("%{}%", g.to_lowercase())) })
         .collect();
     bound.push(Box::new(limit as i64));
     let refs: Vec<&dyn rusqlite::types::ToSql> = bound.iter().map(|b| b.as_ref()).collect();
@@ -361,12 +377,12 @@ pub fn discover_by_mood(
         .query_map(refs.as_slice(), |row| {
             Ok(MoodSearchResult {
                 track_id: row.get(0)?,
-                artist:   row.get(1)?,
-                title:    row.get(2)?,
-                album:    row.get(3)?,
-                genre:    row.get(4)?,
-                path:     row.get(5)?,
-                source:   "local".to_string(),
+                artist: row.get(1)?,
+                title: row.get(2)?,
+                album: row.get(3)?,
+                genre: row.get(4)?,
+                path: row.get(5)?,
+                source: "local".to_string(),
             })
         })?
         .filter_map(Result::ok)

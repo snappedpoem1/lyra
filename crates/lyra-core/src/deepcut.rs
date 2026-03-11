@@ -7,7 +7,7 @@
 //! - Last.fm `track.getInfo` → real listener/playcount for popularity percentile
 //! - Discogs `/database/search` + `/releases/{id}` → community rating for acclaim
 
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -21,9 +21,9 @@ const EPSILON: f64 = 0.05;
 /// Default percentile buckets used when no Last.fm cache data is available.
 /// (percentile, max_listeners_at_that_percentile)
 pub const DEFAULT_LISTENER_BUCKETS: &[(f64, i64)] = &[
-    (0.05,   1_000),
-    (0.10,   5_000),
-    (0.25,  25_000),
+    (0.05, 1_000),
+    (0.10, 5_000),
+    (0.25, 25_000),
     (0.50, 150_000),
     (0.75, 500_000),
     (0.90, 1_500_000),
@@ -31,54 +31,59 @@ pub const DEFAULT_LISTENER_BUCKETS: &[(f64, i64)] = &[
 ];
 
 const DIM_NAMES: [&str; 10] = [
-    "energy", "valence", "tension", "density",
-    "warmth", "movement", "space", "rawness", "complexity", "nostalgia",
+    "energy",
+    "valence",
+    "tension",
+    "density",
+    "warmth",
+    "movement",
+    "space",
+    "rawness",
+    "complexity",
+    "nostalgia",
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeepCutTrack {
-    pub track_id:             i64,
-    pub artist:               String,
-    pub title:                String,
-    pub album:                String,
-    pub genre:                String,
-    pub path:                 String,
-    pub obscurity_score:      f64,
-    pub acclaim_score:        f64,
+    pub track_id: i64,
+    pub artist: String,
+    pub title: String,
+    pub album: String,
+    pub genre: String,
+    pub path: String,
+    pub obscurity_score: f64,
+    pub acclaim_score: f64,
     pub popularity_percentile: f64,
     /// Local playback count (Last.fm proxy when API unavailable).
-    pub local_play_count:     i64,
+    pub local_play_count: i64,
     /// Taste alignment (0–1); populated by `hunt_with_taste_context`.
-    pub taste_alignment:      f64,
+    pub taste_alignment: f64,
     /// Blended rank: obscurity × 0.6 + taste × 0.4.
-    pub deep_cut_rank:        f64,
-    pub tags:                 Vec<String>,
+    pub deep_cut_rank: f64,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct DeepCutStats {
-    pub total_tracks:        i64,
-    pub median_obscurity:    f64,
+    pub total_tracks: i64,
+    pub median_obscurity: f64,
     pub high_potential_count: usize,
-    pub top_5_deep_cuts:     Vec<TopDeepCut>,
+    pub top_5_deep_cuts: Vec<TopDeepCut>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopDeepCut {
-    pub artist:          String,
-    pub title:           String,
+    pub artist: String,
+    pub title: String,
     pub obscurity_score: f64,
 }
 
 // ── Popularity percentile ─────────────────────────────────────────────────────
 
 /// Map a raw listener count to a 0–1 percentile using the bucket table.
-pub fn compute_popularity_percentile(
-    listeners: i64,
-    buckets: &[(f64, i64)],
-) -> f64 {
+pub fn compute_popularity_percentile(listeners: i64, buckets: &[(f64, i64)]) -> f64 {
     if listeners <= 0 {
         return 0.01; // nearly unknown
     }
@@ -94,9 +99,7 @@ pub fn compute_popularity_percentile(
 ///
 /// Reads `playback_history` counts per track. Tracks never played get 0.
 /// Returns a bucket table in the same format as `DEFAULT_LISTENER_BUCKETS`.
-pub fn local_play_count_percentile_buckets(
-    conn: &Connection,
-) -> LyraResult<Vec<(f64, i64)>> {
+pub fn local_play_count_percentile_buckets(conn: &Connection) -> LyraResult<Vec<(f64, i64)>> {
     let counts: Vec<i64> = conn
         .prepare(
             "SELECT COUNT(*) as c
@@ -145,15 +148,18 @@ pub fn compute_acclaim(discogs_rating: f64) -> f64 {
 pub fn build_tags(obscurity: f64, acclaim: f64, pop_pct: f64, genre: &str) -> Vec<String> {
     let mut tags = vec!["deepcut:true".to_string()];
 
-    tags.push(if obscurity > 1.5 {
-        "tier:holy_grail"
-    } else if obscurity > 1.0 {
-        "tier:hidden_gem"
-    } else if obscurity > 0.7 {
-        "tier:deep_cut"
-    } else {
-        "tier:underrated"
-    }.to_string());
+    tags.push(
+        if obscurity > 1.5 {
+            "tier:holy_grail"
+        } else if obscurity > 1.0 {
+            "tier:hidden_gem"
+        } else if obscurity > 0.7 {
+            "tier:deep_cut"
+        } else {
+            "tier:underrated"
+        }
+        .to_string(),
+    );
 
     if pop_pct < 0.1 {
         tags.push("visibility:nearly_unknown".into());
@@ -168,7 +174,7 @@ pub fn build_tags(obscurity: f64, acclaim: f64, pop_pct: f64, genre: &str) -> Ve
     }
 
     if !genre.is_empty() {
-        let safe = genre.to_lowercase().replace(' ', "_").replace('/', "_");
+        let safe = genre.to_lowercase().replace([' ', '/'], "_");
         let safe = &safe[..safe.len().min(30)];
         tags.push(format!("genre:{}", safe));
     }
@@ -180,15 +186,35 @@ pub fn build_tags(obscurity: f64, acclaim: f64, pop_pct: f64, genre: &str) -> Ve
 
 /// Candidate row from the library.
 struct LibraryRow {
-    track_id:       i64,
-    artist:         String,
-    title:          String,
-    album:          String,
-    genre:          String,
-    path:           String,
-    local_plays:    i64,
+    track_id: i64,
+    artist: String,
+    title: String,
+    album: String,
+    genre: String,
+    path: String,
+    local_plays: i64,
     taste_alignment: f64,
 }
+
+type TasteAlignedRow = (
+    i64,
+    String,
+    String,
+    String,
+    String,
+    String,
+    i64,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+);
 
 fn get_library_candidates(
     conn: &Connection,
@@ -227,13 +253,13 @@ fn get_library_candidates(
     let rows: Vec<LibraryRow> = stmt
         .query_map(refs.as_slice(), |row| {
             Ok(LibraryRow {
-                track_id:        row.get(0)?,
-                artist:          row.get(1)?,
-                title:           row.get(2)?,
-                album:           row.get(3)?,
-                genre:           row.get(4)?,
-                path:            row.get(5)?,
-                local_plays:     row.get(6)?,
+                track_id: row.get(0)?,
+                artist: row.get(1)?,
+                title: row.get(2)?,
+                album: row.get(3)?,
+                genre: row.get(4)?,
+                path: row.get(5)?,
+                local_plays: row.get(6)?,
                 taste_alignment: 0.0,
             })
         })?
@@ -250,10 +276,7 @@ fn get_taste_aligned_candidates(
     limit: usize,
 ) -> LyraResult<Vec<LibraryRow>> {
     // Load all scored tracks
-    let rows: Vec<(i64, String, String, String, String, String, i64,
-                   Option<f64>, Option<f64>, Option<f64>, Option<f64>,
-                   Option<f64>, Option<f64>, Option<f64>, Option<f64>,
-                   Option<f64>, Option<f64>)> = conn
+    let rows: Vec<TasteAlignedRow> = conn
         .prepare(
             "SELECT t.id, COALESCE(ar.name,''), COALESCE(t.title,''),
                     COALESCE(al.title,''), COALESCE(t.genre,''), COALESCE(t.path,''),
@@ -283,9 +306,8 @@ fn get_taste_aligned_candidates(
     let mut scored: Vec<(f64, LibraryRow)> = rows
         .into_iter()
         .map(|r| {
-            let track_dims: [Option<f64>; 10] = [
-                r.7, r.8, r.9, r.10, r.11, r.12, r.13, r.14, r.15, r.16,
-            ];
+            let track_dims: [Option<f64>; 10] =
+                [r.7, r.8, r.9, r.10, r.11, r.12, r.13, r.14, r.15, r.16];
             let mut total_dist = 0.0_f64;
             let mut matched = 0usize;
             for (i, &dim) in DIM_NAMES.iter().enumerate() {
@@ -299,16 +321,19 @@ fn get_taste_aligned_candidates(
             } else {
                 1.0 - (total_dist / matched as f64)
             };
-            (alignment, LibraryRow {
-                track_id:        r.0,
-                artist:          r.1,
-                title:           r.2,
-                album:           r.3,
-                genre:           r.4,
-                path:            r.5,
-                local_plays:     r.6,
-                taste_alignment: alignment,
-            })
+            (
+                alignment,
+                LibraryRow {
+                    track_id: r.0,
+                    artist: r.1,
+                    title: r.2,
+                    album: r.3,
+                    genre: r.4,
+                    path: r.5,
+                    local_plays: r.6,
+                    taste_alignment: alignment,
+                },
+            )
         })
         .collect();
 
@@ -321,7 +346,8 @@ fn get_taste_aligned_candidates(
 fn load_lastfm_api_key(conn: &Connection) -> Option<String> {
     conn.query_row(
         "SELECT config_json FROM provider_configs WHERE provider_key = 'lastfm'",
-        [], |row| row.get::<_, String>(0),
+        [],
+        |row| row.get::<_, String>(0),
     )
     .ok()
     .and_then(|j| serde_json::from_str::<Value>(&j).ok())
@@ -337,7 +363,8 @@ fn load_lastfm_api_key(conn: &Connection) -> Option<String> {
 fn load_discogs_token(conn: &Connection) -> Option<String> {
     conn.query_row(
         "SELECT config_json FROM provider_configs WHERE provider_key = 'discogs'",
-        [], |row| row.get::<_, String>(0),
+        [],
+        |row| row.get::<_, String>(0),
     )
     .ok()
     .and_then(|j| serde_json::from_str::<Value>(&j).ok())
@@ -353,13 +380,13 @@ fn load_discogs_token(conn: &Connection) -> Option<String> {
 // ── Last.fm API ───────────────────────────────────────────────────────────────
 
 const LASTFM_BASE: &str = "https://ws.audioscrobbler.com/2.0/";
-const LASTFM_UA:   &str = "Lyra/0.1 (https://github.com/snappedpoem1/lyra)";
+const LASTFM_UA: &str = "Lyra/0.1 (https://github.com/snappedpoem1/lyra)";
 const LASTFM_RATE_MS: u64 = 250;
 
 #[derive(Debug, Default)]
 pub struct LastFmTrackInfo {
-    pub listeners:  i64,
-    pub playcount:  i64,
+    pub listeners: i64,
+    pub playcount: i64,
 }
 
 /// Fetch Last.fm track.getInfo — listeners + playcount.
@@ -383,11 +410,13 @@ pub fn fetch_lastfm_track_info(api_key: &str, artist: &str, title: &str) -> Last
 
     let track = data.get("track").unwrap_or(&Value::Null);
     LastFmTrackInfo {
-        listeners: track.get("listeners")
+        listeners: track
+            .get("listeners")
             .and_then(Value::as_str)
             .and_then(|s| s.parse().ok())
             .unwrap_or(0),
-        playcount: track.get("playcount")
+        playcount: track
+            .get("playcount")
             .and_then(Value::as_str)
             .and_then(|s| s.parse().ok())
             .unwrap_or(0),
@@ -397,7 +426,7 @@ pub fn fetch_lastfm_track_info(api_key: &str, artist: &str, title: &str) -> Last
 // ── Discogs API (acclaim) ─────────────────────────────────────────────────────
 
 const DISCOGS_BASE: &str = "https://api.discogs.com";
-const DISCOGS_UA:   &str = "Lyra/0.1 +https://github.com/snappedpoem1/lyra";
+const DISCOGS_UA: &str = "Lyra/0.1 +https://github.com/snappedpoem1/lyra";
 const DISCOGS_RATE_MS: u64 = 1100; // ~55 req/min to stay under 60/min limit
 
 /// Fetch Discogs community rating for an artist + track/album.
@@ -442,7 +471,8 @@ pub fn fetch_discogs_rating(token: &str, artist: &str, title: &str) -> f64 {
     };
 
     let votes = detail
-        .get("community").and_then(|c| c.get("rating"))
+        .get("community")
+        .and_then(|c| c.get("rating"))
         .and_then(|r| r.get("count"))
         .and_then(Value::as_i64)
         .unwrap_or(0);
@@ -452,7 +482,8 @@ pub fn fetch_discogs_rating(token: &str, artist: &str, title: &str) -> f64 {
     }
 
     detail
-        .get("community").and_then(|c| c.get("rating"))
+        .get("community")
+        .and_then(|c| c.get("rating"))
         .and_then(|r| r.get("average"))
         .and_then(Value::as_f64)
         .unwrap_or(0.0)
@@ -463,27 +494,26 @@ pub fn fetch_discogs_rating(token: &str, artist: &str, title: &str) -> f64 {
 fn score_row(row: LibraryRow, buckets: &[(f64, i64)]) -> DeepCutTrack {
     // Use local play count as popularity proxy (no API key available)
     let pop_pct = compute_popularity_percentile(row.local_plays, buckets);
-    let acclaim  = compute_acclaim(0.0); // neutral 0.5 without Discogs data
+    let acclaim = compute_acclaim(0.0); // neutral 0.5 without Discogs data
     let obscurity = acclaim / (pop_pct + EPSILON);
 
-    let deep_cut_rank =
-        obscurity.clamp(0.0, 5.0) * 0.6 + row.taste_alignment * 0.4;
+    let deep_cut_rank = obscurity.clamp(0.0, 5.0) * 0.6 + row.taste_alignment * 0.4;
 
     let tags = build_tags(obscurity, acclaim, pop_pct, &row.genre);
 
     DeepCutTrack {
-        track_id:              row.track_id,
-        artist:                row.artist,
-        title:                 row.title,
-        album:                 row.album,
-        genre:                 row.genre,
-        path:                  row.path,
-        obscurity_score:       (obscurity * 1000.0).round() / 1000.0,
-        acclaim_score:         acclaim,
+        track_id: row.track_id,
+        artist: row.artist,
+        title: row.title,
+        album: row.album,
+        genre: row.genre,
+        path: row.path,
+        obscurity_score: (obscurity * 1000.0).round() / 1000.0,
+        acclaim_score: acclaim,
         popularity_percentile: (pop_pct * 1000.0).round() / 1000.0,
-        local_play_count:      row.local_plays,
-        taste_alignment:       (row.taste_alignment * 1000.0).round() / 1000.0,
-        deep_cut_rank:         (deep_cut_rank * 1000.0).round() / 1000.0,
+        local_play_count: row.local_plays,
+        taste_alignment: (row.taste_alignment * 1000.0).round() / 1000.0,
+        deep_cut_rank: (deep_cut_rank * 1000.0).round() / 1000.0,
         tags,
     }
 }
@@ -494,24 +524,24 @@ fn score_row_enriched(
     discogs_rating: f64,
     buckets: &[(f64, i64)],
 ) -> DeepCutTrack {
-    let pop_pct   = compute_popularity_percentile(listeners.max(row.local_plays), buckets);
-    let acclaim   = compute_acclaim(discogs_rating);
+    let pop_pct = compute_popularity_percentile(listeners.max(row.local_plays), buckets);
+    let acclaim = compute_acclaim(discogs_rating);
     let obscurity = acclaim / (pop_pct + EPSILON);
     let deep_cut_rank = obscurity.clamp(0.0, 5.0) * 0.6 + row.taste_alignment * 0.4;
     let tags = build_tags(obscurity, acclaim, pop_pct, &row.genre);
     DeepCutTrack {
-        track_id:              row.track_id,
-        artist:                row.artist,
-        title:                 row.title,
-        album:                 row.album,
-        genre:                 row.genre,
-        path:                  row.path,
-        obscurity_score:       (obscurity * 1000.0).round() / 1000.0,
-        acclaim_score:         (acclaim   * 1000.0).round() / 1000.0,
-        popularity_percentile: (pop_pct   * 1000.0).round() / 1000.0,
-        local_play_count:      row.local_plays,
-        taste_alignment:       (row.taste_alignment * 1000.0).round() / 1000.0,
-        deep_cut_rank:         (deep_cut_rank * 1000.0).round() / 1000.0,
+        track_id: row.track_id,
+        artist: row.artist,
+        title: row.title,
+        album: row.album,
+        genre: row.genre,
+        path: row.path,
+        obscurity_score: (obscurity * 1000.0).round() / 1000.0,
+        acclaim_score: (acclaim * 1000.0).round() / 1000.0,
+        popularity_percentile: (pop_pct * 1000.0).round() / 1000.0,
+        local_play_count: row.local_plays,
+        taste_alignment: (row.taste_alignment * 1000.0).round() / 1000.0,
+        deep_cut_rank: (deep_cut_rank * 1000.0).round() / 1000.0,
         tags,
     }
 }
@@ -538,19 +568,21 @@ pub fn hunt_by_obscurity(
         return Ok(vec![]);
     }
 
-    let buckets      = local_play_count_percentile_buckets(conn)?;
-    let lfm_key      = load_lastfm_api_key(conn);
-    let discogs_tok  = load_discogs_token(conn);
+    let buckets = local_play_count_percentile_buckets(conn)?;
+    let lfm_key = load_lastfm_api_key(conn);
+    let discogs_tok = load_discogs_token(conn);
 
     let mut scored: Vec<DeepCutTrack> = candidates
         .into_iter()
         .map(|row| {
-            let listeners = lfm_key.as_deref().map(|key| {
-                fetch_lastfm_track_info(key, &row.artist, &row.title).listeners
-            }).unwrap_or(0);
-            let discogs_rating = discogs_tok.as_deref().map(|tok| {
-                fetch_discogs_rating(tok, &row.artist, &row.title)
-            }).unwrap_or(0.0);
+            let listeners = lfm_key
+                .as_deref()
+                .map(|key| fetch_lastfm_track_info(key, &row.artist, &row.title).listeners)
+                .unwrap_or(0);
+            let discogs_rating = discogs_tok
+                .as_deref()
+                .map(|tok| fetch_discogs_rating(tok, &row.artist, &row.title))
+                .unwrap_or(0.0);
             score_row_enriched(row, listeners, discogs_rating, &buckets)
         })
         .filter(|t| t.obscurity_score >= min_obscurity && t.obscurity_score <= max_obscurity)
@@ -582,19 +614,21 @@ pub fn hunt_with_taste_context(
         candidates = get_library_candidates(conn, None, None, limit * 5)?;
     }
 
-    let buckets     = local_play_count_percentile_buckets(conn)?;
-    let lfm_key     = load_lastfm_api_key(conn);
+    let buckets = local_play_count_percentile_buckets(conn)?;
+    let lfm_key = load_lastfm_api_key(conn);
     let discogs_tok = load_discogs_token(conn);
 
     let mut scored: Vec<DeepCutTrack> = candidates
         .into_iter()
         .map(|row| {
-            let listeners = lfm_key.as_deref().map(|key| {
-                fetch_lastfm_track_info(key, &row.artist, &row.title).listeners
-            }).unwrap_or(0);
-            let discogs_rating = discogs_tok.as_deref().map(|tok| {
-                fetch_discogs_rating(tok, &row.artist, &row.title)
-            }).unwrap_or(0.0);
+            let listeners = lfm_key
+                .as_deref()
+                .map(|key| fetch_lastfm_track_info(key, &row.artist, &row.title).listeners)
+                .unwrap_or(0);
+            let discogs_rating = discogs_tok
+                .as_deref()
+                .map(|tok| fetch_discogs_rating(tok, &row.artist, &row.title))
+                .unwrap_or(0.0);
             score_row_enriched(row, listeners, discogs_rating, &buckets)
         })
         .collect();
@@ -610,8 +644,7 @@ pub fn hunt_with_taste_context(
 
 /// Return summary statistics for the deep cut engine.
 pub fn get_stats(conn: &Connection) -> LyraResult<DeepCutStats> {
-    let total: i64 =
-        conn.query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0))?;
+    let total: i64 = conn.query_row("SELECT COUNT(*) FROM tracks", [], |r| r.get(0))?;
 
     let buckets = local_play_count_percentile_buckets(conn)?;
 
@@ -633,15 +666,15 @@ pub fn get_stats(conn: &Connection) -> LyraResult<DeepCutStats> {
     let high_potential_count = scores.iter().filter(|&&s| s > 0.8).count();
 
     // Top 5 by obscurity (re-score same sample, already have scores)
-    let mut all_buckets2 = local_play_count_percentile_buckets(conn)?;
+    let all_buckets2 = local_play_count_percentile_buckets(conn)?;
     let top5_candidates = get_library_candidates(conn, None, None, 500)?;
     let mut top5: Vec<TopDeepCut> = top5_candidates
         .into_iter()
         .map(|row| {
             let t = score_row(row, &all_buckets2);
             TopDeepCut {
-                artist:          t.artist,
-                title:           t.title,
+                artist: t.artist,
+                title: t.title,
                 obscurity_score: t.obscurity_score,
             }
         })

@@ -19,7 +19,9 @@ fn main() {
         if p.exists() {
             for line in std::fs::read_to_string(&p).unwrap_or_default().lines() {
                 let line = line.trim();
-                if line.starts_with('#') || line.is_empty() { continue; }
+                if line.starts_with('#') || line.is_empty() {
+                    continue;
+                }
                 if let Some((k, v)) = line.split_once('=') {
                     std::env::set_var(k.trim(), v.trim());
                 }
@@ -27,15 +29,39 @@ fn main() {
         }
     }
 
-    // Find the DB — project root lyra_registry.db
-    let db_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|root| root.join("lyra_registry.db"))
-        .expect("could not resolve db path");
+    // Resolve canonical DB path. Preference:
+    // 1) LYRA_DB_PATH
+    // 2) LYRA_DATA_ROOT\db\lyra.db
+    // 3) %LOCALAPPDATA%\Lyra\dev\db\lyra.db
+    // 4) %APPDATA%\com.lyra.player\db\lyra.db (Tauri app-data fallback)
+    let db_path = std::env::var("LYRA_DB_PATH")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var("LYRA_DATA_ROOT")
+                .ok()
+                .map(std::path::PathBuf::from)
+                .map(|root| root.join("db").join("lyra.db"))
+        })
+        .or_else(|| {
+            std::env::var("LOCALAPPDATA")
+                .ok()
+                .map(std::path::PathBuf::from)
+                .map(|root| root.join("Lyra").join("dev").join("db").join("lyra.db"))
+        })
+        .or_else(|| {
+            std::env::var("APPDATA")
+                .ok()
+                .map(std::path::PathBuf::from)
+                .map(|root| root.join("com.lyra.player").join("db").join("lyra.db"))
+        })
+        .expect("could not resolve canonical DB path; set LYRA_DB_PATH or LYRA_DATA_ROOT");
 
     if !db_path.exists() {
-        eprintln!("DB not found at {}", db_path.display());
+        eprintln!(
+            "Canonical DB not found at {}. Set LYRA_DB_PATH or LYRA_DATA_ROOT.",
+            db_path.display()
+        );
         std::process::exit(1);
     }
 
@@ -54,7 +80,9 @@ fn main() {
     } else {
         println!("Running Spotify history taste backfill (force={force})...");
         match lyra_core::taste::seed_taste_from_spotify_history(&conn, force) {
-            Ok(0) if !force => println!("Skipped — profile already confident. Use --force to override."),
+            Ok(0) if !force => {
+                println!("Skipped — profile already confident. Use --force to override.")
+            }
             Ok(matched) => println!("Done. {matched} tracks contributed to taste profile."),
             Err(e) => eprintln!("Backfill error: {e}"),
         }

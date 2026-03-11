@@ -5,6 +5,7 @@ use chrono::Utc;
 use lofty::prelude::{Accessor, AudioFile, TaggedFileExt};
 use rusqlite::{params, Connection, OptionalExtension};
 
+use crate::classifier;
 use crate::commands::{
     CleanupIssue, CurationLogEntry, DuplicateCluster, LibraryCleanupPreview, LibraryOverview,
     LibraryRootRecord, ScanJobRecord, TrackRecord,
@@ -424,6 +425,7 @@ pub fn import_track_from_path(conn: &Connection, path: &Path) -> LyraResult<bool
     let path_str = path.to_string_lossy();
     let hash = content_hash_fast(path);
     let now = Utc::now().to_rfc3339();
+    let classification = classifier::classify_text(&tags.title, &tags.album, path_str.as_ref());
 
     let existing_id: Option<i64> = conn
         .query_row(
@@ -446,8 +448,12 @@ pub fn import_track_from_path(conn: &Connection, path: &Path) -> LyraResult<bool
                 year = COALESCE(NULLIF(?6, ''), year),
                 content_hash = COALESCE(?7, content_hash),
                 track_number = COALESCE(?8, track_number),
-                disc_number = COALESCE(?9, disc_number)
-             WHERE id = ?10",
+                disc_number = COALESCE(?9, disc_number),
+                version_type = ?10,
+                confidence = ?11,
+                status = CASE WHEN ?12 = 'junk' THEN 'quarantined' ELSE 'active' END,
+                quarantined = CASE WHEN ?12 = 'junk' THEN 1 ELSE 0 END
+             WHERE id = ?13",
             params![
                 artist_id,
                 album_id,
@@ -458,6 +464,9 @@ pub fn import_track_from_path(conn: &Connection, path: &Path) -> LyraResult<bool
                 hash,
                 tags.track_number.map(|n| n as i64),
                 tags.disc_number.map(|n| n as i64),
+                classification.version_type.as_str(),
+                classification.confidence,
+                classification.version_type.as_str(),
                 track_id
             ],
         )?;
@@ -470,8 +479,9 @@ pub fn import_track_from_path(conn: &Connection, path: &Path) -> LyraResult<bool
     conn.execute(
         "INSERT INTO tracks
             (legacy_track_key, artist_id, album_id, title, path, duration_seconds,
-             genre, year, content_hash, track_number, disc_number, imported_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+             genre, year, content_hash, track_number, disc_number, status, quarantined,
+             version_type, confidence, imported_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
             path_str.as_ref(),
             artist_id,
@@ -484,6 +494,17 @@ pub fn import_track_from_path(conn: &Connection, path: &Path) -> LyraResult<bool
             hash,
             tags.track_number.map(|n| n as i64),
             tags.disc_number.map(|n| n as i64),
+            if matches!(classification.version_type, classifier::VersionType::Junk) {
+                "quarantined"
+            } else {
+                "active"
+            },
+            i64::from(matches!(
+                classification.version_type,
+                classifier::VersionType::Junk
+            )),
+            classification.version_type.as_str(),
+            classification.confidence,
             now
         ],
     )?;
@@ -511,12 +532,34 @@ pub fn import_legacy_track(
     }
     let artist_id = ensure_artist(conn, artist)?;
     let album_id = ensure_album(conn, artist_id, album)?;
+    let classification = classifier::classify_text(title, album, path);
     conn.execute(
         "
-        INSERT INTO tracks (legacy_track_key, artist_id, album_id, title, path, duration_seconds, imported_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        INSERT INTO tracks
+            (legacy_track_key, artist_id, album_id, title, path, duration_seconds, status,
+             quarantined, version_type, confidence, imported_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
         ",
-        params![path, artist_id, album_id, title, path, duration_seconds, Utc::now().to_rfc3339()],
+        params![
+            path,
+            artist_id,
+            album_id,
+            title,
+            path,
+            duration_seconds,
+            if matches!(classification.version_type, classifier::VersionType::Junk) {
+                "quarantined"
+            } else {
+                "active"
+            },
+            i64::from(matches!(
+                classification.version_type,
+                classifier::VersionType::Junk
+            )),
+            classification.version_type.as_str(),
+            classification.confidence,
+            Utc::now().to_rfc3339()
+        ],
     )?;
     Ok(true)
 }
@@ -588,7 +631,10 @@ pub fn resolve_duplicate_cluster(
 
     for &tid in &remove_track_ids {
         conn.execute(
-            "UPDATE tracks SET quarantined = 1 WHERE id = ?1",
+            "UPDATE tracks
+             SET quarantined = 1,
+                 status = 'quarantined'
+             WHERE id = ?1",
             params![tid],
         )?;
     }

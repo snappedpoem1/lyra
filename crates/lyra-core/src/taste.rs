@@ -18,11 +18,7 @@ fn has_artists_table(conn: &Connection) -> bool {
 
 /// Resolve (artist_lc, title_lc) → track_id TEXT (legacy flat schema).
 /// Returns None if not found or no track_scores row exists.
-fn resolve_track_flat(
-    conn: &Connection,
-    artist_lc: &str,
-    title_lc: &str,
-) -> Option<[f64; 10]> {
+fn resolve_track_flat(conn: &Connection, artist_lc: &str, title_lc: &str) -> Option<[f64; 10]> {
     let track_id: Option<String> = conn
         .query_row(
             "SELECT track_id FROM tracks
@@ -273,20 +269,20 @@ pub fn seed_taste_from_spotify_history(conn: &Connection, force: bool) -> LyraRe
     )?;
 
     struct SpotifyPlay {
-        artist:   String,
-        title:    String,
-        plays:    i64,
-        skips:    i64,
+        artist: String,
+        title: String,
+        plays: i64,
+        skips: i64,
         total_ms: i64,
     }
 
     let groups: Vec<SpotifyPlay> = stmt
         .query_map([], |row| {
             Ok(SpotifyPlay {
-                artist:   row.get(0)?,
-                title:    row.get(1)?,
-                plays:    row.get(2)?,
-                skips:    row.get(3)?,
+                artist: row.get(0)?,
+                title: row.get(1)?,
+                plays: row.get(2)?,
+                skips: row.get(3)?,
                 total_ms: row.get(4)?,
             })
         })?
@@ -346,7 +342,11 @@ pub fn seed_taste_from_spotify_history(conn: &Connection, force: bool) -> LyraRe
         };
 
         let non_skips = sp.plays - sp.skips;
-        let avg_ms = if sp.plays > 0 { sp.total_ms / sp.plays } else { 0 };
+        let avg_ms = if sp.plays > 0 {
+            sp.total_ms / sp.plays
+        } else {
+            0
+        };
         let positive = non_skips > sp.skips && avg_ms >= 30_000;
         // log2-capped weight, matching legacy taste_backfill.py
         let weight = ((sp.plays as f64 + 1.0).log2()).min(3.0);
@@ -382,7 +382,13 @@ fn apply_taste_nudge(
             "SELECT dimension, value, confidence FROM taste_profile ORDER BY dimension ASC",
         )?;
         let rows: Vec<_> = stmt
-            .query_map([], |row| Ok((row.get::<_,String>(0)?, row.get::<_,f64>(1)?, row.get::<_,f64>(2)?)))?
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, f64>(1)?,
+                    row.get::<_, f64>(2)?,
+                ))
+            })?
             .filter_map(Result::ok)
             .collect();
         rows
@@ -476,8 +482,12 @@ pub fn sync_taste_from_lastfm(
             if t["@attr"]["nowplaying"].as_str().is_some() {
                 continue;
             }
-            let artist = t["artist"]["#text"].as_str().unwrap_or("").trim().to_string();
-            let title  = t["name"].as_str().unwrap_or("").trim().to_string();
+            let artist = t["artist"]["#text"]
+                .as_str()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let title = t["name"].as_str().unwrap_or("").trim().to_string();
             if !artist.is_empty() && !title.is_empty() {
                 all_plays.push((artist, title));
             }

@@ -17,21 +17,21 @@ use crate::errors::LyraResult;
 
 #[derive(Debug, Clone)]
 pub struct DupTrack {
-    pub id:           i64,
-    pub path:         String,
-    pub artist:       String,
-    pub title:        String,
+    pub id: i64,
+    pub path: String,
+    pub artist: String,
+    pub title: String,
     pub content_hash: Option<String>,
 }
 
 #[derive(Debug, Default)]
 pub struct DuplicateSummary {
-    pub exact_groups:    usize,
-    pub exact_tracks:    usize,
+    pub exact_groups: usize,
+    pub exact_tracks: usize,
     pub metadata_groups: usize,
     pub metadata_tracks: usize,
-    pub path_groups:     usize,
-    pub path_tracks:     usize,
+    pub path_groups: usize,
+    pub path_tracks: usize,
     pub metadata_threshold: f64,
 }
 
@@ -98,10 +98,10 @@ pub fn find_exact_duplicates(conn: &Connection) -> LyraResult<Vec<Vec<DupTrack>>
             )?
             .query_map([hash], |row| {
                 Ok(DupTrack {
-                    id:           row.get(0)?,
-                    path:         row.get(1)?,
-                    artist:       row.get(2)?,
-                    title:        row.get(3)?,
+                    id: row.get(0)?,
+                    path: row.get(1)?,
+                    artist: row.get(2)?,
+                    title: row.get(3)?,
                     content_hash: row.get(4)?,
                 })
             })?
@@ -130,10 +130,10 @@ pub fn find_metadata_duplicates(
         )?
         .query_map([], |row| {
             Ok(DupTrack {
-                id:           row.get(0)?,
-                path:         row.get(1)?,
-                artist:       row.get(2)?,
-                title:        row.get(3)?,
+                id: row.get(0)?,
+                path: row.get(1)?,
+                artist: row.get(2)?,
+                title: row.get(3)?,
                 content_hash: row.get(4)?,
             })
         })?
@@ -149,13 +149,12 @@ pub fn find_metadata_duplicates(
         }
         let anchor = &tracks[i];
         let anchor_artist = normalize(&anchor.artist);
-        let anchor_title  = normalize(&anchor.title);
+        let anchor_title = normalize(&anchor.title);
 
         let mut group = vec![anchor.clone()];
         visited.insert(anchor.id);
 
-        for j in (i + 1)..tracks.len() {
-            let candidate = &tracks[j];
+        for candidate in tracks.iter().skip(i + 1) {
             if visited.contains(&candidate.id) {
                 continue;
             }
@@ -206,10 +205,10 @@ pub fn find_path_duplicates(conn: &Connection) -> LyraResult<Vec<Vec<DupTrack>>>
             )?
             .query_map([path], |row| {
                 Ok(DupTrack {
-                    id:           row.get(0)?,
-                    path:         row.get(1)?,
-                    artist:       row.get(2)?,
-                    title:        row.get(3)?,
+                    id: row.get(0)?,
+                    path: row.get(1)?,
+                    artist: row.get(2)?,
+                    title: row.get(3)?,
                     content_hash: row.get(4)?,
                 })
             })?
@@ -228,17 +227,17 @@ pub fn get_duplicate_summary(
     conn: &Connection,
     metadata_threshold: f64,
 ) -> LyraResult<DuplicateSummary> {
-    let exact    = find_exact_duplicates(conn)?;
+    let exact = find_exact_duplicates(conn)?;
     let metadata = find_metadata_duplicates(conn, metadata_threshold)?;
-    let path     = find_path_duplicates(conn)?;
+    let path = find_path_duplicates(conn)?;
 
     Ok(DuplicateSummary {
-        exact_groups:    exact.len(),
-        exact_tracks:    exact.iter().map(|g| g.len()).sum(),
+        exact_groups: exact.len(),
+        exact_tracks: exact.iter().map(|g| g.len()).sum(),
         metadata_groups: metadata.len(),
         metadata_tracks: metadata.iter().map(|g| g.len()).sum(),
-        path_groups:     path.len(),
-        path_tracks:     path.iter().map(|g| g.len()).sum(),
+        path_groups: path.len(),
+        path_tracks: path.iter().map(|g| g.len()).sum(),
         metadata_threshold,
     })
 }

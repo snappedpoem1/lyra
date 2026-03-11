@@ -138,6 +138,16 @@ fn acquisition_staging_dir(paths: &AppPaths) -> PathBuf {
         .unwrap_or_else(|| acquisition_data_root(paths).join("staging"))
 }
 
+fn legacy_python_bridge_enabled() -> bool {
+    std::env::var("LYRA_ENABLE_LEGACY_ACQUISITION_BRIDGE")
+        .ok()
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            normalized == "1" || normalized == "true" || normalized == "yes"
+        })
+        .unwrap_or(false)
+}
+
 fn load_provider_config(conn: &rusqlite::Connection, provider_key: &str) -> Option<Value> {
     let config_json: Option<String> = conn
         .query_row(
@@ -1135,13 +1145,23 @@ fn acquire_track(
     conn: &rusqlite::Connection,
     notify: &Arc<dyn Fn(i64) + Send + Sync>,
 ) -> LyraResult<AcquireTrackResult> {
+    let native_result =
+        try_native_acquire_track(paths, artist, title, album, queue_id, conn, notify)?;
+    if native_result.cancelled || native_result.path.is_some() || !legacy_python_bridge_enabled() {
+        return Ok(native_result);
+    }
+
     let workspace_root = acquisition_workspace_root(paths);
     let python_exe = workspace_root
         .join(".venv")
         .join("Scripts")
         .join("python.exe");
-    if !python_exe.exists() {
-        return try_native_acquire_track(paths, artist, title, album, queue_id, conn, notify);
+    let waterfall_script = workspace_root
+        .join("oracle")
+        .join("acquirers")
+        .join("waterfall.py");
+    if !python_exe.exists() || !waterfall_script.exists() {
+        return Ok(native_result);
     }
 
     let mut cmd = Command::new(&python_exe);
@@ -1165,7 +1185,7 @@ fn acquire_track(
                 "Falling back to native acquisition after waterfall spawn error: {}",
                 error
             );
-            return try_native_acquire_track(paths, artist, title, album, queue_id, conn, notify);
+            return Ok(native_result);
         }
     };
 
@@ -1298,7 +1318,11 @@ fn acquire_track(
     }
 
     let _ = child.wait();
-    Ok(result)
+    if result.path.is_some() || result.cancelled {
+        Ok(result)
+    } else {
+        Ok(native_result)
+    }
 }
 
 fn duplicate_path_for_track(

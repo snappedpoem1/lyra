@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 //! Smoke test: scout module — cross_genre_hunt, discover_by_mood, find_local_bridge_artists.
 
 use lyra_core::{
@@ -37,21 +39,33 @@ fn seed(conn: &Connection) {
 
     // tracks — The Prodigy: both Electronic AND Punk genres (bridge artist)
     let tracks: &[(i64, i64, &str, Option<i64>, Option<i32>, &str)] = &[
-        (1, 1, "Firestarter",           Some(1), Some(1996), "Electronic, Punk"),
-        (2, 1, "Breathe",               Some(1), Some(1996), "Electronic"),
-        (3, 1, "Smack My Bitch Up",     Some(1), Some(1997), "Punk, Electronic"),
-        (4, 2, "New Noise",             Some(2), Some(1998), "Punk, Hardcore"),
-        (5, 3, "Glory Box",             Some(3), Some(1994), "Trip Hop"),
-        (6, 4, "Roygbiv",              Some(4), Some(1998), "Electronic, Ambient"),
-        (7, 3, "Sour Times",            Some(3), Some(1994), "Trip Hop"),
-        (8, 4, "Pete Standing Alone",   Some(4), Some(1998), "Ambient"),
+        (1, 1, "Firestarter", Some(1), Some(1996), "Electronic, Punk"),
+        (2, 1, "Breathe", Some(1), Some(1996), "Electronic"),
+        (
+            3,
+            1,
+            "Smack My Bitch Up",
+            Some(1),
+            Some(1997),
+            "Punk, Electronic",
+        ),
+        (4, 2, "New Noise", Some(2), Some(1998), "Punk, Hardcore"),
+        (5, 3, "Glory Box", Some(3), Some(1994), "Trip Hop"),
+        (6, 4, "Roygbiv", Some(4), Some(1998), "Electronic, Ambient"),
+        (7, 3, "Sour Times", Some(3), Some(1994), "Trip Hop"),
+        (8, 4, "Pete Standing Alone", Some(4), Some(1998), "Ambient"),
     ];
     for (id, artist_id, title, album_id, year, genre) in tracks {
         conn.execute(
             "INSERT INTO tracks (id, artist_id, title, album_id, year, genre, path, imported_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '2026-01-01')",
             rusqlite::params![
-                id, artist_id, title, album_id, year, genre,
+                id,
+                artist_id,
+                title,
+                album_id,
+                year,
+                genre,
                 format!("/music/{}.flac", title)
             ],
         )
@@ -69,13 +83,21 @@ fn main() {
     assert!(!genres.is_empty(), "FAIL: mood_to_genres returned empty");
     assert!(
         genres.iter().any(|g| g.to_lowercase().contains("punk")),
-        "FAIL: 'aggressive rebellious' should include Punk, got: {:?}", genres
+        "FAIL: 'aggressive rebellious' should include Punk, got: {:?}",
+        genres
     );
-    println!("PASS: mood_to_genres('aggressive rebellious') => {:?}", genres);
+    println!(
+        "PASS: mood_to_genres('aggressive rebellious') => {:?}",
+        genres
+    );
 
     // Test unmapped mood falls back to literal
     let unknown = mood_to_genres("xyzunknown");
-    assert_eq!(unknown, vec!["xyzunknown"], "FAIL: unknown mood should fall back to literal");
+    assert_eq!(
+        unknown,
+        vec!["xyzunknown"],
+        "FAIL: unknown mood should fall back to literal"
+    );
     println!("PASS: unknown mood falls back to literal string");
 
     // ── Test 2: find_local_bridge_artists ─────────────────────────────────────
@@ -97,7 +119,10 @@ fn main() {
 
     // No bridges for unrelated genres
     let no_bridges = find_local_bridge_artists(&conn, "Jazz", "Classical").unwrap();
-    assert!(no_bridges.is_empty(), "FAIL: no Jazz×Classical bridges expected in this library");
+    assert!(
+        no_bridges.is_empty(),
+        "FAIL: no Jazz×Classical bridges expected in this library"
+    );
     println!("PASS: no bridge artists for Jazz × Classical");
 
     // ── Test 3: cross_genre_hunt ──────────────────────────────────────────────
@@ -107,17 +132,24 @@ fn main() {
         "FAIL: expected cross-genre targets for Electronic × Punk"
     );
     assert!(
-        targets.iter().all(|t| t.priority >= 0.0 && t.priority <= 1.0),
+        targets
+            .iter()
+            .all(|t| t.priority >= 0.0 && t.priority <= 1.0),
         "FAIL: all priorities should be in [0, 1]"
     );
     assert!(
-        targets.iter().all(|t| t.tags.contains(&"context:bridge".to_string())),
+        targets
+            .iter()
+            .all(|t| t.tags.contains(&"context:bridge".to_string())),
         "FAIL: all targets should have 'context:bridge' tag"
     );
     println!(
         "PASS: cross_genre_hunt => {} targets, priorities: {:?}",
         targets.len(),
-        targets.iter().map(|t| format!("{}({:.2})", t.title, t.priority)).collect::<Vec<_>>()
+        targets
+            .iter()
+            .map(|t| format!("{}({:.2})", t.title, t.priority))
+            .collect::<Vec<_>>()
     );
 
     // ── Test 4: discover_by_mood — mapped mood ────────────────────────────────
@@ -130,7 +162,10 @@ fn main() {
 
     // ── Test 5: discover_by_mood — trip hop / melancholic ─────────────────────
     let results = discover_by_mood(&conn, "melancholic", 10).unwrap();
-    println!("PASS: discover_by_mood('melancholic') => {} results", results.len());
+    println!(
+        "PASS: discover_by_mood('melancholic') => {} results",
+        results.len()
+    );
 
     // ── Test 6: cross_genre_hunt with no bridges → empty ─────────────────────
     let empty = cross_genre_hunt(&conn, "Jazz", "Classical", 10).unwrap();

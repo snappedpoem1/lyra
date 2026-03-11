@@ -11,8 +11,8 @@
 //! Mass library re-validation (`validate_and_fix_library`) is
 //! **[Mass Validation Pipeline?]** — deferred, no Tauri caller yet.
 
-use serde::{Deserialize, Serialize};
 use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
 
 use crate::errors::LyraResult;
 
@@ -20,30 +20,51 @@ use crate::errors::LyraResult;
 
 /// Checked against combined artist+title.
 static JUNK_PATTERNS: &[&str] = &[
-    r"karaoke", r"tribute", r"8-bit", r"8 bit",
-    r"remade", r"midi", r"ringtone", r"party tyme", r"prosource",
-    r"zzang", r"piano version",
+    r"karaoke",
+    r"tribute",
+    r"8-bit",
+    r"8 bit",
+    r"remade",
+    r"midi",
+    r"ringtone",
+    r"party tyme",
+    r"prosource",
+    r"zzang",
+    r"piano version",
 ];
 
 /// Checked against title only — words that are band/album names when in artist field.
-static TITLE_JUNK_PATTERNS: &[&str] = &[
-    r"lullaby", r"music box", r"instrumental version",
-];
+static TITLE_JUNK_PATTERNS: &[&str] = &[r"lullaby", r"music box", r"instrumental version"];
 
 /// Record labels that are sometimes stored in the artist field.
 static RECORD_LABELS: &[&str] = &[
-    "epitaph records", "vagrant records", "rise records", "fueled by ramen",
-    "hopeless records", "victory records", "fearless records", "dine alone records",
-    "equal vision", "tooth & nail", "solid state", "roadrunner records",
-    "interscope", "atlantic records", "columbia records", "riserecords",
-    "lyrical lemonade", "worldstarhiphop", "colors show", "genius",
+    "epitaph records",
+    "vagrant records",
+    "rise records",
+    "fueled by ramen",
+    "hopeless records",
+    "victory records",
+    "fearless records",
+    "dine alone records",
+    "equal vision",
+    "tooth & nail",
+    "solid state",
+    "roadrunner records",
+    "interscope",
+    "atlantic records",
+    "columbia records",
+    "riserecords",
+    "lyrical lemonade",
+    "worldstarhiphop",
+    "colors show",
+    "genius",
 ];
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ValidationSource {
-    Clean,          // passed text cleaning + junk guard, no network lookup
+    Clean, // passed text cleaning + junk guard, no network lookup
     MusicBrainz,
     Discogs,
     ITunes,
@@ -54,28 +75,28 @@ pub enum ValidationSource {
 impl ValidationSource {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Clean        => "clean",
-            Self::MusicBrainz  => "musicbrainz",
-            Self::Discogs      => "discogs",
-            Self::ITunes       => "itunes",
+            Self::Clean => "clean",
+            Self::MusicBrainz => "musicbrainz",
+            Self::Discogs => "discogs",
+            Self::ITunes => "itunes",
             Self::PartialMatch => "partial_match",
-            Self::AcoustID     => "acoustid",
+            Self::AcoustID => "acoustid",
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationResult {
-    pub valid:             bool,
-    pub confidence:        f64,
-    pub canonical_artist:  Option<String>,
-    pub canonical_title:   Option<String>,
-    pub canonical_album:   Option<String>,
-    pub year:              Option<i32>,
-    pub genres:            Vec<String>,
-    pub isrc:              Option<String>,
-    pub rejection_reason:  Option<String>,
-    pub source:            ValidationSource,
+    pub valid: bool,
+    pub confidence: f64,
+    pub canonical_artist: Option<String>,
+    pub canonical_title: Option<String>,
+    pub canonical_album: Option<String>,
+    pub year: Option<i32>,
+    pub genres: Vec<String>,
+    pub isrc: Option<String>,
+    pub rejection_reason: Option<String>,
+    pub source: ValidationSource,
 }
 
 impl ValidationResult {
@@ -119,13 +140,19 @@ pub fn clean_title(title: &str) -> String {
     }
     // Suffix patterns to strip (case-insensitive keyword scan)
     static STRIP_PARENS: &[&str] = &[
-        "official video", "official audio", "official music video",
-        "lyric video", "official visualizer", "visualizer",
-        "explicit", "hd", "lyrics", "lyric", "audio",
+        "official video",
+        "official audio",
+        "official music video",
+        "lyric video",
+        "official visualizer",
+        "visualizer",
+        "explicit",
+        "hd",
+        "lyrics",
+        "lyric",
+        "audio",
     ];
-    static STRIP_DASH_SUFFIX: &[&str] = &[
-        "official", "video", "audio", "lyric", "hd", "4k",
-    ];
+    static STRIP_DASH_SUFFIX: &[&str] = &["official", "video", "audio", "lyric", "hd", "4k"];
 
     let mut result = title.to_string();
 
@@ -242,13 +269,13 @@ pub fn is_junk_text(artist: &str, title: &str) -> Option<String> {
 /// **[Network Metadata Validation?]** and not performed here.
 pub fn validate_track_text(artist: &str, title: &str) -> ValidationResult {
     let mut artist = clean_artist(artist);
-    let mut title  = clean_title(title);
+    let mut title = clean_title(title);
 
     // If artist is missing or is a label, try extracting from "Artist - Title"
     if artist.is_empty() || RECORD_LABELS.contains(&artist.to_lowercase().as_str()) {
         if let (Some(extracted_artist), extracted_title) = extract_artist_from_title(&title) {
             artist = clean_artist(&extracted_artist);
-            title  = clean_title(&extracted_title);
+            title = clean_title(&extracted_title);
         }
     }
 

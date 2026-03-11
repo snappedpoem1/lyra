@@ -1,37 +1,42 @@
 pub mod acquisition;
 pub mod acquisition_dispatcher;
+pub mod acquisition_planning;
 pub mod acquisition_worker;
+pub mod audio_data;
+pub mod catalog;
+pub mod classifier;
 pub mod commands;
 pub mod composer_diagnostics;
 pub mod composer_history;
 pub mod config;
-pub mod classifier;
 pub mod db;
-pub mod duplicates;
-pub mod validator;
-pub mod taste_prioritizer;
+pub mod deepcut;
 pub mod diagnostics;
+pub mod duplicates;
 pub mod enrichment;
 pub mod errors;
+pub mod graph_builder;
 pub mod intelligence;
 pub mod library;
+pub mod lineage;
 pub mod llm_client;
 pub mod logging;
 pub mod native;
 pub mod oracle;
 pub mod playback;
 pub mod playlists;
+pub mod provider_runtime;
 pub mod providers;
 pub mod queue;
-pub mod deepcut;
-pub mod graph_builder;
-pub mod scout;
 pub mod scores;
+pub mod scout;
 pub mod scrobble;
 pub mod search;
 pub mod state;
 pub mod taste;
 pub mod taste_memory;
+pub mod taste_prioritizer;
+pub mod validator;
 pub mod waterfall;
 
 use std::fs;
@@ -40,14 +45,15 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use commands::{
-    AcquisitionLead, AcquisitionLeadHandoffReport, AcquisitionPreflight, AcquisitionPreflightCheck,
-    AcquisitionQueueItem, ArtistConnection, ArtistProfile, AudioOutputDevice, BootstrapPayload,
-    ComposedPlaylistDraft, ComposerResponse, DuplicateCluster, ExplainPayload, LegacyImportReport,
-    LibraryOverview, LibraryRootRecord, NativeCapabilities, PlaybackEvent, PlaybackState,
-    PlaylistDetail, PlaylistSummary, ProviderConfigRecord, ProviderHealth,
-    ProviderValidationResult, QueueItemRecord, RecommendationBundle, RecommendationResult,
-    LastfmSyncResult, ScanJobRecord, SettingsPayload, SteerPayload, TasteMemorySnapshot,
-    TasteProfile, TrackDetail, TrackRecord, TrackScores,
+    AcquisitionLead, AcquisitionLeadHandoffReport, AcquisitionPlanResult, AcquisitionPreflight,
+    AcquisitionPreflightCheck, AcquisitionQueueItem, ArtistConnection, ArtistProfile,
+    AudioOutputDevice, BootstrapPayload, ComposedPlaylistDraft, ComposerResponse, DuplicateCluster,
+    ExplainPayload, LastfmSyncResult, LegacyImportReport, LibraryOverview, LibraryRootRecord,
+    NativeCapabilities, PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary,
+    ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
+    RecommendationBundle, RecommendationResult, ScanJobRecord, SettingsPayload,
+    SpotifyOauthBootstrap, SpotifyOauthSession, SteerPayload, TasteMemorySnapshot, TasteProfile,
+    TrackDetail, TrackRecord, TrackScores,
 };
 use config::AppPaths;
 use db::{connect, init_database};
@@ -61,16 +67,6 @@ use serde_json::{json, Value};
 pub struct LyraCore {
     paths: AppPaths,
     playback: Arc<Mutex<PlaybackController>>,
-}
-
-struct ValidationAssessment {
-    artist: String,
-    title: String,
-    album: Option<String>,
-    confidence: f64,
-    summary: String,
-    detail: Option<String>,
-    duplicate_path: Option<String>,
 }
 
 impl LyraCore {
@@ -90,222 +86,19 @@ impl LyraCore {
             .unwrap_or(false)
     }
 
-    fn clean_artist_name(value: &str) -> String {
-        let mut cleaned = value.trim().to_string();
-        for suffix in [" - Topic", " VEVO", " Official"] {
-            if cleaned
-                .to_ascii_lowercase()
-                .ends_with(&suffix.to_ascii_lowercase())
-            {
-                cleaned.truncate(cleaned.len().saturating_sub(suffix.len()));
-                cleaned = cleaned.trim().to_string();
-            }
-        }
-        cleaned
-    }
-
-    fn clean_track_title(value: &str) -> String {
-        value
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .trim()
-            .to_string()
-    }
-
-    fn validation_confidence(
-        conn: &rusqlite::Connection,
-        artist: &str,
-        title: &str,
-        album: Option<&str>,
-    ) -> LyraResult<f64> {
-        let known_artist: i64 = conn.query_row(
-            "SELECT COUNT(*)
-             FROM tracks t
-             LEFT JOIN artists ar ON ar.id = t.artist_id
-             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))",
-            params![artist],
-            |row| row.get(0),
-        )?;
-        let exact_track: i64 = conn.query_row(
-            "SELECT COUNT(*)
-             FROM tracks t
-             LEFT JOIN artists ar ON ar.id = t.artist_id
-             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
-               AND lower(trim(COALESCE(t.title, ''))) = lower(trim(?2))",
-            params![artist, title],
-            |row| row.get(0),
-        )?;
-        let mut confidence: f64 = 0.42;
-        if known_artist > 0 {
-            confidence += 0.26;
-        }
-        if album.is_some() {
-            confidence += 0.08;
-        }
-        if exact_track > 0 {
-            confidence += 0.12;
-        }
-        Ok(confidence.clamp(0.0, 0.97))
-    }
-
-    fn validate_acquisition_request(
-        conn: &rusqlite::Connection,
-        artist: &str,
-        title: &str,
-        album: Option<&str>,
-    ) -> LyraResult<ValidationAssessment> {
-        let cleaned_artist = Self::clean_artist_name(artist);
-        let cleaned_title = Self::clean_track_title(title);
-        let cleaned_album = album.map(Self::clean_track_title);
-        let combined = format!("{} {}", cleaned_artist, cleaned_title).to_ascii_lowercase();
-        let junk_needles = [
-            "karaoke",
-            "tribute",
-            "cover version",
-            "made famous",
-            "made popular",
-            "in the style of",
-            "backing track",
-            "lyrics video",
-            "audio only",
-            "nightcore",
-            "slowed",
-            "sped up",
-            "chopped and screwed",
-            "ringtone",
-            "music box",
-            "8-bit",
-            "8 bit",
-            "instrumental version",
-            "a cappella",
-            "acapella",
-            "lo-fi",
-            "lofi",
-            "epic version",
-        ];
-        if junk_needles.iter().any(|needle| combined.contains(needle)) {
-            let confidence = Self::validation_confidence(
-                conn,
-                &cleaned_artist,
-                &cleaned_title,
-                cleaned_album.as_deref(),
-            )?;
-            return Ok(ValidationAssessment {
-                artist: cleaned_artist,
-                title: cleaned_title,
-                album: cleaned_album,
-                confidence,
-                summary: "Rejected by Rust guard: likely junk, cover, or altered-version metadata"
-                    .to_string(),
-                detail: Some("Queue item matched local junk-pattern checks".to_string()),
-                duplicate_path: None,
-            });
-        }
-
-        let artist_lower = cleaned_artist.to_ascii_lowercase();
-        let record_labels = [
-            "atlantic records",
-            "columbia records",
-            "interscope",
-            "def jam",
-            "universal music",
-            "sony music",
-            "warner records",
-            "vevo",
-            "topic",
-            "official video",
-            "official audio",
-            "lyrical lemonade",
-            "worldstarhiphop",
-            "monstercat",
-            "nocopyrightsounds",
-        ];
-        if record_labels
-            .iter()
-            .any(|label| artist_lower == *label || artist_lower.contains(label))
-            || artist_lower.ends_with("- topic")
-            || artist_lower.ends_with("vevo")
-            || artist_lower.contains("official channel")
-        {
-            let confidence = Self::validation_confidence(
-                conn,
-                &cleaned_artist,
-                &cleaned_title,
-                cleaned_album.as_deref(),
-            )?;
-            return Ok(ValidationAssessment {
-                artist: cleaned_artist,
-                title: cleaned_title,
-                album: cleaned_album,
-                confidence,
-                summary:
-                    "Rejected by Rust guard: artist metadata looks like a label or YouTube channel"
-                        .to_string(),
-                detail: Some("Queue item matched local artist/label guard checks".to_string()),
-                duplicate_path: None,
-            });
-        }
-
-        let duplicate = conn
-            .query_row(
-                "SELECT t.path
-                 FROM tracks t
-                 LEFT JOIN artists ar ON ar.id = t.artist_id
-                 WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
-                   AND lower(trim(COALESCE(t.title, ''))) = lower(trim(?2))
-                 LIMIT 1",
-                params![cleaned_artist, cleaned_title],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()?;
-        let confidence = Self::validation_confidence(
-            conn,
-            &cleaned_artist,
-            &cleaned_title,
-            cleaned_album.as_deref(),
-        )?;
-        let summary = if duplicate.is_some() {
-            "Rejected by Rust guard: track already exists in the library".to_string()
-        } else if confidence >= 0.75 {
-            "Validated by Rust preflight with strong local confidence".to_string()
-        } else if confidence >= 0.55 {
-            "Validated by Rust preflight with moderate local confidence".to_string()
-        } else {
-            "Validated by Rust preflight with limited local confidence".to_string()
-        };
-        Ok(ValidationAssessment {
-            artist: cleaned_artist,
-            title: cleaned_title,
-            album: cleaned_album,
-            confidence,
-            summary,
-            detail: None,
-            duplicate_path: duplicate,
-        })
-    }
-
-    fn resolve_target_root(
-        conn: &rusqlite::Connection,
-        target_root_id: Option<i64>,
-    ) -> LyraResult<(Option<i64>, Option<String>)> {
-        let Some(root_id) = target_root_id else {
-            return Ok((None, None));
-        };
-        let root = library::list_library_roots(conn)?
-            .into_iter()
-            .find(|root| root.id == root_id);
-        Ok(match root {
-            Some(root) => (Some(root.id), Some(root.path)),
-            None => (None, None),
-        })
-    }
-
     pub fn new(app_data_dir: PathBuf) -> LyraResult<Self> {
         let paths = AppPaths::new(app_data_dir)?;
         let conn = connect(&paths)?;
         init_database(&conn)?;
+        if let Some(legacy_path) = Self::legacy_db_path() {
+            if legacy_path.exists() {
+                if let Ok(legacy) = rusqlite::Connection::open(&legacy_path) {
+                    let _ = Self::migrate_spotify_exports_from_legacy(&conn, &legacy);
+                }
+            }
+        }
         db::seed_provider_capabilities(&conn, &default_provider_capabilities())?;
+        let _ = lineage::seed_curated_baseline(&conn);
         let mut session = state::load_session_state(&conn)?;
         let settings = state::load_settings(&conn)?;
 
@@ -354,35 +147,319 @@ impl LyraCore {
         connect(&self.paths)
     }
 
-    fn legacy_db_path(&self) -> PathBuf {
-        std::env::var("LYRA_DB_PATH")
-            .ok()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("lyra_registry.db"))
+    fn legacy_db_path() -> Option<PathBuf> {
+        std::env::var("LYRA_DB_PATH").ok().map(PathBuf::from)
     }
 
-    fn with_attached_legacy_db<T, F>(&self, callback: F) -> LyraResult<Option<T>>
-    where
-        F: FnOnce(&rusqlite::Connection, &Path) -> LyraResult<T>,
-    {
-        let legacy_path = self.legacy_db_path();
-        if !legacy_path.exists() {
-            return Ok(None);
+    fn migrate_spotify_exports_from_legacy(
+        conn: &rusqlite::Connection,
+        legacy: &rusqlite::Connection,
+    ) -> LyraResult<(usize, usize, usize)> {
+        let history_exists = legacy
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='spotify_history'",
+                [],
+                |_| Ok(1_i64),
+            )
+            .optional()?
+            .is_some();
+        let library_exists = legacy
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='spotify_library'",
+                [],
+                |_| Ok(1_i64),
+            )
+            .optional()?
+            .is_some();
+        let features_exists = legacy
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='spotify_features'",
+                [],
+                |_| Ok(1_i64),
+            )
+            .optional()?
+            .is_some();
+
+        let mut imported_history = 0_usize;
+        let mut imported_library = 0_usize;
+        let mut imported_features = 0_usize;
+
+        if history_exists {
+            let mut stmt = legacy.prepare(
+                "SELECT artist, track, album, played_at, ms_played,
+                        spotify_track_uri, reason_start, reason_end, shuffle, skipped,
+                        platform, conn_country, ip_addr, episode_name, episode_show_name
+                 FROM spotify_history",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<i64>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, Option<i64>>(8)?,
+                    row.get::<_, Option<i64>>(9)?,
+                    row.get::<_, Option<String>>(10)?,
+                    row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<String>>(12)?,
+                    row.get::<_, Option<String>>(13)?,
+                    row.get::<_, Option<String>>(14)?,
+                ))
+            })?;
+            for row in rows {
+                let (
+                    artist,
+                    track,
+                    album,
+                    played_at,
+                    ms_played,
+                    spotify_track_uri,
+                    reason_start,
+                    reason_end,
+                    shuffle,
+                    skipped,
+                    platform,
+                    conn_country,
+                    ip_addr,
+                    episode_name,
+                    episode_show_name,
+                ) = row?;
+                let changed = conn.execute(
+                    "INSERT OR IGNORE INTO spotify_history
+                     (artist, track, album, played_at, ms_played, spotify_track_uri,
+                      reason_start, reason_end, shuffle, skipped, platform, conn_country, ip_addr,
+                      episode_name, episode_show_name, imported_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                    params![
+                        artist,
+                        track,
+                        album,
+                        played_at,
+                        ms_played,
+                        spotify_track_uri,
+                        reason_start,
+                        reason_end,
+                        shuffle,
+                        skipped,
+                        platform,
+                        conn_country,
+                        ip_addr,
+                        episode_name,
+                        episode_show_name,
+                        Utc::now().to_rfc3339(),
+                    ],
+                )?;
+                imported_history += usize::from(changed > 0);
+            }
         }
 
-        let conn = self.conn()?;
+        if library_exists {
+            let mut stmt = legacy.prepare(
+                "SELECT spotify_uri, artist, title, album, album_uri, artist_uri, duration_ms,
+                        popularity, explicit, release_date, track_number, disc_number, isrc,
+                        preview_url, album_art_url, source, playlist_name, added_at
+                 FROM spotify_library",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<i64>>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
+                    row.get::<_, Option<i64>>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                    row.get::<_, Option<i64>>(10)?,
+                    row.get::<_, Option<i64>>(11)?,
+                    row.get::<_, Option<String>>(12)?,
+                    row.get::<_, Option<String>>(13)?,
+                    row.get::<_, Option<String>>(14)?,
+                    row.get::<_, Option<String>>(15)?,
+                    row.get::<_, Option<String>>(16)?,
+                    row.get::<_, Option<String>>(17)?,
+                ))
+            })?;
+            for row in rows {
+                let (
+                    spotify_uri,
+                    artist,
+                    title,
+                    album,
+                    album_uri,
+                    artist_uri,
+                    duration_ms,
+                    popularity,
+                    explicit,
+                    release_date,
+                    track_number,
+                    disc_number,
+                    isrc,
+                    preview_url,
+                    album_art_url,
+                    source,
+                    playlist_name,
+                    added_at,
+                ) = row?;
+                let normalized =
+                    match audio_data::normalize_track_candidate(audio_data::RawTrackCandidate {
+                        provider: "spotify",
+                        provider_track_id: &spotify_uri,
+                        artist: &artist,
+                        title: &title,
+                        album: album.as_deref(),
+                        release_date: release_date.as_deref(),
+                        isrc: isrc.as_deref(),
+                        duration_ms,
+                        popularity,
+                        explicit: explicit.unwrap_or(0) != 0,
+                    }) {
+                        Ok(track) => track,
+                        Err(_) => continue,
+                    };
+                let changed = conn.execute(
+                    "INSERT OR REPLACE INTO spotify_library
+                     (spotify_uri, artist, title, album, album_uri, artist_uri, duration_ms,
+                      popularity, explicit, release_date, track_number, disc_number, isrc,
+                      preview_url, album_art_url, source, playlist_name, added_at, imported_at)
+                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+                    params![
+                        spotify_uri,
+                        normalized.artist.name,
+                        normalized.title,
+                        normalized.album.as_ref().map(|value| value.title.as_str()),
+                        album_uri,
+                        artist_uri,
+                        normalized.duration_ms,
+                        normalized.popularity,
+                        i64::from(normalized.explicit),
+                        normalized
+                            .album
+                            .as_ref()
+                            .and_then(|value| value.release_date.as_deref()),
+                        track_number,
+                        disc_number,
+                        normalized.isrc,
+                        preview_url,
+                        album_art_url,
+                        source,
+                        playlist_name,
+                        added_at,
+                        Utc::now().to_rfc3339(),
+                    ],
+                )?;
+                let _ = audio_data::persist_provider_track(
+                    conn,
+                    &normalized,
+                    "library",
+                    &json!({
+                        "spotifyUri": spotify_uri,
+                        "artist": artist,
+                        "title": title,
+                        "album": album,
+                        "releaseDate": release_date,
+                        "isrc": isrc,
+                        "durationMs": duration_ms,
+                        "popularity": popularity,
+                        "explicit": explicit,
+                        "source": source,
+                        "playlistName": playlist_name,
+                    }),
+                );
+                imported_library += usize::from(changed > 0);
+            }
+        }
+
+        if features_exists {
+            let mut stmt = legacy.prepare(
+                "SELECT spotify_uri, danceability, energy, key, loudness, mode, speechiness,
+                        acousticness, instrumentalness, liveness, valence, tempo, time_signature
+                 FROM spotify_features",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<f64>>(1)?,
+                    row.get::<_, Option<f64>>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                    row.get::<_, Option<f64>>(4)?,
+                    row.get::<_, Option<i64>>(5)?,
+                    row.get::<_, Option<f64>>(6)?,
+                    row.get::<_, Option<f64>>(7)?,
+                    row.get::<_, Option<f64>>(8)?,
+                    row.get::<_, Option<f64>>(9)?,
+                    row.get::<_, Option<f64>>(10)?,
+                    row.get::<_, Option<f64>>(11)?,
+                    row.get::<_, Option<i64>>(12)?,
+                ))
+            })?;
+            for row in rows {
+                let (
+                    spotify_uri,
+                    danceability,
+                    energy,
+                    key,
+                    loudness,
+                    mode,
+                    speechiness,
+                    acousticness,
+                    instrumentalness,
+                    liveness,
+                    valence,
+                    tempo,
+                    time_signature,
+                ) = row?;
+                let changed = conn.execute(
+                    "INSERT OR REPLACE INTO spotify_features
+                     (spotify_uri, danceability, energy, key, loudness, mode, speechiness,
+                      acousticness, instrumentalness, liveness, valence, tempo, time_signature, fetched_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                    params![
+                        spotify_uri,
+                        danceability,
+                        energy,
+                        key,
+                        loudness,
+                        mode,
+                        speechiness,
+                        acousticness,
+                        instrumentalness,
+                        liveness,
+                        valence,
+                        tempo,
+                        time_signature,
+                        Utc::now().to_rfc3339(),
+                    ],
+                )?;
+                imported_features += usize::from(changed > 0);
+            }
+        }
+
+        let summary = serde_json::to_string(&json!({
+            "historyImported": imported_history,
+            "libraryImported": imported_library,
+            "featuresImported": imported_features,
+            "historyTablePresent": history_exists,
+            "libraryTablePresent": library_exists,
+            "featuresTablePresent": features_exists,
+        }))?;
         conn.execute(
-            "ATTACH DATABASE ?1 AS legacy_spotify",
-            params![legacy_path.display().to_string()],
+            "INSERT INTO migration_runs (source, status, summary_json, ran_at) VALUES (?1, ?2, ?3, ?4)",
+            params![
+                "spotify_legacy_import",
+                "completed",
+                summary,
+                Utc::now().to_rfc3339(),
+            ],
         )?;
-        let result = callback(&conn, &legacy_path);
-        let detach_result = conn.execute("DETACH DATABASE legacy_spotify", []);
 
-        match (result, detach_result) {
-            (Ok(value), Ok(_)) => Ok(Some(value)),
-            (Err(error), _) => Err(error),
-            (Ok(_), Err(error)) => Err(error.into()),
-        }
+        Ok((imported_history, imported_library, imported_features))
     }
 
     pub fn bootstrap_app(&self) -> LyraResult<BootstrapPayload> {
@@ -910,6 +987,28 @@ impl LyraCore {
         providers::validate_provider(&conn, &provider_key)
     }
 
+    pub fn begin_spotify_oauth_flow(
+        &self,
+        redirect_uri: Option<String>,
+    ) -> Result<SpotifyOauthBootstrap, String> {
+        let conn = self.conn().map_err(|error| error.to_string())?;
+        providers::begin_spotify_oauth_flow(&conn, redirect_uri.as_deref())
+    }
+
+    pub fn complete_spotify_oauth_flow(
+        &self,
+        code: String,
+        state: String,
+    ) -> Result<SpotifyOauthSession, String> {
+        let conn = self.conn().map_err(|error| error.to_string())?;
+        providers::complete_spotify_oauth_flow(&conn, &code, &state)
+    }
+
+    pub fn get_spotify_oauth_session(&self) -> Result<Option<SpotifyOauthSession>, String> {
+        let conn = self.conn().map_err(|error| error.to_string())?;
+        providers::get_spotify_oauth_session(&conn)
+    }
+
     /// Save a provider secret to the OS keychain.
     pub fn keyring_save(
         &self,
@@ -1012,10 +1111,9 @@ impl LyraCore {
             notes.push("No .env source found for provider import".to_string());
         }
 
-        let db_source = legacy_db_path.map(PathBuf::from).or_else(|| {
-            let candidate = PathBuf::from("lyra_registry.db");
-            candidate.exists().then_some(candidate)
-        });
+        let db_source = legacy_db_path
+            .map(PathBuf::from)
+            .or_else(Self::legacy_db_path);
         if let Some(db_file) = db_source {
             let imported_tracks = self.import_legacy_database(&conn, &db_file)?;
             imported.push(format!("tracks:{imported_tracks}"));
@@ -1205,10 +1303,11 @@ impl LyraCore {
         }
 
         // Run extended legacy imports for richer data tables
+        let _ = Self::migrate_spotify_exports_from_legacy(conn, &legacy);
         let _ = scores::import_scores_from_legacy(conn, &legacy);
         let _ = taste::import_taste_from_legacy(conn, &legacy);
         let _ = acquisition::import_queue_from_legacy(conn, &legacy);
-        let _ = acquisition::import_spotify_library_as_queue(conn, &legacy);
+        let _ = acquisition::import_spotify_library_as_queue(conn, conn);
         let _ = enrichment::import_enrich_cache_from_legacy(conn, &legacy);
 
         // Import playback_history — join legacy filepath→new track id, take last 10k rows
@@ -1376,7 +1475,11 @@ impl LyraCore {
     pub fn sync_taste_from_lastfm(&self, lookback_days: u32) -> LyraResult<LastfmSyncResult> {
         let conn = self.conn()?;
         let (fetched, matched, written) = taste::sync_taste_from_lastfm(&conn, lookback_days)?;
-        Ok(LastfmSyncResult { fetched, matched, written })
+        Ok(LastfmSyncResult {
+            fetched,
+            matched,
+            written,
+        })
     }
 
     /// Returns up to `limit` tracks recommended by the broker with multi-lane evidence.
@@ -1554,297 +1657,261 @@ impl LyraCore {
     pub fn get_spotify_gap_summary(&self, limit: usize) -> LyraResult<commands::SpotifyGapSummary> {
         let top_limit = i64::try_from(limit.max(1)).unwrap_or(12);
         let candidate_limit = i64::try_from(limit.max(3) * 2).unwrap_or(24);
-        let summary = self.with_attached_legacy_db(|conn, legacy_path| {
-            let history_exists = conn
-                .query_row(
-                    "SELECT 1 FROM legacy_spotify.sqlite_master WHERE type = 'table' AND name = 'spotify_history'",
-                    [],
-                    |_| Ok(1_i64),
-                )
-                .optional()?
-                .is_some();
-            let library_exists = conn
-                .query_row(
-                    "SELECT 1 FROM legacy_spotify.sqlite_master WHERE type = 'table' AND name = 'spotify_library'",
-                    [],
-                    |_| Ok(1_i64),
-                )
-                .optional()?
-                .is_some();
-            let features_exists = conn
-                .query_row(
-                    "SELECT 1 FROM legacy_spotify.sqlite_master WHERE type = 'table' AND name = 'spotify_features'",
-                    [],
-                    |_| Ok(1_i64),
-                )
-                .optional()?
-                .is_some();
+        let conn = self.conn()?;
+        let migration = conn
+            .query_row(
+                "SELECT ran_at, summary_json
+                 FROM migration_runs
+                 WHERE source = 'spotify_legacy_import'
+                 ORDER BY id DESC
+                 LIMIT 1",
+                [],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()?;
+        let (
+            legacy_import_observed,
+            last_legacy_import_at,
+            last_history,
+            last_library,
+            last_features,
+        ) = if let Some((ran_at, summary_json)) = migration {
+            let parsed: serde_json::Value =
+                serde_json::from_str(&summary_json).unwrap_or_else(|_| json!({}));
+            (
+                true,
+                Some(ran_at),
+                parsed
+                    .get("historyImported")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0),
+                parsed
+                    .get("libraryImported")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0),
+                parsed
+                    .get("featuresImported")
+                    .and_then(serde_json::Value::as_i64)
+                    .unwrap_or(0),
+            )
+        } else {
+            (false, None, 0, 0, 0)
+        };
+        let history_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM spotify_history", [], |row| row.get(0))?;
+        let library_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM spotify_library", [], |row| row.get(0))?;
+        let features_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM spotify_features", [], |row| {
+                row.get(0)
+            })?;
 
-            if !history_exists && !library_exists {
-                return Ok(commands::SpotifyGapSummary {
-                    available: false,
-                    db_path: Some(legacy_path.display().to_string()),
-                    history_count: 0,
-                    library_count: 0,
-                    features_count: 0,
-                    owned_overlap_count: 0,
-                    queued_overlap_count: 0,
-                    recoverable_missing_count: 0,
-                    top_artists: Vec::new(),
-                    missing_candidates: Vec::new(),
-                    summary_lines: vec![
-                        "Cassette found a legacy database path, but no Spotify history or library tables are present yet.".to_string(),
-                    ],
-                });
-            }
+        let owned_overlap_count: i64 = conn.query_row(
+            "SELECT COUNT(*)
+             FROM spotify_library sl
+             WHERE EXISTS (
+                SELECT 1
+                FROM tracks t
+                LEFT JOIN artists ar ON ar.id = t.artist_id
+                WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
+                  AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        let queued_overlap_count: i64 = conn.query_row(
+            "SELECT COUNT(*)
+             FROM spotify_library sl
+             WHERE NOT EXISTS (
+                SELECT 1
+                FROM tracks t
+                LEFT JOIN artists ar ON ar.id = t.artist_id
+                WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
+                  AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
+             )
+             AND EXISTS (
+                SELECT 1
+                FROM acquisition_queue aq
+                WHERE lower(trim(COALESCE(aq.artist, ''))) = lower(trim(sl.artist))
+                  AND lower(trim(COALESCE(aq.title, ''))) = lower(trim(sl.title))
+                  AND aq.status NOT IN ('completed', 'cancelled')
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        let recoverable_missing_count: i64 = conn.query_row(
+            "SELECT COUNT(*)
+             FROM spotify_library sl
+             WHERE NOT EXISTS (
+                SELECT 1
+                FROM tracks t
+                LEFT JOIN artists ar ON ar.id = t.artist_id
+                WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
+                  AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
+             )
+             AND NOT EXISTS (
+                SELECT 1
+                FROM acquisition_queue aq
+                WHERE lower(trim(COALESCE(aq.artist, ''))) = lower(trim(sl.artist))
+                  AND lower(trim(COALESCE(aq.title, ''))) = lower(trim(sl.title))
+                  AND aq.status NOT IN ('completed', 'cancelled')
+             )",
+            [],
+            |row| row.get(0),
+        )?;
 
-            let history_count = if history_exists {
-                conn.query_row("SELECT COUNT(*) FROM legacy_spotify.spotify_history", [], |row| row.get(0))?
-            } else {
-                0
-            };
-            let library_count = if library_exists {
-                conn.query_row("SELECT COUNT(*) FROM legacy_spotify.spotify_library", [], |row| row.get(0))?
-            } else {
-                0
-            };
-            let features_count = if features_exists {
-                conn.query_row("SELECT COUNT(*) FROM legacy_spotify.spotify_features", [], |row| row.get(0))?
-            } else {
-                0
-            };
-
-            let owned_overlap_count = if library_exists {
-                conn.query_row(
-                    "SELECT COUNT(*)
-                     FROM legacy_spotify.spotify_library sl
-                     WHERE EXISTS (
-                        SELECT 1
-                        FROM tracks t
-                        LEFT JOIN artists ar ON ar.id = t.artist_id
-                        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
-                          AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
-                     )",
-                    [],
-                    |row| row.get(0),
-                )?
-            } else {
-                0
-            };
-
-            let queued_overlap_count = if library_exists {
-                conn.query_row(
-                    "SELECT COUNT(*)
-                     FROM legacy_spotify.spotify_library sl
-                     WHERE NOT EXISTS (
-                        SELECT 1
-                        FROM tracks t
-                        LEFT JOIN artists ar ON ar.id = t.artist_id
-                        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
-                          AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
-                     )
-                     AND EXISTS (
-                        SELECT 1
-                        FROM acquisition_queue aq
-                        WHERE lower(trim(COALESCE(aq.artist, ''))) = lower(trim(sl.artist))
-                          AND lower(trim(COALESCE(aq.title, ''))) = lower(trim(sl.title))
-                          AND aq.status NOT IN ('completed', 'cancelled')
-                     )",
-                    [],
-                    |row| row.get(0),
-                )?
-            } else {
-                0
-            };
-
-            let recoverable_missing_count = if library_exists {
-                conn.query_row(
-                    "SELECT COUNT(*)
-                     FROM legacy_spotify.spotify_library sl
-                     WHERE NOT EXISTS (
-                        SELECT 1
-                        FROM tracks t
-                        LEFT JOIN artists ar ON ar.id = t.artist_id
-                        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
-                          AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
-                     )
-                     AND NOT EXISTS (
-                        SELECT 1
-                        FROM acquisition_queue aq
-                        WHERE lower(trim(COALESCE(aq.artist, ''))) = lower(trim(sl.artist))
-                          AND lower(trim(COALESCE(aq.title, ''))) = lower(trim(sl.title))
-                          AND aq.status NOT IN ('completed', 'cancelled')
-                     )",
-                    [],
-                    |row| row.get(0),
-                )?
-            } else {
-                0
-            };
-
-            let top_artists = if history_exists {
-                let mut stmt = conn.prepare(
-                    "WITH artist_plays AS (
-                        SELECT
-                            trim(artist) AS artist,
-                            COUNT(*) AS play_count,
-                            SUM(COALESCE(ms_played, 0)) AS total_ms_played,
-                            MAX(played_at) AS last_played_at
-                        FROM legacy_spotify.spotify_history
-                        WHERE artist IS NOT NULL AND trim(artist) != ''
-                        GROUP BY lower(trim(artist))
-                    )
+        let top_artists = if history_count > 0 {
+            let mut stmt = conn.prepare(
+                "WITH artist_plays AS (
                     SELECT
-                        ap.artist,
-                        ap.play_count,
-                        ap.total_ms_played,
-                        (
-                            SELECT COUNT(*)
+                        trim(artist) AS artist,
+                        COUNT(*) AS play_count,
+                        SUM(COALESCE(ms_played, 0)) AS total_ms_played,
+                        MAX(played_at) AS last_played_at
+                    FROM spotify_history
+                    WHERE artist IS NOT NULL AND trim(artist) != ''
+                    GROUP BY lower(trim(artist))
+                )
+                SELECT
+                    ap.artist,
+                    ap.play_count,
+                    ap.total_ms_played,
+                    (
+                        SELECT COUNT(*)
+                        FROM tracks t
+                        LEFT JOIN artists ar ON ar.id = t.artist_id
+                        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(ap.artist))
+                    ) AS owned_track_count,
+                    (
+                        SELECT COUNT(*)
+                        FROM spotify_library sl
+                        WHERE lower(trim(sl.artist)) = lower(trim(ap.artist))
+                          AND NOT EXISTS (
+                            SELECT 1
                             FROM tracks t
                             LEFT JOIN artists ar ON ar.id = t.artist_id
-                            WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(ap.artist))
-                        ) AS owned_track_count,
-                        (
-                            SELECT COUNT(*)
-                            FROM legacy_spotify.spotify_library sl
-                            WHERE lower(trim(sl.artist)) = lower(trim(ap.artist))
-                              AND NOT EXISTS (
-                                SELECT 1
-                                FROM tracks t
-                                LEFT JOIN artists ar ON ar.id = t.artist_id
-                                WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
-                                  AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
-                              )
-                        ) AS missing_track_count,
-                        ap.last_played_at
-                     FROM artist_plays ap
-                     ORDER BY ap.play_count DESC, ap.total_ms_played DESC
-                     LIMIT ?1",
-                )?;
-                let rows = stmt.query_map(params![top_limit], |row| {
-                    Ok(commands::SpotifyTopArtist {
-                        artist: row.get(0)?,
-                        play_count: row.get(1)?,
-                        total_ms_played: row.get(2)?,
-                        owned_track_count: row.get(3)?,
-                        missing_track_count: row.get(4)?,
-                        last_played_at: row.get(5)?,
-                    })
-                })?;
-                rows.filter_map(Result::ok).collect()
-            } else {
-                Vec::new()
-            };
+                            WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
+                              AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
+                          )
+                    ) AS missing_track_count,
+                    ap.last_played_at
+                 FROM artist_plays ap
+                 ORDER BY ap.play_count DESC, ap.total_ms_played DESC
+                 LIMIT ?1",
+            )?;
+            let rows = stmt.query_map(params![top_limit], |row| {
+                Ok(commands::SpotifyTopArtist {
+                    artist: row.get(0)?,
+                    play_count: row.get(1)?,
+                    total_ms_played: row.get(2)?,
+                    owned_track_count: row.get(3)?,
+                    missing_track_count: row.get(4)?,
+                    last_played_at: row.get(5)?,
+                })
+            })?;
+            rows.filter_map(Result::ok).collect()
+        } else {
+            Vec::new()
+        };
 
-            let missing_candidates = if library_exists {
-                let mut stmt = conn.prepare(
-                    "WITH history_counts AS (
-                        SELECT
-                            lower(trim(artist)) AS artist_key,
-                            lower(trim(track)) AS title_key,
-                            COUNT(*) AS play_count,
-                            MAX(played_at) AS last_played_at
-                        FROM legacy_spotify.spotify_history
-                        WHERE artist IS NOT NULL AND trim(artist) != ''
-                          AND track IS NOT NULL AND trim(track) != ''
-                        GROUP BY artist_key, title_key
-                    )
+        let missing_candidates = if library_count > 0 {
+            let mut stmt = conn.prepare(
+                "WITH history_counts AS (
                     SELECT
-                        sl.artist,
-                        sl.title,
-                        sl.album,
-                        sl.spotify_uri,
-                        COALESCE(sl.source, 'liked') AS source,
-                        COALESCE(h.play_count, 0) AS play_count,
-                        h.last_played_at,
-                        EXISTS (
-                            SELECT 1
-                            FROM acquisition_queue aq
-                            WHERE lower(trim(COALESCE(aq.artist, ''))) = lower(trim(sl.artist))
-                              AND lower(trim(COALESCE(aq.title, ''))) = lower(trim(sl.title))
-                              AND aq.status NOT IN ('completed', 'cancelled')
-                        ) AS already_queued
-                    FROM legacy_spotify.spotify_library sl
-                    LEFT JOIN history_counts h
-                        ON h.artist_key = lower(trim(sl.artist))
-                       AND h.title_key = lower(trim(sl.title))
-                    WHERE NOT EXISTS (
+                        lower(trim(artist)) AS artist_key,
+                        lower(trim(track)) AS title_key,
+                        COUNT(*) AS play_count,
+                        MAX(played_at) AS last_played_at
+                    FROM spotify_history
+                    WHERE artist IS NOT NULL AND trim(artist) != ''
+                      AND track IS NOT NULL AND trim(track) != ''
+                    GROUP BY artist_key, title_key
+                )
+                SELECT
+                    sl.artist,
+                    sl.title,
+                    sl.album,
+                    sl.spotify_uri,
+                    COALESCE(sl.source, 'liked') AS source,
+                    COALESCE(h.play_count, 0) AS play_count,
+                    h.last_played_at,
+                    EXISTS (
                         SELECT 1
-                        FROM tracks t
-                        LEFT JOIN artists ar ON ar.id = t.artist_id
-                        WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
-                          AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
-                    )
-                    ORDER BY COALESCE(h.play_count, 0) DESC,
-                             h.last_played_at DESC,
-                             sl.added_at DESC
-                    LIMIT ?1",
-                )?;
-                let rows = stmt.query_map(params![candidate_limit], |row| {
-                    Ok(commands::SpotifyMissingCandidate {
-                        artist: row.get(0)?,
-                        title: row.get(1)?,
-                        album: row.get(2)?,
-                        spotify_uri: row.get(3)?,
-                        source: row.get(4)?,
-                        play_count: row.get(5)?,
-                        last_played_at: row.get(6)?,
-                        already_queued: row.get::<_, bool>(7)?,
-                    })
-                })?;
-                rows.filter_map(Result::ok).collect()
-            } else {
-                Vec::new()
-            };
+                        FROM acquisition_queue aq
+                        WHERE lower(trim(COALESCE(aq.artist, ''))) = lower(trim(sl.artist))
+                          AND lower(trim(COALESCE(aq.title, ''))) = lower(trim(sl.title))
+                          AND aq.status NOT IN ('completed', 'cancelled')
+                    ) AS already_queued
+                FROM spotify_library sl
+                LEFT JOIN history_counts h
+                    ON h.artist_key = lower(trim(sl.artist))
+                   AND h.title_key = lower(trim(sl.title))
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM tracks t
+                    LEFT JOIN artists ar ON ar.id = t.artist_id
+                    WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(sl.artist))
+                      AND lower(trim(COALESCE(t.title, ''))) = lower(trim(sl.title))
+                )
+                ORDER BY COALESCE(h.play_count, 0) DESC,
+                         h.last_played_at DESC,
+                         sl.added_at DESC
+                LIMIT ?1",
+            )?;
+            let rows = stmt.query_map(params![candidate_limit], |row| {
+                Ok(commands::SpotifyMissingCandidate {
+                    artist: row.get(0)?,
+                    title: row.get(1)?,
+                    album: row.get(2)?,
+                    spotify_uri: row.get(3)?,
+                    source: row.get(4)?,
+                    play_count: row.get(5)?,
+                    last_played_at: row.get(6)?,
+                    already_queued: row.get::<_, bool>(7)?,
+                })
+            })?;
+            rows.filter_map(Result::ok).collect()
+        } else {
+            Vec::new()
+        };
 
-            let summary_lines = if !library_exists && history_exists {
-                vec![
-                    format!("Spotify history is present with {history_count} plays, but no liked-library export was found to compare against ownership."),
-                    "Lyra can treat that history as taste pressure, but missing-world recovery is still underfed until the library export is present.".to_string(),
-                ]
-            } else if library_exists {
-                vec![
-                    format!(
-                        "Cassette found {library_count} Spotify library entries; {recoverable_missing_count} are still missing from your owned world and not yet queued."
-                    ),
-                    format!(
-                        "{owned_overlap_count} already overlap with the local library, and {queued_overlap_count} more are already in the acquisition lane."
-                    ),
-                ]
-            } else {
-                vec!["Spotify evidence is not available yet.".to_string()]
-            };
+        let summary_lines = if library_count == 0 && history_count > 0 {
+            vec![
+                format!("Spotify history is present with {history_count} plays, but no liked-library export was found to compare against ownership."),
+                "Lyra can treat that history as taste pressure, but missing-world recovery is still underfed until the library export is present.".to_string(),
+            ]
+        } else if library_count > 0 {
+            vec![
+                format!(
+                    "Cassette found {library_count} Spotify library entries; {recoverable_missing_count} are still missing from your owned world and not yet queued."
+                ),
+                format!(
+                    "{owned_overlap_count} already overlap with the local library, and {queued_overlap_count} more are already in the acquisition lane."
+                ),
+            ]
+        } else {
+            vec!["Spotify evidence is not available yet.".to_string()]
+        };
 
-            Ok(commands::SpotifyGapSummary {
-                available: history_exists || library_exists,
-                db_path: Some(legacy_path.display().to_string()),
-                history_count,
-                library_count,
-                features_count,
-                owned_overlap_count,
-                queued_overlap_count,
-                recoverable_missing_count,
-                top_artists,
-                missing_candidates,
-                summary_lines,
-            })
-        })?;
-
-        Ok(summary.unwrap_or(commands::SpotifyGapSummary {
-            available: false,
-            db_path: Some(self.legacy_db_path().display().to_string()),
-            history_count: 0,
-            library_count: 0,
-            features_count: 0,
-            owned_overlap_count: 0,
-            queued_overlap_count: 0,
-            recoverable_missing_count: 0,
-            top_artists: Vec::new(),
-            missing_candidates: Vec::new(),
-            summary_lines: vec![
-                "Cassette could not find a Spotify export database yet. Set LYRA_DB_PATH or keep lyra_registry.db in the repo root to surface that lane.".to_string(),
-            ],
-        }))
+        Ok(commands::SpotifyGapSummary {
+            available: history_count > 0 || library_count > 0,
+            db_path: Some(self.paths.db_path.display().to_string()),
+            source_mode: "canonical_runtime".to_string(),
+            legacy_import_observed,
+            last_legacy_import_at,
+            last_legacy_imported_history: last_history,
+            last_legacy_imported_library: last_library,
+            last_legacy_imported_features: last_features,
+            history_count,
+            library_count,
+            features_count,
+            owned_overlap_count,
+            queued_overlap_count,
+            recoverable_missing_count,
+            top_artists,
+            missing_candidates,
+            summary_lines,
+        })
     }
 
     /// Get related artists for a given artist name.
@@ -1938,7 +2005,7 @@ impl LyraCore {
     /// Build Last.fm similar-artist + dimension-affinity edges (incremental).
     pub fn build_graph_incremental(
         &self,
-        top_k_lastfm:      usize,
+        top_k_lastfm: usize,
         local_targets_only: bool,
     ) -> LyraResult<graph_builder::GraphBuildResult> {
         let conn = self.conn()?;
@@ -1948,7 +2015,7 @@ impl LyraCore {
     /// Full graph rebuild (dimension-affinity + Last.fm similar).
     pub fn build_graph_full(
         &self,
-        top_k_lastfm:      usize,
+        top_k_lastfm: usize,
         local_targets_only: bool,
     ) -> LyraResult<graph_builder::GraphBuildResult> {
         let conn = self.conn()?;
@@ -1964,9 +2031,9 @@ impl LyraCore {
     /// Return direct neighbours of an artist from the connections table.
     pub fn get_artist_neighbours(
         &self,
-        artist:    String,
+        artist: String,
         edge_type: Option<String>,
-        limit:     usize,
+        limit: usize,
     ) -> LyraResult<Vec<graph_builder::GraphEdge>> {
         let conn = self.conn()?;
         graph_builder::get_neighbours(&conn, &artist, edge_type.as_deref(), limit)
@@ -1987,6 +2054,53 @@ impl LyraCore {
         acquisition::list_acquisition_queue(&conn, status_filter.as_deref())
     }
 
+    pub fn plan_single_track_acquisition(
+        &self,
+        artist: String,
+        title: String,
+        album: Option<String>,
+        source: Option<String>,
+        target_root_id: Option<i64>,
+    ) -> LyraResult<AcquisitionPlanResult> {
+        let conn = self.conn()?;
+        acquisition_planning::plan_single_track(
+            &conn,
+            &artist,
+            &title,
+            album.as_deref(),
+            source.as_deref(),
+            target_root_id,
+        )
+    }
+
+    pub fn plan_album_acquisition(
+        &self,
+        artist: String,
+        album: String,
+        source: Option<String>,
+        target_root_id: Option<i64>,
+    ) -> LyraResult<AcquisitionPlanResult> {
+        let conn = self.conn()?;
+        acquisition_planning::plan_album(&conn, &artist, &album, source.as_deref(), target_root_id)
+    }
+
+    pub fn plan_discography_acquisition(
+        &self,
+        artist: String,
+        source: Option<String>,
+        target_root_id: Option<i64>,
+        limit_albums: Option<usize>,
+    ) -> LyraResult<AcquisitionPlanResult> {
+        let conn = self.conn()?;
+        acquisition_planning::plan_discography(
+            &conn,
+            &artist,
+            source.as_deref(),
+            target_root_id,
+            limit_albums,
+        )
+    }
+
     pub fn add_to_acquisition_queue(
         &self,
         artist: String,
@@ -1995,60 +2109,8 @@ impl LyraCore {
         source: Option<String>,
         target_root_id: Option<i64>,
     ) -> LyraResult<Vec<AcquisitionQueueItem>> {
+        let _ = self.plan_single_track_acquisition(artist, title, album, source, target_root_id)?;
         let conn = self.conn()?;
-        let validation =
-            Self::validate_acquisition_request(&conn, &artist, &title, album.as_deref())?;
-        let (target_root_id, target_root_path) = Self::resolve_target_root(&conn, target_root_id)?;
-        let priority = acquisition::compute_initial_priority(
-            &conn,
-            &validation.artist,
-            &validation.title,
-            validation.album.as_deref(),
-            source.as_deref(),
-        )?;
-        let item = acquisition::add_acquisition_item(
-            &conn,
-            &validation.artist,
-            &validation.title,
-            validation.album.as_deref(),
-            source.as_deref(),
-            priority,
-            Some(validation.confidence),
-            Some(&validation.summary),
-            target_root_id,
-            target_root_path.as_deref(),
-        )?;
-        if let Some(path) = validation.duplicate_path.as_deref() {
-            acquisition::mark_failed(
-                &conn,
-                item.id,
-                "validating",
-                "Track already exists in the library",
-                Some(path),
-            )?;
-            acquisition::apply_validation_metadata(
-                &conn,
-                item.id,
-                Some(validation.confidence),
-                Some(&validation.summary),
-            )?;
-        } else if validation.summary.starts_with("Rejected by Rust guard:") {
-            acquisition::mark_failed(
-                &conn,
-                item.id,
-                "validating",
-                &validation.summary,
-                validation.detail.as_deref().or(Some(
-                    "Queue item was blocked before the provider waterfall started",
-                )),
-            )?;
-            acquisition::apply_validation_metadata(
-                &conn,
-                item.id,
-                Some(validation.confidence),
-                Some(&validation.summary),
-            )?;
-        }
         acquisition::list_acquisition_queue(&conn, None)
     }
 
@@ -2083,21 +2145,18 @@ impl LyraCore {
         acquisition::retry_failed(&conn)
     }
 
-    /// Seed the acquisition queue from the legacy Spotify liked library.
-    ///
-    /// Opens `lyra_registry.db` (or the path from `LYRA_DB_PATH` env var) and
-    /// imports any `spotify_library` liked tracks that are not yet owned locally
-    /// and not already in the acquisition queue.
-    ///
-    /// Returns the number of new items added.
+    /// Seed the acquisition queue from canonical Spotify library rows.
+    /// If `LYRA_DB_PATH` is configured, this first migrates legacy Spotify export
+    /// tables into canonical storage and then queues from canonical `spotify_library`.
     pub fn seed_acquisition_from_spotify_library(&self) -> LyraResult<usize> {
         let conn = self.conn()?;
-        let legacy_path = self.legacy_db_path();
-        if !legacy_path.exists() {
-            return Ok(0);
+        if let Some(legacy_path) = Self::legacy_db_path() {
+            if legacy_path.exists() {
+                let legacy = rusqlite::Connection::open(&legacy_path)?;
+                let _ = Self::migrate_spotify_exports_from_legacy(&conn, &legacy);
+            }
         }
-        let legacy = rusqlite::Connection::open(&legacy_path)?;
-        acquisition::import_spotify_library_as_queue(&conn, &legacy)
+        acquisition::import_spotify_library_as_queue(&conn, &conn)
     }
 
     /// Bulk-add multiple tracks to the acquisition queue from a text list.
@@ -2111,39 +2170,19 @@ impl LyraCore {
         entries: Vec<(String, String, Option<String>)>,
         source: String,
     ) -> LyraResult<Vec<AcquisitionQueueItem>> {
-        let conn = self.conn()?;
         let mut added: Vec<AcquisitionQueueItem> = Vec::new();
         for (artist, title, album) in entries {
             if artist.trim().is_empty() || title.trim().is_empty() {
                 continue;
             }
-            let validation = Self::validate_acquisition_request(
-                &conn,
-                artist.trim(),
-                title.trim(),
-                album.as_deref(),
+            let plan = self.plan_single_track_acquisition(
+                artist.trim().to_string(),
+                title.trim().to_string(),
+                album,
+                Some(source.clone()),
+                None,
             )?;
-            let (target_root_id, target_root_path) = Self::resolve_target_root(&conn, None)?;
-            let priority = acquisition::compute_initial_priority(
-                &conn,
-                &validation.artist,
-                &validation.title,
-                validation.album.as_deref(),
-                Some(source.as_str()),
-            )?;
-            let item = acquisition::add_acquisition_item(
-                &conn,
-                &validation.artist,
-                &validation.title,
-                validation.album.as_deref(),
-                Some(source.as_str()),
-                priority,
-                Some(validation.confidence),
-                Some(&validation.summary),
-                target_root_id,
-                target_root_path.as_deref(),
-            )?;
-            added.push(item);
+            added.extend(plan.queue_items);
         }
         Ok(added)
     }
@@ -2174,7 +2213,17 @@ impl LyraCore {
         target_root_id: Option<i64>,
     ) -> LyraResult<Vec<AcquisitionQueueItem>> {
         let conn = self.conn()?;
-        let (resolved_id, target_root_path) = Self::resolve_target_root(&conn, target_root_id)?;
+        let (resolved_id, target_root_path) = if let Some(root_id) = target_root_id {
+            let root = library::list_library_roots(&conn)?
+                .into_iter()
+                .find(|root| root.id == root_id);
+            match root {
+                Some(root) => (Some(root.id), Some(root.path)),
+                None => (None, None),
+            }
+        } else {
+            (None, None)
+        };
         acquisition::set_target_root(&conn, id, resolved_id, target_root_path.as_deref())?;
         acquisition::list_acquisition_queue(&conn, None)
     }
@@ -2203,6 +2252,13 @@ impl LyraCore {
             .as_ref()
             .map(|root| root.join(".venv").join("Scripts").join("python.exe"));
         let python_available = python_path.as_ref().is_some_and(|p| p.exists());
+        let legacy_bridge_enabled = std::env::var("LYRA_ENABLE_LEGACY_ACQUISITION_BRIDGE")
+            .ok()
+            .map(|value| {
+                let normalized = value.trim().to_ascii_lowercase();
+                normalized == "1" || normalized == "true" || normalized == "yes"
+            })
+            .unwrap_or(false);
         let waterfall_script = workspace_root
             .as_ref()
             .map(|root| root.join("oracle").join("acquirers").join("waterfall.py"));
@@ -2241,9 +2297,11 @@ impl LyraCore {
             ("slskd", slskd_available),
         ];
         let native_downloader_available = downloader_tools.iter().any(|(_, ok)| *ok);
-        let python_bridge_available =
-            python_available && waterfall_available && native_downloader_available;
-        let downloader_available = native_downloader_available || python_bridge_available;
+        let _python_bridge_available = legacy_bridge_enabled
+            && python_available
+            && waterfall_available
+            && native_downloader_available;
+        let downloader_available = native_downloader_available;
 
         let mut free_bytes: i64 = 0;
         let acquisition_root = std::env::var("LYRA_DATA_ROOT")
@@ -2286,13 +2344,21 @@ impl LyraCore {
 
         let mut notes = Vec::new();
         let mut checks = Vec::new();
-        if !python_available && native_downloader_available {
-            notes.push("Python runtime not found in .venv; Rust will use native acquisition providers where possible.".to_string());
-        } else if !python_available {
-            notes.push("Python runtime not found in .venv".to_string());
+        if legacy_bridge_enabled {
+            notes.push(
+                "Legacy Python acquisition bridge is explicitly enabled for fallback use."
+                    .to_string(),
+            );
+        } else {
+            notes.push(
+                "Canonical acquisition is Rust-native; the legacy Python bridge stays quarantined unless LYRA_ENABLE_LEGACY_ACQUISITION_BRIDGE=1."
+                    .to_string(),
+            );
         }
-        if !waterfall_available && python_available {
-            notes.push("Legacy waterfall bridge not found at oracle/acquirers/waterfall.py; Rust native providers only.".to_string());
+        if legacy_bridge_enabled && !waterfall_available && python_available {
+            notes.push(
+                "Legacy waterfall bridge not found at oracle/acquirers/waterfall.py.".to_string(),
+            );
         }
         if !downloader_available {
             notes.push("No supported acquisition downloader tool detected on PATH".to_string());
@@ -2328,7 +2394,9 @@ impl LyraCore {
         checks.push(AcquisitionPreflightCheck {
             key: "python_runtime".to_string(),
             label: "Python runtime".to_string(),
-            status: if python_available {
+            status: if !legacy_bridge_enabled {
+                "ok"
+            } else if python_available {
                 "ok"
             } else if native_downloader_available {
                 "warning"
@@ -2340,12 +2408,28 @@ impl LyraCore {
                 .as_ref()
                 .map(|path| {
                     if path.exists() {
-                        path.display().to_string()
+                        if legacy_bridge_enabled {
+                            format!(
+                                "{} (legacy bridge enabled only by explicit opt-in)",
+                                path.display()
+                            )
+                        } else {
+                            format!(
+                                "{} (available but not used in the canonical path)",
+                                path.display()
+                            )
+                        }
                     } else {
                         format!("{} (native providers can still run)", path.display())
                     }
                 })
-                .unwrap_or_else(|| "Python venv not configured".to_string()),
+                .unwrap_or_else(|| {
+                    if legacy_bridge_enabled {
+                        "Python venv not configured for the optional legacy bridge".to_string()
+                    } else {
+                        "Python venv not required for canonical acquisition".to_string()
+                    }
+                }),
         });
         checks.push(AcquisitionPreflightCheck {
             key: "provider_readiness".to_string(),
@@ -3166,11 +3250,7 @@ impl LyraCore {
 
     // ── Validator ────────────────────────────────────────────────────────────
 
-    pub fn validate_track_text(
-        &self,
-        artist: &str,
-        title: &str,
-    ) -> validator::ValidationResult {
+    pub fn validate_track_text(&self, artist: &str, title: &str) -> validator::ValidationResult {
         validator::validate_track_text(artist, title)
     }
 
@@ -3238,12 +3318,25 @@ impl LyraCore {
         limit: usize,
     ) -> LyraResult<Vec<search::RemixResult>> {
         let conn = self.conn()?;
-        let a = if artist.is_empty() { None } else { Some(artist.as_str()) };
-        let al = if album.is_empty() { None } else { Some(album.as_str()) };
-        let tr = if track.is_empty() { None } else { Some(track.as_str()) };
+        let a = if artist.is_empty() {
+            None
+        } else {
+            Some(artist.as_str())
+        };
+        let al = if album.is_empty() {
+            None
+        } else {
+            Some(album.as_str())
+        };
+        let tr = if track.is_empty() {
+            None
+        } else {
+            Some(track.as_str())
+        };
         search::find_remixes(&conn, a, al, tr, limit, true, "relevance")
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn hybrid_search(
         &self,
         candidate_ids: Vec<i64>,
@@ -3255,7 +3348,16 @@ impl LyraCore {
         top_k: usize,
     ) -> LyraResult<Vec<search::SearchResult>> {
         let conn = self.conn()?;
-        search::hybrid_search(&conn, &candidate_ids, &filters, &dimension_ranges, sort_by, sort_dim.as_deref(), descending, top_k)
+        search::hybrid_search(
+            &conn,
+            &candidate_ids,
+            &filters,
+            &dimension_ranges,
+            sort_by,
+            sort_dim.as_deref(),
+            descending,
+            top_k,
+        )
     }
 
     // ── Scout ─────────────────────────────────────────────────────────────────

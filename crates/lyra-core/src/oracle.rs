@@ -1,15 +1,19 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::audio_data;
 use crate::commands::{
     AcquisitionLead, AcquisitionLeadHandoffReport, AcquisitionLeadOutcome, DiscoveryInteraction,
     DiscoverySession, EvidenceItem, ExplainPayload, RecommendationBundle, RecommendationResult,
     RelatedArtist, ScoutExitLane, ScoutExitPlan, TasteProfile, TrackScores,
 };
+use crate::lineage;
+use crate::provider_runtime;
 
 /// Static cross-genre bridge map ported from oracle/recommendation_broker.py `_SCOUT_GENRE_BRIDGES`.
 /// Keys are lowercase genre tokens; values are natural bridge destination genres in adjacency order.
@@ -48,6 +52,50 @@ const DIMENSIONS: &[&str] = &[
 ];
 const FEEDBACK_LOOKBACK_SECONDS: i64 = 60 * 60 * 24 * 90;
 const LISTENBRAINZ_WEATHER_WEIGHT: f64 = 0.10;
+
+fn evidence_item(
+    type_label: &str,
+    source: &str,
+    category: &str,
+    anchor: &str,
+    text: String,
+    weight: f64,
+) -> EvidenceItem {
+    EvidenceItem {
+        type_label: type_label.to_string(),
+        source: source.to_string(),
+        category: category.to_string(),
+        anchor: anchor.to_string(),
+        text,
+        weight,
+    }
+}
+
+fn evidence_grade_for_items(items: &[EvidenceItem]) -> String {
+    if items.is_empty() {
+        return "insufficient_evidence".to_string();
+    }
+    let has_audio = items.iter().any(|item| item.category == "audio_features");
+    let has_lineage = items
+        .iter()
+        .any(|item| item.category == "lineage_member_graph");
+    let has_adjacency = items
+        .iter()
+        .any(|item| item.category == "adjacency_similarity");
+    let has_external = items.iter().any(|item| item.category == "external_context");
+    let has_provider_metadata = items
+        .iter()
+        .any(|item| item.category == "provider_metadata");
+    if has_audio && (has_lineage || has_adjacency || has_external || has_provider_metadata) {
+        "high_confidence_multi_evidence".to_string()
+    } else if has_audio {
+        "audio_feature_assisted".to_string()
+    } else if has_lineage || has_adjacency || has_external {
+        "graph_context_assisted".to_string()
+    } else {
+        "metadata_only".to_string()
+    }
+}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -198,6 +246,7 @@ fn merge_recommendation_result(
             existing.why_this_track = candidate.why_this_track;
         }
         existing.evidence.extend(candidate.evidence);
+        existing.evidence_grade = evidence_grade_for_items(&existing.evidence);
 
         let mut providers: Vec<String> = existing
             .provider
@@ -205,7 +254,10 @@ fn merge_recommendation_result(
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
             .collect();
-        if !providers.iter().any(|provider| provider == &candidate.provider) {
+        if !providers
+            .iter()
+            .any(|provider| provider == &candidate.provider)
+        {
             providers.push(candidate.provider);
             providers.sort();
         }
@@ -215,7 +267,10 @@ fn merge_recommendation_result(
     }
 }
 
-fn merge_acquisition_lead(leads: &mut HashMap<String, AcquisitionLead>, candidate: AcquisitionLead) {
+fn merge_acquisition_lead(
+    leads: &mut HashMap<String, AcquisitionLead>,
+    candidate: AcquisitionLead,
+) {
     let key = format!(
         "{}\u{1f}{}",
         candidate.artist.trim().to_ascii_lowercase(),
@@ -228,6 +283,7 @@ fn merge_acquisition_lead(leads: &mut HashMap<String, AcquisitionLead>, candidat
             existing.reason = candidate.reason.clone();
         }
         existing.evidence.extend(candidate.evidence.clone());
+        existing.evidence_grade = evidence_grade_for_items(&existing.evidence);
         if !existing.provider.contains(&candidate.provider) {
             existing.provider = format!("{}, {}", existing.provider, candidate.provider);
         }
@@ -392,7 +448,9 @@ fn parse_weather_row(row: &Value) -> Option<WeatherRecording> {
     })
 }
 
-fn load_listenbrainz_runtime_config(conn: &Connection) -> Result<ListenBrainzRuntimeConfig, String> {
+fn load_listenbrainz_runtime_config(
+    conn: &Connection,
+) -> Result<ListenBrainzRuntimeConfig, String> {
     let mut stmt = conn
         .prepare(
             "SELECT enabled, config_json
@@ -429,19 +487,26 @@ fn load_listenbrainz_runtime_config(conn: &Connection) -> Result<ListenBrainzRun
     Ok(ListenBrainzRuntimeConfig { token, base_url })
 }
 
-fn fetch_artist_mbid(artist_name: &str) -> Result<String, String> {
-    let response = ureq::get("https://musicbrainz.org/ws/2/artist")
-        .set("User-Agent", "Lyra/0.1")
-        .set("Accept", "application/json")
-        .query("query", &format!("artist:{}", artist_name))
-        .query("fmt", "json")
-        .query("limit", "1")
-        .timeout(std::time::Duration::from_millis(2500))
-        .call()
-        .map_err(|error| format!("mbid lookup failed: {error}"))?;
-    let body: Value = response
-        .into_json()
-        .map_err(|error| format!("mbid response json parse failed: {error}"))?;
+fn fetch_artist_mbid(conn: &Connection, artist_name: &str) -> Result<String, String> {
+    let cache_key = format!("artist-mbid::{}", artist_name.trim().to_ascii_lowercase());
+    let body = provider_runtime::cached_json_request(
+        conn,
+        "musicbrainz_artist_search",
+        &cache_key,
+        Duration::from_secs(60 * 60 * 24 * 14),
+        || {
+            ureq::get("https://musicbrainz.org/ws/2/artist")
+                .set("User-Agent", "Lyra/0.1")
+                .set("Accept", "application/json")
+                .query("query", &format!("artist:{}", artist_name))
+                .query("fmt", "json")
+                .query("limit", "1")
+                .timeout(Duration::from_millis(2500))
+                .call()
+        },
+    )
+    .map_err(|error| format!("mbid lookup failed: {error}"))?
+    .payload;
     body.get("artists")
         .and_then(Value::as_array)
         .and_then(|artists| artists.first())
@@ -452,22 +517,29 @@ fn fetch_artist_mbid(artist_name: &str) -> Result<String, String> {
 }
 
 fn fetch_similar_artists(
+    conn: &Connection,
     config: &ListenBrainzRuntimeConfig,
     seed_mbid: &str,
     count: usize,
 ) -> Result<Vec<SimilarArtist>, String> {
     let endpoint = format!("{}/similarity/artist/{}/", config.base_url, seed_mbid);
-    let response = ureq::get(&endpoint)
-        .set("User-Agent", "Lyra/0.1")
-        .set("Accept", "application/json")
-        .set("Authorization", &format!("Token {}", config.token))
-        .query("count", &count.to_string())
-        .timeout(std::time::Duration::from_millis(2500))
-        .call()
-        .map_err(|error| format!("similar-artists fetch failed: {error}"))?;
-    let body: Value = response
-        .into_json()
-        .map_err(|error| format!("similar-artists json parse failed: {error}"))?;
+    let body = provider_runtime::cached_json_request(
+        conn,
+        "listenbrainz_similar_artists",
+        seed_mbid,
+        Duration::from_secs(60 * 60 * 12),
+        || {
+            ureq::get(&endpoint)
+                .set("User-Agent", "Lyra/0.1")
+                .set("Accept", "application/json")
+                .set("Authorization", &format!("Token {}", config.token))
+                .query("count", &count.to_string())
+                .timeout(Duration::from_millis(2500))
+                .call()
+        },
+    )
+    .map_err(|error| format!("similar-artists fetch failed: {error}"))?
+    .payload;
 
     let raw = if body.is_array() {
         body.as_array().cloned().unwrap_or_default()
@@ -519,6 +591,7 @@ fn fetch_similar_artists(
 }
 
 fn fetch_top_recordings(
+    conn: &Connection,
     config: &ListenBrainzRuntimeConfig,
     artist_mbid: &str,
     artist_name: &str,
@@ -528,17 +601,23 @@ fn fetch_top_recordings(
         "{}/popularity/top-recordings-for-artist/{}",
         config.base_url, artist_mbid
     );
-    let response = ureq::get(&endpoint)
-        .set("User-Agent", "Lyra/0.1")
-        .set("Accept", "application/json")
-        .set("Authorization", &format!("Token {}", config.token))
-        .query("count", &count.to_string())
-        .timeout(std::time::Duration::from_millis(2500))
-        .call()
-        .map_err(|error| format!("top-recordings fetch failed: {error}"))?;
-    let body: Value = response
-        .into_json()
-        .map_err(|error| format!("top-recordings json parse failed: {error}"))?;
+    let body = provider_runtime::cached_json_request(
+        conn,
+        "listenbrainz_top_recordings",
+        artist_mbid,
+        Duration::from_secs(60 * 60 * 12),
+        || {
+            ureq::get(&endpoint)
+                .set("User-Agent", "Lyra/0.1")
+                .set("Accept", "application/json")
+                .set("Authorization", &format!("Token {}", config.token))
+                .query("count", &count.to_string())
+                .timeout(Duration::from_millis(2500))
+                .call()
+        },
+    )
+    .map_err(|error| format!("top-recordings fetch failed: {error}"))?
+    .payload;
 
     let rows = if body.is_array() {
         body.as_array().cloned().unwrap_or_default()
@@ -621,18 +700,23 @@ fn fetch_live_weather_recordings(
     limit: usize,
 ) -> Result<Vec<WeatherRecording>, String> {
     let config = load_listenbrainz_runtime_config(conn)?;
-    let seed_mbid = fetch_artist_mbid(seed_artist)?;
-    let similar_count = std::cmp::max(2, std::cmp::min(5, limit));
-    let recordings_per_artist = std::cmp::max(1, std::cmp::min(4, limit / 2));
-    let similar_artists = fetch_similar_artists(&config, &seed_mbid, similar_count)?;
+    let seed_mbid = fetch_artist_mbid(conn, seed_artist)?;
+    let similar_count = limit.clamp(2, 5);
+    let recordings_per_artist = (limit / 2).clamp(1, 4);
+    let similar_artists = fetch_similar_artists(conn, &config, &seed_mbid, similar_count)?;
     if similar_artists.is_empty() {
         return Err("no similar artists found".to_string());
     }
 
     let mut rows = Vec::new();
     for similar in similar_artists {
-        let top_recordings =
-            fetch_top_recordings(&config, &similar.mbid, &similar.name, recordings_per_artist)?;
+        let top_recordings = fetch_top_recordings(
+            conn,
+            &config,
+            &similar.mbid,
+            &similar.name,
+            recordings_per_artist,
+        )?;
         for mut row in top_recordings {
             row.similarity_score = similar.similarity;
             row.source_artist = seed_artist.to_string();
@@ -657,7 +741,11 @@ fn parse_weather_payload(payload: &Value) -> Vec<WeatherRecording> {
     let rows = payload
         .get("recordings")
         .and_then(Value::as_array)
-        .or_else(|| payload.get("similar_artist_recordings").and_then(Value::as_array))
+        .or_else(|| {
+            payload
+                .get("similar_artist_recordings")
+                .and_then(Value::as_array)
+        })
         .or_else(|| payload.get("data").and_then(Value::as_array))
         .or_else(|| payload.as_array());
 
@@ -1035,31 +1123,38 @@ impl<'conn> RecommendationBroker<'conn> {
             };
 
             let mut evidence = vec![
-                EvidenceItem {
-                    type_label: evidence_type.to_string(),
-                    source: provider.clone(),
-                    text: evidence_text,
-                    weight: 0.45,
-                },
-                EvidenceItem {
-                    type_label: "inferred".to_string(),
-                    source: "local".to_string(),
-                    text: inferred_note,
-                    weight: 0.1,
-                },
+                evidence_item(
+                    evidence_type,
+                    &provider,
+                    "audio_features",
+                    "track_scores",
+                    evidence_text,
+                    0.45,
+                ),
+                evidence_item(
+                    "inferred",
+                    "local",
+                    "audio_features",
+                    "taste_profile",
+                    inferred_note,
+                    0.1,
+                ),
             ];
             if feedback_delta != 0.0 {
-                evidence.push(EvidenceItem {
-                    type_label: "feedback_history".to_string(),
-                    source: "broker".to_string(),
-                    text: if feedback_delta > 0.0 {
+                evidence.push(evidence_item(
+                    "feedback_history",
+                    "broker",
+                    "provider_metadata",
+                    "playback_feedback",
+                    if feedback_delta > 0.0 {
                         "Past accepts and replays are reinforcing this pick.".to_string()
                     } else {
                         "Past skips are suppressing this pick.".to_string()
                     },
-                    weight: feedback_delta.abs(),
-                });
+                    feedback_delta.abs(),
+                ));
             }
+            let evidence_grade = evidence_grade_for_items(&evidence);
 
             merge_recommendation_result(
                 &mut merged_results,
@@ -1068,6 +1163,7 @@ impl<'conn> RecommendationBroker<'conn> {
                     score: raw_score,
                     provider: provider.clone(),
                     why_this_track: why,
+                    evidence_grade,
                     evidence,
                 },
             );
@@ -1098,7 +1194,7 @@ impl<'conn> RecommendationBroker<'conn> {
                 let bridge_ids: Vec<i64> = match self.conn.prepare(
                     "SELECT t.id FROM tracks t
                      WHERE LOWER(COALESCE(t.genre, '')) LIKE LOWER(?)
-                       AND t.status = 'active'
+                       AND COALESCE(t.status, 'active') = 'active'
                      LIMIT 8",
                 ) {
                     Err(_) => continue,
@@ -1135,12 +1231,20 @@ impl<'conn> RecommendationBroker<'conn> {
                         "Scout bridge: this is where {} meets {} — a different world that shares your current pressure.",
                         seed_genre, bridge_genre
                     );
-                    let evidence_text = format!(
-                        "Cross-genre bridge: {} × {}. Local taste coherence {:.0}%.",
-                        seed_genre,
-                        bridge_genre,
-                        bridge_score * 100.0
-                    );
+                    let evidence = vec![evidence_item(
+                        "scout_bridge",
+                        "scout",
+                        "adjacency_similarity",
+                        "genre_bridge",
+                        format!(
+                            "Cross-genre bridge: {} × {}. Local taste coherence {:.0}%.",
+                            seed_genre,
+                            bridge_genre,
+                            bridge_score * 100.0
+                        ),
+                        0.10,
+                    )];
+                    let evidence_grade = evidence_grade_for_items(&evidence);
 
                     merge_recommendation_result(
                         &mut merged_results,
@@ -1149,12 +1253,8 @@ impl<'conn> RecommendationBroker<'conn> {
                             score: bridge_score * 0.82,
                             provider: "scout/bridge".to_string(),
                             why_this_track: why,
-                            evidence: vec![EvidenceItem {
-                                type_label: "scout_bridge".to_string(),
-                                source: "scout".to_string(),
-                                text: evidence_text,
-                                weight: 0.10,
-                            }],
+                            evidence_grade,
+                            evidence,
                         },
                     );
                 }
@@ -1171,23 +1271,32 @@ impl<'conn> RecommendationBroker<'conn> {
                     library::get_track_by_id(self.conn, *tid)
                         .ok()
                         .flatten()
-                        .map(|t| t.artist.to_lowercase())
+                        .map(|t| t.artist)
                 })
                 .collect()
         };
 
         if !anchor_artists.is_empty() {
             for anchor in anchor_artists.iter().take(3) {
-                let connected: Vec<(String, i64)> = {
+                let mut connected: HashMap<String, (String, f64, String, String, String)> =
+                    HashMap::new();
+                let graph_rows: Vec<(String, f64, String)> = {
                     let stmt = self.conn.prepare(
-                        "SELECT artist_b, score FROM artist_connections
-                         WHERE LOWER(artist_a) = LOWER(?)
-                         ORDER BY score DESC LIMIT 3",
+                        "SELECT target, weight, type
+                         FROM connections
+                         WHERE LOWER(source) = LOWER(?)
+                           AND type IN ('dimension_affinity', 'similar_artist', 'co_play')
+                         ORDER BY weight DESC
+                         LIMIT 4",
                     );
                     match stmt {
                         Err(_) => vec![],
                         Ok(mut stmt) => match stmt.query_map([anchor], |row| {
-                            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                            Ok((
+                                row.get::<_, String>(0)?,
+                                row.get::<_, f64>(1)?,
+                                row.get::<_, String>(2)?,
+                            ))
                         }) {
                             Ok(rows) => rows.filter_map(Result::ok).collect(),
                             Err(_) => vec![],
@@ -1195,7 +1304,65 @@ impl<'conn> RecommendationBroker<'conn> {
                     }
                 };
 
-                for (connected_artist, graph_score) in connected {
+                for (connected_artist, graph_score, connection_type) in graph_rows {
+                    let evidence_summary = format!(
+                        "Artist graph connection: {} -> {} via {} ({:.0}% strength).",
+                        anchor,
+                        connected_artist,
+                        connection_type,
+                        graph_score * 100.0
+                    );
+                    connected.insert(
+                        connected_artist.trim().to_ascii_lowercase(),
+                        (
+                            connected_artist,
+                            graph_score.clamp(0.0, 1.0),
+                            connection_type,
+                            "adjacency_similarity".to_string(),
+                            evidence_summary,
+                        ),
+                    );
+                }
+
+                for related in
+                    lineage::lineage_related_artists(self.conn, anchor, 4).unwrap_or_default()
+                {
+                    let key = related.name.trim().to_ascii_lowercase();
+                    let score = f64::from(related.connection_strength).clamp(0.0, 1.0);
+                    let evidence_summary = format!(
+                        "{} Evidence level: {}.",
+                        related.evidence_summary, related.evidence_level
+                    );
+                    match connected.get(&key) {
+                        Some((_, existing_score, _, _, _)) if *existing_score >= score => {}
+                        _ => {
+                            connected.insert(
+                                key,
+                                (
+                                    related.name,
+                                    score,
+                                    related.connection_type,
+                                    "lineage_member_graph".to_string(),
+                                    evidence_summary,
+                                ),
+                            );
+                        }
+                    }
+                }
+
+                let mut connected = connected.into_values().collect::<Vec<_>>();
+                connected.sort_by(|left, right| {
+                    right
+                        .1
+                        .partial_cmp(&left.1)
+                        .unwrap_or(Ordering::Equal)
+                        .then_with(|| left.0.cmp(&right.0))
+                });
+                connected.truncate(4);
+
+                for (connected_artist, graph_score, connection_type, category, evidence_summary) in
+                    connected
+                {
                     // Find a track from this artist
                     let track_row: Option<i64> = self
                         .conn
@@ -1203,7 +1370,7 @@ impl<'conn> RecommendationBroker<'conn> {
                             "SELECT t.id FROM tracks t
                          JOIN artists ar ON ar.id = t.artist_id
                          WHERE LOWER(ar.name) = LOWER(?)
-                           AND t.status = 'active'
+                           AND COALESCE(t.status, 'active') = 'active'
                          ORDER BY RANDOM() LIMIT 1",
                             [&connected_artist],
                             |row| row.get(0),
@@ -1211,25 +1378,49 @@ impl<'conn> RecommendationBroker<'conn> {
                         .ok();
 
                     let Some(track_id) = track_row else {
-                        let lead_score = ((graph_score as f64 / 100.0) * 0.6).clamp(0.0, 1.0);
-                        let reason = format!(
-                            "Scout graph lead: {} is strongly adjacent to {} but has no owned track match yet.",
-                            connected_artist, anchor
-                        );
+                        let lead_score = (graph_score * 0.6).clamp(0.0, 1.0);
+                        let reason = if category == "lineage_member_graph" {
+                            format!(
+                                "Scout lineage lead: {} is directly linked to {} through {} evidence, but has no owned track match yet.",
+                                connected_artist, anchor, connection_type
+                            )
+                        } else {
+                            format!(
+                                "Scout graph lead: {} is strongly adjacent to {} but has no owned track match yet.",
+                                connected_artist, anchor
+                            )
+                        };
+                        let evidence = vec![evidence_item(
+                            if category == "lineage_member_graph" {
+                                "scout_lineage_artist_lead"
+                            } else {
+                                "scout_graph_artist_lead"
+                            },
+                            if category == "lineage_member_graph" {
+                                "lineage"
+                            } else {
+                                "scout"
+                            },
+                            &category,
+                            &connection_type,
+                            evidence_summary.clone(),
+                            lead_score,
+                        )];
+                        let evidence_grade = evidence_grade_for_items(&evidence);
                         merge_acquisition_lead(
                             &mut merged_leads,
                             AcquisitionLead {
                                 artist: connected_artist.clone(),
                                 title: "Top track (scout lead)".to_string(),
-                                provider: "scout/graph".to_string(),
+                                provider: if category == "lineage_member_graph" {
+                                    "lineage/member".to_string()
+                                } else {
+                                    "scout/graph".to_string()
+                                },
                                 score: lead_score,
-                                reason: reason.clone(),
-                                evidence: vec![EvidenceItem {
-                                    type_label: "scout_graph_artist_lead".to_string(),
-                                    source: "scout".to_string(),
-                                    text: reason,
-                                    weight: lead_score,
-                                }],
+                                reason,
+                                evidence_grade,
+                                evidence,
                             },
                         );
                         continue;
@@ -1238,7 +1429,7 @@ impl<'conn> RecommendationBroker<'conn> {
                         continue;
                     };
 
-                    let co_score = (graph_score as f64 / 100.0).clamp(0.2, 0.75);
+                    let co_score = graph_score.clamp(0.2, 0.75);
                     let why = format!(
                         "Listeners who love {} also gravitate toward {} — graph affinity, not just genre proximity.",
                         anchor, connected_artist
@@ -1249,16 +1440,31 @@ impl<'conn> RecommendationBroker<'conn> {
                         RecommendationResult {
                             track,
                             score: co_score * 0.72,
-                            provider: "graph/co_play".to_string(),
+                            provider: if category == "lineage_member_graph" {
+                                "lineage/member".to_string()
+                            } else {
+                                "graph/co_play".to_string()
+                            },
                             why_this_track: why.clone(),
+                            evidence_grade: "graph_context_assisted".to_string(),
                             evidence: vec![EvidenceItem {
-                                type_label: "co_play".to_string(),
-                                source: "graph".to_string(),
+                                type_label: if category == "lineage_member_graph" {
+                                    "lineage_member_graph".to_string()
+                                } else {
+                                    "co_play".to_string()
+                                },
+                                source: if category == "lineage_member_graph" {
+                                    "lineage".to_string()
+                                } else {
+                                    "graph".to_string()
+                                },
+                                category: category.clone(),
+                                anchor: connection_type.clone(),
                                 text: format!(
                                     "Artist graph connection: {} → {}. Affinity score {}.",
                                     anchor, connected_artist, graph_score
                                 ),
-                                weight: 0.10,
+                                weight: (co_score * 0.72).clamp(0.0, 1.0),
                             }],
                         },
                     );
@@ -1292,14 +1498,52 @@ impl<'conn> RecommendationBroker<'conn> {
                 ),
             };
             for recording in weather_candidates {
-                let maybe_track_id =
-                    find_local_track_by_artist_title(self.conn, &recording.artist, &recording.title);
+                let payload = serde_json::json!({
+                    "artist": recording.artist,
+                    "title": recording.title,
+                    "listenCount": recording.listen_count,
+                    "similarityScore": recording.similarity_score,
+                    "sourceArtist": recording.source_artist,
+                    "sourceMode": weather_source_mode,
+                });
+                let normalized =
+                    match audio_data::normalize_track_candidate(audio_data::RawTrackCandidate {
+                        provider: "listenbrainz/weather",
+                        provider_track_id: &audio_data::provider_track_key(
+                            "listenbrainz/weather",
+                            &recording.artist,
+                            &recording.title,
+                            None,
+                        ),
+                        artist: &recording.artist,
+                        title: &recording.title,
+                        album: None,
+                        release_date: None,
+                        isrc: None,
+                        duration_ms: None,
+                        popularity: None,
+                        explicit: false,
+                    }) {
+                        Ok(track) => track,
+                        Err(_) => continue,
+                    };
+                let _ = audio_data::persist_provider_track(
+                    self.conn,
+                    &normalized,
+                    "recommendation",
+                    &payload,
+                );
+                let maybe_track_id = find_local_track_by_artist_title(
+                    self.conn,
+                    &normalized.artist.name,
+                    &normalized.title,
+                );
 
                 let raw = weather_score(&recording);
                 let weighted = (raw * 0.68).clamp(0.0, 1.0);
                 let mut reason = format!(
                     "Community weather: listeners around {} also move toward {} — {} global plays.",
-                    recording.source_artist, recording.artist, recording.listen_count
+                    recording.source_artist, normalized.artist.name, recording.listen_count
                 );
                 if weather_source_mode == "cache_fallback" {
                     reason.push_str(" Using cached fallback because live weather was unavailable.");
@@ -1315,6 +1559,8 @@ impl<'conn> RecommendationBroker<'conn> {
                 let evidence = vec![EvidenceItem {
                     type_label: evidence_type.to_string(),
                     source: "listenbrainz_weather".to_string(),
+                    category: "external_context".to_string(),
+                    anchor: "listenbrainz_weather".to_string(),
                     text: reason.clone(),
                     weight: (raw * LISTENBRAINZ_WEATHER_WEIGHT).clamp(0.0, 1.0),
                 }];
@@ -1330,6 +1576,7 @@ impl<'conn> RecommendationBroker<'conn> {
                             score: weighted,
                             provider: "listenbrainz/weather".to_string(),
                             why_this_track: reason.clone(),
+                            evidence_grade: "graph_context_assisted".to_string(),
                             evidence,
                         },
                     );
@@ -1337,11 +1584,12 @@ impl<'conn> RecommendationBroker<'conn> {
                     merge_acquisition_lead(
                         &mut merged_leads,
                         AcquisitionLead {
-                            artist: recording.artist.clone(),
-                            title: recording.title.clone(),
+                            artist: normalized.artist.name.clone(),
+                            title: normalized.title.clone(),
                             provider: "listenbrainz/weather".to_string(),
                             score: weighted,
                             reason,
+                            evidence_grade: "graph_context_assisted".to_string(),
                             evidence,
                         },
                     );
@@ -1418,6 +1666,7 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
         return ExplainPayload {
             track_id,
             why_this_track: "No local score data for this track yet.".to_string(),
+            evidence_grade: "insufficient_evidence".to_string(),
             reasons: vec!["No local track_scores row exists for this track yet.".to_string()],
             evidence_items: vec![],
             explicit_from_prompt: vec![],
@@ -1490,58 +1739,70 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
     }
 
     // Build structured evidence items
-    let mut evidence_items = vec![EvidenceItem {
-        type_label: "taste_alignment".to_string(),
-        source: "local".to_string(),
-        text: format!(
+    let mut evidence_items = vec![evidence_item(
+        "taste_alignment",
+        "local",
+        "audio_features",
+        "track_scores",
+        format!(
             "Cosine similarity {:.0}%, mean overlap {:.0}% against your current {} taste profile.",
             similarity * 100.0,
             overlap * 100.0,
             taste_label
         ),
-        weight: (similarity * 0.85 + overlap * 0.15).clamp(0.0, 1.0),
-    }];
+        (similarity * 0.85 + overlap * 0.15).clamp(0.0, 1.0),
+    )];
 
     if !shared_dimensions.is_empty() {
-        evidence_items.push(EvidenceItem {
-            type_label: "dimension_match".to_string(),
-            source: "local".to_string(),
-            text: format!(
+        evidence_items.push(evidence_item(
+            "dimension_match",
+            "local",
+            "audio_features",
+            "dimension_overlap",
+            format!(
                 "Strong dimension alignment on: {}.",
                 shared_dimensions.join(", ")
             ),
-            weight: 0.6,
-        });
+            0.6,
+        ));
     }
 
     if let Some(bpm) = track_scores.bpm {
-        evidence_items.push(EvidenceItem {
-            type_label: "tempo".to_string(),
-            source: "local".to_string(),
-            text: format!("Tempo: ~{:.0} BPM.", bpm),
-            weight: 0.15,
-        });
+        evidence_items.push(evidence_item(
+            "tempo",
+            "local",
+            "audio_features",
+            "tempo",
+            format!("Tempo: ~{:.0} BPM.", bpm),
+            0.15,
+        ));
     }
 
     if let Some(ref key_signature) = track_scores.key_signature {
         if !key_signature.trim().is_empty() {
-            evidence_items.push(EvidenceItem {
-                type_label: "key".to_string(),
-                source: "local".to_string(),
-                text: format!("Key: {}.", key_signature),
-                weight: 0.1,
-            });
+            evidence_items.push(evidence_item(
+                "key",
+                "local",
+                "audio_features",
+                "key_signature",
+                format!("Key: {}.", key_signature),
+                0.1,
+            ));
         }
     }
 
     // G-063: Graph/adjacency evidence — pull connection signals for this track's artist
     let track_artist: Option<String> = conn
         .query_row(
-            "SELECT artist FROM tracks WHERE id = ?1",
+            "SELECT COALESCE(ar.name, '')
+             FROM tracks t
+             LEFT JOIN artists ar ON ar.id = t.artist_id
+             WHERE t.id = ?1",
             params![track_id],
             |row| row.get(0),
         )
-        .ok();
+        .ok()
+        .filter(|value: &String| !value.trim().is_empty());
 
     if let Some(ref artist) = track_artist {
         // Find strongest connections for this artist from the graph
@@ -1553,12 +1814,16 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
         let mut stmt = conn
             .prepare(
                 "SELECT
-                    CASE WHEN artist_a = ?1 THEN artist_b ELSE artist_a END AS other_artist,
-                    connection_strength,
-                    connection_type
+                    CASE
+                        WHEN lower(trim(source)) = lower(trim(?1)) THEN target
+                        ELSE source
+                    END AS other_artist,
+                    weight,
+                    type
                  FROM connections
-                 WHERE artist_a = ?1 OR artist_b = ?1
-                 ORDER BY connection_strength DESC
+                 WHERE lower(trim(source)) = lower(trim(?1))
+                    OR lower(trim(target)) = lower(trim(?1))
+                 ORDER BY weight DESC
                  LIMIT 3",
             )
             .ok();
@@ -1580,30 +1845,50 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
             let top = &connections[0];
             let label = match top.conn_type.as_str() {
                 "dimension_affinity" => "dimensional affinity",
-                "lastfm_similar" => "Last.fm similarity",
+                "similar" | "lastfm_similar" => "Last.fm similarity",
                 "co_play" => "co-play history",
                 _ => "artist graph",
             };
-            evidence_items.push(EvidenceItem {
-                type_label: "artist_connection".to_string(),
-                source: "graph".to_string(),
-                text: format!(
+            evidence_items.push(evidence_item(
+                "artist_connection",
+                "graph",
+                "adjacency_similarity",
+                &top.conn_type,
+                format!(
                     "Artist graph: {} connects to {} via {} (strength {:.0}%).",
                     artist,
                     top.other,
                     label,
                     top.strength * 100.0
                 ),
-                weight: (top.strength * 0.55).clamp(0.0, 1.0),
-            });
+                (top.strength * 0.55).clamp(0.0, 1.0),
+            ));
             if connections.len() > 1 {
-                let others: Vec<String> = connections[1..]
-                    .iter()
-                    .map(|c| c.other.clone())
-                    .collect();
+                let others: Vec<String> =
+                    connections[1..].iter().map(|c| c.other.clone()).collect();
                 reasons.push(format!(
                     "Artist graph also connects to: {}.",
                     others.join(", ")
+                ));
+            }
+        }
+
+        if let Ok(lineage_edges) = lineage::lineage_edges_for_artist(conn, artist, 2) {
+            if let Some(edge) = lineage_edges.first() {
+                evidence_items.push(evidence_item(
+                    "lineage_member_graph",
+                    "lineage",
+                    "lineage_member_graph",
+                    &edge.relationship_type,
+                    format!(
+                        "{} connects to {} through {} evidence: {}",
+                        edge.source_artist, edge.target_artist, edge.relationship_type, edge.note
+                    ),
+                    edge.weight.clamp(0.0, 1.0),
+                ));
+                reasons.push(format!(
+                    "Artist lineage also points toward {} through {} evidence.",
+                    edge.target_artist, edge.relationship_type
                 ));
             }
         }
@@ -1624,6 +1909,7 @@ pub fn explain_track(conn: &Connection, track_id: i64, taste: &TasteProfile) -> 
     ExplainPayload {
         track_id,
         why_this_track,
+        evidence_grade: evidence_grade_for_items(&evidence_items),
         reasons,
         evidence_items,
         explicit_from_prompt: vec![],
@@ -1811,13 +2097,41 @@ pub fn build_dimension_affinity(conn: &Connection) -> usize {
     inserted
 }
 
+fn local_track_count_for_artist(conn: &Connection, artist_name: &str) -> usize {
+    conn.query_row(
+        "SELECT COUNT(*)
+         FROM tracks t
+         LEFT JOIN artists ar ON ar.id = t.artist_id
+         WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))",
+        params![artist_name],
+        |row| row.get::<_, i64>(0),
+    )
+    .unwrap_or_default() as usize
+}
+
+fn push_unique_related_artist(
+    results: &mut Vec<RelatedArtist>,
+    seen: &mut HashSet<String>,
+    artist: RelatedArtist,
+) {
+    let key = artist.name.trim().to_ascii_lowercase();
+    if seen.insert(key) {
+        results.push(artist);
+    }
+}
+
 /// Find related artists — checks connections table first, then falls back to co-play/genre.
 pub fn get_related_artists(
     artist_name: &str,
     limit: usize,
     conn: &Connection,
 ) -> Vec<RelatedArtist> {
-    let mut results: Vec<RelatedArtist> = Vec::new();
+    let mut results =
+        lineage::lineage_related_artists(conn, artist_name, limit).unwrap_or_default();
+    let mut seen: HashSet<String> = results
+        .iter()
+        .map(|artist| artist.name.trim().to_ascii_lowercase())
+        .collect();
 
     // First: query dimension_affinity + similar edges from connections table
     if let Ok(mut stmt) = conn.prepare(
@@ -1835,32 +2149,32 @@ pub fn get_related_artists(
         if let Ok(rows) = rows {
             for row in rows.filter_map(Result::ok) {
                 let (name, weight, conn_type) = row;
-                let local_count: i64 = conn
-                    .query_row(
-                        "SELECT COUNT(*) FROM tracks t LEFT JOIN artists ar ON ar.id = t.artist_id
-                         WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))",
-                        params![name.as_str()],
-                        |r| r.get(0),
-                    )
-                    .unwrap_or(0);
+                let local_count = local_track_count_for_artist(conn, &name);
                 let (why, preserves, changes, risk_note) =
-                    related_artist_story(&conn_type, weight as f32, local_count as usize);
-                results.push(RelatedArtist {
-                    name,
-                    connection_strength: weight as f32,
-                    connection_type: conn_type,
-                    local_track_count: local_count as usize,
-                    why,
-                    preserves,
-                    changes,
-                    risk_note,
-                });
+                    related_artist_story(&conn_type, weight as f32, local_count);
+                push_unique_related_artist(
+                    &mut results,
+                    &mut seen,
+                    RelatedArtist {
+                        name,
+                        connection_strength: weight as f32,
+                        connection_type: conn_type.clone(),
+                        local_track_count: local_count,
+                        evidence_level: "derived_local".to_string(),
+                        evidence_summary: format!(
+                            "Local {} edge from '{}' at {:.0}% strength.",
+                            conn_type,
+                            artist_name,
+                            weight * 100.0
+                        ),
+                        why,
+                        preserves,
+                        changes,
+                        risk_note,
+                    },
+                );
             }
         }
-    }
-
-    if !results.is_empty() {
-        return results;
     }
 
     // Fallback: co-play connections from playback_history
@@ -1889,27 +2203,29 @@ pub fn get_related_artists(
         if let Ok(rows) = rows {
             for row in rows.filter_map(Result::ok) {
                 let (name, strength) = row;
-                let local_count: i64 = conn
-                    .query_row(
-                        "SELECT COUNT(*) FROM tracks t LEFT JOIN artists ar ON ar.id = t.artist_id
-                         WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))",
-                        params![name.as_str()],
-                        |r| r.get(0),
-                    )
-                    .unwrap_or(0);
+                let local_count = local_track_count_for_artist(conn, &name);
                 let connection_strength = (strength as f32 / 100_f32).min(1.0);
                 let (why, preserves, changes, risk_note) =
-                    related_artist_story("co_play", connection_strength, local_count as usize);
-                results.push(RelatedArtist {
-                    name,
-                    connection_strength,
-                    connection_type: "co_play".to_string(),
-                    local_track_count: local_count as usize,
-                    why,
-                    preserves,
-                    changes,
-                    risk_note,
-                });
+                    related_artist_story("co_play", connection_strength, local_count);
+                push_unique_related_artist(
+                    &mut results,
+                    &mut seen,
+                    RelatedArtist {
+                        name,
+                        connection_strength,
+                        connection_type: "co_play".to_string(),
+                        local_track_count: local_count,
+                        evidence_level: "derived_local".to_string(),
+                        evidence_summary: format!(
+                        "Observed co-play adjacency from playback history ({} shared sessions).",
+                        strength
+                    ),
+                        why,
+                        preserves,
+                        changes,
+                        risk_note,
+                    },
+                );
             }
         }
     }
@@ -1936,37 +2252,51 @@ pub fn get_related_artists(
             if let Ok(rows) = rows {
                 for row in rows.filter_map(Result::ok) {
                     let (name, cnt) = row;
-                    let local_count: i64 = conn
-                        .query_row(
-                            "SELECT COUNT(*) FROM tracks t LEFT JOIN artists ar ON ar.id = t.artist_id
-                             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))",
-                            params![name.as_str()],
-                            |r| r.get(0),
-                        )
-                        .unwrap_or(0);
+                    let local_count = local_track_count_for_artist(conn, &name);
                     let connection_strength = (cnt as f32 / 50.0).min(1.0);
                     let (why, preserves, changes, risk_note) =
-                        related_artist_story("genre", connection_strength, local_count as usize);
-                    results.push(RelatedArtist {
-                        name,
-                        connection_strength,
-                        connection_type: "genre".to_string(),
-                        local_track_count: local_count as usize,
-                        why,
-                        preserves,
-                        changes,
-                        risk_note,
-                    });
+                        related_artist_story("genre", connection_strength, local_count);
+                    push_unique_related_artist(
+                        &mut results,
+                        &mut seen,
+                        RelatedArtist {
+                            name,
+                            connection_strength,
+                            connection_type: "genre".to_string(),
+                            local_track_count: local_count,
+                            evidence_level: "metadata_fallback".to_string(),
+                            evidence_summary: format!(
+                            "Shared genre fallback from local metadata ({} overlapping tracks).",
+                            cnt
+                        ),
+                            why,
+                            preserves,
+                            changes,
+                            risk_note,
+                        },
+                    );
                 }
             }
         }
     }
 
+    results.sort_by(|left, right| {
+        right
+            .connection_strength
+            .partial_cmp(&left.connection_strength)
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    results.truncate(limit.max(1));
     results
 }
 
 /// Build scout-style exits (safe / interesting / dangerous) from local related-artist signals.
-pub fn build_scout_exit_plan(artist_name: &str, limit_per_lane: usize, conn: &Connection) -> ScoutExitPlan {
+pub fn build_scout_exit_plan(
+    artist_name: &str,
+    limit_per_lane: usize,
+    conn: &Connection,
+) -> ScoutExitPlan {
     let related = get_related_artists(artist_name, 48, conn);
     let limit = limit_per_lane.max(1);
 
@@ -2006,7 +2336,8 @@ pub fn build_scout_exit_plan(artist_name: &str, limit_per_lane: usize, conn: &Co
             ScoutExitLane {
                 flavor: "interesting".to_string(),
                 label: "Interesting exit".to_string(),
-                description: "Leave the obvious lane without dropping the emotional thread.".to_string(),
+                description: "Leave the obvious lane without dropping the emotional thread."
+                    .to_string(),
                 artists: interesting_ranked.into_iter().take(limit).collect(),
             },
             ScoutExitLane {
@@ -2285,10 +2616,11 @@ fn describe_texture(space: f64, density: f64, rawness: f64) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_scout_exit_plan, enqueue_acquisition_leads, record_recommendation_feedback,
-        RecommendationBroker,
+        build_scout_exit_plan, enqueue_acquisition_leads, explain_track, get_related_artists,
+        record_recommendation_feedback, RecommendationBroker,
     };
     use crate::commands::TasteProfile;
+    use crate::db;
     use rusqlite::{params, Connection};
     use std::collections::HashMap;
 
@@ -2423,12 +2755,10 @@ mod tests {
         let after = broker.recommend_with_evidence(&taste, 2);
         assert_eq!(after.len(), 2);
         assert_eq!(after[0].track.id, 1);
-        assert!(
-            after[0]
-                .evidence
-                .iter()
-                .any(|item| item.type_label == "feedback_history")
-        );
+        assert!(after[0]
+            .evidence
+            .iter()
+            .any(|item| item.type_label == "feedback_history"));
     }
 
     #[test]
@@ -2492,10 +2822,16 @@ mod tests {
         )
         .expect("schema");
 
-        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')", [])
-            .expect("seed artist");
-        conn.execute("INSERT INTO artists (id, name) VALUES (2, 'Weather Artist')", [])
-            .expect("weather artist");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')",
+            [],
+        )
+        .expect("seed artist");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (2, 'Weather Artist')",
+            [],
+        )
+        .expect("weather artist");
         conn.execute(
             "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'Seed Album')",
             [],
@@ -2581,12 +2917,10 @@ mod tests {
             .find(|item| item.provider.contains("listenbrainz/weather") && item.track.id == 2);
         assert!(weather_hit.is_some());
         let weather_hit = weather_hit.expect("weather recommendation");
-        assert!(
-            weather_hit
-                .evidence
-                .iter()
-                .any(|item| item.type_label == "community_similar_artist_cached")
-        );
+        assert!(weather_hit
+            .evidence
+            .iter()
+            .any(|item| item.type_label == "community_similar_artist_cached"));
     }
 
     #[test]
@@ -2655,10 +2989,16 @@ mod tests {
         )
         .expect("schema");
 
-        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')", [])
-            .expect("seed artist");
-        conn.execute("INSERT INTO artists (id, name) VALUES (2, 'Weather Artist')", [])
-            .expect("weather artist");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')",
+            [],
+        )
+        .expect("seed artist");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (2, 'Weather Artist')",
+            [],
+        )
+        .expect("weather artist");
         conn.execute(
             "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'Seed Album')",
             [],
@@ -2748,17 +3088,11 @@ mod tests {
             .iter()
             .find(|item| item.provider.contains("listenbrainz/weather") && item.track.id == 2)
             .expect("weather from cache fallback");
-        assert!(
-            weather
-                .evidence
-                .iter()
-                .any(|item| item.type_label == "community_similar_artist_cached")
-        );
-        assert!(
-            weather
-                .why_this_track
-                .contains("cached fallback")
-        );
+        assert!(weather
+            .evidence
+            .iter()
+            .any(|item| item.type_label == "community_similar_artist_cached"));
+        assert!(weather.why_this_track.contains("cached fallback"));
     }
 
     #[test]
@@ -2822,12 +3156,21 @@ mod tests {
         )
         .expect("schema");
 
-        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')", [])
-            .expect("artist 1");
-        conn.execute("INSERT INTO artists (id, name) VALUES (2, 'Fused Artist')", [])
-            .expect("artist 2");
-        conn.execute("INSERT INTO artists (id, name) VALUES (3, 'Control Artist')", [])
-            .expect("artist 3");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')",
+            [],
+        )
+        .expect("artist 1");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (2, 'Fused Artist')",
+            [],
+        )
+        .expect("artist 2");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (3, 'Control Artist')",
+            [],
+        )
+        .expect("artist 3");
         conn.execute(
             "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'A')",
             [],
@@ -2937,12 +3280,10 @@ mod tests {
             .expect("fused result");
         assert!(fused.provider.contains("local/"));
         assert!(fused.provider.contains("listenbrainz/weather"));
-        assert!(
-            fused
-                .evidence
-                .iter()
-                .any(|item| item.type_label == "community_similar_artist_cached")
-        );
+        assert!(fused
+            .evidence
+            .iter()
+            .any(|item| item.type_label == "community_similar_artist_cached"));
 
         assert_eq!(results[0].track.id, 2);
     }
@@ -3026,8 +3367,11 @@ mod tests {
         )
         .expect("schema");
 
-        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')", [])
-            .expect("seed artist");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')",
+            [],
+        )
+        .expect("seed artist");
         conn.execute(
             "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'Seed Album')",
             [],
@@ -3100,12 +3444,10 @@ mod tests {
         assert!(first_report.queued_count >= 1);
         assert_eq!(first_report.duplicate_count, 0);
         assert_eq!(first_report.error_count, 0);
-        assert!(
-            first_report
-                .outcomes
-                .iter()
-                .any(|outcome| outcome.status == "queued")
-        );
+        assert!(first_report
+            .outcomes
+            .iter()
+            .any(|outcome| outcome.status == "queued"));
 
         let queue_count: i64 = conn
             .query_row(
@@ -3124,12 +3466,10 @@ mod tests {
         assert_eq!(second_report.queued_count, 0);
         assert!(second_report.duplicate_count >= 1);
         assert_eq!(second_report.error_count, 0);
-        assert!(
-            second_report
-                .outcomes
-                .iter()
-                .any(|outcome| outcome.status == "duplicate_active")
-        );
+        assert!(second_report
+            .outcomes
+            .iter()
+            .any(|outcome| outcome.status == "duplicate_active"));
     }
 
     #[test]
@@ -3156,14 +3496,23 @@ mod tests {
         )
         .expect("schema");
 
-        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')", [])
-            .expect("seed");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (1, 'Seed Artist')",
+            [],
+        )
+        .expect("seed");
         conn.execute("INSERT INTO artists (id, name) VALUES (2, 'Close Pal')", [])
             .expect("close");
-        conn.execute("INSERT INTO artists (id, name) VALUES (3, 'Edge Pulse')", [])
-            .expect("edge");
-        conn.execute("INSERT INTO artists (id, name) VALUES (4, 'Unknown Rift')", [])
-            .expect("unknown");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (3, 'Edge Pulse')",
+            [],
+        )
+        .expect("edge");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (4, 'Unknown Rift')",
+            [],
+        )
+        .expect("unknown");
 
         for i in 0..5 {
             conn.execute(
@@ -3225,5 +3574,97 @@ mod tests {
         assert_eq!(safe.artists[0].name, "Close Pal");
         assert_eq!(interesting.artists[0].name, "Edge Pulse");
         assert_eq!(dangerous.artists[0].name, "Unknown Rift");
+    }
+
+    #[test]
+    fn related_artist_surface_includes_lineage_baseline_evidence() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite");
+        db::init_database(&conn).expect("schema");
+        crate::lineage::seed_curated_baseline(&conn).expect("lineage baseline");
+
+        let related = get_related_artists("Cursive", 5, &conn);
+
+        assert!(related.iter().any(|artist| {
+            artist.name == "The Good Life"
+                && artist.evidence_level == "curated"
+                && artist.evidence_summary.contains("Tim Kasher")
+        }));
+    }
+
+    #[test]
+    fn explain_track_surfaces_graph_evidence_from_current_connections_schema() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite");
+        db::init_database(&conn).expect("schema");
+
+        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Brand New')", [])
+            .expect("artist one");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (2, 'The Good Life')",
+            [],
+        )
+        .expect("artist two");
+        conn.execute(
+            "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'Deja Entendu')",
+            [],
+        )
+        .expect("album");
+        conn.execute(
+            "INSERT INTO tracks (id, artist_id, album_id, title, path, duration_seconds, imported_at)
+             VALUES (1, 1, 1, 'Sic Transit Gloria... Glory Fades', 'C:/tmp/brand-new.mp3', 206.0, '2026-03-10T00:00:00Z')",
+            [],
+        )
+        .expect("track");
+        conn.execute(
+            "INSERT INTO track_scores (
+               track_id, energy, valence, tension, density, warmth, movement, space, rawness,
+               complexity, nostalgia, bpm, key_signature, scored_at, score_version
+             )
+             VALUES (1, 0.62, 0.28, 0.71, 0.56, 0.34, 0.58, 0.30, 0.64, 0.48, 0.55, 142.0, 'C#m', '2026-03-10T00:00:00Z', 2)",
+            [],
+        )
+        .expect("scores");
+        conn.execute(
+            "INSERT INTO connections (source, target, type, weight, evidence, updated_at)
+             VALUES ('Brand New', 'The Good Life', 'dimension_affinity', 0.87, '{}', '2026-03-10T00:00:00Z')",
+            [],
+        )
+        .expect("connection");
+
+        let taste = TasteProfile {
+            dimensions: HashMap::from([
+                ("energy".to_string(), 0.60),
+                ("valence".to_string(), 0.24),
+                ("tension".to_string(), 0.76),
+                ("density".to_string(), 0.52),
+                ("warmth".to_string(), 0.30),
+                ("movement".to_string(), 0.54),
+                ("space".to_string(), 0.34),
+                ("rawness".to_string(), 0.70),
+                ("complexity".to_string(), 0.44),
+                ("nostalgia".to_string(), 0.58),
+            ]),
+            confidence: 0.84,
+            total_signals: 10,
+            source: "test".to_string(),
+        };
+
+        let payload = explain_track(&conn, 1, &taste);
+
+        assert!(payload
+            .evidence_items
+            .iter()
+            .any(|item| item.type_label == "artist_connection"
+                && item.text.contains("Brand New connects to The Good Life")));
+        assert_eq!(payload.evidence_grade, "high_confidence_multi_evidence");
+        assert!(payload
+            .evidence_items
+            .iter()
+            .any(|item| item.category == "audio_features" && item.anchor == "track_scores"));
+        assert!(payload
+            .evidence_items
+            .iter()
+            .any(|item| item.category == "adjacency_similarity"
+                && item.anchor == "dimension_affinity"));
+        assert!(payload.confidence > 0.0);
     }
 }

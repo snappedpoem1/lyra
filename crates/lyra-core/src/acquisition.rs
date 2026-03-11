@@ -2,7 +2,10 @@ use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use crate::commands::AcquisitionQueueItem;
+use crate::audio_data;
+use crate::commands::{
+    AcquisitionPlanItemRecord, AcquisitionPlanRecord, AcquisitionPlanResult, AcquisitionQueueItem,
+};
 use crate::errors::LyraResult;
 use crate::taste;
 
@@ -38,6 +41,46 @@ pub struct AcquisitionSourceSummary {
     pub completed_count: i64,
     pub failed_count: i64,
     pub average_priority: f64,
+}
+
+fn map_plan_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AcquisitionPlanRecord> {
+    Ok(AcquisitionPlanRecord {
+        id: row.get(0)?,
+        kind: row.get(1)?,
+        status: row.get(2)?,
+        source: row.get(3)?,
+        requested_artist: row.get(4)?,
+        requested_title: row.get(5)?,
+        requested_album: row.get(6)?,
+        canonical_artist: row.get(7)?,
+        canonical_album: row.get(8)?,
+        summary: row.get(9)?,
+        total_items: row.get(10)?,
+        queued_items: row.get(11)?,
+        blocked_items: row.get(12)?,
+        created_at: row.get(13)?,
+        updated_at: row.get(14)?,
+    })
+}
+
+fn map_plan_item_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AcquisitionPlanItemRecord> {
+    Ok(AcquisitionPlanItemRecord {
+        id: row.get(0)?,
+        plan_id: row.get(1)?,
+        item_kind: row.get(2)?,
+        status: row.get(3)?,
+        artist: row.get(4)?,
+        title: row.get(5)?,
+        album: row.get(6)?,
+        release_group_mbid: row.get(7)?,
+        release_date: row.get(8)?,
+        disc_number: row.get(9)?,
+        track_number: row.get(10)?,
+        queue_item_id: row.get(11)?,
+        evidence_level: row.get(12)?,
+        evidence_summary: row.get(13)?,
+        created_at: row.get(14)?,
+    })
 }
 
 fn map_acquisition_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AcquisitionQueueItem> {
@@ -177,6 +220,193 @@ pub fn add_acquisition_item(
         ],
     )?;
     get_acquisition_item(conn, conn.last_insert_rowid()).map(|item| item.expect("inserted item"))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn create_acquisition_plan(
+    conn: &Connection,
+    kind: &str,
+    source: Option<&str>,
+    requested_artist: Option<&str>,
+    requested_title: Option<&str>,
+    requested_album: Option<&str>,
+    canonical_artist: Option<&str>,
+    canonical_album: Option<&str>,
+    summary: &str,
+) -> LyraResult<AcquisitionPlanRecord> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO acquisition_plans
+         (kind, status, source, requested_artist, requested_title, requested_album,
+          canonical_artist, canonical_album, summary, total_items, queued_items, blocked_items,
+          created_at, updated_at)
+         VALUES (?1, 'queued', ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, 0, 0, ?9, ?9)",
+        params![
+            kind,
+            source,
+            requested_artist,
+            requested_title,
+            requested_album,
+            canonical_artist,
+            canonical_album,
+            summary,
+            now,
+        ],
+    )?;
+    get_acquisition_plan(conn, conn.last_insert_rowid()).map(|plan| plan.expect("inserted plan"))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn add_plan_item(
+    conn: &Connection,
+    plan_id: i64,
+    item_kind: &str,
+    status: &str,
+    artist: &str,
+    title: &str,
+    album: Option<&str>,
+    release_group_mbid: Option<&str>,
+    release_date: Option<&str>,
+    disc_number: Option<i64>,
+    track_number: Option<i64>,
+    queue_item_id: Option<i64>,
+    evidence_level: &str,
+    evidence_summary: &str,
+) -> LyraResult<AcquisitionPlanItemRecord> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO acquisition_plan_items
+         (plan_id, item_kind, status, artist, title, album, release_group_mbid, release_date,
+          disc_number, track_number, queue_item_id, evidence_level, evidence_summary, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+        params![
+            plan_id,
+            item_kind,
+            status,
+            artist,
+            title,
+            album,
+            release_group_mbid,
+            release_date,
+            disc_number,
+            track_number,
+            queue_item_id,
+            evidence_level,
+            evidence_summary,
+            now,
+        ],
+    )?;
+    conn.query_row(
+        "SELECT id, plan_id, item_kind, status, artist, title, album, release_group_mbid,
+                release_date, disc_number, track_number, queue_item_id, evidence_level,
+                evidence_summary, created_at
+         FROM acquisition_plan_items
+         WHERE id = ?1",
+        params![conn.last_insert_rowid()],
+        map_plan_item_row,
+    )
+    .map_err(Into::into)
+}
+
+pub fn get_acquisition_plan(
+    conn: &Connection,
+    id: i64,
+) -> LyraResult<Option<AcquisitionPlanRecord>> {
+    conn.query_row(
+        "SELECT id, kind, status, source, requested_artist, requested_title, requested_album,
+                canonical_artist, canonical_album, summary, total_items, queued_items,
+                blocked_items, created_at, updated_at
+         FROM acquisition_plans
+         WHERE id = ?1",
+        params![id],
+        map_plan_row,
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+pub fn finalize_acquisition_plan(
+    conn: &Connection,
+    plan_id: i64,
+    summary: Option<&str>,
+) -> LyraResult<AcquisitionPlanRecord> {
+    let (total_items, queued_items, blocked_items): (i64, i64, i64) = conn.query_row(
+        "SELECT COUNT(*),
+                SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN status != 'queued' THEN 1 ELSE 0 END)
+         FROM acquisition_plan_items
+         WHERE plan_id = ?1",
+        params![plan_id],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get::<_, Option<i64>>(1)?.unwrap_or_default(),
+                row.get::<_, Option<i64>>(2)?.unwrap_or_default(),
+            ))
+        },
+    )?;
+    let status = if queued_items == 0 {
+        "blocked"
+    } else if blocked_items > 0 {
+        "partial"
+    } else {
+        "queued"
+    };
+    let now = Utc::now().to_rfc3339();
+    let summary = summary.map(str::to_string).unwrap_or_else(|| {
+        format!("Planned {total_items} items: {queued_items} queued, {blocked_items} blocked.")
+    });
+    conn.execute(
+        "UPDATE acquisition_plans
+         SET status = ?2,
+             summary = ?3,
+             total_items = ?4,
+             queued_items = ?5,
+             blocked_items = ?6,
+             updated_at = ?7
+         WHERE id = ?1",
+        params![
+            plan_id,
+            status,
+            summary,
+            total_items,
+            queued_items,
+            blocked_items,
+            now
+        ],
+    )?;
+    get_acquisition_plan(conn, plan_id)?.ok_or_else(|| {
+        crate::errors::LyraError::Message("finalized acquisition plan missing".to_string())
+    })
+}
+
+pub fn get_acquisition_plan_result(
+    conn: &Connection,
+    plan_id: i64,
+) -> LyraResult<AcquisitionPlanResult> {
+    let plan = get_acquisition_plan(conn, plan_id)?.ok_or_else(|| {
+        crate::errors::LyraError::Message("acquisition plan not found".to_string())
+    })?;
+    let mut stmt = conn.prepare(
+        "SELECT id, plan_id, item_kind, status, artist, title, album, release_group_mbid,
+                release_date, disc_number, track_number, queue_item_id, evidence_level,
+                evidence_summary, created_at
+         FROM acquisition_plan_items
+         WHERE plan_id = ?1
+         ORDER BY COALESCE(album, ''), COALESCE(disc_number, 0), COALESCE(track_number, 0), title ASC",
+    )?;
+    let rows = stmt.query_map(params![plan_id], map_plan_item_row)?;
+    let items = rows.filter_map(Result::ok).collect::<Vec<_>>();
+    let queue_items = items
+        .iter()
+        .filter_map(|item| item.queue_item_id)
+        .filter_map(|queue_id| get_acquisition_item(conn, queue_id).ok().flatten())
+        .collect::<Vec<_>>();
+    Ok(AcquisitionPlanResult {
+        plan,
+        items,
+        queue_items,
+    })
 }
 
 pub fn requeue_item(
@@ -893,29 +1123,81 @@ pub fn import_queue_from_legacy(conn: &Connection, legacy: &Connection) -> LyraR
     Ok(count)
 }
 
+type SpotifyLibraryRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<i64>,
+    Option<i64>,
+    Option<i64>,
+);
+
 pub fn import_spotify_library_as_queue(
     conn: &Connection,
-    legacy: &Connection,
+    source: &Connection,
 ) -> LyraResult<usize> {
-    let mut stmt = legacy.prepare(
-        "SELECT sl.artist, sl.title, sl.album FROM spotify_library sl
-         WHERE sl.source = 'liked'
-         AND NOT EXISTS (
-           SELECT 1 FROM tracks t
-           WHERE lower(t.artist) = lower(sl.artist) AND lower(t.title) = lower(sl.title)
-         )",
+    let mut stmt = source.prepare(
+        "SELECT sl.artist, sl.title, sl.album, sl.isrc, sl.duration_ms, sl.popularity, sl.explicit
+         FROM spotify_library sl
+         WHERE COALESCE(sl.source, 'liked') = 'liked'",
     )?;
-    let rows: Vec<(String, String, Option<String>)> = stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+    let rows: Vec<SpotifyLibraryRow> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+            ))
+        })?
         .filter_map(Result::ok)
         .collect();
     let now = Utc::now().to_rfc3339();
     let mut count = 0_usize;
-    for (artist, title, album) in rows {
+    for (artist, title, album, isrc, duration_ms, popularity, explicit) in rows {
+        let normalized =
+            match audio_data::normalize_track_candidate(audio_data::RawTrackCandidate {
+                provider: "spotify",
+                provider_track_id: &audio_data::provider_track_key(
+                    "spotify",
+                    &artist,
+                    &title,
+                    isrc.as_deref(),
+                ),
+                artist: &artist,
+                title: &title,
+                album: album.as_deref(),
+                release_date: None,
+                isrc: isrc.as_deref(),
+                duration_ms,
+                popularity,
+                explicit: explicit.unwrap_or(0) != 0,
+            }) {
+                Ok(track) => track,
+                Err(_) => continue,
+            };
+
+        let owned: i64 = conn.query_row(
+            "SELECT COUNT(*)
+             FROM tracks t
+             LEFT JOIN artists ar ON ar.id = t.artist_id
+             WHERE lower(trim(COALESCE(ar.name, ''))) = lower(trim(?1))
+               AND lower(trim(COALESCE(t.title, ''))) = lower(trim(?2))",
+            params![normalized.artist.name, normalized.title],
+            |row| row.get(0),
+        )?;
+        if owned > 0 {
+            continue;
+        }
+
         let exists: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM acquisition_queue WHERE artist = ?1 AND title = ?2",
-                params![artist, title],
+                params![normalized.artist.name, normalized.title],
                 |row| row.get(0),
             )
             .unwrap_or(0);
@@ -927,8 +1209,29 @@ pub fn import_spotify_library_as_queue(
             "INSERT INTO acquisition_queue
              (artist, title, album, status, queue_position, priority_score, source, added_at, status_message, lifecycle_stage, lifecycle_progress, lifecycle_note, updated_at)
              VALUES (?1, ?2, ?3, 'queued', ?4, 0.3, 'spotify_liked', ?5, 'Imported from Spotify liked library', 'queued', 0.0, 'Imported from Spotify liked library', ?5)",
-            params![artist, title, album, queue_position, now],
+            params![
+                normalized.artist.name,
+                normalized.title,
+                normalized.album.as_ref().map(|value| value.title.as_str()),
+                queue_position,
+                now
+            ],
         )?;
+        let _ = audio_data::persist_provider_track(
+            conn,
+            &normalized,
+            "library",
+            &serde_json::json!({
+                "artist": artist,
+                "title": title,
+                "album": album,
+                "isrc": isrc,
+                "durationMs": duration_ms,
+                "popularity": popularity,
+                "explicit": explicit,
+                "source": "spotify_liked",
+            }),
+        );
         count += 1;
     }
     Ok(count)

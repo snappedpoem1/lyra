@@ -1,6 +1,5 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
@@ -1727,31 +1726,6 @@ fn normalize_provider_preference(value: &str) -> String {
     }
 }
 
-fn legacy_spotify_db_path() -> PathBuf {
-    std::env::var("LYRA_DB_PATH")
-        .ok()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("lyra_registry.db"))
-}
-
-fn with_attached_spotify_legacy<T, F>(conn: &Connection, callback: F) -> Option<T>
-where
-    F: FnOnce(&Connection, &Path) -> rusqlite::Result<T>,
-{
-    let legacy_path = legacy_spotify_db_path();
-    if !legacy_path.exists() {
-        return None;
-    }
-    conn.execute(
-        "ATTACH DATABASE ?1 AS spotify_ctx",
-        params![legacy_path.display().to_string()],
-    )
-    .ok()?;
-    let result = callback(conn, &legacy_path).ok();
-    let _ = conn.execute("DETACH DATABASE spotify_ctx", []);
-    result
-}
-
 fn load_spotify_pressure(conn: &Connection, intent: &PlaylistIntent) -> SpotifyPressure {
     let lower_prompt = intent.prompt.to_ascii_lowercase();
     let scene_exit = is_scene_exit_prompt(&intent.prompt);
@@ -1761,18 +1735,18 @@ fn load_spotify_pressure(conn: &Connection, intent: &PlaylistIntent) -> SpotifyP
         .map(|value| value.to_ascii_lowercase())
         .collect::<Vec<_>>();
 
-    with_attached_spotify_legacy(conn, |db, _legacy_path| {
-        let history_exists = db
+    let pressure = (|| -> rusqlite::Result<SpotifyPressure> {
+        let history_exists = conn
             .query_row(
-                "SELECT 1 FROM spotify_ctx.sqlite_master WHERE type = 'table' AND name = 'spotify_history'",
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'spotify_history'",
                 [],
                 |_| Ok(1_i64),
             )
             .optional()?
             .is_some();
-        let library_exists = db
+        let library_exists = conn
             .query_row(
-                "SELECT 1 FROM spotify_ctx.sqlite_master WHERE type = 'table' AND name = 'spotify_library'",
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'spotify_library'",
                 [],
                 |_| Ok(1_i64),
             )
@@ -1783,9 +1757,9 @@ fn load_spotify_pressure(conn: &Connection, intent: &PlaylistIntent) -> SpotifyP
         }
 
         let recoverable_missing_count = if library_exists {
-            db.query_row(
+            conn.query_row(
                 "SELECT COUNT(*)
-                 FROM spotify_ctx.spotify_library sl
+                 FROM spotify_library sl
                  WHERE NOT EXISTS (
                     SELECT 1
                     FROM tracks t
@@ -1813,9 +1787,9 @@ fn load_spotify_pressure(conn: &Connection, intent: &PlaylistIntent) -> SpotifyP
 
         for entity in &lower_entities {
             let play_count = if history_exists {
-                db.query_row(
+                conn.query_row(
                     "SELECT COUNT(*)
-                     FROM spotify_ctx.spotify_history
+                     FROM spotify_history
                      WHERE lower(trim(COALESCE(artist, ''))) = lower(trim(?1))",
                     params![entity],
                     |row| row.get::<_, i64>(0),
@@ -1824,9 +1798,9 @@ fn load_spotify_pressure(conn: &Connection, intent: &PlaylistIntent) -> SpotifyP
                 0
             };
             let missing_count = if library_exists {
-                db.query_row(
+                conn.query_row(
                     "SELECT COUNT(*)
-                     FROM spotify_ctx.spotify_library sl
+                     FROM spotify_library sl
                      WHERE lower(trim(sl.artist)) = lower(trim(?1))
                        AND NOT EXISTS (
                           SELECT 1
@@ -1854,12 +1828,12 @@ fn load_spotify_pressure(conn: &Connection, intent: &PlaylistIntent) -> SpotifyP
         }
 
         if cue_lines.is_empty() && history_exists && library_exists {
-            let mut stmt = db.prepare(
+            let mut stmt = conn.prepare(
                 "WITH artist_plays AS (
                     SELECT
                         trim(artist) AS artist,
                         COUNT(*) AS play_count
-                    FROM spotify_ctx.spotify_history
+                    FROM spotify_history
                     WHERE artist IS NOT NULL AND trim(artist) != ''
                     GROUP BY lower(trim(artist))
                 )
@@ -1867,7 +1841,7 @@ fn load_spotify_pressure(conn: &Connection, intent: &PlaylistIntent) -> SpotifyP
                        ap.play_count,
                        (
                          SELECT COUNT(*)
-                         FROM spotify_ctx.spotify_library sl
+                         FROM spotify_library sl
                          WHERE lower(trim(sl.artist)) = lower(trim(ap.artist))
                            AND NOT EXISTS (
                              SELECT 1
@@ -1944,8 +1918,9 @@ fn load_spotify_pressure(conn: &Connection, intent: &PlaylistIntent) -> SpotifyP
             scene_exit_bias,
             cue_lines,
         })
-    })
-    .unwrap_or_default()
+    })();
+
+    pressure.unwrap_or_default()
 }
 
 fn apply_steer(intent: &PlaylistIntent, steer: Option<&SteerPayload>) -> PlaylistIntent {
@@ -4146,6 +4121,7 @@ fn discovery_directions(
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_lyra_framing(
     prompt: &str,
     intent: &PlaylistIntent,
@@ -4685,7 +4661,29 @@ fn uncertainty_notes(
                 .to_string(),
         );
     }
+    if let Some(note) = stronger_evidence_limit_note(&intent.prompt) {
+        notes.push(note);
+    }
     notes
+}
+
+fn stronger_evidence_limit_note(prompt: &str) -> Option<String> {
+    let lower = prompt.to_ascii_lowercase();
+    let asks_for_drop_proof = has_any(&lower, &["edm", "drop", "drops"]);
+    let asks_for_stronger_evidence = has_any(
+        &lower,
+        &[
+            "stronger evidence",
+            "more than an energy score",
+            "not just energy",
+            "simple energy score",
+            "beyond energy score",
+            "not only energy",
+        ],
+    );
+    (asks_for_drop_proof && asks_for_stronger_evidence).then_some(
+        "Lyra can pressure this through local score dimensions and route heuristics, but it does not yet have a dedicated drop detector or a full audio-feature proof path.".to_string(),
+    )
 }
 
 fn alternatives_for_action(intent: &PlaylistIntent, action: &ComposerAction) -> Vec<String> {
@@ -5097,13 +5095,6 @@ fn extract_json_object(content: &str) -> Option<&str> {
 mod tests {
     use super::*;
     use crate::db;
-    use std::sync::{Mutex, OnceLock};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn spotify_env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     fn setup_memory_db() -> Connection {
         let conn = Connection::open_in_memory().expect("in-memory db");
@@ -5364,64 +5355,31 @@ mod tests {
         conn
     }
 
-    fn setup_spotify_legacy_db() -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("time")
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("lyra-spotify-pressure-{unique}.db"));
-        let legacy = Connection::open(&path).expect("legacy db");
-        legacy
-            .execute_batch(
-                "
-                CREATE TABLE spotify_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    artist TEXT,
-                    track TEXT,
-                    album TEXT,
-                    played_at TEXT,
-                    ms_played INTEGER
-                );
-                CREATE TABLE spotify_library (
-                    spotify_uri TEXT PRIMARY KEY,
-                    artist TEXT NOT NULL,
-                    title TEXT NOT NULL,
-                    album TEXT,
-                    source TEXT DEFAULT 'liked',
-                    added_at TEXT
-                );
-                ",
-            )
-            .expect("spotify schema");
-        legacy
-            .execute(
-                "INSERT INTO spotify_history (artist, track, album, played_at, ms_played)
-                 VALUES ('Brand New', 'Soco Static', 'Anchor', '2026-03-08T23:30:00Z', 240000)",
-                [],
-            )
-            .expect("history row");
-        legacy
-            .execute(
-                "INSERT INTO spotify_history (artist, track, album, played_at, ms_played)
-                 VALUES ('Brand New', 'Missing Halo', 'Anchor', '2026-03-08T23:40:00Z', 240000)",
-                [],
-            )
-            .expect("history row 2");
-        legacy
-            .execute(
-                "INSERT INTO spotify_library (spotify_uri, artist, title, album, source, added_at)
-                 VALUES ('spotify:track:missing-halo', 'Brand New', 'Missing Halo', 'Anchor', 'liked', '2026-03-08T00:00:00Z')",
-                [],
-            )
-            .expect("library row");
-        legacy
-            .execute(
-                "INSERT INTO spotify_library (spotify_uri, artist, title, album, source, added_at)
-                 VALUES ('spotify:track:missing-world', 'Brand New', 'Another Missing World', 'Anchor', 'liked', '2026-03-08T00:00:00Z')",
-                [],
-            )
-            .expect("library row 2");
-        path
+    fn setup_spotify_context(conn: &Connection) {
+        conn.execute(
+            "INSERT INTO spotify_history (artist, track, album, played_at, ms_played)
+             VALUES ('Brand New', 'Soco Static', 'Anchor', '2026-03-08T23:30:00Z', 240000)",
+            [],
+        )
+        .expect("history row");
+        conn.execute(
+            "INSERT INTO spotify_history (artist, track, album, played_at, ms_played)
+             VALUES ('Brand New', 'Missing Halo', 'Anchor', '2026-03-08T23:40:00Z', 240000)",
+            [],
+        )
+        .expect("history row 2");
+        conn.execute(
+            "INSERT INTO spotify_library (spotify_uri, artist, title, album, source, added_at)
+             VALUES ('spotify:track:missing-halo', 'Brand New', 'Missing Halo', 'Anchor', 'liked', '2026-03-08T00:00:00Z')",
+            [],
+        )
+        .expect("library row");
+        conn.execute(
+            "INSERT INTO spotify_library (spotify_uri, artist, title, album, source, added_at)
+             VALUES ('spotify:track:missing-world', 'Brand New', 'Another Missing World', 'Anchor', 'liked', '2026-03-08T00:00:00Z')",
+            [],
+        )
+        .expect("library row 2");
     }
 
     #[test]
@@ -5538,6 +5496,35 @@ mod tests {
             ResponsePosture::Revelatory
         ));
         assert!(matches!(response.framing.detail_depth, DetailDepth::Deep));
+    }
+
+    #[test]
+    fn compose_playlist_draft_uses_backend_state_and_reason_payloads() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let draft = compose_playlist_draft(
+            &conn,
+            &settings,
+            "sad bedroom static that eventually forgives me",
+            6,
+        )
+        .expect("draft");
+
+        assert_eq!(draft.tracks.len(), 6);
+        assert!(draft
+            .tracks
+            .iter()
+            .all(|item| item.track.path.starts_with("C:/Music/")));
+        assert!(draft
+            .tracks
+            .iter()
+            .all(|item| !item.phase_key.trim().is_empty()
+                && !item.phase_label.trim().is_empty()
+                && !item.reason.why_this_track.trim().is_empty()));
+        assert!(draft
+            .tracks
+            .iter()
+            .any(|item| !item.reason.evidence.is_empty()));
     }
 
     #[test]
@@ -5932,11 +5919,8 @@ mod tests {
 
     #[test]
     fn spotify_missing_world_pressure_reaches_lyra_read_and_discovery_flavor() {
-        let _guard = spotify_env_lock().lock().expect("spotify env lock");
-        let legacy_path = setup_spotify_legacy_db();
-        std::env::set_var("LYRA_DB_PATH", &legacy_path);
-
         let conn = setup_memory_db();
+        setup_spotify_context(&conn);
         let settings = SettingsPayload::default();
         let response = compose_composer_response(
             &conn,
@@ -5958,9 +5942,6 @@ mod tests {
                     .iter()
                     .any(|cue| cue.contains("Spotify history says"))
         );
-
-        std::env::remove_var("LYRA_DB_PATH");
-        let _ = std::fs::remove_file(legacy_path);
     }
 
     #[test]
@@ -6036,5 +6017,24 @@ mod tests {
             &SpotifyPressure::default(),
         );
         assert!(dangerous > safe);
+    }
+
+    #[test]
+    fn edm_drop_prompt_admits_current_evidence_limit() {
+        let conn = setup_memory_db();
+        let settings = SettingsPayload::default();
+        let response = compose_composer_response(
+            &conn,
+            &settings,
+            "find mind-blowing EDM drops using stronger evidence than a simple energy score",
+            12,
+            None,
+        )
+        .expect("compose");
+
+        assert!(response
+            .uncertainty
+            .iter()
+            .any(|note| note.contains("does not yet have a dedicated drop detector")));
     }
 }

@@ -1668,6 +1668,7 @@ fn find_remixes(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn hybrid_search(
     state: State<'_, AppState>,
     candidate_ids: Vec<i64>,

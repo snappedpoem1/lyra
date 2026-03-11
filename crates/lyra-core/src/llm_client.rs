@@ -197,7 +197,9 @@ fn send_chat_completion(
     if let Some(max_tokens) = max_tokens {
         body["max_tokens"] = json!(max_tokens);
     }
-    let response = builder.send_json(body).map_err(LlmClientError::Ureq)?;
+    let response = builder
+        .send_json(body)
+        .map_err(|error| LlmClientError::Ureq(Box::new(error)))?;
     let payload: serde_json::Value = response.into_json().map_err(LlmClientError::Io)?;
     let text = payload
         .get("choices")
@@ -213,17 +215,17 @@ fn send_chat_completion(
 
 fn should_failover(error: &LlmClientError) -> bool {
     match error {
-        LlmClientError::Ureq(ureq::Error::Status(code, _)) => {
-            matches!(code, 429 | 500 | 502 | 503 | 504)
-        }
-        LlmClientError::Ureq(ureq::Error::Transport(_)) => true,
+        LlmClientError::Ureq(err) => match err.as_ref() {
+            ureq::Error::Status(code, _) => matches!(code, 429 | 500 | 502 | 503 | 504),
+            ureq::Error::Transport(_) => true,
+        },
         LlmClientError::Io(_) | LlmClientError::InvalidResponse => false,
     }
 }
 
 #[derive(Debug)]
 enum LlmClientError {
-    Ureq(ureq::Error),
+    Ureq(Box<ureq::Error>),
     Io(std::io::Error),
     InvalidResponse,
 }

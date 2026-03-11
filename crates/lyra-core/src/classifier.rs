@@ -10,41 +10,82 @@
 
 use std::path::Path;
 
-use serde::{Deserialize, Serialize};
 use rusqlite::{params, Connection, OptionalExtension};
+use serde::Serialize;
 
 use crate::errors::LyraResult;
 
 // ── Token lists ──────────────────────────────────────────────────────────────
 
 static JUNK_TOKENS: &[&str] = &[
-    "vevo", "official video", "official audio", "official music video",
-    "lyrics", "lyric video", "hd", "4k", "8k", "visualizer",
-    "official visualizer", "audio", "free download", "full album",
-    "full ep", "full mixtape", "playlist", "compilation",
+    "vevo",
+    "official video",
+    "official audio",
+    "official music video",
+    "lyrics",
+    "lyric video",
+    "hd",
+    "4k",
+    "8k",
+    "visualizer",
+    "official visualizer",
+    "audio",
+    "free download",
+    "full album",
+    "full ep",
+    "full mixtape",
+    "playlist",
+    "compilation",
 ];
 
 static REMIX_TOKENS: &[&str] = &[
-    "remix", "edit", "rework", "bootleg", "vip", "flip",
-    "refix", "version", "mix", "mashup", "blend",
+    "remix", "edit", "rework", "bootleg", "vip", "flip", "refix", "version", "mix", "mashup",
+    "blend",
 ];
 
 static LIVE_TOKENS: &[&str] = &[
-    "live", "concert", "acoustic", "unplugged", "session",
-    "live at", "live from", "live session", "live performance",
-    "bbc live", "kexp", "tiny desk",
+    "live",
+    "concert",
+    "acoustic",
+    "unplugged",
+    "session",
+    "live at",
+    "live from",
+    "live session",
+    "live performance",
+    "bbc live",
+    "kexp",
+    "tiny desk",
 ];
 
 static COVER_TOKENS: &[&str] = &[
-    "cover", "rendition", "tribute", "originally by",
-    "cover version", "interpretation",
+    "cover",
+    "rendition",
+    "tribute",
+    "originally by",
+    "cover version",
+    "interpretation",
 ];
 
 static SPECIAL_TOKENS: &[&str] = &[
-    "sped up", "speed up", "slowed", "slowed down", "reverb",
-    "nightcore", "8d audio", "8d", "bass boosted", "boosted",
-    "extended", "extended mix", "radio edit", "clean", "explicit",
-    "instrumental", "acapella", "a cappella",
+    "sped up",
+    "speed up",
+    "slowed",
+    "slowed down",
+    "reverb",
+    "nightcore",
+    "8d audio",
+    "8d",
+    "bass boosted",
+    "boosted",
+    "extended",
+    "extended mix",
+    "radio edit",
+    "clean",
+    "explicit",
+    "instrumental",
+    "acapella",
+    "a cappella",
 ];
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -64,12 +105,12 @@ impl VersionType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Original => "original",
-            Self::Remix    => "remix",
-            Self::Live     => "live",
-            Self::Cover    => "cover",
-            Self::Junk     => "junk",
-            Self::Special  => "special",
-            Self::Unknown  => "unknown",
+            Self::Remix => "remix",
+            Self::Live => "live",
+            Self::Cover => "cover",
+            Self::Junk => "junk",
+            Self::Special => "special",
+            Self::Unknown => "unknown",
         }
     }
 }
@@ -99,11 +140,9 @@ fn detect_tokens(text: &str, list: &[&str]) -> Vec<String> {
             // word-boundary: must be preceded and followed by non-alphanumeric
             // or be at start/end of string
             if let Some(pos) = lower.find(t.as_str()) {
-                let before_ok = pos == 0
-                    || !lower.as_bytes()[pos - 1].is_ascii_alphanumeric();
+                let before_ok = pos == 0 || !lower.as_bytes()[pos - 1].is_ascii_alphanumeric();
                 let end = pos + t.len();
-                let after_ok = end >= lower.len()
-                    || !lower.as_bytes()[end].is_ascii_alphanumeric();
+                let after_ok = end >= lower.len() || !lower.as_bytes()[end].is_ascii_alphanumeric();
                 before_ok && after_ok
             } else {
                 false
@@ -139,10 +178,10 @@ pub fn classify_text(title: &str, album: &str, file_path: &str) -> ClassifyResul
         }};
     }
 
-    check!(JUNK_TOKENS,    VersionType::Junk,    0.7);
-    check!(COVER_TOKENS,   VersionType::Cover,   0.8);
-    check!(LIVE_TOKENS,    VersionType::Live,    0.7);
-    check!(REMIX_TOKENS,   VersionType::Remix,   0.7);
+    check!(JUNK_TOKENS, VersionType::Junk, 0.7);
+    check!(COVER_TOKENS, VersionType::Cover, 0.8);
+    check!(LIVE_TOKENS, VersionType::Live, 0.7);
+    check!(REMIX_TOKENS, VersionType::Remix, 0.7);
     check!(SPECIAL_TOKENS, VersionType::Special, 0.6);
 
     ClassifyResult {
@@ -200,18 +239,21 @@ pub fn classify_library(conn: &Connection, limit: usize) -> LyraResult<LibrarySu
         .filter_map(Result::ok)
         .collect();
 
-    let mut summary = LibrarySummary { total: ids.len(), ..Default::default() };
+    let mut summary = LibrarySummary {
+        total: ids.len(),
+        ..Default::default()
+    };
 
     for id in ids {
         let r = classify_and_update(conn, id)?;
         match r.version_type {
             VersionType::Original => summary.original += 1,
-            VersionType::Remix    => summary.remix    += 1,
-            VersionType::Live     => summary.live     += 1,
-            VersionType::Cover    => summary.cover    += 1,
-            VersionType::Junk     => summary.junk     += 1,
-            VersionType::Special  => summary.special  += 1,
-            VersionType::Unknown  => summary.unknown  += 1,
+            VersionType::Remix => summary.remix += 1,
+            VersionType::Live => summary.live += 1,
+            VersionType::Cover => summary.cover += 1,
+            VersionType::Junk => summary.junk += 1,
+            VersionType::Special => summary.special += 1,
+            VersionType::Unknown => summary.unknown += 1,
         }
     }
 
@@ -220,12 +262,12 @@ pub fn classify_library(conn: &Connection, limit: usize) -> LyraResult<LibrarySu
 
 #[derive(Debug, Default, Serialize)]
 pub struct LibrarySummary {
-    pub total:    usize,
+    pub total: usize,
     pub original: usize,
-    pub remix:    usize,
-    pub live:     usize,
-    pub cover:    usize,
-    pub junk:     usize,
-    pub special:  usize,
-    pub unknown:  usize,
+    pub remix: usize,
+    pub live: usize,
+    pub cover: usize,
+    pub junk: usize,
+    pub special: usize,
+    pub unknown: usize,
 }

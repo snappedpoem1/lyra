@@ -1,10 +1,14 @@
+use std::time::Duration;
+
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 use strsim::jaro_winkler;
 use tracing::{info, warn};
 
+use crate::audio_data;
 use crate::errors::LyraResult;
+use crate::provider_runtime;
 
 pub trait EnricherAdapter {
     fn name(&self) -> &str;
@@ -66,7 +70,7 @@ impl EnricherAdapter for MusicBrainzAdapter {
 
     fn enrich(
         &self,
-        _conn: &Connection,
+        conn: &Connection,
         _track_id: i64,
         artist: &str,
         title: &str,
@@ -78,19 +82,32 @@ impl EnricherAdapter for MusicBrainzAdapter {
         // Minimum similarity gate: both artist_sim and title_sim >= 0.60.
         let url = "https://musicbrainz.org/ws/2/recording";
         let query = format!("recording:\"{title}\" AND artist:\"{artist}\"");
-        let result = ureq::get(url)
-            .set(
-                "User-Agent",
-                "Lyra/0.1 (https://github.com/snappedpoem1/lyra)",
-            )
-            .query("query", &query)
-            .query("limit", "10")
-            .query("fmt", "json")
-            .call();
+        let cache_key = format!(
+            "recording-search::{}::{}",
+            artist.trim().to_ascii_lowercase(),
+            title.trim().to_ascii_lowercase()
+        );
+        let result = provider_runtime::cached_json_request(
+            conn,
+            "musicbrainz_search",
+            &cache_key,
+            Duration::from_secs(60 * 60 * 24 * 14),
+            || {
+                ureq::get(url)
+                    .set(
+                        "User-Agent",
+                        "Lyra/0.1 (https://github.com/snappedpoem1/lyra)",
+                    )
+                    .query("query", &query)
+                    .query("limit", "10")
+                    .query("fmt", "json")
+                    .call()
+            },
+        );
 
         match result {
-            Ok(response) => {
-                let body: Value = response.into_json().unwrap_or(Value::Null);
+            Ok(result) => {
+                let body = result.payload;
                 let recordings = body
                     .get("recordings")
                     .and_then(Value::as_array)
@@ -423,19 +440,19 @@ const LASTFM_RATE_MS: u64 = 250;
 
 fn lastfm_call(api_key: &str, method: &str, params: &[(&str, &str)]) -> Value {
     std::thread::sleep(std::time::Duration::from_millis(LASTFM_RATE_MS));
-    let mut req = ureq::get(LASTFM_BASE)
-        .set("User-Agent", LASTFM_UA)
-        .query("method", method)
-        .query("api_key", api_key)
-        .query("format", "json")
-        .query("autocorrect", "1");
-    for (k, v) in params {
-        req = req.query(k, v);
-    }
-    req.call()
-        .ok()
-        .and_then(|r| r.into_json::<Value>().ok())
-        .unwrap_or(Value::Null)
+    provider_runtime::json_request_with_retry(|| {
+        let mut req = ureq::get(LASTFM_BASE)
+            .set("User-Agent", LASTFM_UA)
+            .query("method", method)
+            .query("api_key", api_key)
+            .query("format", "json")
+            .query("autocorrect", "1");
+        for (k, v) in params {
+            req = req.query(k, v);
+        }
+        req.call()
+    })
+    .unwrap_or(Value::Null)
 }
 
 fn lastfm_extract_tags(toptags_node: &Value, limit: usize) -> Vec<String> {
@@ -1091,6 +1108,42 @@ impl EnrichmentDispatcher {
                         params![genre, now, track_id],
                     );
                 }
+                let provider_track_id =
+                    audio_data::payload_track_id(provider, &payload, artist, title);
+                let album = payload
+                    .get("releaseTitle")
+                    .or_else(|| payload.get("album"))
+                    .and_then(Value::as_str);
+                let release_date = payload
+                    .get("releaseDate")
+                    .or_else(|| payload.get("release_date"))
+                    .and_then(Value::as_str);
+                let _ = audio_data::persist_normalized_payload_track(
+                    conn,
+                    "enrichment",
+                    audio_data::RawTrackCandidate {
+                        provider,
+                        provider_track_id: &provider_track_id,
+                        artist: payload
+                            .get("artist")
+                            .and_then(Value::as_str)
+                            .unwrap_or(artist),
+                        title: payload
+                            .get("title")
+                            .and_then(Value::as_str)
+                            .unwrap_or(title),
+                        album,
+                        release_date,
+                        isrc: payload
+                            .get("isrc")
+                            .or_else(|| payload.get("ISRC"))
+                            .and_then(Value::as_str),
+                        duration_ms: None,
+                        popularity: None,
+                        explicit: false,
+                    },
+                    &payload,
+                );
             }
             providers.insert(
                 provider.to_string(),

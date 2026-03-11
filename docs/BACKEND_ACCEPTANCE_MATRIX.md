@@ -1,0 +1,43 @@
+# Backend Acceptance Matrix
+
+Last audited: March 10, 2026
+
+This file defines the backend acceptance bar for the canonical Lyra/Cassette runtime.
+It is intentionally strict: a row is only `Pass` when the backend owns the behavior and there is concrete proof for it.
+
+Status legend:
+
+- `Pass`: backend-owned behavior exists and automated proof exists
+- `Partial`: some backend support exists, but the full acceptance bar is not met
+- `Fail`: the capability is absent or contradicted by the current code
+
+Current summary:
+
+- `Pass`: 10
+- `Partial`: 4
+- `Fail`: 0
+
+| ID | Area | Verification scenario | Pass criteria | Status | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| BA-01 | Acquisition | `download this single song` | Backend can queue a single-track acquisition request without UI ownership assumptions, normalize provider data, reject junk variants, and retain queue lifecycle state through validation/acquisition completion. | Pass | Covered by `acquisition_planning::tests::canonical_single_track_acquisition_plan_creates_backend_plan_state`, queue lifecycle tests in `crates/lyra-core/src/acquisition.rs`, canonical normalization tests in `crates/lyra-core/src/audio_data.rs`, and the canonical-path quarantine in `crates/lyra-core/src/acquisition_dispatcher.rs` (legacy Python bridge is opt-in only via `LYRA_ENABLE_LEGACY_ACQUISITION_BRIDGE`). |
+| BA-02 | Acquisition | `download the discography of Cursive` | Backend can resolve an artist catalog, filter non-canonical releases, plan album/discography acquisition, and queue the result without UI-only orchestration. | Pass | Covered by `acquisition_planning::tests::canonical_album_acquisition_plan_queues_filtered_tracks`, `acquisition_planning::tests::canonical_discography_acquisition_plan_handles_cursive_without_tribute_junk`, and catalog filtering tests in `crates/lyra-core/src/catalog.rs`. |
+| BA-03 | Provider normalization | Provider payload to canonical track row | Provider-fed track data is normalized into canonical artist/title/album/ISRC/popularity fields before persistence, with invalid rows rejected. | Pass | Covered by `audio_data::tests::persists_strict_provider_track_rows`. |
+| BA-04 | Provider auth/session behavior | Spotify session works without the UI | Backend can persist provider session metadata and tokens, reuse a valid token, refresh when possible, and fail honestly when refresh state is missing. | Pass | Covered by `providers::tests::spotify_oauth_session_round_trip_is_backend_owned`, `providers::tests::spotify_oauth_flow_bootstrap_persists_state_and_redirect`, `providers::tests::spotify_oauth_flow_exchange_is_completed_in_backend`, `providers::tests::spotify_oauth_flow_rejects_state_mismatch`, and `providers::tests::spotify_access_token_reports_missing_refresh_secret_when_session_is_expired`. |
+| BA-05 | Provider transport resilience | Provider fetch degrades safely | Shared provider transport can serve cached data, fall back to stale cache on live failure, and centralize retry/backoff behavior in the backend. | Pass | Covered by `provider_runtime::tests::stale_cache_falls_back_when_live_fetch_fails`. |
+| BA-06 | Canonical release filtering | Reject karaoke/tribute/nightcore/sped-up junk unless explicitly requested | Non-canonical variants are rejected before they enter the canonical backend catalog or acquisition flow. | Pass | Covered by `audio_data::tests::rejects_non_canonical_cover_variants`, `audio_data::tests::rejects_non_canonical_sped_up_variants`, and `waterfall` junk-filter tests. |
+| BA-07 | Library and runtime state awareness | Library, playlists, queue, now playing, acquisition leads, taste memory | Backend owns and persists the core state model required for a real player-plus-intelligence system, without relying on frontend memory. | Pass | Schema and commands exist in `crates/lyra-core/src/db.rs` and `crates/lyra-core/src/lib.rs`; queue/taste-memory/composer-history paths are covered by existing backend tests. |
+| BA-08 | Prompt-to-playlist generation | `make a playlist from my library plus adjacent tracks that preserve the same wound/vibe` | Backend can turn a prompt plus library state into a playlist draft with phases, ordered tracks, and structured reason payloads. | Pass | Covered by `intelligence::tests::compose_playlist_draft_uses_backend_state_and_reason_payloads`. |
+| BA-09 | Adjacency and bridge logic | Non-trivial bridge/discovery results | Backend returns distinct adjacency routes rather than flat metadata matches, and those routes are grounded in graph/taste/weather/scout signals. | Pass | Covered by `intelligence::tests::classifies_bridge_prompt_as_bridge_action`, `intelligence::tests::discovery_prompt_can_shape_safe_interesting_dangerous_routes`, `intelligence::tests::graph_evidence_can_surface_in_route_reasons`, and `oracle::tests::scout_exit_plan_returns_safe_interesting_and_dangerous_lanes`. |
+| BA-10 | Lineage and artist-graph intelligence | `Cursive -> The Good Life` and `At The Drive-In -> Sparta / The Mars Volta` | Backend can reason from member/lineage/influence edges, not only co-play, genre, or local connection hints. | Partial | Covered by `lineage::tests::curated_lineage_baseline_supports_cursive_and_the_good_life`, `lineage::tests::lineage_related_artists_expose_evidence_level`, and `oracle::tests::related_artist_surface_includes_lineage_baseline_evidence`. The backend now has curated member/offshoot lineage and recommendation/query integration, but broad influence ingestion is still missing. |
+| BA-11 | Explainability and provenance | Explanations cite actual evidence | Backend explanations reference concrete graph/provider/taste evidence and provenance-like signals instead of decorative language alone. | Partial | `RecommendationResult`, `AcquisitionLead`, and `ExplainPayload` now carry evidence grades plus evidence-category anchors. Covered by `oracle::tests::explain_track_surfaces_graph_evidence_from_current_connections_schema`, `oracle::tests::provider_fusion_can_rerank_when_weather_and_local_merge`, and related broker tests. The behavior is much stronger in the broker/explain surfaces, but not yet universal across every composer/explanation output. |
+| BA-12 | Discovery beyond owned library | Intentionally surface adjacent non-library candidates | Backend can emit non-local candidates or acquisition leads and preserve enough evidence to hand them off into acquisition. | Pass | Covered by `oracle::tests::non_local_weather_candidates_can_be_handed_off_to_acquisition_queue`, `oracle::tests::listenbrainz_weather_lane_uses_cached_recordings`, `oracle::tests::listenbrainz_weather_falls_back_to_cache_when_live_fetch_fails`, and `oracle::tests::provider_fusion_can_rerank_when_weather_and_local_merge`. |
+| BA-13 | Deep music-intelligence honesty | `find mind-blowing EDM drops using stronger evidence than a simple energy score` | Backend either uses a stronger audio-evidence path or explicitly states that the proof path is not implemented. | Partial | Honesty is covered by `intelligence::tests::edm_drop_prompt_admits_current_evidence_limit`. A dedicated drop detector or deeper audio-feature proof path is not implemented. |
+| BA-14 | Packaged backend confidence | Clean-machine packaged confidence | Backend behavior is verified in packaged installs and long-session runs, not only in the dev environment. | Partial | Covered in part by `crates/lyra-core/tests/backend_runtime_confidence.rs` and `scripts/backend_runtime_confidence.ps1`, which prove backend bootstrap and discography planning from an isolated app-data root instead of repo-root/dev-shell assumptions. Clean-machine packaged validation and long-session soak proof are still missing. |
+
+## Release Rule
+
+The backend should not be described as fully matching the Lyra/Cassette product promise until:
+
+1. `BA-01`, `BA-02`, `BA-04`, `BA-10`, `BA-11`, `BA-13`, and `BA-14` are no worse than `Partial`
+2. the acquisition path is fully native-owned
+3. lineage-aware discovery and evidence-aware explainability are both present in code, not only in docs

@@ -1,17 +1,22 @@
+#![allow(clippy::type_complexity)]
+
 //! Smoke test: graph_builder module — dimension_affinity edges, Last.fm similar
 //! edges (mocked), neighbour queries, stats, incremental build tracking.
 
 use lyra_core::{
     db::init_database,
-    graph_builder::{
-        build_incremental, edge_type_counts, get_neighbours, graph_stats,
-    },
+    graph_builder::{build_incremental, edge_type_counts, get_neighbours, graph_stats},
 };
 use rusqlite::{params, Connection};
 
 fn seed(conn: &Connection) {
     // artists
-    for (id, name) in [(1i64, "Radiohead"), (2, "Portishead"), (3, "Massive Attack"), (4, "Boards of Canada")] {
+    for (id, name) in [
+        (1i64, "Radiohead"),
+        (2, "Portishead"),
+        (3, "Massive Attack"),
+        (4, "Boards of Canada"),
+    ] {
         conn.execute(
             "INSERT INTO artists (id, name) VALUES (?1, ?2)",
             params![id, name],
@@ -35,21 +40,25 @@ fn seed(conn: &Connection) {
 
     // tracks
     let tracks: &[(i64, i64, &str, i64, &str)] = &[
-        (1, 1, "Karma Police",      1, "Alternative Rock"),
-        (2, 1, "No Surprises",      1, "Alternative Rock"),
-        (3, 2, "Glory Box",         2, "Trip Hop"),
-        (4, 2, "Roads",             2, "Trip Hop"),
-        (5, 3, "Teardrop",          3, "Trip Hop"),
-        (6, 3, "Angel",             3, "Trip Hop"),
-        (7, 4, "Roygbiv",           4, "Electronic, Ambient"),
-        (8, 4, "Pete Standing Alone",4,"Ambient"),
+        (1, 1, "Karma Police", 1, "Alternative Rock"),
+        (2, 1, "No Surprises", 1, "Alternative Rock"),
+        (3, 2, "Glory Box", 2, "Trip Hop"),
+        (4, 2, "Roads", 2, "Trip Hop"),
+        (5, 3, "Teardrop", 3, "Trip Hop"),
+        (6, 3, "Angel", 3, "Trip Hop"),
+        (7, 4, "Roygbiv", 4, "Electronic, Ambient"),
+        (8, 4, "Pete Standing Alone", 4, "Ambient"),
     ];
     for (id, artist_id, title, album_id, genre) in tracks {
         conn.execute(
             "INSERT INTO tracks (id, artist_id, title, album_id, genre, path, imported_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, '2026-01-01')",
             params![
-                id, artist_id, title, album_id, genre,
+                id,
+                artist_id,
+                title,
+                album_id,
+                genre,
                 format!("/music/{}.flac", title)
             ],
         )
@@ -68,13 +77,29 @@ fn seed(conn: &Connection) {
         (7, 0.4, 0.5, 0.2, 0.3, 0.6, 0.2, 0.9, 0.2, 0.6, 0.8), // BOC track 1
         (8, 0.3, 0.4, 0.2, 0.2, 0.6, 0.2, 0.9, 0.2, 0.5, 0.9), // BOC track 2
     ];
-    for (tid, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia) in scores {
+    for (
+        tid,
+        energy,
+        valence,
+        tension,
+        density,
+        warmth,
+        movement,
+        space,
+        rawness,
+        complexity,
+        nostalgia,
+    ) in scores
+    {
         conn.execute(
             "INSERT INTO track_scores
              (track_id, energy, valence, tension, density, warmth, movement,
               space, rawness, complexity, nostalgia, scored_at)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'2026-01-01')",
-            params![tid, energy, valence, tension, density, warmth, movement, space, rawness, complexity, nostalgia],
+            params![
+                tid, energy, valence, tension, density, warmth, movement, space, rawness,
+                complexity, nostalgia
+            ],
         )
         .unwrap();
     }
@@ -105,8 +130,16 @@ fn main() {
 
     // ── Test 1: graph_stats on seed data (1 pre-seeded pair = 2 rows) ────────
     let stats = graph_stats(&conn).unwrap();
-    assert!(stats.total_connections >= 2, "FAIL: expected ≥2 connections, got {}", stats.total_connections);
-    assert!(stats.total_artists >= 2, "FAIL: expected ≥2 artists in connections, got {}", stats.total_artists);
+    assert!(
+        stats.total_connections >= 2,
+        "FAIL: expected ≥2 connections, got {}",
+        stats.total_connections
+    );
+    assert!(
+        stats.total_artists >= 2,
+        "FAIL: expected ≥2 artists in connections, got {}",
+        stats.total_artists
+    );
     println!(
         "PASS: graph_stats — artists={}, connections={}, last_run_ts={}",
         stats.total_artists, stats.total_connections, stats.last_run_ts
@@ -133,13 +166,17 @@ fn main() {
         similar_only.iter().all(|n| n.edge_type == "similar"),
         "FAIL: type filter leaked non-similar edges"
     );
-    println!("PASS: get_neighbours(type=similar) => {} edges", similar_only.len());
+    println!(
+        "PASS: get_neighbours(type=similar) => {} edges",
+        similar_only.len()
+    );
 
     // ── Test 4: edge_type_counts ─────────────────────────────────────────────
     let counts = edge_type_counts(&conn).unwrap();
     assert!(
         counts.contains_key("similar"),
-        "FAIL: expected 'similar' in edge_type_counts: {:?}", counts
+        "FAIL: expected 'similar' in edge_type_counts: {:?}",
+        counts
     );
     println!("PASS: edge_type_counts => {:?}", counts);
 
@@ -150,7 +187,10 @@ fn main() {
         "PASS: build_incremental — new_pairs={}, dimension={}, lastfm={}, artists_processed={}",
         result.new_pairs, result.dimension_pairs, result.lastfm_pairs, result.artists_processed
     );
-    assert_eq!(result.lastfm_pairs, 0, "FAIL: no Last.fm key → 0 lfm_pairs expected");
+    assert_eq!(
+        result.lastfm_pairs, 0,
+        "FAIL: no Last.fm key → 0 lfm_pairs expected"
+    );
 
     // ── Test 6: dimension_affinity edges created ─────────────────────────────
     let affinity_counts = edge_type_counts(&conn).unwrap();
@@ -176,7 +216,10 @@ fn main() {
     let result2 = build_incremental(&conn, 15, true).unwrap();
     let counts_after = edge_type_counts(&conn).unwrap();
     let dim_after = counts_after.get("dimension_affinity").copied().unwrap_or(0);
-    let dim_before = affinity_counts.get("dimension_affinity").copied().unwrap_or(0);
+    let dim_before = affinity_counts
+        .get("dimension_affinity")
+        .copied()
+        .unwrap_or(0);
     assert_eq!(
         dim_after, dim_before,
         "FAIL: second build added duplicate edges ({} → {})",
@@ -200,7 +243,10 @@ fn main() {
 
     // ── Test 9: unknown artist returns empty neighbours ───────────────────────
     let none = get_neighbours(&conn, "XYZ Unknown Artist", None, 10).unwrap();
-    assert!(none.is_empty(), "FAIL: unknown artist should return empty neighbours");
+    assert!(
+        none.is_empty(),
+        "FAIL: unknown artist should return empty neighbours"
+    );
     println!("PASS: unknown artist returns 0 neighbours");
 
     println!("\nAll smoke_graph_builder checks passed.");

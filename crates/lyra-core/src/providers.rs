@@ -9,14 +9,28 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 use tracing::warn;
 
-use crate::commands::{ProviderConfigRecord, ProviderHealth, ProviderValidationResult};
+use crate::commands::{
+    ProviderConfigRecord, ProviderHealth, ProviderValidationResult, SpotifyOauthBootstrap,
+    SpotifyOauthSession,
+};
 use crate::errors::LyraResult;
+use crate::provider_runtime;
 
 /// Helper function to base64-encode a string (used for HTTP Basic auth).
 fn base64_encode(s: &str) -> String {
     use base64::prelude::*;
     BASE64_STANDARD.encode(s.as_bytes())
 }
+
+const SPOTIFY_ACCESS_TOKEN_KEY: &str = "oauth_access_token";
+const SPOTIFY_REFRESH_TOKEN_KEY: &str = "oauth_refresh_token";
+const SPOTIFY_AUTH_FLOW_TTL_MINUTES: i64 = 10;
+const SPOTIFY_DEFAULT_SCOPES: &[&str] = &[
+    "user-library-read",
+    "playlist-read-private",
+    "user-top-read",
+    "user-read-recently-played",
+];
 
 // ── LLM config ────────────────────────────────────────────────────────────────
 
@@ -70,6 +84,414 @@ pub fn save_provider_config(
         ],
     )?;
     Ok(())
+}
+
+fn provider_config_json(conn: &Connection, provider_key: &str) -> Result<Value, String> {
+    let raw: String = conn
+        .query_row(
+            "SELECT config_json FROM provider_configs WHERE provider_key = ?1",
+            params![provider_key],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "{}".to_string());
+    serde_json::from_str(&raw).map_err(|error| error.to_string())
+}
+
+fn spotify_client_credentials(config: &Value) -> Result<(String, String), String> {
+    let client_id = config
+        .get("spotify_client_id")
+        .or_else(|| config.get("SPOTIFY_CLIENT_ID"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| "spotify client id missing".to_string())?;
+    let client_secret = config
+        .get("spotify_client_secret")
+        .or_else(|| config.get("SPOTIFY_CLIENT_SECRET"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| "spotify client secret missing".to_string())?;
+    Ok((client_id, client_secret))
+}
+
+fn spotify_authorize_url(config: &Value) -> String {
+    config_str(config, &["spotify_authorize_url", "SPOTIFY_AUTHORIZE_URL"])
+        .map(str::to_string)
+        .unwrap_or_else(|| "https://accounts.spotify.com/authorize".to_string())
+}
+
+fn spotify_token_url(config: &Value) -> String {
+    config_str(config, &["spotify_token_url", "SPOTIFY_TOKEN_URL"])
+        .map(str::to_string)
+        .unwrap_or_else(|| "https://accounts.spotify.com/api/token".to_string())
+}
+
+fn spotify_scope_value(config: &Value) -> String {
+    config_str(config, &["spotify_scopes", "SPOTIFY_SCOPES"])
+        .map(str::to_string)
+        .unwrap_or_else(|| SPOTIFY_DEFAULT_SCOPES.join(" "))
+}
+
+fn spotify_redirect_uri(
+    config: &Value,
+    override_redirect_uri: Option<&str>,
+) -> Result<String, String> {
+    override_redirect_uri
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            config_str(config, &["spotify_redirect_uri", "SPOTIFY_REDIRECT_URI"])
+                .map(str::to_string)
+        })
+        .ok_or_else(|| "spotify redirect uri missing".to_string())
+}
+
+fn spotify_auth_state(redirect_uri: &str) -> String {
+    let seed = format!(
+        "spotify:{}:{}:{}",
+        redirect_uri.trim(),
+        Utc::now().timestamp_nanos_opt().unwrap_or_default(),
+        std::process::id()
+    );
+    format!("{:x}", md5::compute(seed))
+}
+
+fn split_scopes(scope: &str) -> Vec<String> {
+    scope
+        .split_whitespace()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.trim().to_string())
+        .collect()
+}
+
+fn spotify_session_row(
+    conn: &Connection,
+) -> Result<Option<(String, String, Option<String>)>, String> {
+    conn.query_row(
+        "SELECT token_type, scope, access_token_expires_at
+         FROM provider_oauth_sessions
+         WHERE provider_key = 'spotify'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )
+    .optional()
+    .map_err(|error| error.to_string())
+}
+
+pub fn begin_spotify_oauth_flow(
+    conn: &Connection,
+    redirect_uri: Option<&str>,
+) -> Result<SpotifyOauthBootstrap, String> {
+    let config = provider_config_json(conn, "spotify")?;
+    let (client_id, _) = spotify_client_credentials(&config)?;
+    let redirect_uri = spotify_redirect_uri(&config, redirect_uri)?;
+    let scope = spotify_scope_value(&config);
+    let scopes = split_scopes(&scope);
+    let state = spotify_auth_state(&redirect_uri);
+    let expires_at =
+        (Utc::now() + chrono::Duration::minutes(SPOTIFY_AUTH_FLOW_TTL_MINUTES)).to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO provider_auth_flows
+         (provider_key, state, redirect_uri, scope, expires_at, completed_at)
+         VALUES ('spotify', ?1, ?2, ?3, ?4, NULL)
+         ON CONFLICT(provider_key) DO UPDATE SET
+           state = excluded.state,
+           redirect_uri = excluded.redirect_uri,
+           scope = excluded.scope,
+           expires_at = excluded.expires_at,
+           completed_at = NULL",
+        params![state, redirect_uri, scope, expires_at],
+    )
+    .map_err(|error| error.to_string())?;
+
+    let authorization_url = format!(
+        "{}?client_id={}&response_type=code&redirect_uri={}&scope={}&state={}&show_dialog=true",
+        spotify_authorize_url(&config),
+        urlencoding::encode(&client_id),
+        urlencoding::encode(&redirect_uri),
+        urlencoding::encode(&scope),
+        urlencoding::encode(&state),
+    );
+
+    Ok(SpotifyOauthBootstrap {
+        authorization_url,
+        state,
+        redirect_uri,
+        scopes,
+        expires_at,
+    })
+}
+
+pub fn complete_spotify_oauth_flow(
+    conn: &Connection,
+    code: &str,
+    state: &str,
+) -> Result<SpotifyOauthSession, String> {
+    if code.trim().is_empty() {
+        return Err("spotify authorization code required".to_string());
+    }
+    if state.trim().is_empty() {
+        return Err("spotify oauth state required".to_string());
+    }
+
+    let (stored_state, redirect_uri, stored_scope, expires_at, completed_at): (
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+    ) = conn
+        .query_row(
+            "SELECT state, redirect_uri, scope, expires_at, completed_at
+             FROM provider_auth_flows
+             WHERE provider_key = 'spotify'",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .map_err(|_| "spotify oauth flow has not been started".to_string())?;
+
+    if completed_at.is_some() {
+        return Err("spotify oauth flow has already been completed".to_string());
+    }
+    if stored_state != state.trim() {
+        return Err("spotify oauth state mismatch".to_string());
+    }
+    let expires_at = chrono::DateTime::parse_from_rfc3339(&expires_at)
+        .map_err(|error| error.to_string())?
+        .with_timezone(&Utc);
+    if expires_at < Utc::now() {
+        return Err("spotify oauth flow expired".to_string());
+    }
+
+    let config = provider_config_json(conn, "spotify")?;
+    let (client_id, client_secret) = spotify_client_credentials(&config)?;
+    let payload = provider_runtime::json_request_with_retry(|| {
+        ureq::post(&spotify_token_url(&config))
+            .set("User-Agent", "Lyra/0.1")
+            .set(
+                "Authorization",
+                &format!(
+                    "Basic {}",
+                    base64_encode(&format!("{}:{}", client_id, client_secret))
+                ),
+            )
+            .send_form(&[
+                ("grant_type", "authorization_code"),
+                ("code", code.trim()),
+                ("redirect_uri", redirect_uri.as_str()),
+            ])
+    })?;
+
+    let access_token = payload
+        .get("access_token")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "spotify auth exchange did not return access_token".to_string())?;
+    let refresh_token = payload
+        .get("refresh_token")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "spotify auth exchange did not return refresh_token".to_string())?;
+    let expires_in_seconds = payload
+        .get("expires_in")
+        .and_then(Value::as_i64)
+        .unwrap_or(3600);
+    let scope = payload
+        .get("scope")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(stored_scope.as_str());
+    let token_type = payload
+        .get("token_type")
+        .and_then(Value::as_str)
+        .unwrap_or("Bearer");
+
+    let session = store_spotify_oauth_session(
+        conn,
+        access_token,
+        Some(refresh_token),
+        expires_in_seconds,
+        scope,
+        Some(token_type),
+    )?;
+    conn.execute(
+        "UPDATE provider_auth_flows
+         SET completed_at = ?1
+         WHERE provider_key = 'spotify'",
+        params![Utc::now().to_rfc3339()],
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(session)
+}
+
+pub fn get_spotify_oauth_session(conn: &Connection) -> Result<Option<SpotifyOauthSession>, String> {
+    let Some((token_type, scope, access_token_expires_at)) = spotify_session_row(conn)? else {
+        return Ok(None);
+    };
+    let has_refresh_token = keyring_load("spotify", SPOTIFY_REFRESH_TOKEN_KEY)?
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    let access_token_ready = keyring_load("spotify", SPOTIFY_ACCESS_TOKEN_KEY)?
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    Ok(Some(SpotifyOauthSession {
+        token_type,
+        scopes: split_scopes(&scope),
+        access_token_expires_at,
+        refreshed_at: conn
+            .query_row(
+                "SELECT refreshed_at FROM provider_oauth_sessions WHERE provider_key = 'spotify'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| Utc::now().to_rfc3339()),
+        has_refresh_token,
+        access_token_ready,
+    }))
+}
+
+pub fn store_spotify_oauth_session(
+    conn: &Connection,
+    access_token: &str,
+    refresh_token: Option<&str>,
+    expires_in_seconds: i64,
+    scope: &str,
+    token_type: Option<&str>,
+) -> Result<SpotifyOauthSession, String> {
+    if access_token.trim().is_empty() {
+        return Err("spotify access token required".to_string());
+    }
+    keyring_save("spotify", SPOTIFY_ACCESS_TOKEN_KEY, access_token)?;
+    if let Some(refresh_token) = refresh_token.filter(|value| !value.trim().is_empty()) {
+        keyring_save("spotify", SPOTIFY_REFRESH_TOKEN_KEY, refresh_token)?;
+    }
+
+    let expires_at = Utc::now() + chrono::Duration::seconds(expires_in_seconds.max(0));
+    let refreshed_at = Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO provider_oauth_sessions
+         (provider_key, token_type, scope, access_token_expires_at, refreshed_at)
+         VALUES ('spotify', ?1, ?2, ?3, ?4)
+         ON CONFLICT(provider_key) DO UPDATE SET
+           token_type = excluded.token_type,
+           scope = excluded.scope,
+           access_token_expires_at = excluded.access_token_expires_at,
+           refreshed_at = excluded.refreshed_at",
+        params![
+            token_type.unwrap_or("Bearer"),
+            scope.trim(),
+            expires_at.to_rfc3339(),
+            refreshed_at,
+        ],
+    )
+    .map_err(|error| error.to_string())?;
+    get_spotify_oauth_session(conn)?.ok_or_else(|| "spotify session not persisted".to_string())
+}
+
+pub fn spotify_access_token(conn: &Connection) -> Result<String, String> {
+    let config = provider_config_json(conn, "spotify")?;
+    let (client_id, client_secret) = spotify_client_credentials(&config)?;
+    let token_url = spotify_token_url(&config);
+    let access_token = keyring_load("spotify", SPOTIFY_ACCESS_TOKEN_KEY)?;
+    let refresh_token = keyring_load("spotify", SPOTIFY_REFRESH_TOKEN_KEY)?;
+    let session = get_spotify_oauth_session(conn)?;
+
+    let should_refresh = match session
+        .as_ref()
+        .and_then(|value| value.access_token_expires_at.as_deref())
+    {
+        Some(value) => chrono::DateTime::parse_from_rfc3339(value)
+            .map(|expires_at| {
+                expires_at.with_timezone(&Utc) <= Utc::now() + chrono::Duration::seconds(60)
+            })
+            .unwrap_or(true),
+        None => true,
+    };
+
+    if !should_refresh {
+        if let Some(access_token) = access_token.filter(|value| !value.trim().is_empty()) {
+            return Ok(access_token);
+        }
+    }
+
+    let refresh_token = refresh_token
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "spotify refresh token missing".to_string())?;
+    refresh_spotify_access_token(conn, &client_id, &client_secret, &token_url, &refresh_token)
+}
+
+fn refresh_spotify_access_token(
+    conn: &Connection,
+    client_id: &str,
+    client_secret: &str,
+    token_url: &str,
+    refresh_token: &str,
+) -> Result<String, String> {
+    let payload = provider_runtime::json_request_with_retry(|| {
+        ureq::post(token_url)
+            .set("User-Agent", "Lyra/0.1")
+            .set(
+                "Authorization",
+                &format!(
+                    "Basic {}",
+                    base64_encode(&format!("{}:{}", client_id, client_secret))
+                ),
+            )
+            .send_form(&[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", refresh_token),
+            ])
+    })?;
+
+    let access_token = payload
+        .get("access_token")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "spotify refresh did not return access_token".to_string())?;
+    let expires_in_seconds = payload
+        .get("expires_in")
+        .and_then(Value::as_i64)
+        .unwrap_or(3600);
+    let returned_refresh_token = payload
+        .get("refresh_token")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty());
+    let scope = payload.get("scope").and_then(Value::as_str).unwrap_or("");
+    let token_type = payload
+        .get("token_type")
+        .and_then(Value::as_str)
+        .unwrap_or("Bearer");
+
+    let session = store_spotify_oauth_session(
+        conn,
+        access_token,
+        returned_refresh_token.or(Some(refresh_token)),
+        expires_in_seconds,
+        scope,
+        Some(token_type),
+    )?;
+    keyring_save("spotify", SPOTIFY_ACCESS_TOKEN_KEY, access_token)?;
+    if let Some(new_refresh_token) = returned_refresh_token {
+        keyring_save("spotify", SPOTIFY_REFRESH_TOKEN_KEY, new_refresh_token)?;
+    }
+    let _ = session;
+    Ok(access_token.to_string())
 }
 
 /// Return the provider keys that have a non-empty config_json in the DB.
@@ -240,7 +662,7 @@ pub fn default_provider_capabilities() -> Vec<ProviderCapabilitySeed> {
         ProviderCapabilitySeed {
             provider_key: "spotify",
             display_name: "Spotify",
-            capabilities: vec!["history-import", "library-import"],
+            capabilities: vec!["history-import", "library-import", "oauth-session"],
         },
         ProviderCapabilitySeed {
             provider_key: "listenbrainz",
@@ -256,6 +678,11 @@ pub fn default_provider_capabilities() -> Vec<ProviderCapabilitySeed> {
             provider_key: "acoustid",
             display_name: "AcoustID",
             capabilities: vec!["fingerprint", "identity"],
+        },
+        ProviderCapabilitySeed {
+            provider_key: "clap",
+            display_name: "CLAP Semantic",
+            capabilities: vec!["semantic-search", "embedding"],
         },
         ProviderCapabilitySeed {
             provider_key: "ollama",
@@ -432,12 +859,10 @@ pub fn import_env_file(
 ) -> LyraResult<usize> {
     let mappings = provider_env_mappings();
     let mut env_values: HashMap<String, String> = HashMap::new();
-    for item in from_path_iter(env_path)? {
+    for (key, value) in (from_path_iter(env_path)?).flatten() {
         // Skip individual lines that fail to parse (e.g. unquoted Windows paths
         // with backslashes). We only care about known provider key names.
-        if let Ok((key, value)) = item {
-            env_values.insert(key, value);
-        }
+        env_values.insert(key, value);
     }
 
     let mut imported_count = 0_usize;
@@ -877,63 +1302,63 @@ pub fn validate_provider(
                 });
             }
             // Validate Spotify credentials via OAuth token endpoint
-            ureq::post("https://accounts.spotify.com/api/token")
-                .set("User-Agent", "Lyra/0.1")
-                .set(
-                    "Authorization",
-                    &format!(
-                        "Basic {}",
-                        base64_encode(&format!("{}:{}", client_id, client_secret))
-                    ),
-                )
-                .send_form(&[("grant_type", "client_credentials")])
-                .map(|resp| {
-                    resp.into_json::<Value>().ok().and_then(|v| {
-                        v.get("access_token")
-                            .map(|_| "credentials valid".to_string())
-                    })
-                })
-                .map_err(|e| e.to_string())
+            let token_url = spotify_token_url(&config);
+            provider_runtime::json_request_with_retry(|| {
+                ureq::post(&token_url)
+                    .set("User-Agent", "Lyra/0.1")
+                    .set(
+                        "Authorization",
+                        &format!(
+                            "Basic {}",
+                            base64_encode(&format!("{}:{}", client_id, client_secret))
+                        ),
+                    )
+                    .send_form(&[("grant_type", "client_credentials")])
+            })
+            .map(|payload| {
+                payload
+                    .get("access_token")
+                    .map(|_| "credentials valid".to_string())
+            })
         }
-        "spotify" => {
-            // Spotify library import validation
-            let client_id = config
-                .get("spotify_client_id")
-                .or_else(|| config.get("SPOTIFY_CLIENT_ID"))
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            let client_secret = config
-                .get("spotify_client_secret")
-                .or_else(|| config.get("SPOTIFY_CLIENT_SECRET"))
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            if client_id.is_empty() || client_secret.is_empty() {
-                return Ok(ProviderValidationResult {
-                    provider_key: provider_key.to_string(),
-                    valid: false,
-                    latency_ms: 0,
-                    error: Some("spotify_client_id and spotify_client_secret required".to_string()),
-                    detail: None,
-                });
+        "spotify" => match spotify_access_token(conn) {
+            Ok(_) => {
+                let detail = get_spotify_oauth_session(conn)
+                    .map_err(|error| crate::errors::LyraError::Message(error.clone()))?
+                    .map(|session| {
+                        let scope_label = if session.scopes.is_empty() {
+                            "no scopes recorded".to_string()
+                        } else {
+                            session.scopes.join(", ")
+                        };
+                        format!("oauth session ready ({scope_label})")
+                    })
+                    .or_else(|| Some("spotify credentials valid".to_string()));
+                Ok(detail)
             }
-            ureq::post("https://accounts.spotify.com/api/token")
-                .set("User-Agent", "Lyra/0.1")
-                .set(
-                    "Authorization",
-                    &format!(
-                        "Basic {}",
-                        base64_encode(&format!("{}:{}", client_id, client_secret))
-                    ),
-                )
-                .send_form(&[("grant_type", "client_credentials")])
-                .map(|resp| {
-                    resp.into_json::<Value>().ok().and_then(|v| {
-                        v.get("access_token")
-                            .map(|_| "credentials valid".to_string())
-                    })
+            Err(_) => {
+                let (client_id, client_secret) = spotify_client_credentials(&config)
+                    .map_err(|error| crate::errors::LyraError::Message(error.clone()))?;
+                let token_url = spotify_token_url(&config);
+                provider_runtime::json_request_with_retry(|| {
+                    ureq::post(&token_url)
+                        .set("User-Agent", "Lyra/0.1")
+                        .set(
+                            "Authorization",
+                            &format!(
+                                "Basic {}",
+                                base64_encode(&format!("{}:{}", client_id, client_secret))
+                            ),
+                        )
+                        .send_form(&[("grant_type", "client_credentials")])
                 })
-                .map_err(|e| e.to_string())
-        }
+                .map(|payload| {
+                    payload
+                        .get("access_token")
+                        .map(|_| "client credentials valid (no user session yet)".to_string())
+                })
+            }
+        },
         "listenbrainz" => {
             let token = config
                 .get("listenbrainz_token")
@@ -949,20 +1374,26 @@ pub fn validate_provider(
                     detail: None,
                 });
             }
-            ureq::get("https://api.listenbrainz.org/1/validate-token")
-                .set("User-Agent", "Lyra/0.1")
-                .set("Authorization", &format!("Token {}", token))
-                .call()
-                .map(|resp| {
-                    resp.into_json::<Value>().ok().and_then(|v| {
-                        if v.get("valid").and_then(Value::as_bool).unwrap_or(false) {
-                            v.get("user_name").and_then(Value::as_str).map(String::from)
-                        } else {
-                            None
-                        }
-                    })
-                })
-                .map_err(|e| e.to_string())
+            provider_runtime::json_request_with_retry(|| {
+                ureq::get("https://api.listenbrainz.org/1/validate-token")
+                    .set("User-Agent", "Lyra/0.1")
+                    .set("Authorization", &format!("Token {}", token))
+                    .call()
+            })
+            .map(|payload| {
+                if payload
+                    .get("valid")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    payload
+                        .get("user_name")
+                        .and_then(Value::as_str)
+                        .map(String::from)
+                } else {
+                    None
+                }
+            })
         }
         "acoustid" => {
             let api_key = config
@@ -1257,5 +1688,383 @@ pub fn load_env_credential(key_name: &str) -> Result<Option<String>, String> {
         Ok(v) => Ok(Some(v)),
         Err(keyring::Error::NoEntry) => Ok(None),
         Err(e) => Err(e.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::any::Any;
+    use std::collections::HashMap;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::{mpsc, Mutex, MutexGuard, Once, OnceLock};
+    use std::thread;
+    use std::time::Duration;
+
+    use keyring::credential::{
+        Credential, CredentialApi, CredentialBuilderApi, CredentialPersistence,
+    };
+    use keyring::{set_default_credential_builder, Error};
+    use rusqlite::Connection;
+    use serde_json::json;
+
+    use super::{
+        begin_spotify_oauth_flow, complete_spotify_oauth_flow, get_spotify_oauth_session,
+        spotify_access_token, store_spotify_oauth_session, update_provider_config,
+    };
+    use crate::db;
+
+    #[derive(Debug)]
+    struct TestCredential {
+        key: String,
+    }
+
+    impl CredentialApi for TestCredential {
+        fn set_secret(&self, secret: &[u8]) -> keyring::Result<()> {
+            secret_store()
+                .lock()
+                .expect("test secret store lock")
+                .insert(self.key.clone(), secret.to_vec());
+            Ok(())
+        }
+
+        fn get_secret(&self) -> keyring::Result<Vec<u8>> {
+            secret_store()
+                .lock()
+                .expect("test secret store lock")
+                .get(&self.key)
+                .cloned()
+                .ok_or(Error::NoEntry)
+        }
+
+        fn delete_credential(&self) -> keyring::Result<()> {
+            secret_store()
+                .lock()
+                .expect("test secret store lock")
+                .remove(&self.key)
+                .map(|_| ())
+                .ok_or(Error::NoEntry)
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    #[derive(Debug, Default)]
+    struct TestCredentialBuilder;
+
+    impl CredentialBuilderApi for TestCredentialBuilder {
+        fn build(
+            &self,
+            target: Option<&str>,
+            service: &str,
+            user: &str,
+        ) -> keyring::Result<Box<Credential>> {
+            let key = format!("{}::{service}::{user}", target.unwrap_or_default().trim());
+            Ok(Box::new(TestCredential { key }))
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn persistence(&self) -> CredentialPersistence {
+            CredentialPersistence::ProcessOnly
+        }
+    }
+
+    fn secret_store() -> &'static Mutex<HashMap<String, Vec<u8>>> {
+        static STORE: OnceLock<Mutex<HashMap<String, Vec<u8>>>> = OnceLock::new();
+        STORE.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+
+    fn install_test_keyring() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            set_default_credential_builder(Box::new(TestCredentialBuilder));
+        });
+        secret_store()
+            .lock()
+            .expect("test secret store lock")
+            .clear();
+    }
+
+    fn provider_test_guard() -> MutexGuard<'static, ()> {
+        static GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+        GUARD
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("provider test guard")
+    }
+
+    fn setup_conn() -> Connection {
+        install_test_keyring();
+        let conn = Connection::open_in_memory().expect("memory db");
+        db::init_database(&conn).expect("schema");
+        update_provider_config(
+            &conn,
+            "spotify",
+            true,
+            &json!({
+                "spotify_client_id": "client-id",
+                "spotify_client_secret": "client-secret",
+            }),
+        )
+        .expect("spotify config");
+        conn
+    }
+
+    fn spawn_token_server(response_body: serde_json::Value) -> (String, mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind token server");
+        let addr = listener.local_addr().expect("token server addr");
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept token request");
+            let mut buffer = Vec::new();
+            let mut header_end = None;
+            let mut content_length = 0_usize;
+
+            loop {
+                let mut chunk = [0_u8; 1024];
+                let read = stream.read(&mut chunk).expect("read request");
+                if read == 0 {
+                    break;
+                }
+                buffer.extend_from_slice(&chunk[..read]);
+
+                if header_end.is_none() {
+                    if let Some(index) = buffer.windows(4).position(|window| window == b"\r\n\r\n")
+                    {
+                        let end = index + 4;
+                        header_end = Some(end);
+                        let headers = String::from_utf8_lossy(&buffer[..end]);
+                        content_length = headers
+                            .lines()
+                            .find_map(|line| {
+                                let mut parts = line.splitn(2, ':');
+                                let name = parts.next()?.trim();
+                                let value = parts.next()?.trim();
+                                if name.eq_ignore_ascii_case("content-length") {
+                                    value.parse::<usize>().ok()
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or_default();
+                    }
+                }
+
+                if let Some(end) = header_end {
+                    if buffer.len() >= end + content_length {
+                        break;
+                    }
+                }
+            }
+
+            let header_end = header_end.expect("request headers");
+            let body = String::from_utf8_lossy(&buffer[header_end..header_end + content_length])
+                .to_string();
+            tx.send(body).expect("send request body");
+
+            let payload = response_body.to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                payload.len(),
+                payload
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("write token response");
+            stream.flush().expect("flush token response");
+        });
+        (format!("http://{addr}/api/token"), rx)
+    }
+
+    #[test]
+    fn spotify_oauth_session_round_trip_is_backend_owned() {
+        let _guard = provider_test_guard();
+        let conn = setup_conn();
+
+        let session = store_spotify_oauth_session(
+            &conn,
+            "access-token",
+            Some("refresh-token"),
+            3600,
+            "user-library-read playlist-read-private",
+            Some("Bearer"),
+        )
+        .expect("stored session");
+
+        assert!(session.has_refresh_token);
+        assert!(session.access_token_ready);
+        assert_eq!(
+            session.scopes,
+            vec![
+                "user-library-read".to_string(),
+                "playlist-read-private".to_string()
+            ]
+        );
+
+        let loaded = get_spotify_oauth_session(&conn)
+            .expect("load session")
+            .expect("session exists");
+        assert_eq!(loaded.scopes, session.scopes);
+        assert!(loaded.has_refresh_token);
+        assert!(loaded.access_token_ready);
+
+        let access_token = spotify_access_token(&conn).expect("access token");
+        assert_eq!(access_token, "access-token");
+    }
+
+    #[test]
+    fn spotify_oauth_flow_bootstrap_persists_state_and_redirect() {
+        let _guard = provider_test_guard();
+        let conn = setup_conn();
+        update_provider_config(
+            &conn,
+            "spotify",
+            true,
+            &json!({
+                "spotify_client_id": "client-id",
+                "spotify_client_secret": "client-secret",
+                "spotify_redirect_uri": "http://127.0.0.1:43123/callback",
+                "spotify_scopes": "user-library-read playlist-read-private",
+                "spotify_authorize_url": "https://accounts.spotify.test/authorize"
+            }),
+        )
+        .expect("spotify config with redirect");
+
+        let bootstrap = begin_spotify_oauth_flow(&conn, None).expect("bootstrap flow");
+
+        assert_eq!(bootstrap.redirect_uri, "http://127.0.0.1:43123/callback");
+        assert_eq!(
+            bootstrap.scopes,
+            vec![
+                "user-library-read".to_string(),
+                "playlist-read-private".to_string()
+            ]
+        );
+        assert!(bootstrap.authorization_url.contains("response_type=code"));
+        assert!(bootstrap.authorization_url.contains(&bootstrap.state));
+
+        let persisted: (String, String, String, Option<String>) = conn
+            .query_row(
+                "SELECT state, redirect_uri, scope, completed_at
+                 FROM provider_auth_flows
+                 WHERE provider_key = 'spotify'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("persisted auth flow");
+        assert_eq!(persisted.0, bootstrap.state);
+        assert_eq!(persisted.1, bootstrap.redirect_uri);
+        assert_eq!(persisted.2, "user-library-read playlist-read-private");
+        assert!(persisted.3.is_none());
+    }
+
+    #[test]
+    fn spotify_oauth_flow_exchange_is_completed_in_backend() {
+        let _guard = provider_test_guard();
+        let conn = setup_conn();
+        let (token_url, request_rx) = spawn_token_server(json!({
+            "access_token": "server-access-token",
+            "refresh_token": "server-refresh-token",
+            "expires_in": 3600,
+            "scope": "user-library-read playlist-read-private",
+            "token_type": "Bearer"
+        }));
+        update_provider_config(
+            &conn,
+            "spotify",
+            true,
+            &json!({
+                "spotify_client_id": "client-id",
+                "spotify_client_secret": "client-secret",
+                "spotify_redirect_uri": "http://127.0.0.1:43123/callback",
+                "spotify_scopes": "user-library-read playlist-read-private",
+                "spotify_authorize_url": "https://accounts.spotify.test/authorize",
+                "spotify_token_url": token_url
+            }),
+        )
+        .expect("spotify config with token url");
+
+        let bootstrap = begin_spotify_oauth_flow(&conn, None).expect("bootstrap flow");
+        let session = complete_spotify_oauth_flow(&conn, "auth-code", &bootstrap.state)
+            .expect("complete oauth flow");
+
+        let request_body = request_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("authorization_code request body");
+        assert!(request_body.contains("grant_type=authorization_code"));
+        assert!(request_body.contains("code=auth-code"));
+        assert!(request_body.contains(&format!(
+            "redirect_uri={}",
+            urlencoding::encode("http://127.0.0.1:43123/callback")
+        )));
+
+        assert!(session.has_refresh_token);
+        assert!(session.access_token_ready);
+        assert_eq!(
+            session.scopes,
+            vec![
+                "user-library-read".to_string(),
+                "playlist-read-private".to_string()
+            ]
+        );
+
+        let completed_at: Option<String> = conn
+            .query_row(
+                "SELECT completed_at FROM provider_auth_flows WHERE provider_key = 'spotify'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("completed flow timestamp");
+        assert!(completed_at.is_some());
+
+        let access_token = spotify_access_token(&conn).expect("stored access token");
+        assert_eq!(access_token, "server-access-token");
+    }
+
+    #[test]
+    fn spotify_oauth_flow_rejects_state_mismatch() {
+        let _guard = provider_test_guard();
+        let conn = setup_conn();
+        update_provider_config(
+            &conn,
+            "spotify",
+            true,
+            &json!({
+                "spotify_client_id": "client-id",
+                "spotify_client_secret": "client-secret",
+                "spotify_redirect_uri": "http://127.0.0.1:43123/callback"
+            }),
+        )
+        .expect("spotify config with redirect");
+
+        let _bootstrap = begin_spotify_oauth_flow(&conn, None).expect("bootstrap flow");
+        let error = complete_spotify_oauth_flow(&conn, "auth-code", "wrong-state")
+            .expect_err("state mismatch should fail");
+
+        assert!(error.contains("state mismatch"));
+    }
+
+    #[test]
+    fn spotify_access_token_reports_missing_refresh_secret_when_session_is_expired() {
+        let _guard = provider_test_guard();
+        let conn = setup_conn();
+
+        store_spotify_oauth_session(
+            &conn,
+            "short-lived-access-token",
+            None,
+            0,
+            "user-library-read",
+            Some("Bearer"),
+        )
+        .expect("stored session");
+
+        let error = spotify_access_token(&conn).expect_err("refresh should fail");
+        assert!(error.contains("spotify refresh token missing"));
     }
 }

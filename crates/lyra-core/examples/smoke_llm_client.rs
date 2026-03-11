@@ -55,8 +55,8 @@ fn main() {
     // ── Test 3: live call (gated) ─────────────────────────────────────────────
     if std::env::var("SMOKE_LLM").unwrap_or_default() == "1" {
         println!("SMOKE_LLM=1 — running live call...");
-        let live_client = LlmClient::from_connection(&conn)
-            .expect("need configured client for live test");
+        let live_client =
+            LlmClient::from_connection(&conn).expect("need configured client for live test");
         let text = live_client.chat_completion_text(
             "You are a terse assistant.",
             "Reply with exactly the word: PONG",

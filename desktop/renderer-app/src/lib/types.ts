@@ -154,6 +154,12 @@ export type SpotifyMissingCandidate = {
 export type SpotifyGapSummary = {
   available: boolean;
   dbPath?: string | null;
+  sourceMode: string;
+  legacyImportObserved: boolean;
+  lastLegacyImportAt?: string | null;
+  lastLegacyImportedHistory: number;
+  lastLegacyImportedLibrary: number;
+  lastLegacyImportedFeatures: number;
   historyCount: number;
   libraryCount: number;
   featuresCount: number;

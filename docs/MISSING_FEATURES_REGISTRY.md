@@ -1,43 +1,26 @@
 # Lyra Gap Registry
 
-Last audited: March 9, 2026
+Last audited: March 10, 2026
 
-This file tracks the open canonical product gaps that keep Lyra from fully matching its intended identity.
+This file tracks the backend and product gaps that still keep Lyra from matching its intended identity.
 
 ## Active Gap Matrix
 
 | ID | Area | Status | Implemented Now | Missing Or Partial | Legacy Sources To Inspect Next |
 | --- | --- | --- | --- | --- | --- |
-| G-063 | Composer and playlist intelligence depth | partial, active | Canonical composer pipeline now includes typed intent, provider-parse sanitization, graph-aware route scoring, act-shaped sequencing, feedback-aware route pressure, mood-pressure phase shaping, first-class scene exits, Lyra-read summaries, route audition teasers, deploy-time composer diagnostics, a first canonical Spotify evidence/gap panel in the Lyra workspace, Spotify-driven missing-world pressure inside route flavor and novelty selection, and `explain_track` now emits artist graph evidence (connections table, top-3 by strength, with connection-type labels) as structured EvidenceItems | Arc template evaluation in playlist sequencing and playlust 4-act authorship remain unported | `oracle/vibes.py`, `oracle/playlust.py`, `oracle/explain.py`, `oracle/arc.py`, `oracle/mood_interpreter.py`, `oracle/taste_backfill.py` |
-| G-064 | Discovery graph and bridge depth | largely complete | Related-artist and graph scaffolding exist, the composer has distinct safe/interesting/dangerous lanes, scene-exit logic, and scout-style scene-family targeting; Discover exposes route-handoff, Spotify missing-world recovery, a Genre Hunt panel (genre pair selector, bridge-artist chips, Scout target results, Ask Lyra prompts), and a Deep Cuts panel (obscurity × acclaim scoring, rank display); Artist page exposes lazy-loaded Scout Exits panel with 3-lane UI and play/bridge/hunt/Ask Lyra actions | ListenBrainz weather and full Discogs-backed Scout multi-provider fusion remain Python-only (tagged dormant in BACKLOG_TAGS.md) | `oracle/graph_builder.py`, `oracle/scout.py`, `oracle/recommendation_broker.py` |
-| G-061 | Explainability and provenance breadth | largely complete | Provenance, confidence, saved reason summaries, and reopenable composer-run history now exist; live and saved playlist detail retain structured reason payloads, phase roles, and inferred-vs-explicit splits; Discover recommendations now carry EvidenceItem + whyThisTrack + inferredByLyra at composer payload depth with provider badges per card; Library UI now uses canonical `search_excavation_surface` (artist/album facet chips + live route hints replace static panel) | Saved playlist detail and broader recommendation surfaces still lack the full richer reason model | `oracle/explain.py`, `oracle/explainability.py`, `oracle/enrichers/unified.py` |
-| G-060 | Acquisition workflow parity | implemented with residual risk | Canonical acquisition lifecycle, queue authority, and horizon intelligence infrastructure exist | Remaining Python executor removal and metadata-validator parity still open | `oracle/acquirers/waterfall.py`, `oracle/acquirers/validator.py`, `oracle/acquisition.py` |
-| G-062 | Curation workflows | largely complete | Duplicate cluster detection, keeper selection, quarantine-on-resolve, full undo depth, cleanup preview (missing artist/album + suspected dup issues with enrich/review shortcuts), and curation log all wired end-to-end; quarantined tracks now filtered from all library list and search queries | Physical file deletion and deeper folder-repair workflows remain out of scope for now | `oracle/duplicates.py`, `oracle/curator.py`, `oracle/organizer.py` |
-| G-065 | Packaged desktop confidence | partial | Canonical runtime builds and launches locally; Cassette-branded NSIS/MSI bundles now build from the canonical Tauri app | Clean-machine installer and long-session packaged proof remain open until the new installer is validated outside the dev machine | packaged validation scripts and soak artifacts |
+| G-060 | Native acquisition parity | partial, active | Rust owns canonical acquisition planning for single tracks, albums, and discographies; persisted plan state; queue lifecycle tracking; missing-world lead handoff; and canonical junk rejection before persistence. The legacy Python bridge is quarantined behind explicit opt-in. | Native end-to-end acquisition execution and validator/ingest-confidence parity are still incomplete; the optional migration bridge still exists for fallback/migration use | `archive/legacy-runtime/oracle/acquisition.py`, `archive/legacy-runtime/oracle/acquirers/waterfall.py`, `archive/legacy-runtime/oracle/acquirers/validator.py` |
+| G-066 | Provider auth and transport autonomy | partial, active | Provider config, provider validation, backend cache/retry transport, backend-owned Spotify auth bootstrap/exchange, and backend-owned Spotify session persistence/refresh exist in Rust | Cross-provider auth proof remains uneven, and Spotify still needs broader packaged/runtime proof beyond local tests | `archive/legacy-runtime/oracle/provider_contract.py`, `archive/legacy-runtime/oracle/api/auth.py`, `archive/legacy-runtime/lyra_api.py` |
+| G-064 | Discovery graph and bridge depth | partial, active | Rust backend supports local graph/co-play/shared-genre routes, scout exits, bridge/discovery route variants, ListenBrainz weather, non-local acquisition leads, and a curated lineage/member/offshoot baseline used in route/query logic | Influence ingestion and broader lineage coverage are still missing, so artist-intelligence depth is real but not yet broad enough to call solved | `archive/legacy-runtime/oracle/graph_builder.py`, `archive/legacy-runtime/oracle/scout.py`, `archive/legacy-runtime/oracle/lore.py` |
+| G-063 | Composer and playlist intelligence depth | partial, active | Prompt-to-draft, bridge, discovery, steer, explain, route memory, and structured reason payloads exist in Rust | Strong audio-evidence-backed vibe claims remain partial; current execution still leans heavily on heuristics, `track_scores`, local graph pressure, and Spotify memory instead of deeper proof paths | `archive/legacy-runtime/oracle/playlust.py`, `archive/legacy-runtime/oracle/arc.py`, `archive/legacy-runtime/oracle/mood_interpreter.py`, `archive/legacy-runtime/oracle/vibes.py` |
+| G-061 | Explainability and provenance breadth | partial, active | `explain_track`, recommendation payloads, and acquisition leads now emit structured evidence items with evidence categories, anchors, and overall evidence grades | Explainability is still uneven across backend surfaces; provenance/evidence language is much stronger in broker/explain flows but not yet universal | `archive/legacy-runtime/oracle/explain.py`, `archive/legacy-runtime/oracle/explainability.py`, `archive/legacy-runtime/oracle/enrichers/unified.py` |
+| G-062 | Curation workflows | largely complete | Duplicate review, keeper selection, quarantine, cleanup preview, and undo depth are present in the canonical runtime | Deeper file-system repair workflows remain intentionally out of scope for now | `archive/legacy-runtime/oracle/duplicates.py`, `archive/legacy-runtime/oracle/curator.py`, `archive/legacy-runtime/oracle/organizer.py` |
+| G-065 | Packaged desktop confidence | partial | The backend now has an isolated app-data runtime proof plus a focused verification script (`scripts/backend_runtime_confidence.ps1`) in addition to the existing dev-environment tests | Clean-machine packaged validation and long-session soak proof are still missing | packaged validation scripts and soak artifacts |
 
 ## Execution Order
 
-1. `G-063` Composer and playlist intelligence depth
-2. `G-064` Discovery graph and bridge depth
-3. `G-061` Explainability and provenance breadth
-4. `G-060` Remaining acquisition runtime risk
-5. `G-062` Curation workflows
+1. `G-060` Native acquisition parity
+2. `G-066` Provider auth and transport autonomy
+3. `G-064` Discovery graph and bridge depth
+4. `G-063` Composer and playlist intelligence depth
+5. `G-061` Explainability and provenance breadth
 6. `G-065` Packaged desktop confidence
-
-## Dormant Concept Tags
-
-Concepts explicitly identified as backlogged, unported, or not-yet-started are tagged in `docs/BACKLOG_TAGS.md`.
-Each is marked `**[ConceptName?]**` — acknowledged and dormant, not in active execution.
-Consult that file before starting work on any capability listed as "Mostly unported" or "Not started" above.
-
-## Config Reality
-
-Provider and config plumbing already exists.
-Future work should continue to reuse:
-
-- provider config records in SQLite
-- capability metadata in Rust
-- provider validation hooks
-- OS keyring support
-
-Do not invent a parallel credential system for composer or LLM work.

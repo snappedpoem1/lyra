@@ -7,7 +7,7 @@
 //!
 //! Priority scale: 0.0–10.0. Cosine similarity 1.0 → 9.5, 0.0 → 1.0.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 
 use rusqlite::{params, Connection};
@@ -17,32 +17,97 @@ use crate::errors::LyraResult;
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const ALL_DIMS: [&str; 10] = [
-    "energy", "valence", "tension", "density",
-    "warmth", "movement", "space", "rawness", "complexity", "nostalgia",
+    "energy",
+    "valence",
+    "tension",
+    "density",
+    "warmth",
+    "movement",
+    "space",
+    "rawness",
+    "complexity",
+    "nostalgia",
 ];
 
 /// Genre keyword → dimension boosts (value replaces 0.5 base if higher).
 fn genre_boost_table() -> &'static [(&'static str, &'static [(&'static str, f64)])] {
     &[
-        ("hip-hop",    &[("energy", 0.6), ("rawness", 0.7), ("density", 0.4)]),
-        ("rap",        &[("energy", 0.6), ("rawness", 0.7), ("density", 0.4)]),
-        ("electronic", &[("energy", 0.7), ("movement", 0.8), ("tension", 0.5)]),
-        ("edm",        &[("energy", 0.8), ("movement", 0.9), ("tension", 0.6)]),
-        ("pop",        &[("valence", 0.7), ("warmth", 0.5), ("density", 0.3)]),
-        ("rock",       &[("energy", 0.6), ("rawness", 0.5), ("tension", 0.4)]),
-        ("jazz",       &[("complexity", 0.8), ("warmth", 0.6), ("nostalgia", 0.5)]),
-        ("classical",  &[("complexity", 0.9), ("space", 0.8), ("tension", 0.3)]),
-        ("r&b",        &[("warmth", 0.7), ("valence", 0.6), ("movement", 0.5)]),
-        ("soul",       &[("warmth", 0.8), ("rawness", 0.4), ("nostalgia", 0.6)]),
-        ("ambient",    &[("space", 0.9), ("energy", 0.1), ("tension", 0.1)]),
-        ("metal",      &[("energy", 0.9), ("rawness", 0.9), ("tension", 0.8)]),
-        ("indie",      &[("rawness", 0.5), ("nostalgia", 0.4), ("complexity", 0.4)]),
-        ("folk",       &[("warmth", 0.7), ("nostalgia", 0.6), ("rawness", 0.4)]),
-        ("blues",      &[("rawness", 0.6), ("warmth", 0.7), ("nostalgia", 0.7)]),
+        (
+            "hip-hop",
+            &[("energy", 0.6), ("rawness", 0.7), ("density", 0.4)],
+        ),
+        (
+            "rap",
+            &[("energy", 0.6), ("rawness", 0.7), ("density", 0.4)],
+        ),
+        (
+            "electronic",
+            &[("energy", 0.7), ("movement", 0.8), ("tension", 0.5)],
+        ),
+        (
+            "edm",
+            &[("energy", 0.8), ("movement", 0.9), ("tension", 0.6)],
+        ),
+        (
+            "pop",
+            &[("valence", 0.7), ("warmth", 0.5), ("density", 0.3)],
+        ),
+        (
+            "rock",
+            &[("energy", 0.6), ("rawness", 0.5), ("tension", 0.4)],
+        ),
+        (
+            "jazz",
+            &[("complexity", 0.8), ("warmth", 0.6), ("nostalgia", 0.5)],
+        ),
+        (
+            "classical",
+            &[("complexity", 0.9), ("space", 0.8), ("tension", 0.3)],
+        ),
+        (
+            "r&b",
+            &[("warmth", 0.7), ("valence", 0.6), ("movement", 0.5)],
+        ),
+        (
+            "soul",
+            &[("warmth", 0.8), ("rawness", 0.4), ("nostalgia", 0.6)],
+        ),
+        (
+            "ambient",
+            &[("space", 0.9), ("energy", 0.1), ("tension", 0.1)],
+        ),
+        (
+            "metal",
+            &[("energy", 0.9), ("rawness", 0.9), ("tension", 0.8)],
+        ),
+        (
+            "indie",
+            &[("rawness", 0.5), ("nostalgia", 0.4), ("complexity", 0.4)],
+        ),
+        (
+            "folk",
+            &[("warmth", 0.7), ("nostalgia", 0.6), ("rawness", 0.4)],
+        ),
+        (
+            "blues",
+            &[("rawness", 0.6), ("warmth", 0.7), ("nostalgia", 0.7)],
+        ),
     ]
 }
 
 type DimVec = HashMap<String, f64>;
+type ArtistAvgRow = (
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+    Option<f64>,
+);
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
@@ -62,10 +127,7 @@ fn load_taste_profile(conn: &Connection) -> Option<DimVec> {
 }
 
 fn artist_avg_scores(conn: &Connection, artist: &str) -> Option<DimVec> {
-    let row: Option<(
-        Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>,
-        Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>,
-    )> = conn
+    let row: Option<ArtistAvgRow> = conn
         .query_row(
             "SELECT AVG(ts.energy), AVG(ts.valence), AVG(ts.tension), AVG(ts.density),
                     AVG(ts.warmth), AVG(ts.movement), AVG(ts.space), AVG(ts.rawness),
@@ -79,8 +141,16 @@ fn artist_avg_scores(conn: &Connection, artist: &str) -> Option<DimVec> {
             params![format!("%{}%", artist)],
             |row| {
                 Ok((
-                    row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?,
-                    row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?,
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
                 ))
             },
         )
@@ -90,7 +160,9 @@ fn artist_avg_scores(conn: &Connection, artist: &str) -> Option<DimVec> {
     // If energy (first dim) is None, artist has no scored tracks
     row.0?;
 
-    let vals = [row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9];
+    let vals = [
+        row.0, row.1, row.2, row.3, row.4, row.5, row.6, row.7, row.8, row.9,
+    ];
     Some(
         ALL_DIMS
             .iter()
@@ -101,10 +173,7 @@ fn artist_avg_scores(conn: &Connection, artist: &str) -> Option<DimVec> {
 }
 
 fn genre_score_vector(hint: &str) -> DimVec {
-    let mut base: DimVec = ALL_DIMS
-        .iter()
-        .map(|&d| (d.to_string(), 0.5))
-        .collect();
+    let mut base: DimVec = ALL_DIMS.iter().map(|&d| (d.to_string(), 0.5)).collect();
     let lower = hint.to_lowercase();
     for (keyword, boosts) in genre_boost_table() {
         if lower.contains(keyword) {
@@ -126,7 +195,7 @@ fn cosine_similarity(a: &DimVec, b: &DimVec) -> f64 {
     if dims.is_empty() {
         return 0.0;
     }
-    let dot: f64   = dims.iter().map(|&d| a[d] * b[d]).sum();
+    let dot: f64 = dims.iter().map(|&d| a[d] * b[d]).sum();
     let mag_a: f64 = dims.iter().map(|&d| a[d].powi(2)).sum::<f64>().sqrt();
     let mag_b: f64 = dims.iter().map(|&d| b[d].powi(2)).sum::<f64>().sqrt();
     if mag_a == 0.0 || mag_b == 0.0 {
@@ -145,8 +214,8 @@ fn compute_priority(taste: &DimVec, track_scores: &DimVec) -> f64 {
 
 #[derive(Debug, Default, Serialize)]
 pub struct PrioritizeStats {
-    pub updated:  usize,
-    pub skipped:  usize,
+    pub updated: usize,
+    pub skipped: usize,
     pub no_taste: bool,
 }
 
@@ -154,7 +223,12 @@ pub struct PrioritizeStats {
 pub fn prioritize_queue(conn: &Connection, limit: usize) -> LyraResult<PrioritizeStats> {
     let taste = match load_taste_profile(conn) {
         Some(t) => t,
-        None => return Ok(PrioritizeStats { no_taste: true, ..Default::default() }),
+        None => {
+            return Ok(PrioritizeStats {
+                no_taste: true,
+                ..Default::default()
+            })
+        }
     };
 
     let sql = if limit > 0 {
@@ -201,7 +275,11 @@ pub fn prioritize_queue(conn: &Connection, limit: usize) -> LyraResult<Prioritiz
         updated += 1;
     }
 
-    Ok(PrioritizeStats { updated, skipped, no_taste: false })
+    Ok(PrioritizeStats {
+        updated,
+        skipped,
+        no_taste: false,
+    })
 }
 
 /// Return the next N highest-priority pending queue items.
@@ -220,10 +298,10 @@ pub fn get_next_priority_batch(
         )?
         .query_map(params![status, limit as i64], |row| {
             Ok(QueueItem {
-                id:             row.get(0)?,
-                artist:         row.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                title:          row.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                album:          row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                id: row.get(0)?,
+                artist: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                title: row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                album: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
                 priority_score: row.get::<_, Option<f64>>(4)?.unwrap_or(5.0),
             })
         })?
@@ -234,9 +312,9 @@ pub fn get_next_priority_batch(
 
 #[derive(Debug, Clone, Serialize)]
 pub struct QueueItem {
-    pub id:             i64,
-    pub artist:         String,
-    pub title:          String,
-    pub album:          String,
+    pub id: i64,
+    pub artist: String,
+    pub title: String,
+    pub album: String,
     pub priority_score: f64,
 }
