@@ -24,6 +24,8 @@ static JUNK_PATTERNS: &[&str] = &[
     r"tribute",
     r"8-bit",
     r"8 bit",
+    r"lo-fi",
+    r"lofi",
     r"remade",
     r"midi",
     r"ringtone",
@@ -34,7 +36,16 @@ static JUNK_PATTERNS: &[&str] = &[
 ];
 
 /// Checked against title only — words that are band/album names when in artist field.
-static TITLE_JUNK_PATTERNS: &[&str] = &[r"lullaby", r"music box", r"instrumental version"];
+static TITLE_JUNK_PATTERNS: &[&str] = &[
+    r"lullaby",
+    r"music box",
+    r"instrumental version",
+    r"instrumental mix",
+    r"instrumental edit",
+    r"karaoke version",
+    r"soundcheck",
+    r"demo version",
+];
 
 /// Record labels that are sometimes stored in the artist field.
 static RECORD_LABELS: &[&str] = &[
@@ -268,6 +279,12 @@ pub fn is_junk_text(artist: &str, title: &str) -> Option<String> {
 /// `ValidationResult`. Network lookup (MusicBrainz / Discogs / iTunes) is
 /// **[Network Metadata Validation?]** and not performed here.
 pub fn validate_track_text(artist: &str, title: &str) -> ValidationResult {
+    // Check raw inputs first — cleaning can strip junk markers like
+    // "[soundcheck]" that we need to catch before they disappear.
+    if let Some(reason) = is_junk_text(artist, title) {
+        return ValidationResult::rejected(reason);
+    }
+
     let mut artist = clean_artist(artist);
     let mut title = clean_title(title);
 
@@ -328,4 +345,34 @@ pub fn mark_validated(
         ],
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_track_text;
+
+    #[test]
+    fn rejects_lofi_variant_titles() {
+        let result = validate_track_text(
+            "Brand New",
+            "The Quiet Things That No One Ever Knows (Lofi Version)",
+        );
+        assert!(!result.valid);
+        assert!(result
+            .rejection_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("lofi"));
+    }
+
+    #[test]
+    fn rejects_soundcheck_titles() {
+        let result = validate_track_text("Coheed and Cambria", "[soundcheck]");
+        assert!(!result.valid);
+        assert!(result
+            .rejection_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("soundcheck"));
+    }
 }

@@ -227,7 +227,7 @@ impl Default for YtdlpTier {
 }
 
 impl YtdlpTier {
-    fn find_binary(&self) -> Option<PathBuf> {
+    pub fn find_binary(&self) -> Option<PathBuf> {
         if let Some(path) = &self.binary {
             if path.exists() {
                 return Some(path.clone());

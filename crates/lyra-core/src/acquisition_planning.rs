@@ -548,7 +548,37 @@ fn validate_acquisition_request(
     let cleaned_title = clean_track_title(title);
     let cleaned_album = album.map(clean_track_title);
     let combined = format!("{} {}", cleaned_artist, cleaned_title).to_ascii_lowercase();
-    let junk_needles = [
+
+    // Official-release backup validator: if the track has an album context that
+    // indicates it comes from an official live album, official EP, or official
+    // deluxe/special edition, bypass variant-sensitive junk needles.
+    // This allows tracks from releases like:
+    //   - Muse "HAARP" (official live album)
+    //   - Coheed "Live at the Starland Ballroom" / "Live at La Zona Rosa"
+    //   - Brand New "3 Demos, Reworked" (official EP)
+    let album_lower = cleaned_album
+        .as_deref()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let is_official_variant_album = !album_lower.is_empty()
+        && (album_lower.contains("live at")
+            || album_lower.contains("live from")
+            || album_lower.contains("live in")
+            || album_lower.starts_with("live ")
+            || album_lower.ends_with(" live")
+            || album_lower.contains("live edition")
+            || album_lower.contains("demos, reworked")
+            || album_lower.contains("demos reworked")
+            || album_lower.contains("deluxe")
+            || album_lower.contains("special edition")
+            || album_lower.contains("expanded edition")
+            || album_lower.contains("remastered")
+            || album_lower.contains("unplugged")
+            || album_lower.contains("mtv unplugged")
+            || album_lower.contains("haarp"));
+
+    // Hard junk needles: always rejected, even on official albums
+    let hard_junk_needles = [
         "karaoke",
         "tribute",
         "cover version",
@@ -566,14 +596,33 @@ fn validate_acquisition_request(
         "music box",
         "8-bit",
         "8 bit",
-        "instrumental version",
-        "a cappella",
-        "acapella",
         "lo-fi",
         "lofi",
         "epic version",
     ];
-    if junk_needles.iter().any(|needle| combined.contains(needle)) {
+    // Variant-sensitive needles: only rejected if the track is NOT from an
+    // official variant album (live, demo EP, deluxe, etc.)
+    let variant_junk_needles = [
+        "soundcheck",
+        "instrumental version",
+        "a cappella",
+        "acapella",
+        "demo version",
+        "(demo)",
+        "[demo]",
+        "(acoustic)",
+        "[acoustic]",
+    ];
+
+    let hit_hard = hard_junk_needles
+        .iter()
+        .any(|needle| combined.contains(needle));
+    let hit_variant = !is_official_variant_album
+        && variant_junk_needles
+            .iter()
+            .any(|needle| combined.contains(needle));
+
+    if hit_hard || hit_variant {
         let confidence = validation_confidence(
             conn,
             &cleaned_artist,
@@ -868,5 +917,166 @@ mod tests {
         assert!(album_titles
             .iter()
             .all(|title| title != "A Tribute to Cursive"));
+    }
+
+    #[test]
+    fn discography_plan_skips_bootleg_demo_and_soundcheck_material() {
+        let conn = setup_conn();
+        seed_cache(
+            &conn,
+            &artist_search_cache_key("Coheed and Cambria"),
+            json!({
+                "artists": [
+                    {
+                        "id": "artist-coheed",
+                        "name": "Coheed and Cambria",
+                        "type": "Group",
+                        "score": "100"
+                    }
+                ]
+            }),
+        );
+        seed_cache(
+            &conn,
+            &release_group_cache_key("artist-coheed", "album"),
+            json!({
+                "release-groups": [
+                    {
+                        "id": "rg-bootleg",
+                        "title": "2002-04-25: Valentine's, Albany, NY, USA",
+                        "primary-type": "Album",
+                        "secondary-types": [],
+                        "first-release-date": "2002-04-25"
+                    },
+                    {
+                        "id": "rg-demo",
+                        "title": "3 Demos, Reworked",
+                        "primary-type": "Album",
+                        "secondary-types": [],
+                        "first-release-date": "2002-02-01"
+                    },
+                    {
+                        "id": "rg-canonical",
+                        "title": "Second Stage Turbine Blade",
+                        "primary-type": "Album",
+                        "secondary-types": [],
+                        "first-release-date": "2002-03-05"
+                    }
+                ]
+            }),
+        );
+        seed_cache(
+            &conn,
+            &release_group_cache_key("artist-coheed", "ep"),
+            json!({
+                "release-groups": []
+            }),
+        );
+        seed_cache(
+            &conn,
+            &release_candidates_cache_key("rg-canonical"),
+            json!({
+                "releases": [{
+                    "id": "release-canonical",
+                    "title": "Second Stage Turbine Blade",
+                    "status": "Official",
+                    "country": "US",
+                    "date": "2002-03-05",
+                    "media": [{"track-count": 2}]
+                }]
+            }),
+        );
+        seed_cache(
+            &conn,
+            &release_detail_cache_key("release-canonical"),
+            json!({
+                "media": [{
+                    "tracks": [
+                        {"position": 1, "title": "[soundcheck]", "recording": {"id": "rec-bad", "length": 120000}},
+                        {"position": 2, "title": "Time Consumer", "recording": {"id": "rec-good", "length": 215000}}
+                    ]
+                }]
+            }),
+        );
+
+        let result = plan_discography(&conn, "Coheed and Cambria", Some("manual"), None, None)
+            .expect("discography plan");
+
+        assert_eq!(result.plan.kind, "discography");
+        assert_eq!(result.items.len(), 1);
+        assert_eq!(result.queue_items.len(), 1);
+        assert_eq!(result.items[0].title, "Time Consumer");
+        assert_eq!(
+            result.items[0].album.as_deref(),
+            Some("Second Stage Turbine Blade")
+        );
+    }
+
+    #[test]
+    fn official_variant_bypass_allows_demo_track_on_official_ep() {
+        // Brand New "3 Demos, Reworked" is an official EP — tracks with
+        // "(Demo)" in the title should pass the junk filter.
+        let conn = setup_conn();
+        let result = plan_single_track(
+            &conn,
+            "Brand New",
+            "Sowing Season (Demo)",
+            Some("3 Demos, Reworked"),
+            Some("test"),
+            None,
+        )
+        .expect("plan");
+        assert_eq!(result.plan.status, "queued");
+        assert_eq!(result.items.len(), 1);
+        assert_eq!(result.items[0].status, "queued");
+    }
+
+    #[test]
+    fn official_variant_bypass_allows_acoustic_on_live_album() {
+        // A track marked "(Acoustic)" from an official live album should pass.
+        let conn = setup_conn();
+        let result = plan_single_track(
+            &conn,
+            "Coheed and Cambria",
+            "A Favor House Atlantic (Acoustic)",
+            Some("Live at the Starland Ballroom"),
+            Some("test"),
+            None,
+        )
+        .expect("plan");
+        assert_eq!(result.plan.status, "queued");
+        assert_eq!(result.items[0].status, "queued");
+    }
+
+    #[test]
+    fn junk_filter_still_blocks_demo_without_official_album() {
+        // A "(Demo)" track with no album context should still be rejected.
+        let conn = setup_conn();
+        let result = plan_single_track(
+            &conn,
+            "Brand New",
+            "Sowing Season (Demo)",
+            None,
+            Some("test"),
+            None,
+        )
+        .expect("plan");
+        assert_eq!(result.items[0].status, "rejected");
+    }
+
+    #[test]
+    fn hard_junk_always_blocked_even_on_official_album() {
+        // "Karaoke" tracks should be blocked regardless of album context.
+        let conn = setup_conn();
+        let result = plan_single_track(
+            &conn,
+            "Muse",
+            "Hysteria (Karaoke Version)",
+            Some("HAARP"),
+            Some("test"),
+            None,
+        )
+        .expect("plan");
+        assert_eq!(result.items[0].status, "rejected");
     }
 }

@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::audio_data;
-use crate::track_audio_features::{self, TrackAudioFeatures};
 use crate::commands::{
     AcquisitionLead, AcquisitionLeadHandoffReport, AcquisitionLeadOutcome, DiscoveryInteraction,
     DiscoverySession, EvidenceItem, ExplainPayload, RecommendationBundle, RecommendationResult,
@@ -15,6 +14,7 @@ use crate::commands::{
 };
 use crate::lineage;
 use crate::provider_runtime;
+use crate::track_audio_features::{self, TrackAudioFeatures};
 
 /// Static cross-genre bridge map ported from oracle/recommendation_broker.py `_SCOUT_GENRE_BRIDGES`.
 /// Keys are lowercase genre tokens; values are natural bridge destination genres in adjacency order.
@@ -2690,7 +2690,11 @@ fn build_audio_feature_evidence(
         } else {
             return items; // nothing interesting enough to say
         };
-        let weight = if vol > 0.08 || vol < 0.025 { 0.50 } else { 0.35 };
+        let weight = if vol > 0.08 || vol < 0.025 {
+            0.50
+        } else {
+            0.35
+        };
         items.push(evidence_item(
             "energy_movement",
             "local",
@@ -3929,8 +3933,14 @@ mod tests {
                 .evidence_items
                 .iter()
                 .any(|item| item.category == "audio_proof"
-                    && ["tag_bpm", "tag_key", "pcm_dynamic_range", "pcm_energy_volatility", "pcm_compound"]
-                        .contains(&item.anchor.as_str())),
+                    && [
+                        "tag_bpm",
+                        "tag_key",
+                        "pcm_dynamic_range",
+                        "pcm_energy_volatility",
+                        "pcm_compound"
+                    ]
+                    .contains(&item.anchor.as_str())),
             "audio_proof evidence must anchor to a tag or PCM column name"
         );
     }
@@ -3942,10 +3952,16 @@ mod tests {
         db::init_database(&conn).expect("schema");
 
         // Insert two artists in the library
-        conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Godspeed You! Black Emperor')", [])
-            .expect("artist 1");
-        conn.execute("INSERT INTO artists (id, name) VALUES (2, 'A Silver Mt. Zion')", [])
-            .expect("artist 2");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (1, 'Godspeed You! Black Emperor')",
+            [],
+        )
+        .expect("artist 1");
+        conn.execute(
+            "INSERT INTO artists (id, name) VALUES (2, 'A Silver Mt. Zion')",
+            [],
+        )
+        .expect("artist 2");
 
         // Simulate a verified lineage edge as produced by ingest_artist_relationships
         conn.execute(

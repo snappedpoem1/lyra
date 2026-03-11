@@ -13,6 +13,8 @@ const REJECT_TOKENS: &[&str] = &[
     "made popular by",
     "in the style of",
     "cover version",
+    "lo-fi",
+    "lofi",
     "lo-fi remix",
     "lofi remix",
     "nightcore",
@@ -268,17 +270,51 @@ pub fn persist_normalized_payload_track(
     Ok(true)
 }
 
+fn is_official_variant_album(album: Option<&str>) -> bool {
+    let album_lower = album.unwrap_or("").to_ascii_lowercase();
+    !album_lower.is_empty()
+        && (album_lower.contains("live at")
+            || album_lower.contains("live from")
+            || album_lower.contains("live in")
+            || album_lower.starts_with("live ")
+            || album_lower.ends_with(" live")
+            || album_lower.contains("live edition")
+            || album_lower.contains("demos, reworked")
+            || album_lower.contains("demos reworked")
+            || album_lower.contains("deluxe")
+            || album_lower.contains("special edition")
+            || album_lower.contains("expanded edition")
+            || album_lower.contains("remastered")
+            || album_lower.contains("unplugged")
+            || album_lower.contains("mtv unplugged")
+            || album_lower.contains("haarp"))
+}
+
 fn should_reject_variant(version_type: &VersionType, title: &str, album: Option<&str>) -> bool {
-    if matches!(
-        version_type,
-        VersionType::Junk
-            | VersionType::Cover
-            | VersionType::Live
-            | VersionType::Remix
-            | VersionType::Special
-    ) {
+    // Always reject junk and cover variants
+    if matches!(version_type, VersionType::Junk | VersionType::Cover) {
         return true;
     }
+
+    // For Remix, Live, and Special variants, allow if the album context
+    // indicates an official variant release (official live album, demo EP,
+    // deluxe/special edition).  The classifier combines title+album text, so
+    // tokens like "reworked" in album "3 Demos, Reworked" can trigger Remix
+    // even though the track itself is an original.
+    if matches!(
+        version_type,
+        VersionType::Remix | VersionType::Live | VersionType::Special
+    ) {
+        if is_official_variant_album(album) {
+            // Double-check: if the variant token is ONLY in the album title
+            // and not in the track title, this is album context pollution.
+            // Even if the token IS in the track title (e.g. "(Demo)" on a
+            // demo EP), the official album context means the user wants it.
+            return false;
+        }
+        return true;
+    }
+
     let combined = format!("{} {}", title, album.unwrap_or_default()).to_ascii_lowercase();
     REJECT_TOKENS.iter().any(|token| combined.contains(token))
 }
@@ -441,6 +477,23 @@ mod tests {
             isrc: None,
             duration_ms: Some(190_000),
             popularity: Some(44),
+            explicit: false,
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn rejects_non_canonical_lofi_variants() {
+        let result = normalize_track_candidate(RawTrackCandidate {
+            provider: "spotify",
+            provider_track_id: "spotify:track:444",
+            artist: "Chill Covers Collective",
+            title: "The Quiet Things That No One Ever Knows (Lofi Version)",
+            album: Some("Late Night Reworks"),
+            release_date: Some("2025-06-21"),
+            isrc: None,
+            duration_ms: Some(201_000),
+            popularity: Some(18),
             explicit: false,
         });
         assert!(result.is_err());

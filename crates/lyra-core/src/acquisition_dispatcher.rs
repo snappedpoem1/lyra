@@ -19,6 +19,34 @@ use crate::errors::{LyraError, LyraResult};
 use crate::library;
 use crate::providers;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WATERFALL TIER TIMEOUTS (Qobuz-first optimization)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Timeouts are tuned to prioritize Qobuz (T1) while giving each tier
+// realistic time to respond based on provider characteristics:
+//
+// T1 Qobuz (native streamrip): 40s (auth + search + download)
+// T2 Streamrip (subprocess):   40s (secondary streamrip tier)
+// T3 Slskd (HTTP + p2p search): 60s (p2p search can be slow; wait for results)
+// T4 Real-Debrid (torrent cache): 120s control-plane, 300s file transfer
+// T5 SpotDL (subprocess):      30s (Spotify can be fast or slow)
+// T6 yt-dlp (subprocess):      90s (YouTube scraping is slowest; final fallback)
+//
+const QOBUZ_TIMEOUT_SECS: u64 = 40;       // T1: Native Qobuz via streamrip
+const STREAMRIP_TIMEOUT_SECS: u64 = 40;   // T2: Subprocess-based Qobuz/Tidal
+const SLSKD_TIMEOUT_SECS: u64 = 60;       // T3: P2P Soulseek network
+#[allow(dead_code)]
+const REALDEBRID_TIMEOUT_SECS: u64 = 120; // T4: Torrent cache orchestration
+#[allow(dead_code)]
+const REALDEBRID_TRANSFER_TIMEOUT_SECS: u64 = 300; // T4: Direct file transfer
+#[allow(dead_code)]
+const REALDEBRID_MIN_SEEDERS_DEFAULT: i64 = 5;
+#[allow(dead_code)]
+const REALDEBRID_MIN_SEEDERS_COLLECTION: i64 = 1;
+const SPOTDL_TIMEOUT_SECS: u64 = 30;      // T5: Spotify scraper
+const YTDLP_TIMEOUT_SECS: u64 = 90;       // T6: YouTube/web fallback
+
 type QueuedItemRow = (
     i64,
     String,
@@ -51,6 +79,16 @@ struct MonitoredCommandResult {
 struct SlskdCandidate {
     username: String,
     filename: String,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+struct ProwlarrCandidate {
+    title: String,
+    indexer: String,
+    seeders: i64,
+    size: i64,
+    magnet_url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,13 +139,29 @@ fn infer_provider_from_tier(tier: &str) -> &'static str {
         "T1" => "qobuz",
         "T2" => "streamrip",
         "T3" => "slskd",
-        "T4" => "real_debrid",
+        "T4" => "realdebrid",
         "T5" => "spotdl",
+        "T6" => "yt-dlp",
         _ => "unknown",
     }
 }
 
 fn acquisition_workspace_root(paths: &AppPaths) -> &Path {
+    if let Ok(base_path) = std::env::var("LYRA_BASE_PATH") {
+        let candidate = PathBuf::from(base_path);
+        if candidate.exists() {
+            let leaked = Box::leak(candidate.into_boxed_path());
+            return leaked;
+        }
+    }
+
+    if let Ok(current_dir) = std::env::current_dir() {
+        if current_dir.join("Cargo.toml").exists() {
+            let leaked = Box::leak(current_dir.into_boxed_path());
+            return leaked;
+        }
+    }
+
     paths
         .app_data_dir
         .parent()
@@ -163,6 +217,27 @@ fn load_provider_config(conn: &rusqlite::Connection, provider_key: &str) -> Opti
         .and_then(|value| serde_json::from_str(value).ok())
 }
 
+#[allow(dead_code)]
+fn realdebrid_min_seeders_for_queue_item(
+    conn: &rusqlite::Connection,
+    queue_id: i64,
+) -> i64 {
+    let item_kind: Option<String> = conn
+        .query_row(
+            "SELECT item_kind FROM acquisition_plan_items WHERE queue_item_id = ?1 ORDER BY id DESC LIMIT 1",
+            params![queue_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten();
+
+    match item_kind.as_deref() {
+        Some("album_track") | Some("discography_track") => REALDEBRID_MIN_SEEDERS_COLLECTION,
+        _ => REALDEBRID_MIN_SEEDERS_DEFAULT,
+    }
+}
+
 fn find_command(configured: Option<&str>, candidates: &[&str]) -> Option<PathBuf> {
     if let Some(configured) = configured.filter(|value| !value.trim().is_empty()) {
         let configured_path = PathBuf::from(configured);
@@ -179,6 +254,16 @@ fn find_command(configured: Option<&str>, candidates: &[&str]) -> Option<PathBuf
         }
     }
     None
+}
+
+fn workspace_venv_binary(paths: &AppPaths, binary_name: &str) -> Option<PathBuf> {
+    let workspace_root = acquisition_workspace_root(paths);
+    let candidate = workspace_root.join(".venv").join("Scripts").join(binary_name);
+    if candidate.exists() {
+        Some(candidate)
+    } else {
+        None
+    }
 }
 
 fn build_streamrip_query(artist: &str, title: &str, album: Option<&str>) -> String {
@@ -251,6 +336,7 @@ fn run_monitored_command(
     mut cmd: Command,
     queue_id: i64,
     conn: &rusqlite::Connection,
+    timeout_secs: u64,
 ) -> LyraResult<MonitoredCommandResult> {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
@@ -283,6 +369,7 @@ fn run_monitored_command(
     }
 
     let started = std::time::Instant::now();
+    let timeout = Duration::from_secs(timeout_secs);
     loop {
         if acquisition::cancel_requested(conn, queue_id)? {
             let _ = child.kill();
@@ -295,7 +382,7 @@ fn run_monitored_command(
                 exit_code: None,
             });
         }
-        if started.elapsed() > Duration::from_secs(300) {
+        if started.elapsed() > timeout {
             let _ = child.kill();
             let _ = child.wait();
             return Ok(MonitoredCommandResult {
@@ -328,6 +415,12 @@ fn try_native_streamrip(
     artist: &str,
     title: &str,
     album: Option<&str>,
+    source_override: Option<&str>,
+    provider_label: &str,
+    tier_label: &str,
+    lifecycle_note: &str,
+    lifecycle_progress: f64,
+    timeout_secs: u64,
     queue_id: i64,
     conn: &rusqlite::Connection,
     notify: &Arc<dyn Fn(i64) + Send + Sync>,
@@ -342,11 +435,15 @@ fn try_native_streamrip(
         })
         .and_then(Value::as_str)
         .map(str::to_string)
-        .or_else(|| std::env::var("LYRA_STREAMRIP_BINARY").ok());
+        .or_else(|| std::env::var("LYRA_STREAMRIP_BINARY").ok())
+        .or_else(|| {
+            workspace_venv_binary(paths, "rip.exe")
+                .and_then(|path| path.to_str().map(str::to_string))
+        });
     let Some(binary) = find_command(configured_binary.as_deref(), &["rip"]) else {
         return Ok(AcquireTrackResult {
-            provider: Some("streamrip".to_string()),
-            tier: Some("T2".to_string()),
+            provider: Some(provider_label.to_string()),
+            tier: Some(tier_label.to_string()),
             failure_stage: Some("acquiring".to_string()),
             failure_reason: Some("streamrip binary not found".to_string()),
             ..AcquireTrackResult::default()
@@ -356,7 +453,10 @@ fn try_native_streamrip(
     let output_dir = acquisition_staging_dir(paths).join(format!("streamrip-queue-{queue_id}"));
     fs::create_dir_all(&output_dir)?;
     let query = build_streamrip_query(artist, title, album);
-    let source = config
+    let source = source_override
+        .map(str::to_string)
+        .or_else(|| {
+            config
         .as_ref()
         .and_then(|value| {
             value
@@ -364,17 +464,33 @@ fn try_native_streamrip(
                 .or_else(|| value.get("LYRA_STREAMRIP_SOURCE"))
         })
         .and_then(Value::as_str)
-        .unwrap_or("qobuz");
+        .map(str::to_string)
+        })
+        .or_else(|| std::env::var("LYRA_STREAMRIP_SOURCE").ok())
+        .unwrap_or_else(|| "qobuz".to_string());
+
+    if provider_label == "streamrip" && source.eq_ignore_ascii_case("qobuz") {
+        return Ok(AcquireTrackResult {
+            provider: Some(provider_label.to_string()),
+            tier: Some(tier_label.to_string()),
+            failure_stage: Some("acquiring".to_string()),
+            failure_reason: Some(
+                "No alternate streamrip source configured for T2; set LYRA_STREAMRIP_SOURCE to a non-qobuz provider"
+                    .to_string(),
+            ),
+            ..AcquireTrackResult::default()
+        });
+    }
     let started_at = std::time::SystemTime::now();
 
     let _ = acquisition::update_lifecycle(
         conn,
         queue_id,
         "acquiring",
-        0.2,
-        Some("Trying native Streamrip provider"),
-        Some("streamrip"),
-        Some("T2"),
+        lifecycle_progress,
+        Some(lifecycle_note),
+        Some(provider_label),
+        Some(tier_label),
         Some("rust-native"),
     );
     (notify)(queue_id);
@@ -387,11 +503,11 @@ fn try_native_streamrip(
         .arg("track")
         .arg(&query)
         .arg("--first");
-    let result = run_monitored_command(cmd, queue_id, conn)?;
+    let result = run_monitored_command(cmd, queue_id, conn, timeout_secs)?;
     if result.cancelled {
         return Ok(AcquireTrackResult {
-            provider: Some("streamrip".to_string()),
-            tier: Some("T2".to_string()),
+            provider: Some(provider_label.to_string()),
+            tier: Some(tier_label.to_string()),
             failure_stage: Some("acquiring".to_string()),
             failure_reason: Some("Cancellation requested".to_string()),
             cancelled: true,
@@ -400,8 +516,8 @@ fn try_native_streamrip(
     }
     if result.timed_out {
         return Ok(AcquireTrackResult {
-            provider: Some("streamrip".to_string()),
-            tier: Some("T2".to_string()),
+            provider: Some(provider_label.to_string()),
+            tier: Some(tier_label.to_string()),
             failure_stage: Some("acquiring".to_string()),
             failure_reason: Some("streamrip command timed out".to_string()),
             ..AcquireTrackResult::default()
@@ -415,8 +531,8 @@ fn try_native_streamrip(
             detail
         };
         return Ok(AcquireTrackResult {
-            provider: Some("streamrip".to_string()),
-            tier: Some("T2".to_string()),
+            provider: Some(provider_label.to_string()),
+            tier: Some(tier_label.to_string()),
             failure_stage: Some("acquiring".to_string()),
             failure_reason: Some(format!(
                 "streamrip failed: {}",
@@ -431,8 +547,8 @@ fn try_native_streamrip(
     }
     let Some(path) = newest_audio_file(&output_dir, started_at) else {
         return Ok(AcquireTrackResult {
-            provider: Some("streamrip".to_string()),
-            tier: Some("T2".to_string()),
+            provider: Some(provider_label.to_string()),
+            tier: Some(tier_label.to_string()),
             failure_stage: Some("staging".to_string()),
             failure_reason: Some("streamrip finished without producing an audio file".to_string()),
             ..AcquireTrackResult::default()
@@ -440,8 +556,8 @@ fn try_native_streamrip(
     };
     Ok(AcquireTrackResult {
         path: Some(path),
-        provider: Some("streamrip".to_string()),
-        tier: Some("T2".to_string()),
+        provider: Some(provider_label.to_string()),
+        tier: Some(tier_label.to_string()),
         ..AcquireTrackResult::default()
     })
 }
@@ -454,111 +570,30 @@ fn try_native_qobuz_service(
     conn: &rusqlite::Connection,
     notify: &Arc<dyn Fn(i64) + Send + Sync>,
 ) -> LyraResult<AcquireTrackResult> {
-    let config = load_provider_config(conn, "qobuz");
-    let service_url = config
-        .as_ref()
-        .and_then(|value| {
-            value
-                .get("qobuz_service_url")
-                .or_else(|| value.get("QOBUZ_SERVICE_URL"))
-        })
-        .and_then(Value::as_str)
-        .unwrap_or("http://localhost:7700")
-        .trim_end_matches('/')
-        .to_string();
-
-    let _ = acquisition::update_lifecycle(
-        conn,
-        queue_id,
-        "acquiring",
-        0.1,
-        Some("Trying native Qobuz service"),
+    // T1 is native-only: run Qobuz via local streamrip/rip, not a localhost service.
+    let mut result = try_native_streamrip(
+        paths,
+        artist,
+        title,
+        None,
         Some("qobuz"),
-        Some("T1"),
-        Some("rust-native"),
-    );
-    (notify)(queue_id);
+        "qobuz",
+        "T1",
+        "Trying native Qobuz download",
+        0.1,
+        QOBUZ_TIMEOUT_SECS,
+        queue_id,
+        conn,
+        notify,
+    )?;
 
-    let response = match ureq::post(&format!("{service_url}/acquire"))
-        .set("Content-Type", "application/json")
-        .send_json(serde_json::json!({ "artist": artist, "title": title }))
-    {
-        Ok(response) => response,
-        Err(error) => {
-            return Ok(AcquireTrackResult {
-                provider: Some("qobuz".to_string()),
-                tier: Some("T1".to_string()),
-                failure_stage: Some("acquiring".to_string()),
-                failure_reason: Some(format!("Qobuz service unavailable: {error}")),
-                ..AcquireTrackResult::default()
-            });
-        }
-    };
-
-    let payload: Value = match response.into_json() {
-        Ok(payload) => payload,
-        Err(error) => {
-            return Ok(AcquireTrackResult {
-                provider: Some("qobuz".to_string()),
-                tier: Some("T1".to_string()),
-                failure_stage: Some("acquiring".to_string()),
-                failure_reason: Some(format!("Invalid Qobuz service response: {error}")),
-                ..AcquireTrackResult::default()
-            });
-        }
-    };
-
-    if !payload
-        .get("success")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        return Ok(AcquireTrackResult {
-            provider: Some("qobuz".to_string()),
-            tier: Some("T1".to_string()),
-            failure_stage: Some("acquiring".to_string()),
-            failure_reason: payload
-                .get("error")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .or_else(|| Some("Qobuz service acquisition failed".to_string())),
-            ..AcquireTrackResult::default()
-        });
+    if result.failure_reason.as_deref() == Some("streamrip binary not found") {
+        result.failure_reason = Some(
+            "native Qobuz requires streamrip (`rip`) to be installed and on PATH".to_string(),
+        );
     }
 
-    let response_path = payload
-        .get("path")
-        .and_then(Value::as_str)
-        .map(PathBuf::from);
-    let existing_path = response_path
-        .as_ref()
-        .filter(|path| path.exists())
-        .cloned()
-        .or_else(|| {
-            response_path.as_ref().map(|path| {
-                acquisition_staging_dir(paths)
-                    .join(path.file_name().and_then(OsStr::to_str).unwrap_or_default())
-            })
-        })
-        .filter(|path| path.exists());
-
-    match existing_path {
-        Some(path) => Ok(AcquireTrackResult {
-            path: Some(path),
-            provider: Some("qobuz".to_string()),
-            tier: Some("T1".to_string()),
-            ..AcquireTrackResult::default()
-        }),
-        None => Ok(AcquireTrackResult {
-            provider: Some("qobuz".to_string()),
-            tier: Some("T1".to_string()),
-            failure_stage: Some("staging".to_string()),
-            failure_reason: Some(
-                "Qobuz service reported success but no staged file was visible to Lyra".to_string(),
-            ),
-            ..AcquireTrackResult::default()
-        }),
-    }
+    Ok(result)
 }
 
 fn slskd_node_config(
@@ -575,7 +610,7 @@ fn slskd_node_config(
                 .or_else(|| value.get("LYRA_PROTOCOL_NODE_URL"))
         })
         .and_then(Value::as_str)
-        .unwrap_or("http://localhost:5030")
+        .unwrap_or("http://localhost:5930")
         .trim_end_matches('/')
         .to_string();
     let api_base = std::env::var("LYRA_PROTOCOL_NODE_API_BASE")
@@ -639,6 +674,7 @@ fn slskd_headers(conn: &rusqlite::Connection) -> LyraResult<Vec<(String, String)
     let login_url = slskd_api_url(&base_url, &api_base, "/session");
     let response = ureq::post(&login_url)
         .set("Content-Type", "application/json")
+        .timeout(Duration::from_secs(SLSKD_TIMEOUT_SECS))
         .send_json(serde_json::json!({ "username": username, "password": password }))
         .map_err(|_| LyraError::InvalidInput("slskd authentication failed"))?;
     let payload: Value = response.into_json()?;
@@ -765,7 +801,9 @@ fn try_native_slskd(
     for (key, value) in &headers {
         request = request.set(key, value);
     }
-    let search_response = match request.send_json(serde_json::json!({ "searchText": query })) {
+    let search_response = match request
+        .timeout(Duration::from_secs(SLSKD_TIMEOUT_SECS))
+        .send_json(serde_json::json!({ "searchText": query })) {
         Ok(response) => response,
         Err(error) => {
             return Ok(AcquireTrackResult {
@@ -855,7 +893,9 @@ fn try_native_slskd(
         enqueue_request = enqueue_request.set(key, value);
     }
     if let Err(error) =
-        enqueue_request.send_json(serde_json::json!([{ "filename": candidate.filename }]))
+        enqueue_request
+            .timeout(Duration::from_secs(SLSKD_TIMEOUT_SECS))
+            .send_json(serde_json::json!([{ "filename": candidate.filename }]))
     {
         return Ok(AcquireTrackResult {
             provider: Some("slskd".to_string()),
@@ -926,7 +966,22 @@ fn try_native_spotdl(
     conn: &rusqlite::Connection,
     notify: &Arc<dyn Fn(i64) + Send + Sync>,
 ) -> LyraResult<AcquireTrackResult> {
-    let Some(binary) = find_command(None, &["spotdl"]) else {
+    let config = load_provider_config(conn, "spotdl");
+    let configured_binary = config
+        .as_ref()
+        .and_then(|value| {
+            value
+                .get("lyra_spotdl_binary")
+                .or_else(|| value.get("LYRA_SPOTDL_BINARY"))
+        })
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| std::env::var("LYRA_SPOTDL_BINARY").ok())
+        .or_else(|| {
+            workspace_venv_binary(paths, "spotdl.exe")
+                .and_then(|path| path.to_str().map(str::to_string))
+        });
+    let Some(binary) = find_command(configured_binary.as_deref(), &["spotdl"]) else {
         return Ok(AcquireTrackResult {
             provider: Some("spotdl".to_string()),
             tier: Some("T5".to_string()),
@@ -964,7 +1019,7 @@ fn try_native_spotdl(
         .arg("320k")
         .arg("--threads")
         .arg("1");
-    let result = run_monitored_command(cmd, queue_id, conn)?;
+    let result = run_monitored_command(cmd, queue_id, conn, SPOTDL_TIMEOUT_SECS)?;
     if result.cancelled {
         return Ok(AcquireTrackResult {
             provider: Some("spotdl".to_string()),
@@ -1023,6 +1078,85 @@ fn try_native_spotdl(
     })
 }
 
+fn try_native_ytdlp(
+    paths: &AppPaths,
+    artist: &str,
+    title: &str,
+    queue_id: i64,
+    conn: &rusqlite::Connection,
+    notify: &Arc<dyn Fn(i64) + Send + Sync>,
+) -> LyraResult<AcquireTrackResult> {
+    use crate::waterfall::{YtdlpTier, AcquisitionTier, TierResult};
+    use crate::commands::AcquisitionQueueItem;
+
+    let configured_binary = load_provider_config(conn, "ytdlp")
+        .as_ref()
+        .and_then(|value| {
+            value
+                .get("lyra_ytdlp_binary")
+                .or_else(|| value.get("LYRA_YTDLP_BINARY"))
+        })
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+        .or_else(|| std::env::var("LYRA_YTDLP_BINARY").ok().map(PathBuf::from))
+        .or_else(|| workspace_venv_binary(paths, "yt-dlp.exe"));
+    let tier = YtdlpTier {
+        binary: configured_binary,
+        timeout_secs: YTDLP_TIMEOUT_SECS,
+        ..YtdlpTier::default()
+    };
+    if tier.find_binary().is_none() {
+        return Ok(AcquireTrackResult {
+            provider: Some("yt-dlp".to_string()),
+            tier: Some("T4".to_string()),
+            failure_stage: Some("acquiring".to_string()),
+            failure_reason: Some("yt-dlp binary not found".to_string()),
+            ..AcquireTrackResult::default()
+        });
+    }
+
+    let _ = acquisition::update_lifecycle(
+        conn,
+        queue_id,
+        "acquiring",
+        0.8,
+        Some("Trying native yt-dlp fallback"),
+        Some("yt-dlp"),
+        Some("T4"),
+        Some("rust-native"),
+    );
+    (notify)(queue_id);
+
+    let staging_dir = acquisition_staging_dir(paths);
+    fs::create_dir_all(&staging_dir)?;
+
+    // Build a minimal AcquisitionQueueItem for the trait interface
+    let item = AcquisitionQueueItem {
+        id: queue_id,
+        artist: artist.to_string(),
+        title: title.to_string(),
+        album: None,
+        status: "acquiring".to_string(),
+        ..AcquisitionQueueItem::default()
+    };
+
+    match tier.try_acquire(&item, &staging_dir) {
+        TierResult::Success(path) => Ok(AcquireTrackResult {
+            path: Some(path),
+            provider: Some("yt-dlp".to_string()),
+            tier: Some("T4".to_string()),
+            ..AcquireTrackResult::default()
+        }),
+        TierResult::Skip(reason) | TierResult::Fail(reason) => Ok(AcquireTrackResult {
+            provider: Some("yt-dlp".to_string()),
+            tier: Some("T4".to_string()),
+            failure_stage: Some("acquiring".to_string()),
+            failure_reason: Some(reason),
+            ..AcquireTrackResult::default()
+        }),
+    }
+}
+
 fn try_native_acquire_track(
     paths: &AppPaths,
     artist: &str,
@@ -1032,11 +1166,26 @@ fn try_native_acquire_track(
     conn: &rusqlite::Connection,
     notify: &Arc<dyn Fn(i64) + Send + Sync>,
 ) -> LyraResult<AcquireTrackResult> {
+    // Waterfall: T1 Qobuz (lossless) → T2 Streamrip (lossless) → T3 Slskd (lossless/lossy) → T5 SpotDL (lossy) → T4 yt-dlp (lossy fallback)
     let qobuz = try_native_qobuz_service(paths, artist, title, queue_id, conn, notify)?;
     if qobuz.cancelled || qobuz.path.is_some() {
         return Ok(qobuz);
     }
-    let streamrip = try_native_streamrip(paths, artist, title, album, queue_id, conn, notify)?;
+    let streamrip = try_native_streamrip(
+        paths,
+        artist,
+        title,
+        album,
+        None,
+        "streamrip",
+        "T2",
+        "Trying alternate native Streamrip provider",
+        0.2,
+        STREAMRIP_TIMEOUT_SECS,
+        queue_id,
+        conn,
+        notify,
+    )?;
     if streamrip.cancelled || streamrip.path.is_some() {
         return Ok(streamrip);
     }
@@ -1048,7 +1197,11 @@ fn try_native_acquire_track(
     if spotdl.cancelled || spotdl.path.is_some() {
         return Ok(spotdl);
     }
-    Ok(spotdl)
+    let ytdlp = try_native_ytdlp(paths, artist, title, queue_id, conn, notify)?;
+    if ytdlp.cancelled || ytdlp.path.is_some() {
+        return Ok(ytdlp);
+    }
+    Ok(ytdlp)
 }
 
 fn organize_download(

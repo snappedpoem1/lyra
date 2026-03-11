@@ -11,20 +11,21 @@ const MUSICBRAINZ_CACHE_PROVIDER: &str = "musicbrainz_catalog";
 const MUSICBRAINZ_BASE_URL: &str = "https://musicbrainz.org/ws/2";
 const MUSICBRAINZ_CACHE_TTL_SECONDS: u64 = 60 * 60 * 24 * 30;
 const MUSICBRAINZ_USER_AGENT: &str = "Lyra/0.1 (catalog planner)";
-const SKIP_SECONDARY_TYPES: &[&str] = &[
-    "compilation",
-    "dj-mix",
-    "mixtape/street",
-    "remix",
-    "soundtrack",
-    "spokenword",
-    "audio drama",
-];
 const NON_CANONICAL_RELEASE_TOKENS: &[&str] = &[
+    "acoustic",
+    "bootleg",
     "karaoke",
     "tribute",
     "cover",
+    "commentary",
+    "demo",
+    "demos",
+    "instrumental",
     "nightcore",
+    "rehearsal",
+    "reworked",
+    "session",
+    "soundcheck",
     "sped up",
     "slowed",
     "lofi",
@@ -360,20 +361,58 @@ fn should_skip_release_group(
     requested_variant: bool,
 ) -> bool {
     if !requested_variant {
+        // Official-release backup validator: allow release groups that have
+        // "live" or "demo" secondary types BUT are clearly named official
+        // releases (not bootleg date-titles).  Examples:
+        //   - Muse "HAARP" (live)
+        //   - Coheed "Live at the Starland Ballroom" (live)
+        //   - Brand New "3 Demos, Reworked" (demo)
+        // A bootleg has a date-based title like "2002-04-25: Valentine's, Albany"
+        // or generic event-only names.
+        let lower = title.to_ascii_lowercase();
+
+        // Always skip these secondary types regardless
+        let hard_skip_types: &[&str] = &[
+            "compilation",
+            "dj-mix",
+            "mixtape/street",
+            "remix",
+            "soundtrack",
+            "spokenword",
+            "audio drama",
+        ];
         if secondary_types
             .iter()
-            .any(|value| SKIP_SECONDARY_TYPES.contains(&value.as_str()))
+            .any(|value| hard_skip_types.contains(&value.as_str()))
         {
             return true;
         }
-        let lower = title.to_ascii_lowercase();
+
+        // For "live" and "demo" secondary types, apply the backup validator:
+        // allow if the title looks like a named official release, skip if it
+        // looks like a bootleg event recording.
+        let has_variant_secondary = secondary_types
+            .iter()
+            .any(|value| value == "live" || value == "demo");
+        if has_variant_secondary {
+            // Bootleg indicators: date-prefix titles, generic venue-only names
+            if is_probably_bootleg_event_title(&lower) {
+                return true;
+            }
+            // If it has a proper album-style name, allow it through
+            // (it's an official live album or demo EP)
+            return false;
+        }
+
+        // For release groups WITHOUT live/demo secondary types, apply the
+        // standard token-based filtering on the title text.
         if NON_CANONICAL_RELEASE_TOKENS
             .iter()
             .any(|token| lower.contains(token))
         {
             return true;
         }
-        if is_probably_live_title(&lower) {
+        if is_probably_live_title(&lower) || is_probably_bootleg_event_title(&lower) {
             return true;
         }
     }
@@ -522,7 +561,7 @@ fn parse_release_tracks(payload: &Value) -> Vec<CatalogTrack> {
                                 .and_then(Value::as_str)?
                                 .trim()
                                 .to_string();
-                            if title.is_empty() {
+                            if title.is_empty() || should_skip_catalog_track_title(&title) {
                                 return None;
                             }
                             Some(CatalogTrack {
@@ -626,6 +665,46 @@ fn is_probably_live_title(lower: &str) -> bool {
         || lower.contains(" live in ")
 }
 
+fn is_probably_bootleg_event_title(lower: &str) -> bool {
+    starts_with_iso_date(lower)
+        || lower.contains("napsterlive")
+        || lower.contains("soundcheck")
+        || lower.contains("rehearsal")
+        || lower.contains("session")
+}
+
+fn starts_with_iso_date(lower: &str) -> bool {
+    let bytes = lower.as_bytes();
+    if bytes.len() < 10 {
+        return false;
+    }
+    bytes[0..4].iter().all(u8::is_ascii_digit)
+        && bytes[4] == b'-'
+        && bytes[5..7].iter().all(u8::is_ascii_digit)
+        && bytes[7] == b'-'
+        && bytes[8..10].iter().all(u8::is_ascii_digit)
+}
+
+fn should_skip_catalog_track_title(title: &str) -> bool {
+    let lower = title.to_ascii_lowercase();
+    lower.contains("soundcheck")
+        || lower.contains("rehearsal")
+        || lower.contains("instrumental version")
+        || lower.contains("instrumental mix")
+        || lower.contains("instrumental edit")
+        || lower.contains("(instrumental)")
+        || lower.contains("[instrumental]")
+        || lower.contains("(acoustic)")
+        || lower.contains("[acoustic]")
+        || lower.contains(" acoustic version")
+        || lower.contains(" live at ")
+        || lower.contains(" live from ")
+        || lower.contains(" live in ")
+        || lower.contains("(demo)")
+        || lower.contains("[demo]")
+        || lower.contains(" demo version")
+}
+
 fn normalize_key(value: &str) -> String {
     value
         .to_ascii_lowercase()
@@ -664,7 +743,7 @@ mod tests {
     use super::{
         artist_search_cache_key, parse_release_groups_payload, release_candidates_cache_key,
         release_detail_cache_key, release_group_cache_key, resolve_album, resolve_discography,
-        MUSICBRAINZ_CACHE_PROVIDER,
+        should_skip_catalog_track_title, MUSICBRAINZ_CACHE_PROVIDER,
     };
     use crate::db;
 
@@ -716,6 +795,53 @@ mod tests {
 
         assert_eq!(releases.len(), 1);
         assert_eq!(releases[0].title, "Domestica");
+    }
+
+    #[test]
+    fn release_group_filter_rejects_demo_and_bootleg_event_titles() {
+        let releases = parse_release_groups_payload(
+            &json!({
+                "release-groups": [
+                    {
+                        "id": "rg-bootleg",
+                        "title": "2002-04-25: Valentine's, Albany, NY, USA",
+                        "primary-type": "Album",
+                        "secondary-types": [],
+                        "first-release-date": "2002-04-25"
+                    },
+                    {
+                        "id": "rg-demo",
+                        "title": "3 Demos, Reworked",
+                        "primary-type": "EP",
+                        "secondary-types": [],
+                        "first-release-date": "2006-01-01"
+                    },
+                    {
+                        "id": "rg-canonical",
+                        "title": "Second Stage Turbine Blade",
+                        "primary-type": "Album",
+                        "secondary-types": [],
+                        "first-release-date": "2002-03-05"
+                    }
+                ]
+            }),
+            false,
+        );
+
+        assert_eq!(releases.len(), 1);
+        assert_eq!(releases[0].title, "Second Stage Turbine Blade");
+    }
+
+    #[test]
+    fn catalog_track_filter_rejects_soundcheck_and_instrumental_titles() {
+        assert!(should_skip_catalog_track_title("[soundcheck]"));
+        assert!(should_skip_catalog_track_title(
+            "A Favor House Atlantic (Acoustic)"
+        ));
+        assert!(should_skip_catalog_track_title(
+            "The Suffering (Instrumental Version)"
+        ));
+        assert!(!should_skip_catalog_track_title("Time Consumer"));
     }
 
     #[test]
@@ -901,5 +1027,84 @@ mod tests {
         assert_eq!(release.title, "The Ugly Organ");
         assert_eq!(release.tracks.len(), 1);
         assert_eq!(release.source_mode, "cache");
+    }
+
+    // ── Backup validator tests ───────────────────────────────────────────
+
+    use super::should_skip_release_group;
+    use std::collections::HashSet;
+
+    fn types(values: &[&str]) -> HashSet<String> {
+        values.iter().map(|v| v.to_string()).collect()
+    }
+
+    #[test]
+    fn backup_validator_allows_official_live_album_with_secondary_type() {
+        // Muse "HAARP" — has secondary-type "live" in MusicBrainz but is an
+        // official live album that users want in their discography.
+        assert!(
+            !should_skip_release_group("HAARP", &types(&["live"]), false),
+            "HAARP should be allowed as an official live album"
+        );
+    }
+
+    #[test]
+    fn backup_validator_allows_official_live_at_venue_with_secondary_type() {
+        // Coheed "Live at the Starland Ballroom" — official live album
+        assert!(
+            !should_skip_release_group(
+                "Live at the Starland Ballroom",
+                &types(&["live"]),
+                false
+            ),
+            "Live at the Starland Ballroom should be allowed"
+        );
+    }
+
+    #[test]
+    fn backup_validator_allows_demo_ep_with_secondary_type() {
+        // Brand New "3 Demos, Reworked" — official EP with demo secondary type
+        assert!(
+            !should_skip_release_group("3 Demos, Reworked", &types(&["demo"]), false),
+            "3 Demos, Reworked should be allowed as an official demo EP"
+        );
+    }
+
+    #[test]
+    fn backup_validator_blocks_bootleg_date_title_with_live_secondary() {
+        // Bootleg: "2002-04-25: Valentine's, Albany, NY, USA"
+        assert!(
+            should_skip_release_group(
+                "2002-04-25: Valentine's, Albany, NY, USA",
+                &types(&["live"]),
+                false
+            ),
+            "Date-prefix bootleg should be blocked"
+        );
+    }
+
+    #[test]
+    fn backup_validator_blocks_compilation_secondary_type() {
+        assert!(
+            should_skip_release_group("Greatest Hits", &types(&["compilation"]), false),
+            "Compilations should always be blocked"
+        );
+    }
+
+    #[test]
+    fn backup_validator_blocks_remix_secondary_type() {
+        assert!(
+            should_skip_release_group("Remixes", &types(&["remix"]), false),
+            "Remix albums should always be blocked"
+        );
+    }
+
+    #[test]
+    fn backup_validator_still_blocks_title_token_without_secondary() {
+        // "Domestica Live in Omaha" — no secondary types but has "live" in title
+        assert!(
+            should_skip_release_group("Domestica Live in Omaha", &types(&[]), false),
+            "Title-only live variant without secondary type should still be caught"
+        );
     }
 }

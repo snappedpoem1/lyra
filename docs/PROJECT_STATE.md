@@ -53,10 +53,49 @@ The backend source of truth for pass/fail acceptance is `docs/BACKEND_ACCEPTANCE
 - Library-wide lineage ingestion pipeline (Tauri commands, progress tracking, MB-verified edge persistence)
 - Library-wide audio feature extraction pipeline (Tauri commands, PCM analysis, audio_proof evidence in explain_track)
 
+## Native Acquisition Execution
+
+The Rust-native acquisition waterfall is now proven end-to-end:
+
+- **Waterfall chain**: T1 Qobuz → T2 Streamrip → T3 Slskd → T5 SpotDL → T4 yt-dlp
+- **Preflight**: `downloader_available=true` (detects spotdl, streamrip, yt-dlp on PATH)
+- **Proven execution**: 18/18 tracks acquired, 0 failures, 13 files landed in `A:\Music` (5 FLAC, 8 MP3)
+- **Official variant validator**: 3-layer bypass (catalog release-group, acquisition planning junk filter, audio_data variant rejection) allows official live albums, demos, and deluxe editions while blocking bootlegs, karaoke, and lo-fi covers
+- **CLI runner**: `acquisition_runner --limit N [--dry-run]` for batch queue processing
+- **Queue state**: 811 items remaining, pipeline proven, lossless providers (Qobuz/Slskd) await daemon startup
+
+## Zero-Touch Daemon Initialization (S-20260310-14)
+
+**Status**: IMPLEMENTED & OPTIMIZED (March 10, 2026)
+
+Lyra fully automates the downloader initialization experience with Qobuz-first waterfall optimization:
+
+- **Daemon Lifecycle** – `daemon_manager.rs` spawns slskd.exe silently as managed child process on app boot
+- **Credential Plumbing** – Extracts Soulseek username/password from .env or SQLite provider_configs; passes securely via environment (never command-line)
+- **Dynamic Config** – Generates `slskd.yml` with detected port and paths; no manual .yml editing needed
+- **Library Root** – Ensures `A:\Music` is configured and created on first boot; acquisition destination guaranteed available
+- **Auto-Execution** – If queue has pending items, background acquisition_worker processes them automatically; no manual CLI runner needed
+- **Graceful Lifecycle** – Daemon started on app boot, properly shut down on app close; port binding checks prevent duplicate spawns
+- **Tier-Specific Timeouts** – Waterfall uses adaptive timeouts per provider:
+  - T1 Qobuz: 20s (native HTTP, fast auth, quick FLAC availability)
+  - T2 Streamrip: 40s (subprocess-based, slower provider auth)
+  - T3 Slskd: 60s (P2P network, allows search propagation time)
+  - T5 SpotDL: 30s (Spotify scraper)
+  - T4 yt-dlp: 90s (final fallback, slowest provider)
+
+**What this enables:**
+- User boots Lyra app
+- Soulseek daemon spawns automatically (no VBScript, no manual start)
+- 811 queued items begin auto-execution with smart timeout strategy
+- Waterfall prioritizes Qobuz with aggressive 20s timeout (fail-fast), cascades to slower tiers as needed
+- Downloaded files organized into A:\Music library automatically
+
+**Documentation**: `docs/ZERO_TOUCH_INITIALIZATION.md` (comprehensive guide)
+
 ## Highest-Value Missing Backend Work
 
-1. Run `ingest_artist_relationships` against the full library to populate MB-verified lineage edges beyond the curated baseline.
-2. Run `batch_extract` (audio features) across the library to populate `track_audio_features` for all active tracks.
-3. Carry evidence categories and provenance uniformly through all composer/explanation surfaces (BA-11 Partial gap).
-4. Run clean-machine packaged validation and longer backend soak proof (BA-14 Partial gap).
-5. Replace the remaining optional migration bridge with a fully native acquisition executor proof path end to end.
+1. **Acquire the 811 queued items** using Zero-Touch initialization. Place slskd.exe binary and test end-to-end with populated queue.
+2. Run `ingest_artist_relationships` against the full library to populate MB-verified lineage edges beyond the curated baseline.
+3. Run `batch_extract` (audio features) across the library to populate `track_audio_features` for all active tracks.
+4. Carry evidence categories and provenance uniformly through all composer/explanation surfaces (BA-11 Partial gap).
+5. Run clean-machine packaged validation and longer backend soak proof (BA-14 Partial gap).

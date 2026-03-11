@@ -275,7 +275,7 @@ impl Default for TasteProfile {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AcquisitionQueueItem {
     pub id: i64,

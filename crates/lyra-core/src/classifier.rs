@@ -39,16 +39,13 @@ static JUNK_TOKENS: &[&str] = &[
 ];
 
 static REMIX_TOKENS: &[&str] = &[
-    "remix", "edit", "rework", "bootleg", "vip", "flip", "refix", "version", "mix", "mashup",
-    "blend",
+    "remix", "edit", "rework", "reworked", "bootleg", "vip", "flip", "refix", "mashup", "blend",
 ];
 
 static LIVE_TOKENS: &[&str] = &[
-    "live",
     "concert",
-    "acoustic",
     "unplugged",
-    "session",
+    "soundcheck",
     "live at",
     "live from",
     "live session",
@@ -78,12 +75,7 @@ static SPECIAL_TOKENS: &[&str] = &[
     "8d",
     "bass boosted",
     "boosted",
-    "extended",
-    "extended mix",
     "radio edit",
-    "clean",
-    "explicit",
-    "instrumental",
     "acapella",
     "a cappella",
 ];
@@ -134,6 +126,10 @@ pub struct ClassifyResult {
 /// Detect which tokens from `list` appear as whole words in `text`.
 fn detect_tokens(text: &str, list: &[&str]) -> Vec<String> {
     let lower = text.to_lowercase();
+    detect_tokens_in_lower(&lower, list)
+}
+
+fn detect_tokens_in_lower(lower: &str, list: &[&str]) -> Vec<String> {
     list.iter()
         .filter(|&&token| {
             let t = token.to_lowercase();
@@ -152,6 +148,45 @@ fn detect_tokens(text: &str, list: &[&str]) -> Vec<String> {
         .collect()
 }
 
+fn detect_contextual_tokens(lower: &str, rules: &[(&str, &[&str])]) -> Vec<String> {
+    let mut found = Vec::new();
+    for (label, phrases) in rules {
+        if phrases.iter().any(|phrase| lower.contains(phrase))
+            && !found.iter().any(|existing| existing == label)
+        {
+            found.push((*label).to_string());
+        }
+    }
+    found
+}
+
+fn merge_tokens(mut primary: Vec<String>, secondary: Vec<String>) -> Vec<String> {
+    for token in secondary {
+        if !primary.iter().any(|existing| existing == &token) {
+            primary.push(token);
+        }
+    }
+    primary
+}
+
+fn classification_from_tokens(
+    version_type: VersionType,
+    base_confidence: f64,
+    found: Vec<String>,
+) -> Option<ClassifyResult> {
+    if found.is_empty() {
+        return None;
+    }
+    let confidence = (base_confidence + found.len() as f64 * 0.1_f64).min(1.0);
+    let reason = format!("Detected tokens: {}", found.join(", "));
+    Some(ClassifyResult {
+        version_type,
+        confidence,
+        tokens_found: found,
+        reason,
+    })
+}
+
 /// Classify a track from raw strings (no DB access).
 pub fn classify_text(title: &str, album: &str, file_path: &str) -> ClassifyResult {
     let filename = Path::new(file_path)
@@ -160,29 +195,131 @@ pub fn classify_text(title: &str, album: &str, file_path: &str) -> ClassifyResul
         .unwrap_or("");
 
     let search = format!("{} {} {}", title, album, filename);
+    let lower = search.to_ascii_lowercase();
+    let live_contextual_tokens = merge_tokens(
+        detect_tokens_in_lower(&lower, LIVE_TOKENS),
+        detect_contextual_tokens(
+            &lower,
+            &[
+                (
+                    "live",
+                    &[
+                        "(live)",
+                        "[live]",
+                        "(live,",
+                        "[live,",
+                        "(live ",
+                        "[live ",
+                        " live,",
+                        " live at ",
+                        " live from ",
+                        " live in ",
+                        " live on ",
+                        " live session",
+                        " live performance",
+                    ],
+                ),
+                (
+                    "acoustic",
+                    &[
+                        "(acoustic)",
+                        "[acoustic]",
+                        " acoustic version",
+                        ", acoustic",
+                    ],
+                ),
+            ],
+        ),
+    );
+    let remix_contextual_tokens = merge_tokens(
+        detect_tokens_in_lower(&lower, REMIX_TOKENS),
+        detect_contextual_tokens(
+            &lower,
+            &[
+                (
+                    "mix",
+                    &[
+                        "(mix)",
+                        "[mix]",
+                        "(extended mix)",
+                        "[extended mix]",
+                        " extended mix",
+                        " radio mix",
+                        " club mix",
+                        " dub mix",
+                        " mix version",
+                    ],
+                ),
+                (
+                    "version",
+                    &[
+                        " demo version",
+                        " karaoke version",
+                        " acoustic version",
+                        " instrumental version",
+                        " clean version",
+                        " explicit version",
+                    ],
+                ),
+            ],
+        ),
+    );
+    let special_contextual_tokens = merge_tokens(
+        detect_tokens_in_lower(&lower, SPECIAL_TOKENS),
+        detect_contextual_tokens(
+            &lower,
+            &[
+                ("demo", &["(demo)", "[demo]", " demo version"]),
+                (
+                    "lofi",
+                    &[
+                        "(lofi)",
+                        "[lofi]",
+                        "(lo-fi)",
+                        "[lo-fi]",
+                        " lofi version",
+                        " lo-fi version",
+                        " lofi remix",
+                        " lo-fi remix",
+                    ],
+                ),
+                (
+                    "instrumental",
+                    &[
+                        "(instrumental)",
+                        "[instrumental]",
+                        " instrumental version",
+                        " instrumental mix",
+                        " instrumental edit",
+                    ],
+                ),
+                ("clean", &["(clean)", "[clean]", " clean version"]),
+                (
+                    "explicit",
+                    &["(explicit)", "[explicit]", " explicit version"],
+                ),
+            ],
+        ),
+    );
 
     // Priority: junk > cover > live > remix > special > original
-    macro_rules! check {
-        ($tokens:expr, $vtype:expr, $base_conf:expr) => {{
-            let found = detect_tokens(&search, $tokens);
-            if !found.is_empty() {
-                let conf = ($base_conf + found.len() as f64 * 0.1_f64).min(1.0);
-                let reason = format!("Detected tokens: {}", found.join(", "));
-                return ClassifyResult {
-                    version_type: $vtype,
-                    confidence: conf,
-                    tokens_found: found,
-                    reason,
-                };
+    macro_rules! check_found {
+        ($found:expr, $vtype:expr, $base_conf:expr) => {{
+            if let Some(result) = classification_from_tokens($vtype, $base_conf, $found) {
+                return result;
             }
         }};
     }
 
-    check!(JUNK_TOKENS, VersionType::Junk, 0.7);
-    check!(COVER_TOKENS, VersionType::Cover, 0.8);
-    check!(LIVE_TOKENS, VersionType::Live, 0.7);
-    check!(REMIX_TOKENS, VersionType::Remix, 0.7);
-    check!(SPECIAL_TOKENS, VersionType::Special, 0.6);
+    check_found!(detect_tokens(&search, JUNK_TOKENS), VersionType::Junk, 0.7);
+    check_found!(
+        detect_tokens(&search, COVER_TOKENS),
+        VersionType::Cover,
+        0.8
+    );
+    check_found!(live_contextual_tokens, VersionType::Live, 0.7);
+    check_found!(remix_contextual_tokens, VersionType::Remix, 0.7);
+    check_found!(special_contextual_tokens, VersionType::Special, 0.6);
 
     ClassifyResult {
         version_type: VersionType::Original,
@@ -270,4 +407,30 @@ pub struct LibrarySummary {
     pub junk: usize,
     pub special: usize,
     pub unknown: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_text, VersionType};
+
+    #[test]
+    fn classify_text_keeps_legitimate_mix_title_original() {
+        let result = classify_text("Mix Tape", "Your Favorite Weapon", "");
+        assert_eq!(result.version_type, VersionType::Original);
+    }
+
+    #[test]
+    fn classify_text_keeps_legitimate_live_title_original() {
+        let result = classify_text("When Skeletons Live", "Year of the Black Rainbow", "");
+        assert_eq!(result.version_type, VersionType::Original);
+    }
+
+    #[test]
+    fn classify_text_flags_contextual_live_and_mix_variants() {
+        let live = classify_text("Bought a Bride (Live in Studio)", "Daisy", "");
+        assert_eq!(live.version_type, VersionType::Live);
+
+        let remix = classify_text("Song Title (Extended Mix)", "Singles", "");
+        assert_eq!(remix.version_type, VersionType::Remix);
+    }
 }

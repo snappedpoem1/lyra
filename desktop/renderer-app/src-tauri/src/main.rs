@@ -7,6 +7,8 @@ use std::time::Duration;
 #[cfg(target_os = "windows")]
 mod smtc;
 
+use lyra_core::artist_intelligence::{IngestResult, LineageIngestStatus};
+use lyra_core::classifier::{ClassifyResult, LibrarySummary};
 use lyra_core::commands::{
     AcquisitionEventPayload, AcquisitionLead, AcquisitionLeadHandoffReport, AcquisitionPreflight,
     AcquisitionQueueItem, AppShellState, ArtistProfile, AudioOutputDevice, BootstrapPayload,
@@ -15,11 +17,11 @@ use lyra_core::commands::{
     GeneratedPlaylist, GraphStats, LegacyImportReport, LibraryCleanupPreview, NativeCapabilities,
     PlaybackEvent, PlaybackState, PlaylistDetail, PlaylistSummary, PlaylistTrackReasonRecord,
     ProviderConfigRecord, ProviderHealth, ProviderValidationResult, QueueItemRecord,
-    RecentPlayRecord, RecommendationBundle, RecommendationResult, RelatedArtist, ScoutExitPlan,
-    RouteFeedbackPayload, ScanJobRecord, SettingsPayload, SpotifyGapSummary, SteerPayload,
-    TasteMemorySnapshot, TasteProfile, TrackDetail, TrackEnrichmentResult, TrackRecord, TrackScores,
+    RecentPlayRecord, RecommendationBundle, RecommendationResult, RelatedArtist,
+    RouteFeedbackPayload, ScanJobRecord, ScoutExitPlan, SettingsPayload, SpotifyGapSummary,
+    SteerPayload, TasteMemorySnapshot, TasteProfile, TrackDetail, TrackEnrichmentResult,
+    TrackRecord, TrackScores,
 };
-use lyra_core::classifier::{ClassifyResult, LibrarySummary};
 use lyra_core::deepcut::{DeepCutStats, DeepCutTrack};
 use lyra_core::logging::initialize_logging;
 use lyra_core::scout::{BridgeArtist, MoodSearchResult, ScoutTarget};
@@ -27,7 +29,6 @@ use lyra_core::search::{
     RemixResult, SearchExcavationResult, SearchFilters, SearchResult, SearchSemanticCapability,
     SortBy,
 };
-use lyra_core::artist_intelligence::{IngestResult, LineageIngestStatus};
 use lyra_core::taste_prioritizer::{PrioritizeStats, QueueItem};
 use lyra_core::track_audio_features::{AudioExtractionStatus, BatchExtractResult};
 use lyra_core::validator::ValidationResult;
@@ -1231,27 +1232,46 @@ fn get_artist_profile(
 
 #[tauri::command]
 fn classify_track(state: State<'_, AppState>, track_id: i64) -> Result<ClassifyResult, String> {
-    state.core.classify_track(track_id).map_err(|e| e.to_string())
+    state
+        .core
+        .classify_track(track_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn classify_library(state: State<'_, AppState>, limit: usize) -> Result<LibrarySummary, String> {
-    state.core.classify_library(limit).map_err(|e| e.to_string())
+    state
+        .core
+        .classify_library(limit)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn validate_track_text(state: State<'_, AppState>, artist: String, title: String) -> ValidationResult {
+fn validate_track_text(
+    state: State<'_, AppState>,
+    artist: String,
+    title: String,
+) -> ValidationResult {
     state.core.validate_track_text(&artist, &title)
 }
 
 #[tauri::command]
-fn prioritize_acquisition_queue(state: State<'_, AppState>, limit: usize) -> Result<PrioritizeStats, String> {
-    state.core.prioritize_acquisition_queue(limit).map_err(|e| e.to_string())
+fn prioritize_acquisition_queue(
+    state: State<'_, AppState>,
+    limit: usize,
+) -> Result<PrioritizeStats, String> {
+    state
+        .core
+        .prioritize_acquisition_queue(limit)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn get_priority_batch(state: State<'_, AppState>, limit: usize) -> Result<Vec<QueueItem>, String> {
-    state.core.get_priority_batch(limit).map_err(|e| e.to_string())
+    state
+        .core
+        .get_priority_batch(limit)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1679,7 +1699,10 @@ fn fallback_text_search(
     query: String,
     limit: usize,
 ) -> Result<Vec<SearchResult>, String> {
-    state.core.fallback_text_search(query, limit).map_err(|e| e.to_string())
+    state
+        .core
+        .fallback_text_search(query, limit)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1712,7 +1735,10 @@ fn find_remixes(
     track: String,
     limit: usize,
 ) -> Result<Vec<RemixResult>, String> {
-    state.core.find_remixes(artist, album, track, limit).map_err(|e| e.to_string())
+    state
+        .core
+        .find_remixes(artist, album, track, limit)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1729,7 +1755,15 @@ fn hybrid_search(
 ) -> Result<Vec<SearchResult>, String> {
     state
         .core
-        .hybrid_search(candidate_ids, filters, dimension_ranges, sort_by, sort_dim, descending, top_k)
+        .hybrid_search(
+            candidate_ids,
+            filters,
+            dimension_ranges,
+            sort_by,
+            sort_dim,
+            descending,
+            top_k,
+        )
         .map_err(|e| e.to_string())
 }
 
@@ -1742,7 +1776,10 @@ fn cross_genre_hunt(
     genre_b: String,
     limit: usize,
 ) -> Result<Vec<ScoutTarget>, String> {
-    state.core.cross_genre_hunt(genre_a, genre_b, limit).map_err(|e| e.to_string())
+    state
+        .core
+        .cross_genre_hunt(genre_a, genre_b, limit)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1751,7 +1788,10 @@ fn discover_by_mood(
     mood: String,
     limit: usize,
 ) -> Result<Vec<MoodSearchResult>, String> {
-    state.core.discover_by_mood(mood, limit).map_err(|e| e.to_string())
+    state
+        .core
+        .discover_by_mood(mood, limit)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1760,7 +1800,10 @@ fn find_local_bridge_artists(
     genre_a: String,
     genre_b: String,
 ) -> Result<Vec<BridgeArtist>, String> {
-    state.core.find_local_bridge_artists(genre_a, genre_b).map_err(|e| e.to_string())
+    state
+        .core
+        .find_local_bridge_artists(genre_a, genre_b)
+        .map_err(|e| e.to_string())
 }
 
 // ── DeepCut commands ──────────────────────────────────────────────────────────
@@ -1785,7 +1828,10 @@ fn deepcut_hunt_taste(
     taste: std::collections::HashMap<String, f64>,
     limit: usize,
 ) -> Result<Vec<DeepCutTrack>, String> {
-    state.core.deepcut_hunt_taste(taste, limit).map_err(|e| e.to_string())
+    state
+        .core
+        .deepcut_hunt_taste(taste, limit)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1818,9 +1864,7 @@ fn build_graph_full(
 }
 
 #[tauri::command]
-fn graph_stats(
-    state: State<'_, AppState>,
-) -> Result<lyra_core::graph_builder::GraphStats, String> {
+fn graph_stats(state: State<'_, AppState>) -> Result<lyra_core::graph_builder::GraphStats, String> {
     state.core.graph_stats().map_err(|e| e.to_string())
 }
 
@@ -1878,6 +1922,11 @@ fn main() {
             }
             // Seed taste from Spotify history if profile is cold (force=false).
             let _ = state.core.seed_taste_from_spotify_history(false);
+
+            // Zero-Touch Initialization: Ensure default library root is configured
+            if let Err(e) = state.core.ensure_default_library_root() {
+                tracing::warn!("Failed to ensure default library root: {}", e);
+            }
 
             app.manage(state.clone());
 
@@ -1975,6 +2024,38 @@ fn main() {
                     }
                 }
             });
+
+            // Zero-Touch Initialization: Ensure slskd daemon is running
+            match lyra_core::daemon_manager::SlskdDaemon::ensure_running(
+                &app.path().app_data_dir()
+                    .unwrap_or_else(|_| state.core.paths().app_data_dir.clone()),
+            ) {
+                Ok(daemon) => {
+                    tracing::info!(
+                        "slskd daemon managed: listening on ports {}/{}",
+                        daemon.port,
+                        daemon.api_port
+                    );
+                    // Store daemon reference for lifecycle management
+                    app.manage(daemon);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize slskd daemon: {}", e);
+                    // Don't block app startup if daemon fails to start
+                }
+            }
+
+            // Check if we should auto-execute the acquisition queue
+            if let Ok(queue) = state.core.get_acquisition_queue(Some("queued".to_string())) {
+                if !queue.is_empty() {
+                    tracing::info!(
+                        "Acquisition queue has {} pending items; they will auto-execute",
+                        queue.len()
+                    );
+                    // The acquisition_worker is already spawned by LyraCore and will
+                    // automatically process the queue in the background
+                }
+            }
 
             Ok(())
         })

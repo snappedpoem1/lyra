@@ -1,5 +1,6 @@
 pub mod acquisition;
 pub mod acquisition_dispatcher;
+pub mod acquisition_executor;
 pub mod acquisition_planning;
 pub mod acquisition_worker;
 pub mod artist_intelligence;
@@ -7,6 +8,7 @@ pub mod audio_data;
 pub mod catalog;
 pub mod classifier;
 pub mod commands;
+pub mod daemon_manager;
 pub mod composer_diagnostics;
 pub mod composer_history;
 pub mod config;
@@ -73,6 +75,19 @@ pub struct LyraCore {
 
 impl LyraCore {
     fn workspace_root_from_paths(&self) -> Option<PathBuf> {
+        if let Ok(base_path) = std::env::var("LYRA_BASE_PATH") {
+            let candidate = PathBuf::from(base_path);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+
+        if let Ok(current_dir) = std::env::current_dir() {
+            if current_dir.join("Cargo.toml").exists() {
+                return Some(current_dir);
+            }
+        }
+
         self.paths
             .app_data_dir
             .parent()
@@ -528,6 +543,32 @@ impl LyraCore {
         let conn = self.conn()?;
         library::remove_library_root(&conn, root_id)?;
         self.list_library_roots()
+    }
+
+    /// Ensures at least one library root is configured. If none exist, adds A:\Music as default.
+    /// This is part of the Zero-Touch initialization process.
+    pub fn ensure_default_library_root(&self) -> LyraResult<Vec<LibraryRootRecord>> {
+        let roots = self.list_library_roots()?;
+        if !roots.is_empty() {
+            return Ok(roots); // Already configured
+        }
+
+        let default_root = if cfg!(target_os = "windows") {
+            PathBuf::from("A:\\Music")
+        } else {
+            PathBuf::from("~/Music")
+        };
+
+        // Try to create the directory if it doesn't exist
+        let _ = fs::create_dir_all(&default_root);
+
+        // If the directory exists, add it
+        if default_root.exists() {
+            self.add_library_root(default_root.to_string_lossy().to_string())
+        } else {
+            // If we can't create the directory, just return empty
+            Ok(vec![])
+        }
     }
 
     pub fn create_scan_job(&self) -> LyraResult<ScanJobRecord> {
@@ -2348,19 +2389,74 @@ impl LyraCore {
             .as_ref()
             .map(|root| root.join("oracle").join("acquirers").join("waterfall.py"));
         let waterfall_available = waterfall_script.as_ref().is_some_and(|p| p.exists());
-        let qobuz_service_url = provider_config(
-            "qobuz",
-            "qobuz_service_url",
-            "QOBUZ_SERVICE_URL",
-            "http://localhost:7700",
+        let qobuz_record = provider_configs
+            .iter()
+            .find(|record| record.provider_key == "qobuz");
+        let qobuz_username = qobuz_record
+            .and_then(|record| {
+                record
+                    .config
+                    .get("qobuz_username")
+                    .or_else(|| record.config.get("QOBUZ_USERNAME"))
+                    .or_else(|| record.config.get("qobuz_email"))
+                    .or_else(|| record.config.get("QOBUZ_EMAIL"))
+            })
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| std::env::var("QOBUZ_USERNAME").ok())
+            .or_else(|| std::env::var("QOBUZ_EMAIL").ok())
+            .unwrap_or_default();
+        let qobuz_password = qobuz_record
+            .and_then(|record| {
+                record
+                    .config
+                    .get("qobuz_password")
+                    .or_else(|| record.config.get("QOBUZ_PASSWORD"))
+            })
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| std::env::var("QOBUZ_PASSWORD").ok())
+            .unwrap_or_default();
+        let streamrip_binary = provider_config(
+            "streamrip",
+            "lyra_streamrip_binary",
+            "LYRA_STREAMRIP_BINARY",
+            "",
         );
-        let qobuz_service_available = ureq::get(&format!(
-            "{}/health",
-            qobuz_service_url.trim_end_matches('/')
-        ))
-        .call()
-        .is_ok();
-        let slskd_url = provider_config("slskd", "slskd_url", "SLSKD_URL", "http://localhost:5030");
+        let workspace_rip = workspace_root
+            .as_ref()
+            .map(|root| root.join(".venv").join("Scripts").join("rip.exe"));
+        let streamrip_available = (!streamrip_binary.trim().is_empty()
+            && PathBuf::from(streamrip_binary.trim()).exists())
+            || workspace_rip.as_ref().is_some_and(|path| path.exists())
+            || Self::command_available("rip");
+        let streamrip_config_path = std::env::var("APPDATA")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+            .map(|root| root.join("streamrip").join("config.toml"));
+        let streamrip_config_text = streamrip_config_path
+            .as_ref()
+            .and_then(|path| fs::read_to_string(path).ok())
+            .unwrap_or_default();
+        let streamrip_qobuz_configured = !streamrip_config_text.contains("email_or_userid = \"\"")
+            && !streamrip_config_text.contains("password_or_token = \"\"")
+            && streamrip_config_text.contains("[qobuz]");
+        let streamrip_source = provider_config(
+            "streamrip",
+            "lyra_streamrip_source",
+            "LYRA_STREAMRIP_SOURCE",
+            "",
+        );
+        let streamrip_alt_available = streamrip_available
+            && !streamrip_source.trim().is_empty()
+            && !streamrip_source.trim().eq_ignore_ascii_case("qobuz");
+        let qobuz_native_available = streamrip_available
+            && (!qobuz_username.trim().is_empty()
+                && !qobuz_password.trim().is_empty()
+                || streamrip_qobuz_configured);
+
+        let slskd_url = provider_config("slskd", "slskd_url", "SLSKD_URL", "http://localhost:5930");
         let slskd_api_base = std::env::var("LYRA_PROTOCOL_NODE_API_BASE")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -2375,11 +2471,40 @@ impl LyraCore {
             Err(ureq::Error::Status(code, _)) => matches!(code, 401 | 403),
             Err(_) => false,
         };
+        let spotdl_binary = provider_config(
+            "spotdl",
+            "lyra_spotdl_binary",
+            "LYRA_SPOTDL_BINARY",
+            "",
+        );
+        let workspace_spotdl = workspace_root
+            .as_ref()
+            .map(|root| root.join(".venv").join("Scripts").join("spotdl.exe"));
+        let spotdl_available = (!spotdl_binary.trim().is_empty()
+            && PathBuf::from(spotdl_binary.trim()).exists())
+            || workspace_spotdl.as_ref().is_some_and(|path| path.exists())
+            || Self::command_available("spotdl");
+        let ytdlp_binary = provider_config(
+            "ytdlp",
+            "lyra_ytdlp_binary",
+            "LYRA_YTDLP_BINARY",
+            "",
+        );
+        let workspace_ytdlp = workspace_root
+            .as_ref()
+            .map(|root| root.join(".venv").join("Scripts").join("yt-dlp.exe"));
+        let ytdlp_available = (!ytdlp_binary.trim().is_empty()
+            && PathBuf::from(ytdlp_binary.trim()).exists())
+            || workspace_ytdlp.as_ref().is_some_and(|path| path.exists())
+            || Self::command_available("yt-dlp")
+            || Self::command_available("yt_dlp");
+
         let downloader_tools = [
-            ("qobuz-service", qobuz_service_available),
-            ("spotdl", Self::command_available("spotdl")),
-            ("streamrip", Self::command_available("rip")),
+            ("qobuz-native", qobuz_native_available),
+            ("streamrip-alt", streamrip_alt_available),
             ("slskd", slskd_available),
+            ("spotdl", spotdl_available),
+            ("yt-dlp", ytdlp_available),
         ];
         let native_downloader_available = downloader_tools.iter().any(|(_, ok)| *ok);
         let _python_bridge_available = legacy_bridge_enabled

@@ -47,3 +47,14 @@ Use `docs/BACKEND_ACCEPTANCE_MATRIX.md` as the backend release gate.
 - [x] Wire `track_audio_features` rows into composer/explain evidence items — compound music-language claims in `oracle.rs::explain_track` via `build_audio_feature_evidence`
 - [x] Add isolated app-data backend runtime confidence proof
 - [ ] Run packaged clean-machine and long-session backend confidence proof
+- [x] Wire yt-dlp as T4 fallback in native acquisition waterfall
+- [x] Build 3-layer official variant backup validator (catalog + planning + audio_data)
+- [x] Fix preflight to detect all native downloader tools (spotdl, streamrip, yt-dlp)
+- [x] Prove native acquisition end-to-end: 18/18 tracks acquired, 13 files in A:\Music
+- [x] Implement Zero-Touch daemon initialization with automatic slskd spawn on app boot
+- [x] Wire acquisition queue auto-execution to Tauri setup handler
+- [x] Implement tier-specific timeouts for waterfall (T1: 20s, T2: 40s, T3: 60s, T5: 30s, T4: 90s)
+- [ ] Obtain slskd.exe binary and place in desktop/renderer-app/src-tauri/binaries/
+- [ ] Populate .env with SOULSEEK_USERNAME and SOULSEEK_PASSWORD
+- [ ] Test Zero-Touch end-to-end: Boot app → Daemon spawns → 811 items auto-acquire → Files to A:\Music
+- [ ] Queue Brand New and Muse discographies and acquire them

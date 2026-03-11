@@ -20,8 +20,8 @@ use std::path::Path;
 
 use chrono::Utc;
 use lofty::prelude::{ItemKey, TaggedFileExt};
-use rodio::Source;
 use lofty::probe::Probe;
+use rodio::Source;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
@@ -73,7 +73,12 @@ const DYNAMIC_RANGE_THRESHOLD: f64 = 5.0; // peak / RMS ratio
 // ── Tag extraction ────────────────────────────────────────────────────────────
 
 pub fn extract_tags(path: &Path) -> Option<(Option<f64>, Option<String>)> {
-    let tagged = Probe::open(path).ok()?.guess_file_type().ok()?.read().ok()?;
+    let tagged = Probe::open(path)
+        .ok()?
+        .guess_file_type()
+        .ok()?
+        .read()
+        .ok()?;
 
     let bpm = tagged
         .primary_tag()
@@ -362,7 +367,10 @@ pub fn batch_extract(conn: &Connection, limit: usize, force: bool) -> BatchExtra
         let path = std::path::PathBuf::from(&path_str);
         if !path.exists() {
             failed += 1;
-            tracing::warn!("track_audio_features: file not found for track {}", track_id);
+            tracing::warn!(
+                "track_audio_features: file not found for track {}",
+                track_id
+            );
             continue;
         }
 
@@ -427,11 +435,9 @@ pub fn log_extraction_run(conn: &Connection, result: &BatchExtractResult) {
 pub fn extraction_status(conn: &Connection) -> AudioExtractionStatus {
     let pending = pending_extraction_count(conn);
     let total_with_features: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM track_audio_features",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT COUNT(*) FROM track_audio_features", [], |row| {
+            row.get(0)
+        })
         .unwrap_or(0);
 
     let last_run = conn
@@ -478,7 +484,7 @@ pub fn pending_extraction_count(conn: &Connection) -> i64 {
 mod tests {
     use rusqlite::Connection;
 
-    use super::{pending_extraction_count, TrackAudioFeatures, upsert_features, load_features};
+    use super::{load_features, pending_extraction_count, upsert_features, TrackAudioFeatures};
     use crate::db;
 
     #[test]

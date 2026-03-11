@@ -234,8 +234,11 @@ fn lineage_ingest_run_with_cached_mb_edges_persists_and_is_queryable() {
     let conn = db::connect(core.paths()).expect("open runtime db");
 
     // Insert a library artist that needs ingestion
-    conn.execute("INSERT INTO artists (id, name) VALUES (1, 'Godspeed You! Black Emperor')", [])
-        .expect("artist");
+    conn.execute(
+        "INSERT INTO artists (id, name) VALUES (1, 'Godspeed You! Black Emperor')",
+        [],
+    )
+    .expect("artist");
     conn.execute(
         "INSERT INTO albums (id, artist_id, title) VALUES (1, 1, 'F# A# ∞')",
         [],
@@ -308,7 +311,10 @@ fn audio_extraction_status_reports_after_batch_run() {
 
     // Run on an empty library — no tracks, so processed = 0 but log row still written
     let result = batch_extract(&conn, 50, false);
-    assert_eq!(result.processed, 0, "empty library should yield 0 processed");
+    assert_eq!(
+        result.processed, 0,
+        "empty library should yield 0 processed"
+    );
 
     let after = extraction_status(&conn);
     assert!(
@@ -359,13 +365,23 @@ fn acquisition_lifecycle_transitions_are_honest() {
     assert_eq!(validating.lifecycle_stage.as_deref(), Some("validating"));
 
     // Transition to failed with a meaningful reason
-    let failed = mark_failed(&conn, id, "validating", "No provider could confirm the track exists", None)
-        .expect("mark failed")
-        .expect("item");
+    let failed = mark_failed(
+        &conn,
+        id,
+        "validating",
+        "No provider could confirm the track exists",
+        None,
+    )
+    .expect("mark failed")
+    .expect("item");
     assert_eq!(failed.status, "failed");
     assert_eq!(failed.failure_stage.as_deref(), Some("validating"));
     assert!(
-        failed.failure_reason.as_deref().unwrap_or("").contains("provider"),
+        failed
+            .failure_reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("provider"),
         "failure_reason should describe why it failed"
     );
     assert!(

@@ -161,7 +161,10 @@ fn mb_get(path: &str, query: &[(&str, &str)]) -> Option<Value> {
 fn resolve_mbid(conn: &Connection, artist_name: &str) -> Option<(String, String)> {
     let cache_key = format!("mbid:{}", artist_name.to_ascii_lowercase().trim());
     if let Some(cached) = cache_get(conn, &cache_key) {
-        let id = cached.get("id").and_then(Value::as_str).map(str::to_string)?;
+        let id = cached
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_string)?;
         let name = cached
             .get("name")
             .and_then(Value::as_str)
@@ -170,7 +173,13 @@ fn resolve_mbid(conn: &Connection, artist_name: &str) -> Option<(String, String)
         return Some((id, name));
     }
 
-    let payload = mb_get("artist", &[("query", &format!("artist:\"{}\"", artist_name.trim())), ("limit", "5")])?;
+    let payload = mb_get(
+        "artist",
+        &[
+            ("query", &format!("artist:\"{}\"", artist_name.trim())),
+            ("limit", "5"),
+        ],
+    )?;
     let result: MbArtistSearchResult = serde_json::from_value(payload.clone()).ok()?;
     let candidates = result.artists?;
 
@@ -206,10 +215,7 @@ fn fetch_artist_relations(conn: &Connection, mbid: &str) -> Option<Vec<MbRelatio
         return Some(relations);
     }
 
-    let payload = mb_get(
-        &format!("artist/{mbid}"),
-        &[("inc", "artist-rels")],
-    )?;
+    let payload = mb_get(&format!("artist/{mbid}"), &[("inc", "artist-rels")])?;
     cache_put(conn, &cache_key, &payload);
     let parsed: MbArtistRelations = serde_json::from_value(payload).ok()?;
     Some(parsed.relations.unwrap_or_default())
@@ -364,10 +370,7 @@ pub fn ingest_status(conn: &Connection) -> LineageIngestStatus {
 /// This is designed to be called from a background job or a Tauri command.
 /// It is intentionally blocking (synchronous) so callers can choose whether to
 /// spawn it on a thread pool.
-pub fn ingest_artist_relationships(
-    conn: &Connection,
-    limit: usize,
-) -> LyraResult<IngestResult> {
+pub fn ingest_artist_relationships(conn: &Connection, limit: usize) -> LyraResult<IngestResult> {
     let artists = artists_needing_ingestion(conn, limit.clamp(1, 200))?;
     let total = artists.len();
     let mut edges_inserted = 0_usize;
@@ -389,7 +392,9 @@ pub fn ingest_artist_relationships(
         let relations = match fetch_artist_relations(conn, &mbid) {
             Some(v) => v,
             None => {
-                errors.push(format!("failed to fetch relations for '{artist_name}' ({mbid})"));
+                errors.push(format!(
+                    "failed to fetch relations for '{artist_name}' ({mbid})"
+                ));
                 continue;
             }
         };
@@ -409,10 +414,7 @@ pub fn ingest_artist_relationships(
             };
 
             let attrs = rel.attributes.as_deref().unwrap_or(&[]);
-            let facts: Vec<String> = attrs
-                .iter()
-                .map(|a| format!("mb_attribute: {a}"))
-                .collect();
+            let facts: Vec<String> = attrs.iter().map(|a| format!("mb_attribute: {a}")).collect();
 
             let note = format!(
                 "MusicBrainz verified relationship: {} {} {} (direction: {})",
@@ -491,7 +493,7 @@ pub fn pending_ingestion_count(conn: &Connection) -> usize {
 mod tests {
     use rusqlite::Connection;
 
-    use super::{map_mb_relation, MbRelation, pending_ingestion_count};
+    use super::{map_mb_relation, pending_ingestion_count, MbRelation};
     use crate::db;
 
     fn make_relation(rel_type: &str, direction: &str) -> MbRelation {
